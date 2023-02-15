@@ -36,6 +36,7 @@
 using EventStore.Client;
 using ES = Lib.Persistence.EventStoreManager;
 using System.Collections.Immutable;
+using LanguageExt;
 
 using Lib;
 using static Lib.Route.Response;
@@ -43,8 +44,6 @@ using Account.Domain;
 using Account.Domain.Commands;
  
 namespace Account.Routes;
-
-using AccountsCache = ImmutableDictionary<Guid, AccountProcess>;
 
 public static class AccountRoutes
 {
@@ -60,16 +59,17 @@ public static class AccountRoutes
    {
       builder.Services.AddSingleton(Account.Domain.Account.EventTypeMapping);
 
-      builder.Services.AddSingleton<Validator<TransferCmd>>(
+      builder.Services.AddSingleton<TransferValidator>(
          Validators.TransferValidation(() => DateTime.UtcNow.Date));
 
-      builder.Services.AddSingleton<Validator<CreateAccountCmd>>(
+      builder.Services.AddSingleton<CurrencyValidator>(
          Validators.AccountInitValidation());
 
       var esClient = ES.Connect();
 
-      builder.Services.AddSingleton<AccountRegistry/*<AccountProcess>*/>(
-         new AccountRegistry/*<AccountProcess>*/(
+/*
+      builder.Services.AddSingleton<AccountRegistry>(
+         new AccountRegistry(
             //Cache: ImmutableDictionary<Guid, AccountProcess>.Empty,
             loadAccount: id => API.GetAccount(
                esClient,
@@ -85,6 +85,7 @@ public static class AccountRoutes
                   Account.Domain.Account.StreamName(evt.EntityId),
                   evt);
             }));
+*/
 
       builder.Services.AddSingleton<EventStoreClient>(esClient);
    }
@@ -93,10 +94,13 @@ public static class AccountRoutes
    {
       app.MapGet(Path.Base + "/{id}", GetAccount);
       app.MapGet(Path.Base + "/events/{id}", GetAccountEvents);
+
       app.MapPost(Path.Base, CreateAccount);
+      /*
       app.MapPost(Path.Transfer, Transfer);
       app.MapPost(Path.Deposit, Deposit);
       app.MapPost(Path.FreezeAccount, FreezeAccount);
+      */
       //.WithParameterValidation();
    }
 
@@ -107,7 +111,7 @@ public static class AccountRoutes
       EventStoreClient es,
       ImmutableDictionary<string, Type> mapping
    )
-   => API.GetAccountEvents(es, id, mapping).Unwrap<List<object>>();
+   => API.GetAccountEvents(es, id, mapping).Unwrap<Lst<object>>();
 
    static Task<IResult> GetAccount(
       Guid id,
@@ -121,10 +125,11 @@ public static class AccountRoutes
    static Task<IResult> CreateAccount(
       CreateAccountCmd cmd,
       EventStoreClient es,
-      Validator<CreateAccountCmd> validate
+      CurrencyValidator validate
    )
    => API.Create(es, validate, cmd).Unwrap<Guid>();
 
+/*
    static Task<IResult> Transfer(
       TransferCmd cmd,
       Validator<TransferCmd> validate,
@@ -149,4 +154,5 @@ public static class AccountRoutes
    => API
       .ProcessCommand<FreezeAccountCmd>(cmd, accounts)
       .Unwrap<AccountState>(newState => new { Status = newState.Status });
+      */
 }

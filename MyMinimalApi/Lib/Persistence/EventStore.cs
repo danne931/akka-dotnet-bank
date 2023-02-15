@@ -1,8 +1,8 @@
 using EventStore.Client;
 using System.Text.Json;
-using LaYumba.Functional;
-using static LaYumba.Functional.F;
-using Unit = System.ValueTuple;
+using LanguageExt;
+using static LanguageExt.Prelude;
+
 using System.Collections.Immutable;
 
 using Account.Domain.Events;
@@ -33,10 +33,11 @@ public static class EventStoreManager
          new[] { eventData }
       );
 
-      return Unit();
+      return unit;
    }
 
-   public static async Task<Option<List<object>>> ReadStream(
+   public static async Task<Option<Lst<object>>> ReadStream(
+   //public static async TryOption<Lst<object>> ReadStream(
       EventStoreClient es,
       string streamName,
       ImmutableDictionary<string, Type> mapping
@@ -51,14 +52,13 @@ public static class EventStoreManager
          return None;
 
       return await stream.AggregateAsync(
-         new List<object>(),
-         (acc, e) => {
+         List<object>(),
+         (acc, e) =>
             acc.Add(JsonSerializer.Deserialize(
                e.Event.Data.ToArray(),
                mapping[e.Event.EventType]
-            ));
-            return acc;
-         });
+            ))
+         );
    }
 
    public static EventStoreClient Connect() => new EventStoreClient(

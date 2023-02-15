@@ -17,6 +17,7 @@ public class AgentProcess//<T>
    ) {}
 }
 
+/*
 public class AccountProcess// : AgentProcess//<AccountProcess>
 {
    Agent<Command, Result> agent;
@@ -33,13 +34,12 @@ public class AccountProcess// : AgentProcess//<AccountProcess>
          Console.WriteLine("3. ACCOUNTPROCESS: compute state change from command: " + cmd);
          // Uses pure fns to calculate the result of the command
 
-         /*Result*//*Validation<(Event Event, T NewState)> result = cmd switch
-         {
-            TransferCmd transfer => state.Debit(transfer),
-            DepositCashCmd deposit => state.Deposit(deposit),
-            FreezeAccountCmd freeze => state.Freeze(freeze)
-         };
-         */
+         //Result*//*Validation<(Event Event, T NewState)> result = cmd switch
+         //{
+         //   TransferCmd transfer => state.Debit(transfer),
+         //   DepositCashCmd deposit => state.Deposit(deposit),
+         //   FreezeAccountCmd freeze => state.Freeze(freeze)
+         //};
  
          Result result = state.StateTransition(cmd);//state.StateTransition(cmd);
  
@@ -59,3 +59,4 @@ public class AccountProcess// : AgentProcess//<AccountProcess>
    // Commands are queued & processed sequentially. 
    public Task<Result> SyncStateChange(Command cmd) => agent.Tell(cmd);
 }
+*/

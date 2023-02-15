@@ -1,10 +1,16 @@
-using LaYumba.Functional;
-using static LaYumba.Functional.F;
+//using LaYumba.Functional;
+//using static LaYumba.Functional.F;
+using LanguageExt;
+using static LanguageExt.Prelude;
 using Account.Domain.Commands;
+using Account.Domain.Events;
 
 namespace Account.Domain;
 
-public delegate Validation<T> Validator<T>(T t);
+//public delegate Validation Validator<T>(T t);
+//public delegate Validation<TError, T> Validator<TError, T>(T t);
+public delegate Validation<InvalidCurrencyError, CreatedAccount> CurrencyValidator(CreateAccountCmd cmd);
+public delegate Validation<TransferDateIsPastError, DebitedTransfer> TransferValidator(TransferCmd cmd);
 
 public static class Validators
 {
@@ -15,15 +21,13 @@ public static class Validators
       "EUR"
    };
 
-   public static Validator<TransferCmd> TransferValidation(Func<DateTime> clock)
-      => cmd
-      => cmd.Date.Date < clock().Date
-         ? Errors.TransferDateIsPast
-         : Valid(cmd);
+   public static TransferValidator TransferValidation(Func<DateTime> clock) =>
+      cmd => cmd.Date.Date < clock().Date
+         ? Fail<TransferDateIsPastError, DebitedTransfer>(Errors.TransferDateIsPast(cmd.Date))
+         : Success<TransferDateIsPastError, DebitedTransfer>(cmd.ToEvent());
 
-   public static Validator<CreateAccountCmd> AccountInitValidation()
-      => cmd
-      => Currencies.Contains(cmd.Currency) 
-         ? Valid(cmd)
-         : Errors.InvalidCurrency(cmd.Currency);
+   public static CurrencyValidator AccountInitValidation() =>
+      cmd => Currencies.Contains(cmd.Currency) 
+         ? Success<InvalidCurrencyError, CreatedAccount>(cmd.ToEvent())
+         : Fail<InvalidCurrencyError, CreatedAccount>(Errors.InvalidCurrency(cmd.Currency));
 }

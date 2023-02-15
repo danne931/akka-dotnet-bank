@@ -3,7 +3,7 @@ using static LaYumba.Functional.F;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
-using Lib.Registry;
+using Lib;
 using Account.Routes;
 using Account.Domain;
 using Account.Domain.Commands;

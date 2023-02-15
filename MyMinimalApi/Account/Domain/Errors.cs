@@ -1,9 +1,12 @@
-using LaYumba.Functional;
+//using LaYumba.Functional;
+using LanguageExt;
+using static LanguageExt.Prelude;
 
 namespace Account.Domain;
 
 public static class Errors
 {
+   /*
    public static Error InsufficientBalance
       => new InsufficientBalanceError();
 
@@ -12,10 +15,11 @@ public static class Errors
 
    public static Error CannotActivateClosedAccount
       => new CannotActivateClosedAccountError();
+   */
+   public static TransferDateIsPastError TransferDateIsPast(DateTime date)
+      => TransferDateIsPastError.New(date.ToString());
 
-   public static Error TransferDateIsPast 
-      => new TransferDateIsPastError();
-
+/*
    public static Error AccountNotActive
       => new AccountNotActiveError();
 
@@ -27,11 +31,11 @@ public static class Errors
 
    public static Error InvalidDepositAmount
       => new InvalidDepositAmountError();
-
-   public static Error InvalidCurrency(string currency)
-      => new InvalidCurrencyError(currency);
+*/
+   public static InvalidCurrencyError InvalidCurrency(string currency)
+      => InvalidCurrencyError.New($"Cannot create account with unknown currency {currency}");
 }
-
+/*
 public sealed record UnknownAccountIdError(Guid Id)
    : Error($"No account found for id {Id}");
 
@@ -50,11 +54,23 @@ public sealed record InsufficientBalanceError()
 public sealed record CannotActivateClosedAccountError()
    : Error("Cannot activate an account that has been closed");
 
-public sealed record TransferDateIsPastError()
-   : Error("Transfer date cannot be in the past");
 
 public sealed record InvalidDepositAmountError()
    : Error("Deposit amount must be greater than 0");
+*/
+/*
+public class Error : NewType<Error, string>
+{
+   public Error(string e) : base(e) {}
+}
+*/
 
-public sealed record InvalidCurrencyError(string currency)
-   : Error($"Cannot create account with unknown currency {currency}");
+public sealed class TransferDateIsPastError : NewType<TransferDateIsPastError, string>
+{
+   public TransferDateIsPastError(string date) : base($"Transfer date {date} cannot be in the past") {}
+}
+
+public sealed class InvalidCurrencyError : NewType<InvalidCurrencyError, string>
+{
+   public InvalidCurrencyError(string currency) : base(currency) {}
+}
