@@ -158,10 +158,10 @@ public static class Account
    {
       if (state.Status != AccountStatus.Active)
          return Errors.AccountNotActive;
-/*
+
       if (state.Balance - cmd.Amount < state.AllowedOverdraft)
          return Errors.InsufficientBalance;
-*/
+
       var evt = cmd.ToEvent();
       var newState = state.Apply(evt);
 

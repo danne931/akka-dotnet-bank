@@ -20,7 +20,7 @@ public static class Response
    WrappedResult.Match(
       Fail: ExceptionResponse,
       Succ: val => val.Match(
-         Fail: e => BadRequest(e.ToFullString()),
+         Fail: BadRequest,
          Succ: state => Ok(ShapeResponse != null ? ShapeResponse(state) : state)
       )
    );

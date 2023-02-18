@@ -1,5 +1,4 @@
-using LaYumba.Functional;
-using static LaYumba.Functional.F;
+using static LanguageExt.Prelude;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,10 +15,10 @@ public class AccountTests
    public async Task WhenAccountDoesntExist_Then400()
    {
       await using var app = MockApp(
-         Valid,
+         Validators.Pass<TransferCmd>(),
          new AccountRegistry(
-            loadAccount: _ => Async<Option<AccountState>>(None),
-            saveAndPublish: _ => Async(Unit())));
+            loadAccount: _ => TaskSucc<LaYumba.Functional.Option<AccountState>>(LaYumba.Functional.F.None),
+            saveAndPublish: _ => TaskSucc(unit)));
 
       var client = app.CreateClient();
  
@@ -49,11 +48,11 @@ public class AccountTests
       await using var app = MockApp(
          Validators.TransferValidation(() => DateTime.UtcNow.Date),
          new AccountRegistry(
-            loadAccount: _ => Async(Some(MockAccount())),
+            loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
             saveAndPublish: _ =>
             {
                changesPersisted = true;
-               return Async(Unit());
+               return TaskSucc(unit);
             }));
 
       var client = app.CreateClient();
@@ -74,13 +73,13 @@ public class AccountTests
       bool changesPersisted = false;
 
       await using var app = MockApp(
-         Valid,
+         Validators.Pass<TransferCmd>(),
          new AccountRegistry(
-            loadAccount: _ => Async(Some(MockAccount())),
+            loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
             saveAndPublish: _ =>
             {
                changesPersisted = true;
-               return Async(Unit());
+               return TaskSucc(unit);
             }));
 
       var client = app.CreateClient();
@@ -102,13 +101,13 @@ public class AccountTests
       bool changesPersisted = false;
 
       await using var app = MockApp(
-         Valid,
+         Validators.Pass<TransferCmd>(),
          new AccountRegistry(
-            loadAccount: _ => Async(Some(MockAccount())),
+            loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
             saveAndPublish: _ =>
             {
                changesPersisted = true;
-               return Async(Unit());
+               return TaskSucc(unit);
             }));
 
       var client = app.CreateClient();
@@ -127,13 +126,13 @@ public class AccountTests
       bool changesPersisted = false;
 
       await using var app = MockApp(
-         Valid,
+         Validators.Pass<TransferCmd>(),
          new AccountRegistry(
             loadAccount: _ => { throw new InvalidOperationException(); },
             saveAndPublish: _ =>
             {
                changesPersisted = true;
-               return Async(Unit());
+               return TaskSucc(unit);
             }));
 
       var client = app.CreateClient();
@@ -153,16 +152,16 @@ public class AccountTests
       int changesPersisted = 0;
 
       await using var app = MockApp(
-         Valid,
+         Validators.Pass<TransferCmd>(),
          new AccountRegistry(
             loadAccount: _ => {
                accountLoaded++;
-               return Async(Some(MockAccount()));
+               return TaskSucc(LaYumba.Functional.F.Some(MockAccount()));
             },
             saveAndPublish: _ =>
             {
                changesPersisted++;
-               return Async(Unit());
+               return TaskSucc(unit);
             }));
 
       var client = app.CreateClient();
@@ -180,9 +179,9 @@ public class AccountTests
    public async Task WhenPersistenceFails_Then500()
    {
       await using var app = MockApp(
-         Valid,
+         Validators.Pass<TransferCmd>(),
          new AccountRegistry(
-            loadAccount: _ => Async(Some(MockAccount())),
+            loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
             saveAndPublish: _ => { throw new InvalidOperationException(); }));
 
       var client = app.CreateClient();

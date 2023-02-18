@@ -34,6 +34,9 @@ public class Error : NewType<Error, string>
 public sealed class UnknownAccountIdError : Error
 {
    public UnknownAccountIdError(Guid id) : base($"No account found for id {id}") {}
+
+   // Required for tests (json deserialize)
+   public Guid id { get; init; }
 }
 
 public sealed class AccountNotActiveError : Error
@@ -44,6 +47,9 @@ public sealed class AccountNotActiveError : Error
 public sealed class TransferDateIsPastError : Error
 {
    public TransferDateIsPastError(DateTime date) : base($"Transfer date {date.ToString()} cannot be in the past") {}
+
+   // Required for tests (json deserialize)
+   public DateTime date { get; init; }
 }
 
 public sealed class InvalidCurrencyError : Error

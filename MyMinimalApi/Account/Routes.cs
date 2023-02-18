@@ -8,7 +8,7 @@
  *   6. Replace ImmutableDictionary<Guid, AccountProcess> cache
  *      (https://learn.microsoft.com/en-us/dotnet/core/extensions/caching
  *       https://docs.redis.com/latest/rs/references/client_references/client_csharp/) 
- *   7. Replace LaYumba.Functional with louthy/language-ext
+ *   X 7. Replace LaYumba.Functional with louthy/language-ext
  *   8. Add System.ComponentModel.DataAnnotations to TransferCmd & perform
  *      parameter validation?
  *   X 9. Add diagnostic route to get all events for account
