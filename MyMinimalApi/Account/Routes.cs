@@ -42,7 +42,7 @@ using Lib;
 using static Lib.Route.Response;
 using Account.Domain;
 using Account.Domain.Commands;
- 
+
 namespace Account.Routes;
 
 public static class AccountRoutes
@@ -59,15 +59,14 @@ public static class AccountRoutes
    {
       builder.Services.AddSingleton(Account.Domain.Account.EventTypeMapping);
 
-      builder.Services.AddSingleton<TransferValidator>(
+      builder.Services.AddSingleton<Validator<TransferCmd>>(
          Validators.TransferValidation(() => DateTime.UtcNow.Date));
 
-      builder.Services.AddSingleton<CurrencyValidator>(
+      builder.Services.AddSingleton<Validator<CreateAccountCmd>>(
          Validators.AccountInitValidation());
 
       var esClient = ES.Connect();
 
-/*
       builder.Services.AddSingleton<AccountRegistry>(
          new AccountRegistry(
             //Cache: ImmutableDictionary<Guid, AccountProcess>.Empty,
@@ -75,17 +74,21 @@ public static class AccountRoutes
                esClient,
                id,
                Account.Domain.Account.EventTypeMapping
-            ),
+            )
+            .Map(opt => opt.Match(
+               Some: LaYumba.Functional.F.Some,
+               None: LaYumba.Functional.F.None
+            )),
             //stateTransition: Account.Domain.Account.StateTransition,
             saveAndPublish: evt => {
                Console.WriteLine("SAVE AND PUBLISH: " + evt.GetType());
+               
                return ES.SaveAndPublish(
                   esClient,
                   Account.Domain.Account.EventTypeMapping,
                   Account.Domain.Account.StreamName(evt.EntityId),
                   evt);
             }));
-*/
 
       builder.Services.AddSingleton<EventStoreClient>(esClient);
    }
@@ -96,11 +99,9 @@ public static class AccountRoutes
       app.MapGet(Path.Base + "/events/{id}", GetAccountEvents);
 
       app.MapPost(Path.Base, CreateAccount);
-      /*
       app.MapPost(Path.Transfer, Transfer);
       app.MapPost(Path.Deposit, Deposit);
       app.MapPost(Path.FreezeAccount, FreezeAccount);
-      */
       //.WithParameterValidation();
    }
 
@@ -125,12 +126,11 @@ public static class AccountRoutes
    static Task<IResult> CreateAccount(
       CreateAccountCmd cmd,
       EventStoreClient es,
-      CurrencyValidator validate
+      Validator<CreateAccountCmd> validate
    )
    => API.Create(es, validate, cmd).Unwrap<Guid>();
 
-/*
-   static Task<IResult> Transfer(
+   public static Task<IResult> Transfer(
       TransferCmd cmd,
       Validator<TransferCmd> validate,
       AccountRegistry accounts
@@ -154,5 +154,4 @@ public static class AccountRoutes
    => API
       .ProcessCommand<FreezeAccountCmd>(cmd, accounts)
       .Unwrap<AccountState>(newState => new { Status = newState.Status });
-      */
 }

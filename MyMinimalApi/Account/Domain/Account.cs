@@ -1,8 +1,7 @@
 using LanguageExt;
+
 using static LanguageExt.Prelude;
 using static LanguageExt.List;
-//using LaYumba.Functional;
-//using static LaYumba.Functional.F;
 using System.Collections.Immutable;
 using EventStore.Client;
 
@@ -25,42 +24,31 @@ var ty = AppDomain.CurrentDomain
 
 public static class API
 {
-   //public static Task<Validation<InvalidCurrencyError, Guid>> Create(
+   //public static TryOptionAsync<Validation<InvalidCurrencyError, Guid>> Create(
    public static Task<TryOption<Guid>> Create(
       EventStoreClient client,
-      CurrencyValidator validate,
+      Validator<CreateAccountCmd> validate,
       CreateAccountCmd command
    )
    {
       /*
-      var evt = validate(command);
-      await ES.SaveAndPublish(
-         client,
-         Account.EventTypeMapping,
-         Account.StreamName(evt.EntityId),
-         evt,
-         // Create event stream only if it doesn't already exist.
-         StreamState.NoStream
-      );
-      */
-      /* 
-      var save = (CreatedAccount evt) => TryAsync(ES.SaveAndPublish(
-         client,
-         Account.EventTypeMapping,
-         Account.StreamName(evt.EntityId),
-         evt,
-         // Create event stream only if it doesn't already exist.
-         StreamState.NoStream
-      ).Map(() => evt.EntityId));
-
-      return validate(command).Match(
-         Succ: evt => evt.EntityId,
-         Fail: e => e
-      );
-      */
-      
-      return validate(command).Map(async evt => {
+      return TryOptionAsync(validate(command).Map(async evt => {
          //var evt = cmd.ToEvent();
+         await ES.SaveAndPublish(
+            client,
+            Account.EventTypeMapping,
+            Account.StreamName(evt.EntityId),
+            evt,
+            // Create event stream only if it doesn't already exist.
+            StreamState.NoStream
+         );
+         return evt.EntityId;
+      })
+      .Sequence());
+      */
+
+      return validate(command).Map(async cmd => {
+         var evt = cmd.ToEvent();
          await ES.SaveAndPublish(
             client,
             Account.EventTypeMapping,
@@ -73,10 +61,6 @@ public static class API
       })
       .ToTryOption()
       .Sequence();
-      
-      //.Traverse
-      //.MapFail(e => e)
-      //.Traverse(evt => evt.EntityId);
    }
 
    public static Task<Option<Lst<object>>> GetAccountEvents(
@@ -87,7 +71,7 @@ public static class API
    )
    => ES.ReadStream(client, Account.StreamName(accountId), mapping);
 
-   public static async Task<LanguageExt.Option<AccountState>> GetAccount(
+   public static async Task<Option<AccountState>> GetAccount(
       EventStoreClient client,
       Guid accountId,
       ImmutableDictionary<string, Type> mapping
@@ -111,30 +95,36 @@ public static class API
       );
    }
 
-/*
-   public static Task<Validation<AccountState>> ProcessCommand<T>(
+   public static TryAsync<Validation<Error, AccountState>> ProcessCommand<T>(
       T command,
       AccountRegistry accounts,
       Validator<T>? validate = null
    )
    where T : Command
    {
-      if (validate is null) validate = Valid;
+      if (validate is null)
+         validate = Validators.Pass<T>();
 
-      var getAccountVal = (Guid id) =>
+      var getAccountVal = (Command cmd) =>
          accounts
-            .Lookup(id)
-            .Map(opt => opt.ToValidation(Errors.UnknownAccountId(id)));
+            .Lookup(cmd.EntityId)
+            .Map((LaYumba.Functional.Option<AccountProcess> opt) => opt.Match(
+               Some: LanguageExt.Prelude.Some,
+               None: () => LanguageExt.Prelude.None
+            ))
+            .Map(opt => opt.ToValidation(Error.New("oopsie")));//Errors.UnknownAccountId(cmd.EntityId)));
 
-      var outcome =
-         from cmd in Async(validate(command))
-         from acc in getAccountVal(cmd.EntityId)
-         from result in acc.SyncStateChange(cmd)
-         select result.NewState;
+      // validate = command -> Validation<Error, T>
+      // getAccountVal = command -> Validation<UnknownAccountIdError, AccountProcess>
 
-      return outcome;
+      var res =
+         from cmd in TaskSucc(validate(command))//validate(command)
+         from acc in getAccountVal(cmd)
+         from state in acc.SyncStateChange(cmd)
+         select state.NewState;
+
+      return TryAsync(res);
    }
-   */
 }
 
 public static class Account
@@ -151,7 +141,7 @@ public static class Account
       }
       .ToImmutableDictionary();
 /*
-   public static Validation<(Event Event, AccountState NewState)>
+   public static LaYumba.Functional.Validation<(Event Event, AccountState NewState)>
       StateTransition(this AccountState state, Command cmd) =>
          cmd switch
          {
@@ -159,25 +149,26 @@ public static class Account
             DepositCashCmd deposit => state.Deposit(deposit),
             FreezeAccountCmd freeze => state.Freeze(freeze)
          };
+  */
 
-   public static Validation<(Event Event, AccountState NewState)> Debit(
+   public static Validation<Error, (Event Event, AccountState NewState)> Debit(
       this AccountState state,
       TransferCmd cmd
    )
    {
       if (state.Status != AccountStatus.Active)
          return Errors.AccountNotActive;
-
+/*
       if (state.Balance - cmd.Amount < state.AllowedOverdraft)
          return Errors.InsufficientBalance;
-
+*/
       var evt = cmd.ToEvent();
       var newState = state.Apply(evt);
 
       return (evt, newState);
    }
 
-   public static Validation<(Event evt, AccountState newState)> Deposit(
+   public static Validation<Error, (Event Event, AccountState NewState)> Deposit(
       this AccountState state,
       DepositCashCmd cmd
    )
@@ -185,7 +176,6 @@ public static class Account
       if (state.Status != AccountStatus.Active)
          return Errors.AccountNotActive;
 
-      /*
       if (cmd.Amount <= 0)
          return Errors.InvalidDepositAmount;
 
@@ -196,7 +186,7 @@ public static class Account
       return (evt, newState);
    }
 
-   public static Validation<(Event evt, AccountState newState)> Freeze(
+   public static Validation<Error, (Event Event, AccountState NewState)> Freeze(
       this AccountState state,
       FreezeAccountCmd cmd
    )
@@ -209,7 +199,6 @@ public static class Account
 
       return (evt, newState);
    }
-   */
 
    // apply events
 
@@ -235,22 +224,6 @@ public static class Account
 
       _ => throw new InvalidOperationException()
    };
-
-/*
-   public static LanguageExt.Option<AccountState> Aggregate(Lst<object> history)
-      => match(history,
-         Some: (otherEvents) =>
-            fold(otherEvents,
-               Account.Create((CreatedAccount) head(otherEvents)),
-               (state, evt) => state.Apply(evt)),
-         None: () => null);//new List<object>() {});
-         //() => None,
-         /*
-         (createdEvent, otherEvents) => Some(
-            otherEvents.Aggregate(
-               Account.Create((CreatedAccount) createdEvent),
-               func: (state, evt) => state.Apply(evt))));
-*/
 }
 
 
