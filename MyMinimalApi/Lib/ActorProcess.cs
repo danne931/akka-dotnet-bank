@@ -6,7 +6,7 @@ using Account.Domain.Events;
 
 namespace Lib;
 
-using Result = LanguageExt.Validation<Account.Domain.Error, (Event Event, AccountState NewState)>;
+using Result = LanguageExt.Validation<Err, (Event Event, AccountState NewState)>;
 
 public class AgentProcess//<T>
 {

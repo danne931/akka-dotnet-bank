@@ -1,73 +1,28 @@
+using System.Runtime.Serialization;
 using LanguageExt;
+using LanguageExt.Common;
 
 namespace Account.Domain;
 
 public static class Errors
 {
-   public static InsufficientBalanceError InsufficientBalance
-      => new InsufficientBalanceError();
+   public static Err InsufficientBalance
+      => new Err("Insufficient funds to fulfil the requested operation");
 
-   public static TransferDateIsPastError TransferDateIsPast(DateTime date) =>
-      new TransferDateIsPastError(date);
+   public static Err TransferDateIsPast
+      => new Err(nameof(TransferDateIsPast));
 
-   public static AccountNotActiveError AccountNotActive
-      => new AccountNotActiveError();
+   public static Err AccountNotActive
+      => new Err(nameof(AccountNotActive));
 
-   public static UnexpectedError UnexpectedError
-      => new UnexpectedError();
+   public static Err UnknownAccountId(Guid id)
+      => new Err($"{nameof(UnknownAccountId)}: {id.ToString()}");
 
-   public static UnknownAccountIdError UnknownAccountId(Guid id)
-      => new UnknownAccountIdError(id);
+   public static Err InvalidDepositAmount
+      => new Err("Deposit amount must be greater than 0");
 
-   public static InvalidDepositAmountError InvalidDepositAmount
-      => new InvalidDepositAmountError();
-
-   public static InvalidCurrencyError InvalidCurrency(string currency)
-      => new InvalidCurrencyError(currency);
+   public static Err InvalidCurrency(string currency)
+      => new Err($"{nameof(InvalidCurrency)}: {currency}");
 }
 
-public class Error : NewType<Error, string>
-{
-   public Error(string e) : base(e) {}
-}
-
-public sealed class UnknownAccountIdError : Error
-{
-   public UnknownAccountIdError(Guid id) : base($"No account found for id {id}") {}
-
-   // Required for tests (json deserialize)
-   public Guid id { get; init; }
-}
-
-public sealed class AccountNotActiveError : Error
-{
-   public AccountNotActiveError() : base("The account is not active; the requested operation cannot be completed") {}
-}
-
-public sealed class TransferDateIsPastError : Error
-{
-   public TransferDateIsPastError(DateTime date) : base($"Transfer date {date.ToString()} cannot be in the past") {}
-
-   // Required for tests (json deserialize)
-   public DateTime date { get; init; }
-}
-
-public sealed class InvalidCurrencyError : Error
-{
-   public InvalidCurrencyError(string currency) : base($"Cannot create account with unknown currency {currency}") {}
-}
-
-public sealed class InsufficientBalanceError : Error
-{
-   public InsufficientBalanceError() : base("Insufficient funds to fulfil the requested operation") {}
-}
-
-public sealed class InvalidDepositAmountError : Error
-{
-   public InvalidDepositAmountError() : base("Deposit amount must be greater than 0") {}
-}
-
-public sealed class UnexpectedError : Error
-{
-   public UnexpectedError() : base("An unexpected error has occurred") {}
-}
+public record Err(string Message, int Code = 100) : Expected(Message, Code);

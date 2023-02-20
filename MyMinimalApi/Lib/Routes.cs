@@ -1,19 +1,14 @@
-//using LaYumba.Functional;
-using LanguageExt;
-using static LanguageExt.Prelude;
-using LanguageExt.ClassInstances;
 using static Microsoft.AspNetCore.Http.Results;
-using LanguageExt.Common;
+using LanguageExt;
 
 using Account.Domain;
-using Account.Domain.Events;
 
 namespace Lib.Route;
 
 public static class Response
 {
    public static Task<IResult> Unwrap<T>(
-      this TryAsync<Validation<Account.Domain.Error, T>> WrappedResult,
+      this TryAsync<Validation<Err, T>> WrappedResult,
       Func<T, Object>? ShapeResponse = null
    )
    =>
@@ -52,30 +47,10 @@ public static class Response
          None: () => NotFound(),
          Some: state => Ok(ShapeResponse != null ? ShapeResponse(state) : state)
       );
-
-/*
-      return r.Match(
-         Fail: ExceptionResponse,
-         Succ: val => val.Match(
-            //Invalid: ErrorsAsValidationResponse,
-            None: () => NotFound(),
-            Some: state => Ok(ShapeResponse != null ? ShapeResponse(state) : state))
-      );
-      */
    }
 
-    private static IResult ErrorsAsValidationResponse(IEnumerable<Account.Domain.Error> errors) =>
-      ValidationProblem(errors.Aggregate(
-         new Dictionary<string, string[]>(),
-         (acc, val) => {
-            //acc[val.GetType().ToString()] = new string[]{val.Message};
-            acc[val.GetType().ToString()] = new string[]{val.ToString()};
-            return acc;
-         }
-      ));
-
-   private static IResult ExceptionResponse(Exception ex/*Error ex*/) {
-      Console.WriteLine("EXCEPTION: " + ex.Message);//ex.InnerException);
+   private static IResult ExceptionResponse(Exception ex) {
+      Console.WriteLine("EXCEPTION: " + ex.Message);
       return StatusCode(StatusCodes.Status500InternalServerError);
    }
 }

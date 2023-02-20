@@ -1,4 +1,5 @@
 using LanguageExt;
+using LanguageExt.Common;
 
 using static LanguageExt.Prelude;
 using static LanguageExt.List;
@@ -95,7 +96,7 @@ public static class API
       );
    }
 
-   public static TryAsync<Validation<Error, AccountState>> ProcessCommand<T>(
+   public static TryAsync<Validation<Err, AccountState>> ProcessCommand<T>(
       T command,
       AccountRegistry accounts,
       Validator<T>? validate = null
@@ -112,10 +113,7 @@ public static class API
                Some: LanguageExt.Prelude.Some,
                None: () => LanguageExt.Prelude.None
             ))
-            .Map(opt => opt.ToValidation(Error.New("oopsie")));//Errors.UnknownAccountId(cmd.EntityId)));
-
-      // validate = command -> Validation<Error, T>
-      // getAccountVal = command -> Validation<UnknownAccountIdError, AccountProcess>
+            .Map(opt => opt.ToValidation(Errors.UnknownAccountId(cmd.EntityId)));
 
       var res =
          from cmd in TaskSucc(validate(command))//validate(command)
@@ -151,7 +149,7 @@ public static class Account
          };
   */
 
-   public static Validation<Error, (Event Event, AccountState NewState)> Debit(
+   public static Validation<Err, (Event Event, AccountState NewState)> Debit(
       this AccountState state,
       TransferCmd cmd
    )
@@ -168,7 +166,7 @@ public static class Account
       return (evt, newState);
    }
 
-   public static Validation<Error, (Event Event, AccountState NewState)> Deposit(
+   public static Validation<Err, (Event Event, AccountState NewState)> Deposit(
       this AccountState state,
       DepositCashCmd cmd
    )
@@ -186,7 +184,7 @@ public static class Account
       return (evt, newState);
    }
 
-   public static Validation<Error, (Event Event, AccountState NewState)> Freeze(
+   public static Validation<Err, (Event Event, AccountState NewState)> Freeze(
       this AccountState state,
       FreezeAccountCmd cmd
    )

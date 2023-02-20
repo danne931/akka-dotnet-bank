@@ -1,6 +1,6 @@
-using static LanguageExt.Prelude;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using static LanguageExt.Prelude;
 
 using Lib;
 using Account.Routes;
@@ -25,19 +25,10 @@ public class AccountTests
       var res = await client.PostAsJsonAsync(
          AccountRoutes.Path.Transfer,
          MockTransferCmd());
-
-      var obj = await res.Content.
-         ReadFromJsonAsync<IEnumerable<UnknownAccountIdError>>();
-
-      /*
-       * TODO: uncomment when uniform validation response object shape
-       *       decided upon.  convert other tests as well
-      var obj = await res.Content.ReadFromJsonAsync<HttpValidationProblemDetails>();
-      Assert.NotEmpty(obj!.Errors[typeof(UnknownAccountIdError).ToString()]);
-      */
+      var obj = await res.Content.ReadFromJsonAsync<IEnumerable<Err>>();
 
       Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
-      Assert.IsType<UnknownAccountIdError>(obj?.ElementAt(0));
+      Assert.Equal(Errors.UnknownAccountId(Guid.Empty), obj.Head());
    }
 
    [Fact]
@@ -46,7 +37,7 @@ public class AccountTests
       var changesPersisted = false;
 
       await using var app = MockApp(
-         Validators.TransferValidation(() => DateTime.UtcNow.Date),
+         Validators.TransferValidation(() => DateTime.Now),
          new AccountRegistry(
             loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
             saveAndPublish: _ =>
@@ -59,11 +50,10 @@ public class AccountTests
  
       var res = await client.
          PostAsJsonAsync(AccountRoutes.Path.Transfer, MockTransferCmdInvalidDate());
-      var obj = await res.Content.
-         ReadFromJsonAsync<IEnumerable<TransferDateIsPastError>>();
+      var obj = await res.Content.ReadFromJsonAsync<IEnumerable<Err>>();
 
       Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
-      Assert.IsType<TransferDateIsPastError>(obj?.ElementAt(0));
+      Assert.Equal(Errors.TransferDateIsPast, obj.Head());
       Assert.False(changesPersisted);
    }
 
@@ -88,10 +78,10 @@ public class AccountTests
          AccountRoutes.Path.Transfer,
          MockTransferCmd() with { Amount = 1200 });
       var obj = await res.Content.
-         ReadFromJsonAsync<IEnumerable<InsufficientBalanceError>>();
+         ReadFromJsonAsync<IEnumerable<Err>>();
 
       Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
-      Assert.IsType<InsufficientBalanceError>(obj?.ElementAt(0));
+      Assert.Equal(Errors.InsufficientBalance, obj.Head());
       Assert.False(changesPersisted);
    }
 
