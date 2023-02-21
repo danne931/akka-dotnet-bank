@@ -1,20 +1,13 @@
 namespace Account.Domain.Events;
 
-public abstract record Event
-(
+public abstract record Event(
    Guid EntityId,
    DateTime Timestamp,
    string Name,
    float Version = 1.0F
 );
-/*
-{
-   public string StreamId() => $"accounts_{this.EntityId}";
-}
-*/
 
-public record CreatedAccount
-(
+public record CreatedAccount(
    Guid EntityId,
    DateTime Timestamp,
    //CurrencyCode Currency
@@ -22,8 +15,7 @@ public record CreatedAccount
 )
 : Event(EntityId, Timestamp, nameof(CreatedAccount));
 
-public record DebitedTransfer
-(
+public record DebitedTransfer(
    Guid EntityId,
    DateTime Date,
    DateTime Timestamp,
@@ -45,16 +37,14 @@ public record AlteredOverdraft
 : Event(EntityId, Timestamp);
 */
 
-public record FrozeAccount
-(
+public record FrozeAccount(
    Guid EntityId,
    DateTime Timestamp,
    string Reference
 )
 : Event(EntityId, Timestamp, nameof(FrozeAccount));
 
-public record DepositedCash
-(
+public record DepositedCash(
    Guid EntityId,
    DateTime Timestamp,
    decimal DepositedAmount,

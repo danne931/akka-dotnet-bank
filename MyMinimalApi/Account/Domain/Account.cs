@@ -1,5 +1,7 @@
 using LanguageExt;
-using LanguageExt.Common;
+using static Echo.Process;
+using static Echo.Strategy;
+
 
 using static LanguageExt.Prelude;
 using static LanguageExt.List;
@@ -13,6 +15,8 @@ using ES = Lib.Persistence.EventStoreManager;
 
 namespace Account.Domain;
 
+using StateTransitionResult = Validation<Err, (Event Event, AccountState NewState)>;
+
 /*
 var ty = AppDomain.CurrentDomain
    .GetAssemblies()
@@ -23,15 +27,21 @@ var ty = AppDomain.CurrentDomain
    .FirstOrDefault();
 */
 
-public static class API
-{
+public static class API {
+   public static Task<Option<EchoCmd>> TestEchoProcess(EchoCmd cmd) {
+      var logger = spawn<EchoCmd>("echo", Console.WriteLine);
+
+      tell(logger, cmd);
+      return TaskSucc(Some(cmd));
+   }
+
+
    //public static TryOptionAsync<Validation<InvalidCurrencyError, Guid>> Create(
    public static Task<TryOption<Guid>> Create(
       EventStoreClient client,
       Validator<CreateAccountCmd> validate,
       CreateAccountCmd command
-   )
-   {
+   ) {
       /*
       return TryOptionAsync(validate(command).Map(async evt => {
          //var evt = cmd.ToEvent();
@@ -76,8 +86,7 @@ public static class API
       EventStoreClient client,
       Guid accountId,
       ImmutableDictionary<string, Type> mapping
-   )
-   {
+   ) {
       /*
       var agg =
          from events in GetAccountEvents(client, accountId, mapping)
@@ -125,31 +134,29 @@ public static class API
    }
 }
 
-public static class Account
-{
+public static class Account {
    public static string StreamName(Guid id) => $"accounts_{id}";
 
    public static ImmutableDictionary<string, Type> EventTypeMapping
-      => new Dictionary<string, Type>
-      {
+      => new Dictionary<string, Type> {
          { nameof(CreatedAccount), typeof(CreatedAccount) },
          { nameof(DebitedTransfer), typeof(DebitedTransfer) },
          { nameof(DepositedCash), typeof(DepositedCash)},
          { nameof(FrozeAccount), typeof(FrozeAccount)}
       }
       .ToImmutableDictionary();
-/*
-   public static LaYumba.Functional.Validation<(Event Event, AccountState NewState)>
-      StateTransition(this AccountState state, Command cmd) =>
-         cmd switch
-         {
-            TransferCmd transfer => state.Debit(transfer),
-            DepositCashCmd deposit => state.Deposit(deposit),
-            FreezeAccountCmd freeze => state.Freeze(freeze)
-         };
-  */
 
-   public static Validation<Err, (Event Event, AccountState NewState)> Debit(
+   public static StateTransitionResult StateTransition(
+      this AccountState state,
+      Command cmd
+   ) =>
+      cmd switch {
+         TransferCmd transfer => state.Debit(transfer),
+         DepositCashCmd deposit => state.Deposit(deposit),
+         FreezeAccountCmd freeze => state.Freeze(freeze)
+      };
+
+   public static StateTransitionResult Debit(
       this AccountState state,
       TransferCmd cmd
    )
@@ -166,11 +173,10 @@ public static class Account
       return (evt, newState);
    }
 
-   public static Validation<Err, (Event Event, AccountState NewState)> Deposit(
+   public static StateTransitionResult Deposit(
       this AccountState state,
       DepositCashCmd cmd
-   )
-   {
+   ) {
       if (state.Status != AccountStatus.Active)
          return Errors.AccountNotActive;
 
@@ -184,11 +190,10 @@ public static class Account
       return (evt, newState);
    }
 
-   public static Validation<Err, (Event Event, AccountState NewState)> Freeze(
+   public static StateTransitionResult Freeze(
       this AccountState state,
       FreezeAccountCmd cmd
-   )
-   {
+   ) {
       if (state.Status == AccountStatus.Frozen)
          return Errors.AccountNotActive;
 
@@ -209,8 +214,7 @@ public static class Account
          );
 
    public static AccountState Apply(this AccountState acc, object evt)
-   => evt switch
-   {
+   => evt switch {
       DepositedCash e
          => acc with { Balance = acc.Balance + e.DepositedAmount },
 
@@ -224,41 +228,19 @@ public static class Account
    };
 }
 
-
 public enum AccountStatus
 { Requested, Active, Frozen, Dormant, Closed }
 
-public abstract record State (Guid EntityId);
-/*
-public interface IState<T>
-{
-   Validation<(Event Event, T NewState)> StateTransition(Command cmd);
-}
-*/
-
-public sealed record AccountState
-(
+public sealed record AccountState(
    Guid EntityId,
    //CurrencyCode Currency,
    string Currency,
    AccountStatus Status = AccountStatus.Requested,
    decimal Balance = 0,
    decimal AllowedOverdraft = 0
-) : State(EntityId);/*, IState<AccountState>
-{
-   public Validation<(Event Event, AccountState NewState)> StateTransition(Command cmd) =>
-      cmd switch
-      {
-         TransferCmd transfer => this.Debit(transfer),
-         DepositCashCmd deposit => this.Deposit(deposit),
-         FreezeAccountCmd freeze => this.Freeze(freeze)
-      };
+);
 
-}
-*/
-
-public struct CurrencyCode
-{
+public struct CurrencyCode {
    string Value { get; }
    public CurrencyCode(string value) => Value = value;
 

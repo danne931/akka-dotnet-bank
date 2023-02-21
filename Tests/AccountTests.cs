@@ -9,11 +9,9 @@ using Account.Domain.Commands;
 
 namespace Account.Tests;
 
-public class AccountTests
-{
+public class AccountTests {
    [Fact]
-   public async Task WhenAccountDoesntExist_Then400()
-   {
+   public async Task WhenAccountDoesntExist_Then400() {
       await using var app = MockApp(
          Validators.Pass<TransferCmd>(),
          new AccountRegistry(
@@ -24,7 +22,8 @@ public class AccountTests
  
       var res = await client.PostAsJsonAsync(
          AccountRoutes.Path.Transfer,
-         MockTransferCmd());
+         MockTransferCmd()
+      );
       var obj = await res.Content.ReadFromJsonAsync<IEnumerable<Err>>();
 
       Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
@@ -32,24 +31,24 @@ public class AccountTests
    }
 
    [Fact]
-   public async Task WhenValidationFails_Then400()
-   {
+   public async Task WhenValidationFails_Then400() {
       var changesPersisted = false;
 
       await using var app = MockApp(
          Validators.TransferValidation(() => DateTime.Now),
          new AccountRegistry(
             loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
-            saveAndPublish: _ =>
-            {
+            saveAndPublish: _ => {
                changesPersisted = true;
                return TaskSucc(unit);
             }));
 
       var client = app.CreateClient();
  
-      var res = await client.
-         PostAsJsonAsync(AccountRoutes.Path.Transfer, MockTransferCmdInvalidDate());
+      var res = await client.PostAsJsonAsync(
+         AccountRoutes.Path.Transfer,
+         MockTransferCmdInvalidDate()
+      );
       var obj = await res.Content.ReadFromJsonAsync<IEnumerable<Err>>();
 
       Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
@@ -58,27 +57,27 @@ public class AccountTests
    }
 
    [Fact]
-   public async Task WhenInsufficientBalance_Then400()
-   {
+   public async Task WhenInsufficientBalance_Then400() {
       bool changesPersisted = false;
 
       await using var app = MockApp(
          Validators.Pass<TransferCmd>(),
          new AccountRegistry(
             loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
-            saveAndPublish: _ =>
-            {
+            saveAndPublish: _ => {
                changesPersisted = true;
                return TaskSucc(unit);
-            }));
+            }
+         )
+      );
 
       var client = app.CreateClient();
  
       var res = await client.PostAsJsonAsync(
          AccountRoutes.Path.Transfer,
-         MockTransferCmd() with { Amount = 1200 });
-      var obj = await res.Content.
-         ReadFromJsonAsync<IEnumerable<Err>>();
+         MockTransferCmd() with { Amount = 1200 }
+      );
+      var obj = await res.Content.ReadFromJsonAsync<IEnumerable<Err>>();
 
       Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
       Assert.Equal(Errors.InsufficientBalance, obj.Head());
@@ -86,58 +85,59 @@ public class AccountTests
    }
 
    [Fact]
-   public async Task WhenEverythingWorks_Then200()
-   {
+   public async Task WhenEverythingWorks_Then200() {
       bool changesPersisted = false;
 
       await using var app = MockApp(
          Validators.Pass<TransferCmd>(),
          new AccountRegistry(
             loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
-            saveAndPublish: _ =>
-            {
+            saveAndPublish: _ => {
                changesPersisted = true;
                return TaskSucc(unit);
-            }));
+            }
+         )
+      );
 
       var client = app.CreateClient();
 
       var res = await client.PostAsJsonAsync(
          AccountRoutes.Path.Transfer,
-         MockTransferCmd());
+         MockTransferCmd()
+      );
 
       Assert.True(changesPersisted);
       Assert.Equal(HttpStatusCode.OK, res.StatusCode);
    }
 
    [Fact]
-   public async Task WhenLoadingFails_Then500()
-   {
+   public async Task WhenLoadingFails_Then500() {
       bool changesPersisted = false;
 
       await using var app = MockApp(
          Validators.Pass<TransferCmd>(),
          new AccountRegistry(
             loadAccount: _ => { throw new InvalidOperationException(); },
-            saveAndPublish: _ =>
-            {
+            saveAndPublish: _ => {
                changesPersisted = true;
                return TaskSucc(unit);
-            }));
+            }
+         )
+      );
 
       var client = app.CreateClient();
 
       var res = await client.PostAsJsonAsync(
          AccountRoutes.Path.Transfer,
-         MockTransferCmd());
+         MockTransferCmd()
+      );
 
       Assert.False(changesPersisted); 
       Assert.Equal(HttpStatusCode.InternalServerError, res.StatusCode);
    }
 
    [Fact]
-   public async Task AccountIsOnlyLoadedOnce()
-   {
+   public async Task AccountIsOnlyLoadedOnce() {
       int accountLoaded = 0;
       int changesPersisted = 0;
 
@@ -148,11 +148,12 @@ public class AccountTests
                accountLoaded++;
                return TaskSucc(LaYumba.Functional.F.Some(MockAccount()));
             },
-            saveAndPublish: _ =>
-            {
+            saveAndPublish: _ => {
                changesPersisted++;
                return TaskSucc(unit);
-            }));
+            }
+         )
+      );
 
       var client = app.CreateClient();
       var cmd = MockTransferCmd();
@@ -166,19 +167,21 @@ public class AccountTests
    }
 
    [Fact]
-   public async Task WhenPersistenceFails_Then500()
-   {
+   public async Task WhenPersistenceFails_Then500() {
       await using var app = MockApp(
          Validators.Pass<TransferCmd>(),
          new AccountRegistry(
             loadAccount: _ => TaskSucc(LaYumba.Functional.F.Some(MockAccount())),
-            saveAndPublish: _ => { throw new InvalidOperationException(); }));
+            saveAndPublish: _ => { throw new InvalidOperationException(); }
+         )
+      );
 
       var client = app.CreateClient();
 
       var res = await client.PostAsJsonAsync(
          AccountRoutes.Path.Transfer,
-         MockTransferCmd());
+         MockTransferCmd()
+      );
 
       Assert.Equal(HttpStatusCode.InternalServerError, res.StatusCode);
    }
@@ -189,8 +192,7 @@ public class AccountTests
    )
    => new WebApplicationFactory<Program>()
          .WithWebHostBuilder(builder => builder
-            .ConfigureServices(services =>
-            {
+            .ConfigureServices(services => {
                services.AddSingleton<Validator<TransferCmd>>(validate);
                services.AddSingleton<AccountRegistry>(accounts);
             }));
@@ -202,7 +204,7 @@ public class AccountTests
          Balance: 500,
          Status: AccountStatus.Active);
 
-   private static TransferCmd MockTransferCmd () =>
+   private static TransferCmd MockTransferCmd() =>
       new(
          Amount: 200,
          Date: DateTime.Now.AddDays(1),
@@ -213,6 +215,6 @@ public class AccountTests
          Reference: default
       );
 
-   private static TransferCmd MockTransferCmdInvalidDate () =>
+   private static TransferCmd MockTransferCmdInvalidDate() =>
       MockTransferCmd() with { Date = DateTime.Now.AddDays(-1) };
 }

@@ -45,18 +45,15 @@ using Account.Domain.Commands;
 
 namespace Account.Routes;
 
-public static class AccountRoutes
-{
-   public static class Path
-   {
+public static class AccountRoutes {
+   public static class Path {
       public const string Base = "/accounts";
       public const string Deposit = $"{Base}/deposit";
       public const string Transfer = $"{Base}/transfer";
       public const string FreezeAccount = $"{Base}/freeze";
    }
 
-   public static void Configure(WebApplicationBuilder builder)
-   {
+   public static void Configure(WebApplicationBuilder builder) {
       builder.Services.AddSingleton(Account.Domain.Account.EventTypeMapping);
 
       builder.Services.AddSingleton<Validator<TransferCmd>>(
@@ -93,8 +90,7 @@ public static class AccountRoutes
       builder.Services.AddSingleton<EventStoreClient>(esClient);
    }
 
-   public static void Start(WebApplication app)
-   {
+   public static void Start(WebApplication app) {
       app.MapGet(Path.Base + "/{id}", GetAccount);
       app.MapGet(Path.Base + "/events/{id}", GetAccountEvents);
 
@@ -103,9 +99,16 @@ public static class AccountRoutes
       app.MapPost(Path.Deposit, Deposit);
       app.MapPost(Path.FreezeAccount, FreezeAccount);
       //.WithParameterValidation();
+
+      app.MapPost("/echo", TestEchoProcess);
    }
 
    // QUERY
+
+   static Task<IResult> TestEchoProcess(
+      EchoCmd cmd
+   )
+   => API.TestEchoProcess(cmd).Unwrap<EchoCmd>();
 
    static Task<IResult> GetAccountEvents(
       Guid id,

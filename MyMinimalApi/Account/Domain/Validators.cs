@@ -6,8 +6,7 @@ namespace Account.Domain;
 
 public delegate Validation<Err, T> Validator<T>(T t);
 
-public static class Validators
-{
+public static class Validators {
    // TODO: Change to a dictionary or something else for better perf?
    public static Lst<string> Currencies => List("USD", "EUR");
 

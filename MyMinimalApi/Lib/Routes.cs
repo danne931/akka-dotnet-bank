@@ -5,8 +5,7 @@ using Account.Domain;
 
 namespace Lib.Route;
 
-public static class Response
-{
+public static class Response {
    public static Task<IResult> Unwrap<T>(
       this TryAsync<Validation<Err, T>> WrappedResult,
       Func<T, Object>? ShapeResponse = null
@@ -27,8 +26,7 @@ public static class Response
       //this Validation<InvalidCurrencyError, CreatedAccount> WrappedResult,
       this Task<TryOption<T>> WrappedResult,
       Func<T, Object>? ShapeResponse = null
-   )
-   {
+   ) {
       return WrappedResult.Match(
          Fail: ExceptionResponse,
          None: () => BadRequest(),
@@ -40,8 +38,7 @@ public static class Response
       this Task<Option<T>> WrappedResult,
       //this TryOptionAsync<T> WrappedResult,
       Func<T, Object>? ShapeResponse = null
-   )
-   {
+   ) {
       return WrappedResult.ToTryOptionAsync().Match(
          Fail: ExceptionResponse,
          None: () => NotFound(),

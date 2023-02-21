@@ -1,11 +1,8 @@
-using System.Runtime.Serialization;
-using LanguageExt;
 using LanguageExt.Common;
 
 namespace Account.Domain;
 
-public static class Errors
-{
+public static class Errors {
    public static Err InsufficientBalance
       => new Err("Insufficient funds to fulfil the requested operation");
 

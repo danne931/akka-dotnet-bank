@@ -9,16 +9,14 @@ using Account.Domain.Events;
 
 namespace Lib.Persistence;
 
-public static class EventStoreManager
-{
+public static class EventStoreManager {
    public async static Task<Unit> SaveAndPublish(
       EventStoreClient es,
       ImmutableDictionary<string, Type> mapping,
       string streamName,
       Event evt,
       StreamState? expectedStreamState = null
-   )
-   {
+   ) {
       var typeFromName = mapping[evt.Name];
 
       var eventData = new EventData(
@@ -41,8 +39,7 @@ public static class EventStoreManager
       EventStoreClient es,
       string streamName,
       ImmutableDictionary<string, Type> mapping
-   )
-   {
+   ) {
       var stream = es.ReadStreamAsync(
          Direction.Forwards,
          streamName,
