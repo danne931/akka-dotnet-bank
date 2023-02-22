@@ -23,7 +23,6 @@ public record EchoCmd(
 
 public record CreateAccountCmd(
    Guid EntityId,
-   //CurrencyCode Currency
    string Currency
 )
 : Command(EntityId)

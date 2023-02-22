@@ -1,5 +1,5 @@
 using Account.Routes;
-
+/*
 using static Echo.Process;
 using static LanguageExt.Prelude;
 
@@ -23,6 +23,7 @@ pong = spawn<string>("pong", msg => {
 
 // Trigger
 tell(pong, "start");
+*/
 
 var builder = WebApplication.CreateBuilder(args);
 

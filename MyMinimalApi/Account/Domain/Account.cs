@@ -228,24 +228,18 @@ public static class Account {
    };
 }
 
-public enum AccountStatus
-{ Requested, Active, Frozen, Dormant, Closed }
+public enum AccountStatus {
+   Requested,
+   Active,
+   Frozen,
+   Dormant,
+   Closed
+}
 
 public sealed record AccountState(
    Guid EntityId,
-   //CurrencyCode Currency,
    string Currency,
    AccountStatus Status = AccountStatus.Requested,
    decimal Balance = 0,
    decimal AllowedOverdraft = 0
 );
-
-public struct CurrencyCode {
-   string Value { get; }
-   public CurrencyCode(string value) => Value = value;
-
-   public static implicit operator string(CurrencyCode c) => c.Value;
-   public static implicit operator CurrencyCode(string s) => new(s);
-
-   public override string ToString() => Value;
-}

@@ -8,7 +8,10 @@ public delegate Validation<Err, T> Validator<T>(T t);
 
 public static class Validators {
    // TODO: Change to a dictionary or something else for better perf?
-   public static Lst<string> Currencies => List("USD", "EUR");
+   public static Lst<string> Currencies => List(
+      "USD",
+      "EUR"
+   );
 
    public static Validator<TransferCmd>
       TransferValidation(Func<DateTime> clock) =>

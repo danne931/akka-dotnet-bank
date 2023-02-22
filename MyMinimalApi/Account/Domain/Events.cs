@@ -10,7 +10,6 @@ public abstract record Event(
 public record CreatedAccount(
    Guid EntityId,
    DateTime Timestamp,
-   //CurrencyCode Currency
    string Currency
 )
 : Event(EntityId, Timestamp, nameof(CreatedAccount));
