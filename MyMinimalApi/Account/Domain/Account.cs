@@ -1,4 +1,6 @@
 using LanguageExt;
+
+using Echo;
 using static Echo.Process;
 using static Echo.Strategy;
 
@@ -17,24 +19,11 @@ namespace Account.Domain;
 
 using StateTransitionResult = Validation<Err, (Event Event, AccountState NewState)>;
 
-/*
-var ty = AppDomain.CurrentDomain
-   .GetAssemblies()
-   .SelectMany(a =>
-      a.GetTypes().Where(x =>
-         x.FullName == "DebitedTransfer" || x.Name == "DebitedTransfer")
-   )
-   .FirstOrDefault();
-*/
 
 public static class API {
    public static Task<Option<EchoCmd>> TestEchoProcess(EchoCmd cmd) {
-      var logger = spawn<EchoCmd>("echo", Console.WriteLine);
-
-      tell(logger, cmd);
       return TaskSucc(Some(cmd));
    }
-
 
    //public static TryOptionAsync<Validation<InvalidCurrencyError, Guid>> Create(
    public static Task<TryOption<Guid>> Create(
@@ -87,13 +76,6 @@ public static class API {
       Guid accountId,
       ImmutableDictionary<string, Type> mapping
    ) {
-      /*
-      var agg =
-         from events in GetAccountEvents(client, accountId, mapping)
-         select Account.Aggregate(events);
-      return agg;
-      */
-
       var res = await GetAccountEvents(client, accountId, mapping);
 
       return res.Map(events =>
@@ -105,7 +87,7 @@ public static class API {
       );
    }
 
-   public static TryAsync<Validation<Err, AccountState>> ProcessCommand<T>(
+   public static TryAsync<Validation<Err, Unit>> ProcessCommand<T>(
       T command,
       AccountRegistry accounts,
       Validator<T>? validate = null
@@ -118,17 +100,12 @@ public static class API {
       var getAccountVal = (Command cmd) =>
          accounts
             .Lookup(cmd.EntityId)
-            .Map((LaYumba.Functional.Option<AccountProcess> opt) => opt.Match(
-               Some: LanguageExt.Prelude.Some,
-               None: () => LanguageExt.Prelude.None
-            ))
             .Map(opt => opt.ToValidation(Errors.UnknownAccountId(cmd.EntityId)));
 
       var res =
-         from cmd in TaskSucc(validate(command))//validate(command)
+         from cmd in TaskSucc(validate(command))
          from acc in getAccountVal(cmd)
-         from state in acc.SyncStateChange(cmd)
-         select state.NewState;
+         select acc.SyncStateChange(cmd);
 
       return TryAsync(res);
    }

@@ -3,9 +3,9 @@
  *   X 2. Implement loadAccount events with EventStore
  *   X 3. Implement saveAndPublish with EventStore
  *   X 4. Add Create, DepositedCash, & FreezeAccount
- *   5. Replace Agent.Start & Agent.Tell with library equivalent
- *      (Orleans, Akka.NET, or github.com/louthy/echo-process)
- *   6. Replace ImmutableDictionary<Guid, AccountProcess> cache
+ *   X 5. Replace Agent.Start & Agent.Tell with library equivalent
+ *       (Orleans, Akka.NET, or github.com/louthy/echo-process)
+ *   X 6. Replace ImmutableDictionary<Guid, AccountProcess> cache
  *      (https://learn.microsoft.com/en-us/dotnet/core/extensions/caching
  *       https://docs.redis.com/latest/rs/references/client_references/client_csharp/) 
  *   X 7. Replace LaYumba.Functional with louthy/language-ext
@@ -63,29 +63,23 @@ public static class AccountRoutes {
          Validators.AccountInitValidation());
 
       var esClient = ES.Connect();
+      Echo.ProcessConfig.initialise();
 
       builder.Services.AddSingleton<AccountRegistry>(
          new AccountRegistry(
-            //Cache: ImmutableDictionary<Guid, AccountProcess>.Empty,
             loadAccount: id => API.GetAccount(
                esClient,
                id,
                Account.Domain.Account.EventTypeMapping
+            ),
+            saveAndPublish: evt => ES.SaveAndPublish(
+               esClient,
+               Account.Domain.Account.EventTypeMapping,
+               Account.Domain.Account.StreamName(evt.EntityId),
+               evt
             )
-            .Map(opt => opt.Match(
-               Some: LaYumba.Functional.F.Some,
-               None: LaYumba.Functional.F.None
-            )),
-            //stateTransition: Account.Domain.Account.StateTransition,
-            saveAndPublish: evt => {
-               Console.WriteLine("SAVE AND PUBLISH: " + evt.GetType());
-               
-               return ES.SaveAndPublish(
-                  esClient,
-                  Account.Domain.Account.EventTypeMapping,
-                  Account.Domain.Account.StreamName(evt.EntityId),
-                  evt);
-            }));
+         )
+      );
 
       builder.Services.AddSingleton<EventStoreClient>(esClient);
    }
@@ -140,7 +134,7 @@ public static class AccountRoutes {
    )
    => API
       .ProcessCommand<TransferCmd>(cmd, accounts, validate)
-      .Unwrap<AccountState>(newState => new { Balance = newState.Balance });
+      .Unwrap<Unit>();
 
    static Task<IResult> Deposit(
       DepositCashCmd cmd,
@@ -148,7 +142,7 @@ public static class AccountRoutes {
    )
    => API
       .ProcessCommand<DepositCashCmd>(cmd, accounts)
-      .Unwrap<AccountState>(newState => new { Balance = newState.Balance });
+      .Unwrap<Unit>();
 
    static Task<IResult> FreezeAccount(
       FreezeAccountCmd cmd,
@@ -156,5 +150,5 @@ public static class AccountRoutes {
    )
    => API
       .ProcessCommand<FreezeAccountCmd>(cmd, accounts)
-      .Unwrap<AccountState>(newState => new { Status = newState.Status });
+      .Unwrap<Unit>();
 }

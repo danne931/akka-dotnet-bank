@@ -1,4 +1,7 @@
 using LanguageExt;
+using static LanguageExt.Prelude;
+using Echo;
+using static Echo.Process;
 
 using Account.Domain;
 using Account.Domain.Commands;
@@ -6,49 +9,39 @@ using Account.Domain.Events;
 
 namespace Lib;
 
-using Result = LanguageExt.Validation<Err, (Event Event, AccountState NewState)>;
-
-public class AgentProcess {
-   public AgentProcess(
-      AccountState initialState,
-      Func<Event, Task<LanguageExt.Unit>> saveAndPublish
-   ) {}
-}
-
 public class AccountProcess {
-   LaYumba.Functional.Agent<Command, Result> agent;
+   public ProcessId PID { get; init; }
 
    public AccountProcess(
       AccountState initialState,
       Func<Event, Task<LanguageExt.Unit>> saveAndPublish
-      //Func<AccountState, Command, Validation<(Event Event, AccountState NewState)>> stateTransition
-   )
-   => agent = LaYumba.Functional.Agent.Start(
-      initialState,
-      async (AccountState state, Command cmd) =>
-      {
-         Console.WriteLine("3. ACCOUNTPROCESS: compute state change from command: " + cmd);
-         // Uses pure fns to calculate the result of the command
-
-         var result = state.StateTransition(cmd);
+   ) {
+      PID = spawn<AccountState, Command>(
+         $"accounts_{initialState.EntityId}",
+         () => initialState,
+         (AccountState account, Command cmd) => {
  
-         Console.WriteLine("4. ACCOUNTPROCESS: result of state change: " + result);
+            Console.WriteLine($"3. ACCOUNTPROCESS: compute state change from command: {cmd.EntityId}");
 
-         // Persist within block, so that the agent doesn't process
-         // new messages in a non-persisted state.
-         // If the result is Valid, we proceed to save & publish
-         // the created event (the check is done as part of Traverse)
+            var result = account.StateTransition(cmd);
+   
+            Console.WriteLine("4. ACCOUNTPROCESS: state transitioned" + cmd.EntityId);
 
-         await result.Map(tpl => saveAndPublish(tpl.Event)).Sequence();
+            // Persist within block, so that the agent doesn't process
+            // new messages in a non-persisted state.
+            // If the result is Valid, we proceed to save & publish
+            // the created event (the check is done as part of Traverse)
+            result.Map(tpl => saveAndPublish(tpl.Event)).Sequence().Wait();
 
-         var newState = result.Map(tpl => tpl.Success.NewState).Head();//.HeadOrLeft(state);//.GetOrElse(state);
-         Console.WriteLine("5. ACCOUNT PROCESS: newState: " + newState);
-         return (newState, result);
-      });
+            return result.Map(tpl => tpl.Success.NewState).Head();//.HeadOrLeft(state);//.GetOrElse(state);
+         }
+      );
+   }
 
    // Commands are queued & processed sequentially. 
-   public Task<Result> SyncStateChange(Command cmd) {
-      Console.WriteLine("SYNC STATE " + cmd);
-      return agent.Tell(cmd);
+   public Unit SyncStateChange(Command cmd) {
+      Console.WriteLine($"SYNC STATE for process {PID}: {cmd}");
+      tell(PID, cmd);
+      return unit;
    }
 }

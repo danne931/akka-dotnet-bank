@@ -11,7 +11,6 @@
     <PackageReference Include="EventStore.Client.Grpc.Streams" Version="22.0.0" />
     <PackageReference Include="LanguageExt.Core" Version="4.4.2" />
     <PackageReference Include="LanguageExt.Transformers" Version="4.4.2" />
-    <PackageReference Include="LaYumba.Functional" Version="2.0.0" />
     <PackageReference Include="MinimalApis.Extensions" Version="0.10.1" />
   </ItemGroup>
 
