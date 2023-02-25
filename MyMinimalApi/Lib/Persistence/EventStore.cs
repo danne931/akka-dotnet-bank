@@ -2,10 +2,9 @@ using EventStore.Client;
 using System.Text.Json;
 using LanguageExt;
 using static LanguageExt.Prelude;
-
 using System.Collections.Immutable;
 
-using Account.Domain.Events;
+using Lib.Types;
 
 namespace Lib.Persistence;
 

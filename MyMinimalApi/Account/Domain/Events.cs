@@ -1,11 +1,6 @@
-namespace Account.Domain.Events;
+using Lib.Types;
 
-public abstract record Event(
-   Guid EntityId,
-   DateTime Timestamp,
-   string Name,
-   float Version = 1.0F
-);
+namespace Account.Domain;
 
 public record CreatedAccount(
    Guid EntityId,

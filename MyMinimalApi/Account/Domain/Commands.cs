@@ -1,10 +1,6 @@
-using Account.Domain.Events;
+using Lib.Types;
 
-namespace Account.Domain.Commands;
-
-public abstract record Command(Guid EntityId) {
-   public DateTime Timestamp { get; init; } = DateTime.UtcNow;
-};
+namespace Account.Domain;
 
 /*
 public static class CommandExt

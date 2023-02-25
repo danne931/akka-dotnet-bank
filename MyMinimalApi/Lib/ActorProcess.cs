@@ -3,9 +3,8 @@ using static LanguageExt.Prelude;
 using Echo;
 using static Echo.Process;
 
+using Lib.Types;
 using Account.Domain;
-using Account.Domain.Commands;
-using Account.Domain.Events;
 
 namespace Lib;
 

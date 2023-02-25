@@ -3,8 +3,8 @@ using static Echo.Process;
 using LanguageExt;
 using static LanguageExt.Prelude;
 
+using Lib.Types;
 using Account.Domain;
-using Account.Domain.Events;
 
 namespace Lib;
 
@@ -61,8 +61,12 @@ public class AccountRegistry {
    }
 
    public Task<Option<AccountProcess>> Lookup(Guid id) {
+      var watch = System.Diagnostics.Stopwatch.StartNew();
       var account = ask<Option<AccountProcess>>(PID, new LookupMsg(id));
-      if (account != null) return TaskSucc(account);
+      watch.Stop();
+      Console.WriteLine($"Execution Time: {watch.ElapsedMilliseconds} ms");
+
+      if (account.IsSome) return TaskSucc(account);
 
       return 
          from state in loadAccount(id)

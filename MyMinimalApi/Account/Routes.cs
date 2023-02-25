@@ -4,10 +4,11 @@
  *   X 3. Implement saveAndPublish with EventStore
  *   X 4. Add Create, DepositedCash, & FreezeAccount
  *   X 5. Replace Agent.Start & Agent.Tell with library equivalent
- *       (Orleans, Akka.NET, or github.com/louthy/echo-process)
+ *       (Akka.NET, or github.com/louthy/echo-process)
  *   X 6. Replace ImmutableDictionary<Guid, AccountProcess> cache
  *      (https://learn.microsoft.com/en-us/dotnet/core/extensions/caching
- *       https://docs.redis.com/latest/rs/references/client_references/client_csharp/) 
+ *       https://docs.redis.com/latest/rs/references/client_references/client_csharp/)
+*        --> Replaced with Registry implementation including echo-process
  *   X 7. Replace LaYumba.Functional with louthy/language-ext
  *   8. Add System.ComponentModel.DataAnnotations to TransferCmd & perform
  *      parameter validation?
@@ -20,7 +21,7 @@
  *   X 15. Implement account load aggregate
  *   16. Implement event deletion (diagnostic)
  *   - 17. Make sure mapping exists at SaveAndPublish?
- *   18. Fix "The JSON value could not be converted to CurrencyCode error"
+ *   - 18. Fix "The JSON value could not be converted to CurrencyCode error"
  *   X 19. Replace AccountRegistry loadAccount stub
  *   20. Account EntityId defaults to 0000-... if none supplied.  How to require
  *       non-default value from definition?
@@ -28,10 +29,11 @@
  *   X 22. Validate create account (currency)
  *   - 23. Move Create into generic process command
  *   X 24. Prevent CreateAccount happening more than once
- *   25. Update valid currency lookup for better perf?
- *   26. See if can make AccountRegistry agnostic to domain
- *   27. Move Agent process to Lib
- *   X 28. Fix tests not running after moving directory
+ *   25. See if can make AccountRegistry agnostic to domain
+ *   26. See if can make Agent process agnostic to domain 
+ *   X 27. Fix tests not running after moving directory
+ *   28. Fix tests not working after changing from LaYumba Agent to echo-process
+ *   
  */
 using EventStore.Client;
 using ES = Lib.Persistence.EventStoreManager;
@@ -40,8 +42,8 @@ using LanguageExt;
 
 using Lib;
 using static Lib.Route.Response;
+using Account.API;
 using Account.Domain;
-using Account.Domain.Commands;
 
 namespace Account.Routes;
 
@@ -67,7 +69,7 @@ public static class AccountRoutes {
 
       builder.Services.AddSingleton<AccountRegistry>(
          new AccountRegistry(
-            loadAccount: id => API.GetAccount(
+            loadAccount: id => AccountAPI.GetAccount(
                esClient,
                id,
                Account.Domain.Account.EventTypeMapping
@@ -102,21 +104,21 @@ public static class AccountRoutes {
    static Task<IResult> TestEchoProcess(
       EchoCmd cmd
    )
-   => API.TestEchoProcess(cmd).Unwrap<EchoCmd>();
+   => AccountAPI.TestEchoProcess(cmd).Unwrap<EchoCmd>();
 
    static Task<IResult> GetAccountEvents(
       Guid id,
       EventStoreClient es,
       ImmutableDictionary<string, Type> mapping
    )
-   => API.GetAccountEvents(es, id, mapping).Unwrap<Lst<object>>();
+   => AccountAPI.GetAccountEvents(es, id, mapping).Unwrap<Lst<object>>();
 
    static Task<IResult> GetAccount(
       Guid id,
       EventStoreClient es,
       ImmutableDictionary<string, Type> mapping
    )
-   => API.GetAccount(es, id, mapping).Unwrap<AccountState>();
+   => AccountAPI.GetAccount(es, id, mapping).Unwrap<AccountState>();
 
    // COMMAND
 
@@ -125,14 +127,14 @@ public static class AccountRoutes {
       EventStoreClient es,
       Validator<CreateAccountCmd> validate
    )
-   => API.Create(es, validate, cmd).Unwrap<Guid>();
+   => AccountAPI.Create(es, validate, cmd).Unwrap<Guid>();
 
    public static Task<IResult> Transfer(
       TransferCmd cmd,
       Validator<TransferCmd> validate,
       AccountRegistry accounts
    )
-   => API
+   => AccountAPI
       .ProcessCommand<TransferCmd>(cmd, accounts, validate)
       .Unwrap<Unit>();
 
@@ -140,7 +142,7 @@ public static class AccountRoutes {
       DepositCashCmd cmd,
       AccountRegistry accounts
    )
-   => API
+   => AccountAPI
       .ProcessCommand<DepositCashCmd>(cmd, accounts)
       .Unwrap<Unit>();
 
@@ -148,7 +150,7 @@ public static class AccountRoutes {
       FreezeAccountCmd cmd,
       AccountRegistry accounts
    )
-   => API
+   => AccountAPI
       .ProcessCommand<FreezeAccountCmd>(cmd, accounts)
       .Unwrap<Unit>();
 }
