@@ -22,12 +22,19 @@ public record DebitedTransfer(
 )
 : Event(EntityId, Timestamp, nameof(DebitedTransfer), 1.2F);
 
-public record FrozeAccount(
+public record LockedCard(
    Guid EntityId,
    DateTime Timestamp,
    string Reference
 )
-: Event(EntityId, Timestamp, nameof(FrozeAccount));
+: Event(EntityId, Timestamp, nameof(LockedCard));
+
+public record UnlockedCard(
+   Guid EntityId,
+   DateTime Timestamp,
+   string Reference
+)
+: Event(EntityId, Timestamp, nameof(UnlockedCard));
 
 public record DepositedCash(
    Guid EntityId,

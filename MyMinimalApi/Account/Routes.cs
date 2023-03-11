@@ -16,7 +16,8 @@ public static class AccountRoutes {
       public const string Deposit = $"{Base}/deposit";
       public const string Debit = $"{Base}/debit";
       public const string Transfer = $"{Base}/transfer";
-      public const string FreezeAccount = $"{Base}/freeze";
+      public const string LockCard = $"{Base}/lock";
+      public const string UnlockCard = $"{Base}/unlock";
    }
 
    public static void Configure(WebApplicationBuilder builder) {
@@ -58,8 +59,8 @@ public static class AccountRoutes {
       app.MapPost(Path.Transfer, Transfer);
       app.MapPost(Path.Deposit, Deposit);
       app.MapPost(Path.Debit, Debit);
-      app.MapPost(Path.FreezeAccount, FreezeAccount);
-      //.WithParameterValidation();
+      app.MapPost(Path.LockCard, LockCard);
+      app.MapPost(Path.UnlockCard, UnlockCard);
 
       app.MapPost("/echo", TestEchoProcess);
    }
@@ -119,11 +120,19 @@ public static class AccountRoutes {
       .ProcessCommand<DebitCmd>(cmd, accounts)
       .Unwrap<Unit>();
 
-   static Task<IResult> FreezeAccount(
-      FreezeAccountCmd cmd,
+   static Task<IResult> LockCard(
+      LockCardCmd cmd,
       AccountRegistry accounts
    )
    => AccountAPI
-      .ProcessCommand<FreezeAccountCmd>(cmd, accounts)
+      .ProcessCommand<LockCardCmd>(cmd, accounts)
+      .Unwrap<Unit>();
+
+   static Task<IResult> UnlockCard(
+      UnlockCardCmd cmd,
+      AccountRegistry accounts
+   )
+   => AccountAPI
+      .ProcessCommand<UnlockCardCmd>(cmd, accounts)
       .Unwrap<Unit>();
 }

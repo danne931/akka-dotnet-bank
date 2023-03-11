@@ -9,7 +9,7 @@ using StateTransitionResult = Validation<Err, (Event Event, AccountState NewStat
 
 public enum AccountStatus {
    Active,
-   Frozen,
+   ActiveWithLockedCard,
    Closed
 }
 
@@ -30,89 +30,10 @@ public static class Account {
          { nameof(DebitedTransfer), typeof(DebitedTransfer) },
          { nameof(DebitedAccount), typeof(DebitedAccount) },
          { nameof(DepositedCash), typeof(DepositedCash)},
-         { nameof(FrozeAccount), typeof(FrozeAccount)}
+         { nameof(LockedCard), typeof(LockedCard)},
+         { nameof(UnlockedCard), typeof(UnlockedCard)}
       }
       .ToImmutableDictionary();
-
-   public static StateTransitionResult StateTransition(
-      this AccountState state,
-      Command cmd
-   ) =>
-      cmd switch {
-         TransferCmd transfer => state.Transfer(transfer),
-         DebitCmd debit => state.Debit(debit),
-         DepositCashCmd deposit => state.Deposit(deposit),
-         FreezeAccountCmd freeze => state.Freeze(freeze)
-      };
-
-   public static StateTransitionResult Transfer(
-      this AccountState state,
-      TransferCmd cmd
-   ) {
-      if (state.Status != AccountStatus.Active)
-         return Errors.AccountNotActive;
-
-      if (state.Balance - cmd.Amount < state.AllowedOverdraft)
-         return Errors.InsufficientBalance;
-
-      var evt = cmd.ToEvent();
-      var newState = state.Apply(evt);
-
-      return (evt, newState);
-   }
-
-   public static StateTransitionResult Debit(
-      this AccountState state,
-      DebitCmd cmd
-   ) {
-      if (state.Status != AccountStatus.Active)
-         return Errors.AccountNotActive;
-
-      if (state.Balance - cmd.Amount < state.AllowedOverdraft)
-         return Errors.InsufficientBalance;
-
-      var evt = cmd.ToEvent();
-      var newState = state.Apply(evt);
-
-      return (evt, newState);
-   }
-
-   public static StateTransitionResult Deposit(
-      this AccountState state,
-      DepositCashCmd cmd
-   ) {
-      if (state.Status != AccountStatus.Active)
-         return Errors.AccountNotActive;
-
-      if (cmd.Amount <= 0)
-         return Errors.InvalidDepositAmount;
-
-      var evt = cmd.ToEvent();
-      var newState = state.Apply(evt);
-
-
-      return (evt, newState);
-   }
-
-   public static StateTransitionResult Freeze(
-      this AccountState state,
-      FreezeAccountCmd cmd
-   ) {
-      if (state.Status == AccountStatus.Frozen)
-         return Errors.AccountNotActive;
-
-      var evt = cmd.ToEvent();
-      var newState = state.Apply(evt);
-
-      return (evt, newState);
-   }
-
-   public static AccountState Create(CreatedAccount evt) =>
-      new AccountState(
-         EntityId: evt.EntityId,
-         Currency: evt.Currency,
-         Balance: evt.Balance
-      );
 
    public static AccountState Apply(this AccountState acc, object evt) =>
       evt switch {
@@ -125,9 +46,98 @@ public static class Account {
          DebitedAccount e
             => acc with { Balance = acc.Balance - e.DebitedAmount },
 
-         FrozeAccount _
-            => acc with { Status = AccountStatus.Frozen },
+         LockedCard _
+            => acc with { Status = AccountStatus.ActiveWithLockedCard },
+
+         UnlockedCard _
+            => acc with { Status = AccountStatus.Active },
 
          _ => throw new InvalidOperationException()
       };
+
+   public static StateTransitionResult StateTransition(
+      this AccountState state,
+      Command command
+   ) =>
+      command switch {
+         TransferCmd cmd => state.Transfer(cmd),
+         DebitCmd cmd => state.Debit(cmd),
+         DepositCashCmd cmd => state.Deposit(cmd),
+         LockCardCmd cmd => state.LockCard(cmd),
+         UnlockCardCmd cmd => state.UnlockCard(cmd)
+      };
+
+   public static StateTransitionResult Transfer(
+      this AccountState state,
+      TransferCmd cmd
+   ) {
+      if (state.Status == AccountStatus.Closed)
+         return Errors.AccountNotActive;
+
+      if (state.Balance - cmd.Amount < state.AllowedOverdraft)
+         return Errors.InsufficientBalance;
+
+      var evt = cmd.ToEvent();
+      return (evt, state.Apply(evt));
+   }
+
+   public static StateTransitionResult Debit(
+      this AccountState state,
+      DebitCmd cmd
+   ) {
+      if (state.Status == AccountStatus.Closed)
+         return Errors.AccountNotActive;
+
+      if (state.Status == AccountStatus.ActiveWithLockedCard)
+         return Errors.AccountCardLocked;
+
+      if (state.Balance - cmd.Amount < state.AllowedOverdraft)
+         return Errors.InsufficientBalance;
+
+      var evt = cmd.ToEvent();
+      return (evt, state.Apply(evt));
+   }
+
+   public static StateTransitionResult Deposit(
+      this AccountState state,
+      DepositCashCmd cmd
+   ) {
+      if (state.Status == AccountStatus.Closed)
+         return Errors.AccountNotActive;
+
+      if (cmd.Amount <= 0)
+         return Errors.InvalidDepositAmount;
+
+      var evt = cmd.ToEvent();
+      return (evt, state.Apply(evt));
+   }
+
+   public static StateTransitionResult LockCard(
+      this AccountState state,
+      LockCardCmd cmd
+   ) {
+      if (state.Status != AccountStatus.Active)
+         return Errors.AccountNotActive;
+
+      var evt = cmd.ToEvent();
+      return (evt, state.Apply(evt));
+   }
+
+   public static StateTransitionResult UnlockCard(
+      this AccountState state,
+      UnlockCardCmd cmd
+   ) {
+      if (state.Status != AccountStatus.ActiveWithLockedCard)
+         return new Err($"Account card already unlocked: {state.Status}");
+
+      var evt = cmd.ToEvent();
+      return (evt, state.Apply(evt));
+   }
+
+   public static AccountState Create(CreatedAccount evt) =>
+      new AccountState(
+         EntityId: evt.EntityId,
+         Currency: evt.Currency,
+         Balance: evt.Balance
+      );
 }

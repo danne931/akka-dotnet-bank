@@ -12,6 +12,9 @@ public static class Errors {
    public static Err AccountNotActive
       => new Err(nameof(AccountNotActive));
 
+   public static Err AccountCardLocked
+      => new Err(nameof(AccountCardLocked));
+
    public static Err UnknownAccountId(Guid id)
       => new Err($"{nameof(UnknownAccountId)}: {id.ToString()}");
 

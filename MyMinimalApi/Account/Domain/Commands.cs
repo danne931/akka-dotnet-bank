@@ -91,13 +91,26 @@ public record TransferCmd(
    );
 }
 
-public record FreezeAccountCmd(
+public record LockCardCmd(
    Guid EntityId,
    string Reference
 )
 : Command(EntityId)
 {
-   public FrozeAccount ToEvent() => new(
+   public LockedCard ToEvent() => new(
+      EntityId: this.EntityId,
+      Reference: this.Reference,
+      Timestamp: this.Timestamp
+   );
+}
+
+public record UnlockCardCmd(
+   Guid EntityId,
+   string Reference
+)
+: Command(EntityId)
+{
+   public UnlockedCard ToEvent() => new(
       EntityId: this.EntityId,
       Reference: this.Reference,
       Timestamp: this.Timestamp
