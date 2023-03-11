@@ -17,29 +17,12 @@ public static class AccountAPI {
       return TaskSucc(Some(cmd));
    }
 
-   //public static TryOptionAsync<Validation<InvalidCurrencyError, Guid>> Create(
-   public static Task<TryOption<Guid>> Create(
+   public static TryAsync<Validation<Err, Guid>> Create(
       EventStoreClient client,
       Validator<CreateAccountCmd> validate,
       CreateAccountCmd command
    ) {
-      /*
-      return TryOptionAsync(validate(command).Map(async evt => {
-         //var evt = cmd.ToEvent();
-         await ES.SaveAndPublish(
-            client,
-            Account.EventTypeMapping,
-            Account.StreamName(evt.EntityId),
-            evt,
-            // Create event stream only if it doesn't already exist.
-            StreamState.NoStream
-         );
-         return evt.EntityId;
-      })
-      .Sequence());
-      */
-
-      return validate(command).Map(async cmd => {
+      return TryAsync(validate(command).Map(async cmd => {
          var evt = cmd.ToEvent();
          await ES.SaveAndPublish(
             client,
@@ -51,8 +34,7 @@ public static class AccountAPI {
          );
          return evt.EntityId;
       })
-      .ToTryOption()
-      .Sequence();
+      .Sequence());
    }
 
    public static Task<Option<Lst<object>>> GetAccountEvents(
