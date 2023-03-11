@@ -111,8 +111,7 @@ public static class Account {
       new AccountState(
          EntityId: evt.EntityId,
          Currency: evt.Currency,
-         Status: AccountStatus.Active,
-         Balance: 0
+         Balance: evt.Balance
       );
 
    public static AccountState Apply(this AccountState acc, object evt) =>

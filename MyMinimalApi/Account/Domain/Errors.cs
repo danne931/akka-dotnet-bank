@@ -20,6 +20,9 @@ public static class Errors {
 
    public static Err InvalidCurrency(string currency)
       => new Err($"{nameof(InvalidCurrency)}: {currency}");
+
+   public static Err InvalidStartBalance(decimal balance)
+      => new Err($"Unable to open account with {balance} balance.");
 }
 
 public record Err(string Message, int Code = 100) : Expected(Message, Code);

@@ -21,11 +21,16 @@ public static class Validators {
          : Success<Err, TransferCmd>(cmd);
 
 
-   public static Validator<CreateAccountCmd>
-      AccountInitValidation() =>
-      cmd => Currencies.Contains(cmd.Currency) 
-         ? Success<Err, CreateAccountCmd>(cmd)
-         : Fail<Err, CreateAccountCmd>(Errors.InvalidCurrency(cmd.Currency));
+   public static Validator<CreateAccountCmd> AccountInitValidation() =>
+      cmd => {
+         // TODO: handle varying currency codes
+         if (cmd.Balance < 100)
+            return Fail<Err, CreateAccountCmd>(Errors.InvalidStartBalance(cmd.Balance));
+         if (!Currencies.Contains(cmd.Currency))
+            return Fail<Err, CreateAccountCmd>(Errors.InvalidCurrency(cmd.Currency));
+
+         return Success<Err, CreateAccountCmd>(cmd);
+      };
 
    public static Validator<T> Pass<T>() => Success<Err, T>;
 }

@@ -5,7 +5,8 @@ namespace Account.Domain;
 public record CreatedAccount(
    Guid EntityId,
    DateTime Timestamp,
-   string Currency
+   string Currency,
+   decimal Balance
 )
 : Event(EntityId, Timestamp, nameof(CreatedAccount));
 

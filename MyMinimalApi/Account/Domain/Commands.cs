@@ -19,7 +19,8 @@ public record EchoCmd(
 
 public record CreateAccountCmd(
    Guid EntityId,
-   string Currency
+   string Currency,
+   decimal Balance
 )
 : Command(EntityId)
 {
@@ -28,7 +29,8 @@ public record CreateAccountCmd(
    public CreatedAccount ToEvent() => new(
       EntityId: this.EntityId,
       Timestamp: this.Timestamp,
-      Currency: this.Currency
+      Currency: this.Currency,
+      Balance: this.Balance
    );
 }
 
