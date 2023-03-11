@@ -8,17 +8,15 @@ namespace Account.Domain;
 using StateTransitionResult = Validation<Err, (Event Event, AccountState NewState)>;
 
 public enum AccountStatus {
-   Requested,
    Active,
    Frozen,
-   Dormant,
    Closed
 }
 
 public sealed record AccountState(
    Guid EntityId,
    string Currency,
-   AccountStatus Status = AccountStatus.Requested,
+   AccountStatus Status = AccountStatus.Active,
    decimal Balance = 0,
    decimal AllowedOverdraft = 0
 );
@@ -30,6 +28,7 @@ public static class Account {
       new Dictionary<string, Type> {
          { nameof(CreatedAccount), typeof(CreatedAccount) },
          { nameof(DebitedTransfer), typeof(DebitedTransfer) },
+         { nameof(DebitedAccount), typeof(DebitedAccount) },
          { nameof(DepositedCash), typeof(DepositedCash)},
          { nameof(FrozeAccount), typeof(FrozeAccount)}
       }
@@ -40,14 +39,31 @@ public static class Account {
       Command cmd
    ) =>
       cmd switch {
-         TransferCmd transfer => state.Debit(transfer),
+         TransferCmd transfer => state.Transfer(transfer),
+         DebitCmd debit => state.Debit(debit),
          DepositCashCmd deposit => state.Deposit(deposit),
          FreezeAccountCmd freeze => state.Freeze(freeze)
       };
 
-   public static StateTransitionResult Debit(
+   public static StateTransitionResult Transfer(
       this AccountState state,
       TransferCmd cmd
+   ) {
+      if (state.Status != AccountStatus.Active)
+         return Errors.AccountNotActive;
+
+      if (state.Balance - cmd.Amount < state.AllowedOverdraft)
+         return Errors.InsufficientBalance;
+
+      var evt = cmd.ToEvent();
+      var newState = state.Apply(evt);
+
+      return (evt, newState);
+   }
+
+   public static StateTransitionResult Debit(
+      this AccountState state,
+      DebitCmd cmd
    ) {
       if (state.Status != AccountStatus.Active)
          return Errors.AccountNotActive;
@@ -105,6 +121,9 @@ public static class Account {
             => acc with { Balance = acc.Balance + e.DepositedAmount },
 
          DebitedTransfer e
+            => acc with { Balance = acc.Balance - e.DebitedAmount },
+
+         DebitedAccount e
             => acc with { Balance = acc.Balance - e.DebitedAmount },
 
          FrozeAccount _

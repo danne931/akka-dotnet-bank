@@ -9,7 +9,9 @@ public static class Validators {
    // TODO: Change to a dictionary or something else for better perf?
    public static Lst<string> Currencies => List(
       "USD",
-      "EUR"
+      "EUR",
+      "THB",
+      "VND"
    );
 
    public static Validator<TransferCmd>

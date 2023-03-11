@@ -35,16 +35,33 @@ public record CreateAccountCmd(
 public record DepositCashCmd(
    Guid EntityId,
    DateTime Date,
-   decimal Amount,
-   Guid BranchId
+   decimal Amount
 )
 : Command(EntityId)
 {
    public DepositedCash ToEvent() => new(
       DepositedAmount: this.Amount,
       EntityId: this.EntityId,
+      Timestamp: this.Timestamp
+   );
+}
+
+public record DebitCmd(
+   Guid EntityId,
+   DateTime Date,
+   decimal Amount,
+   string Origin,
+   string Reference
+)
+: Command(EntityId)
+{
+   public DebitedAccount ToEvent() => new(
+      EntityId: this.EntityId,
+      DebitedAmount: this.Amount,
+      Date: this.Date,
       Timestamp: this.Timestamp,
-      BranchId: this.BranchId
+      Origin: this.Origin,
+      Reference: this.Reference
    );
 }
 

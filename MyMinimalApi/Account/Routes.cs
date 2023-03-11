@@ -1,40 +1,3 @@
-/* TODO:
- *   X 1. Add persistence (geteventstore.com)
- *   X 2. Implement loadAccount events with EventStore
- *   X 3. Implement saveAndPublish with EventStore
- *   X 4. Add Create, DepositedCash, & FreezeAccount
- *   X 5. Replace Agent.Start & Agent.Tell with library equivalent
- *       (Akka.NET, or github.com/louthy/echo-process)
- *   X 6. Replace ImmutableDictionary<Guid, AccountProcess> cache
- *      (https://learn.microsoft.com/en-us/dotnet/core/extensions/caching
- *       https://docs.redis.com/latest/rs/references/client_references/client_csharp/)
-*        --> Replaced with Registry implementation including echo-process
- *   X 7. Replace LaYumba.Functional with louthy/language-ext
- *   8. Add System.ComponentModel.DataAnnotations to TransferCmd & perform
- *      parameter validation?
- *   X 9. Add diagnostic route to get all events for account
- *   X 10. Figure out how to remove stream data so can clean up improperly inserted data
- *   X 11. Slice app vertically.  Store tests alongside project.
- *   X 12. Add account id to end of stream id
- *   X 13. Handle readstream not found exception with Option
- *   X 14. Change UnwrapValidation to act on this
- *   X 15. Implement account load aggregate
- *   16. Implement event deletion (diagnostic)
- *   - 17. Make sure mapping exists at SaveAndPublish?
- *   - 18. Fix "The JSON value could not be converted to CurrencyCode error"
- *   X 19. Replace AccountRegistry loadAccount stub
- *   20. Account EntityId defaults to 0000-... if none supplied.  How to require
- *       non-default value from definition?
- *   X 21. Consolidate Freeze, Debit, Transfer methods into a generic ProcessCommand<T>
- *   X 22. Validate create account (currency)
- *   - 23. Move Create into generic process command
- *   X 24. Prevent CreateAccount happening more than once
- *   25. See if can make AccountRegistry agnostic to domain
- *   26. See if can make Agent process agnostic to domain 
- *   X 27. Fix tests not running after moving directory
- *   28. Fix tests not working after changing from LaYumba Agent to echo-process
- *   
- */
 using EventStore.Client;
 using ES = Lib.Persistence.EventStoreManager;
 using System.Collections.Immutable;
@@ -51,6 +14,7 @@ public static class AccountRoutes {
    public static class Path {
       public const string Base = "/accounts";
       public const string Deposit = $"{Base}/deposit";
+      public const string Debit = $"{Base}/debit";
       public const string Transfer = $"{Base}/transfer";
       public const string FreezeAccount = $"{Base}/freeze";
    }
@@ -93,6 +57,7 @@ public static class AccountRoutes {
       app.MapPost(Path.Base, CreateAccount);
       app.MapPost(Path.Transfer, Transfer);
       app.MapPost(Path.Deposit, Deposit);
+      app.MapPost(Path.Debit, Debit);
       app.MapPost(Path.FreezeAccount, FreezeAccount);
       //.WithParameterValidation();
 
@@ -144,6 +109,14 @@ public static class AccountRoutes {
    )
    => AccountAPI
       .ProcessCommand<DepositCashCmd>(cmd, accounts)
+      .Unwrap<Unit>();
+
+   static Task<IResult> Debit(
+      DebitCmd cmd,
+      AccountRegistry accounts
+   )
+   => AccountAPI
+      .ProcessCommand<DebitCmd>(cmd, accounts)
       .Unwrap<Unit>();
 
    static Task<IResult> FreezeAccount(

@@ -21,16 +21,6 @@ public record DebitedTransfer(
 )
 : Event(EntityId, Timestamp, nameof(DebitedTransfer), 1.2F);
 
-/*
-public record AlteredOverdraft
-(
-    Guid EntityId,
-    DateTime Timestamp,
-    decimal By
-)
-: Event(EntityId, Timestamp);
-*/
-
 public record FrozeAccount(
    Guid EntityId,
    DateTime Timestamp,
@@ -41,7 +31,15 @@ public record FrozeAccount(
 public record DepositedCash(
    Guid EntityId,
    DateTime Timestamp,
-   decimal DepositedAmount,
-   Guid BranchId
+   decimal DepositedAmount
 )
 : Event(EntityId, Timestamp, nameof(DepositedCash));
+
+public record DebitedAccount(
+   Guid EntityId,
+   DateTime Date,
+   DateTime Timestamp,
+   decimal DebitedAmount,
+   string Origin,
+   string Reference
+) : Event(EntityId, Timestamp, nameof(DebitedAccount));
