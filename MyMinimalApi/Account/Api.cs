@@ -83,4 +83,13 @@ public static class AccountAPI {
 
       return TryAsync(res);
    }
+
+   public static Task<Unit> SoftDeleteEvents(
+      AccountRegistry accounts,
+      EventStoreClient client,
+      Guid accountId
+   ) {
+      accounts.Delete(accountId);
+      return ES.SoftDelete(client, AD.StreamName(accountId));
+   }
 }

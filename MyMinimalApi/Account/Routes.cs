@@ -13,6 +13,7 @@ namespace Account.Routes;
 public static class AccountRoutes {
    public static class Path {
       public const string Base = "/accounts";
+      public const string Diagnostic = "/diagnostic";
       public const string Deposit = $"{Base}/deposit";
       public const string Debit = $"{Base}/debit";
       public const string Transfer = $"{Base}/transfer";
@@ -53,7 +54,8 @@ public static class AccountRoutes {
 
    public static void Start(WebApplication app) {
       app.MapGet(Path.Base + "/{id}", GetAccount);
-      app.MapGet(Path.Base + "/events/{id}", GetAccountEvents);
+      app.MapGet(Path.Diagnostic + "/events/{id}", GetAccountEvents);
+      app.MapDelete(Path.Diagnostic + "/events/{id}", SoftDeleteEvents);
 
       app.MapPost(Path.Base, CreateAccount);
       app.MapPost(Path.Transfer, Transfer);
@@ -78,6 +80,13 @@ public static class AccountRoutes {
       ImmutableDictionary<string, Type> mapping
    )
    => AccountAPI.GetAccountEvents(es, id, mapping).Unwrap<Lst<object>>();
+
+   static Task<IResult> SoftDeleteEvents(
+      Guid id,
+      EventStoreClient es,
+      AccountRegistry accounts
+   )
+   => AccountAPI.SoftDeleteEvents(accounts, es, id).Unwrap<Unit>();
 
    static Task<IResult> GetAccount(
       Guid id,

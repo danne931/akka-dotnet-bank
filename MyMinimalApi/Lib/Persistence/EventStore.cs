@@ -18,16 +18,16 @@ public static class EventStoreManager {
    ) {
       var typeFromName = mapping[evt.Name];
 
-      var eventData = new EventData(
-         eventId: Uuid.NewUuid(),
-         type: evt.Name,
-         data: JsonSerializer.SerializeToUtf8Bytes(evt, typeFromName)
-      );
-
       await es.AppendToStreamAsync(
          streamName,
          expectedStreamState ?? StreamState.StreamExists,
-         new[] { eventData }
+         new[] {
+            new EventData(
+               eventId: Uuid.NewUuid(),
+               type: evt.Name,
+               data: JsonSerializer.SerializeToUtf8Bytes(evt, typeFromName)
+            )
+         }
       );
 
       return unit;
@@ -47,14 +47,23 @@ public static class EventStoreManager {
       if (await stream.ReadState == ReadState.StreamNotFound)
          return None;
 
+
       return await stream.AggregateAsync(
          List<object>(),
          (acc, e) =>
             acc.Add(JsonSerializer.Deserialize(
                e.Event.Data.ToArray(),
                mapping[e.Event.EventType]
-            ))
+            )!)
          );
+   }
+
+   public async static Task<Unit> SoftDelete(
+      EventStoreClient es,
+      string streamName
+   ) {
+      await es.DeleteAsync(streamName, StreamState.Any);
+      return unit;
    }
 
    public static EventStoreClient Connect() => new EventStoreClient(

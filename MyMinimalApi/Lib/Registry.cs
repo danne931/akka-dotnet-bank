@@ -17,6 +17,7 @@ public class AccountRegistry {
    abstract record Msg(Guid Id);
    record LookupMsg(Guid Id) : Msg(Id);
    record RegisterMsg(Guid Id, AccountState AccountState) : Msg(Id);
+   record DeleteMsg(Guid Id) : Msg(Id);
 
    public AccountRegistry(
       Func<Guid, Task<Option<AccountState>>> loadAccount,
@@ -54,6 +55,9 @@ public class AccountRegistry {
                      }
                   );
                }
+               case DeleteMsg m: {
+                  return cache.Remove(m.Id);
+               }
             }
             return cache;
          }
@@ -72,5 +76,11 @@ public class AccountRegistry {
          from state in loadAccount(id)
          from acct in TaskSucc(ask<Option<AccountProcess>>(PID, new RegisterMsg(id, state)))
          select acct;
+   }
+
+   public Unit Delete(Guid id) {
+      Console.WriteLine($"Removing actor {id} from cache");
+      tell(PID, new DeleteMsg(id));
+      return unit;
    }
 }

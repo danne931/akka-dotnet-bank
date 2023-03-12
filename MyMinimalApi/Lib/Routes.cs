@@ -1,11 +1,18 @@
 using static Microsoft.AspNetCore.Http.Results;
 using LanguageExt;
+using static LanguageExt.Prelude;
 
 using Account.Domain;
 
 namespace Lib.Route;
 
 public static class Response {
+   public static Task<IResult> Unwrap<T>(this Task<T> WrappedResult) =>
+      TryAsync(WrappedResult).Match(
+         Fail: ExceptionResponse,
+         Succ: Ok
+      );
+
    public static Task<IResult> Unwrap<T>(
       this TryAsync<Validation<Err, T>> WrappedResult,
       Func<T, Object>? ShapeResponse = null

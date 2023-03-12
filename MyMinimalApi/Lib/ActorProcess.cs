@@ -19,20 +19,25 @@ public class AccountProcess {
          $"accounts_{initialState.EntityId}",
          () => initialState,
          (AccountState account, Command cmd) => {
- 
             Console.WriteLine($"3. ACCOUNTPROCESS: compute state change from command: {cmd.EntityId}");
 
-            var result = account.StateTransition(cmd);
+            var validation = account.StateTransition(cmd);
    
             Console.WriteLine("4. ACCOUNTPROCESS: state transitioned" + cmd.EntityId);
 
             // Persist within block, so that the agent doesn't process
             // new messages in a non-persisted state.
             // If the result is Valid, we proceed to save & publish
-            // the created event (the check is done as part of Traverse)
-            result.Map(tpl => saveAndPublish(tpl.Event)).Sequence().Wait();
-
-            return result.Map(tpl => tpl.Success.NewState).Head();//.HeadOrLeft(state);//.GetOrElse(state);
+            return validation.Match(
+               Fail: errs => {
+                  Console.WriteLine($"Validation Fail: {errs.Head.Message}");
+                  return account;
+               },
+               Succ: tup => {
+                  saveAndPublish(tup.Event).Wait();
+                  return tup.NewState;
+               }
+            );
          }
       );
    }
