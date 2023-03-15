@@ -7,20 +7,6 @@ namespace Account.Domain;
 
 using StateTransitionResult = Validation<Err, (Event Event, AccountState NewState)>;
 
-public enum AccountStatus {
-   Active,
-   ActiveWithLockedCard,
-   Closed
-}
-
-public sealed record AccountState(
-   Guid EntityId,
-   string Currency,
-   AccountStatus Status = AccountStatus.Active,
-   decimal Balance = 0,
-   decimal AllowedOverdraft = 0
-);
-
 public static class Account {
    public static string StreamName(Guid id) => $"accounts_{id}";
 
@@ -31,7 +17,8 @@ public static class Account {
          { nameof(DebitedAccount), typeof(DebitedAccount) },
          { nameof(DepositedCash), typeof(DepositedCash)},
          { nameof(LockedCard), typeof(LockedCard)},
-         { nameof(UnlockedCard), typeof(UnlockedCard)}
+         { nameof(UnlockedCard), typeof(UnlockedCard)},
+         { nameof(RegisteredInternalTransferRecipient), typeof(RegisteredInternalTransferRecipient) }
       }
       .ToImmutableDictionary();
 
@@ -52,7 +39,20 @@ public static class Account {
          UnlockedCard _
             => acc with { Status = AccountStatus.Active },
 
-         _ => throw new InvalidOperationException()
+         RegisteredInternalTransferRecipient e => acc with {
+            TransferRecipients = acc.TransferRecipients.AddOrUpdate(
+               e.AccountNumber,
+               new TransferRecipient(
+                  Identification: e.AccountNumber,
+                  IdentificationMethod: AccountIdentificationMethod.AccountID,
+                  LastName: e.LastName,
+                  Firstname: e.FirstName,
+                  CreatedAt: e.Timestamp
+               )
+            )
+         },
+
+         _ => acc
       };
 
    public static StateTransitionResult StateTransition(
@@ -64,7 +64,9 @@ public static class Account {
          DebitCmd cmd => state.Debit(cmd),
          DepositCashCmd cmd => state.Deposit(cmd),
          LockCardCmd cmd => state.LockCard(cmd),
-         UnlockCardCmd cmd => state.UnlockCard(cmd)
+         UnlockCardCmd cmd => state.UnlockCard(cmd),
+         RegisterInternalTransferRecipientCmd cmd => state.RegisterTransferRecipient(cmd),
+         _ => new Err("State Transition not implemented for command.")
       };
 
    public static StateTransitionResult Transfer(
@@ -134,10 +136,52 @@ public static class Account {
       return (evt, state.Apply(evt));
    }
 
+   public static StateTransitionResult RegisterTransferRecipient(
+      this AccountState state,
+      RegisterInternalTransferRecipientCmd cmd
+   ) {
+      if (state.TransferRecipients.Find(cmd.AccountNumber.ToString()).IsSome)
+         return new Err($"Transfer recipient {cmd.AccountNumber} " +
+            $"already added to account: {cmd.EntityId}");
+
+      var evt = cmd.ToEvent();
+      return (evt, state.Apply(evt));
+   }
+
    public static AccountState Create(CreatedAccount evt) =>
       new AccountState(
          EntityId: evt.EntityId,
          Currency: evt.Currency,
          Balance: evt.Balance
       );
+}
+
+public sealed record AccountState(
+   Guid EntityId,
+   string Currency,
+   AccountStatus Status = AccountStatus.Active,
+   decimal Balance = 0,
+   decimal AllowedOverdraft = 0,
+   Map<string, TransferRecipient> TransferRecipients = default
+);
+
+public enum AccountStatus {
+   Active,
+   ActiveWithLockedCard,
+   Closed
+}
+
+public record TransferRecipient(
+   string Identification,
+   AccountIdentificationMethod IdentificationMethod,
+   string LastName,
+   string Firstname,
+   DateTime CreatedAt
+);
+
+public enum AccountIdentificationMethod {
+   AccountID,
+   SwiftBIC,
+   IBAN,
+   NationalID
 }

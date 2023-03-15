@@ -47,7 +47,6 @@ public static class EventStoreManager {
       if (await stream.ReadState == ReadState.StreamNotFound)
          return None;
 
-
       return await stream.AggregateAsync(
          List<object>(),
          (acc, e) =>
@@ -64,6 +63,18 @@ public static class EventStoreManager {
    ) {
       await es.DeleteAsync(streamName, StreamState.Any);
       return unit;
+   }
+
+   public static async Task<bool> Exists(
+      EventStoreClient es,
+      string streamName
+   ) {
+      var stream = es.ReadStreamAsync(
+         Direction.Forwards,
+         streamName,
+         StreamPosition.Start
+      );
+      return (await stream.ReadState != ReadState.StreamNotFound);
    }
 
    public static EventStoreClient Connect() => new EventStoreClient(

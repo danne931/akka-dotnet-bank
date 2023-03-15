@@ -23,17 +23,16 @@ public class AccountProcess {
 
             var validation = account.StateTransition(cmd);
    
-            Console.WriteLine("4. ACCOUNTPROCESS: state transitioned" + cmd.EntityId);
-
             // Persist within block, so that the agent doesn't process
             // new messages in a non-persisted state.
             // If the result is Valid, we proceed to save & publish
             return validation.Match(
                Fail: errs => {
-                  Console.WriteLine($"Validation Fail: {errs.Head.Message}");
+                  Console.WriteLine($"4. Validation Fail: {errs.Head.Message}");
                   return account;
                },
                Succ: tup => {
+                  Console.WriteLine($"4. ACCOUNTPROCESS: state transitioned {cmd.EntityId}");
                   saveAndPublish(tup.Event).Wait();
                   return tup.NewState;
                }

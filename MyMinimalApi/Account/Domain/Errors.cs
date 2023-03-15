@@ -18,6 +18,9 @@ public static class Errors {
    public static Err UnknownAccountId(Guid id)
       => new Err($"{nameof(UnknownAccountId)}: {id.ToString()}");
 
+   public static Err TransferRecipientNotFound(Guid id)
+      => new Err($"{nameof(TransferRecipientNotFound)}: {id.ToString()}");
+
    public static Err InvalidDepositAmount
       => new Err("Deposit amount must be greater than 0");
 

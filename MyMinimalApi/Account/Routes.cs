@@ -19,6 +19,7 @@ public static class AccountRoutes {
       public const string Transfer = $"{Base}/transfer";
       public const string LockCard = $"{Base}/lock";
       public const string UnlockCard = $"{Base}/unlock";
+      public const string TransferRecipient = $"{Base}/transfer-recipient";
    }
 
    public static void Configure(WebApplicationBuilder builder) {
@@ -26,9 +27,6 @@ public static class AccountRoutes {
 
       builder.Services.AddSingleton<Validator<TransferCmd>>(
          Validators.TransferValidation(() => DateTime.UtcNow.Date));
-
-      builder.Services.AddSingleton<Validator<CreateAccountCmd>>(
-         Validators.AccountInitValidation());
 
       var esClient = ES.Connect();
       Echo.ProcessConfig.initialise();
@@ -58,11 +56,12 @@ public static class AccountRoutes {
       app.MapDelete(Path.Diagnostic + "/events/{id}", SoftDeleteEvents);
 
       app.MapPost(Path.Base, CreateAccount);
-      app.MapPost(Path.Transfer, Transfer);
       app.MapPost(Path.Deposit, Deposit);
       app.MapPost(Path.Debit, Debit);
       app.MapPost(Path.LockCard, LockCard);
       app.MapPost(Path.UnlockCard, UnlockCard);
+      app.MapPost(Path.Transfer, Transfer);
+      app.MapPost(Path.TransferRecipient, RegisterTransferRecipient);
 
       app.MapPost("/echo", TestEchoProcess);
    }
@@ -99,10 +98,23 @@ public static class AccountRoutes {
 
    static Task<IResult> CreateAccount(
       CreateAccountCmd cmd,
-      EventStoreClient es,
-      Validator<CreateAccountCmd> validate
+      EventStoreClient es
    )
-   => AccountAPI.Create(es, validate, cmd).Unwrap<Guid>();
+   => AccountAPI
+      .Create(es, Validators.AccountInitValidation(), cmd)
+      .Unwrap<Guid>();
+
+   static Task<IResult> RegisterTransferRecipient(
+      RegisterInternalTransferRecipientCmd cmd,
+      EventStoreClient es,
+      AccountRegistry accounts
+   ) =>
+      AccountAPI.ProcessCommand<RegisterInternalTransferRecipientCmd>(
+         cmd,
+         accounts,
+         asyncValidate: Validators.RegisterInternalTransferRecipient(es)
+      )
+      .Unwrap<Unit>();
 
    public static Task<IResult> Transfer(
       TransferCmd cmd,

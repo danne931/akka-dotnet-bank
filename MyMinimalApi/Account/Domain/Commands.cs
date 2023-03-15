@@ -116,3 +116,62 @@ public record UnlockCardCmd(
       Timestamp: this.Timestamp
    );
 }
+
+public record RegisterInternalTransferRecipientCmd(
+   Guid EntityId,
+   string LastName,
+   string FirstName,
+   Guid AccountNumber // TODO: change account number generation
+)
+: Command(EntityId)
+{
+   public RegisteredInternalTransferRecipient ToEvent() => new(
+      EntityId: this.EntityId,
+      Timestamp: this.Timestamp,
+      LastName: this.LastName,
+      FirstName: this.FirstName,
+      AccountNumber: this.AccountNumber.ToString()
+   );
+}
+
+public record RegisterDomesticTransferRecipientCmd(
+   Guid EntityId,
+   string LastName,
+   string FirstName,
+   string NickName,
+   string StreetAddress,
+   string City,
+   string State,
+   string AccountNumber,
+   string RoutingNumber
+)
+: Command(EntityId);
+
+public record RegisterInternationalTransferRecipientCmd(
+   Guid EntityId,
+   string LastName,
+   string FirstName,
+   string NickName,
+   string Identification,
+   AccountIdentificationMethod IdentificationMethod,
+   string Currency,
+   string StreetAddress,
+   string City,
+   string Country
+)
+: Command(EntityId)
+{
+   public RegisteredInternationalTransferRecipient ToEvent() => new(
+      EntityId: this.EntityId,
+      LastName: this.LastName,
+      FirstName: this.FirstName,
+      NickName: this.NickName,
+      Identification: this.Identification,
+      IdentificationMethod: this.IdentificationMethod,
+      Currency: this.Currency,
+      StreetAddress: this.StreetAddress,
+      City: this.City,
+      Country: this.Country,
+      Timestamp: this.Timestamp
+   );
+}

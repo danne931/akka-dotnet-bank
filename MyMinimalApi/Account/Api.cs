@@ -64,12 +64,17 @@ public static class AccountAPI {
    public static TryAsync<Validation<Err, Unit>> ProcessCommand<T>(
       T command,
       AccountRegistry accounts,
-      Validator<T>? validate = null
+      Validator<T>? validate = null,
+      AsyncValidator<T>? asyncValidate = null
    )
    where T : Command
    {
-      if (validate is null)
+      if (validate is null && asyncValidate is null)
          validate = Validators.Pass<T>();
+
+      var validation = asyncValidate != null
+         ? asyncValidate(command)
+         : TaskSucc(validate(command));
 
       var getAccountVal = (Command cmd) =>
          accounts
@@ -77,7 +82,7 @@ public static class AccountAPI {
             .Map(opt => opt.ToValidation(Errors.UnknownAccountId(cmd.EntityId)));
 
       var res =
-         from cmd in TaskSucc(validate(command))
+         from cmd in validation
          from acc in getAccountVal(cmd)
          select acc.SyncStateChange(cmd);
 
