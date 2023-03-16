@@ -1,6 +1,14 @@
+using OneOf;
+
 using Lib.Types;
 
 namespace Bank.Transfer.Domain;
+
+using TransferRecipientEvent = OneOf<
+   RegisteredInternalTransferRecipient,
+   RegisteredDomesticTransferRecipient,
+   RegisteredInternationalTransferRecipient
+>;
 
 public record DebitedTransfer(
    Guid EntityId,
@@ -21,27 +29,66 @@ public record RegisteredInternalTransferRecipient(
    string FirstName,
    string AccountNumber
 )
-: Event(EntityId, Timestamp, nameof(RegisteredInternalTransferRecipient));
+: Event(EntityId, Timestamp, nameof(RegisteredInternalTransferRecipient))
+{
+   public TransferRecipient AsTransferRecipient() =>
+      new TransferRecipient(
+         LastName,
+         FirstName,
+         AccountNumber,
+         RecipientAccountEnvironment.Internal,
+         RecipientAccountIdentificationStrategy.AccountID
+      );
+}
 
 public record RegisteredDomesticTransferRecipient(
    Guid EntityId,
    string LastName,
    string FirstName,
-   string NickName,
    string RoutingNumber,
    string AccountNumber,
    DateTime Timestamp
 )
-: Event(EntityId, Timestamp, nameof(RegisteredDomesticTransferRecipient));
+: Event(EntityId, Timestamp, nameof(RegisteredDomesticTransferRecipient))
+{
+   public TransferRecipient AsTransferRecipient() =>
+      new TransferRecipient(
+         LastName,
+         FirstName,
+         AccountNumber,
+         RecipientAccountEnvironment.Domestic,
+         RecipientAccountIdentificationStrategy.AccountID,
+         RoutingNumber
+      );
+}
 
 public record RegisteredInternationalTransferRecipient(
    Guid EntityId,
    string LastName,
    string FirstName,
-   string NickName,
    string Identification,
-   InternationalRecipientAccountIdentificationStrategy IdentificationStrategy,
+   RecipientAccountIdentificationStrategy IdentificationStrategy,
    string Currency,
    DateTime Timestamp
 )
-: Event(EntityId, Timestamp, nameof(RegisteredInternationalTransferRecipient));
+: Event(EntityId, Timestamp, nameof(RegisteredInternationalTransferRecipient))
+{
+   public TransferRecipient AsTransferRecipient() =>
+      new TransferRecipient(
+         LastName,
+         FirstName,
+         Identification,
+         RecipientAccountEnvironment.International,
+         IdentificationStrategy,
+         Currency: Currency
+      );
+}
+
+public static class TransferEventsExt {
+   public static Event Unwrap(this TransferRecipientEvent evtWrapped) =>
+      evtWrapped.Match<Event>(
+         _ => evtWrapped.AsT0,
+         _ => evtWrapped.AsT1,
+         _ => evtWrapped.AsT2
+      );
+}

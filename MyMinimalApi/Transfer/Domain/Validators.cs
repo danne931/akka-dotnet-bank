@@ -17,22 +17,23 @@ public static class Validators {
    public static AsyncValidator<RegisterTransferRecipientCmd>
       RegisterTransferRecipient(EventStoreClient es) =>
       async cmd => {
-         if (isEmpty(cmd.LastName) || isEmpty(cmd.Identification)) {
+         var rec = cmd.Recipient;
+         if (isEmpty(rec.LastName) || isEmpty(rec.Identification)) {
             return Fail<Err, RegisterTransferRecipientCmd>(
                new Err("LastName & Identification required.")
             );
          }
 
-         switch (cmd.AccountEnvironment) {
+         switch (cmd.Recipient.AccountEnvironment) {
             case RecipientAccountEnvironment.Internal:
                // TODO: Remove Guid play
-               var accountExists = await ES.Exists(es, StreamName(new Guid(cmd.Identification)));
+               var accountExists = await ES.Exists(es, StreamName(new Guid(rec.Identification)));
                if (!accountExists)
-                  return Errors.TransferRecipientNotFound(new Guid(cmd.Identification));
+                  return Errors.TransferRecipientNotFound(new Guid(rec.Identification));
                break;
 
             case RecipientAccountEnvironment.Domestic:
-               if (isEmpty(cmd.RoutingNumber))
+               if (isEmpty(rec.RoutingNumber))
                   return Fail<Err, RegisterTransferRecipientCmd>(
                      new Err("RoutingNumber required for domestic transfers.")
                   );
@@ -43,7 +44,7 @@ public static class Validators {
 
             case RecipientAccountEnvironment.International:
                // TODO: XXX - use lenses
-               if (isnull(cmd.IdentificationStrategy))
+               if (isnull(rec.IdentificationStrategy))
                   return Fail<Err, RegisterTransferRecipientCmd>(
                      new Err("IdentificationMethod required for international transfers.")
                   );

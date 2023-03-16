@@ -1,5 +1,4 @@
 using LanguageExt;
-using OneOf;
 using System.Collections.Immutable;
 
 using Lib.Types;
@@ -8,11 +7,7 @@ using Bank.Transfer.Domain;
 namespace Bank.Account.Domain;
 
 using StateTransitionResult = Validation<Err, (Event Event, AccountState NewState)>;
-using TransferRecipient = OneOf<
-   RegisteredInternalTransferRecipient,
-   RegisteredDomesticTransferRecipient,
-   RegisteredInternationalTransferRecipient
->;
+
 
 public static class Account {
    public static string StreamName(Guid id) => $"accounts_{id}";
@@ -49,17 +44,24 @@ public static class Account {
             => acc with { Status = AccountStatus.Active },
 
          RegisteredInternalTransferRecipient e => acc with {
-            TransferRecipients = acc.TransferRecipients.AddOrUpdate(e.AccountNumber, e)
+            TransferRecipients = acc.TransferRecipients.AddOrUpdate(
+               e.AccountNumber,
+               e.AsTransferRecipient()
+            )
          },
 
          RegisteredDomesticTransferRecipient e => acc with {
-            TransferRecipients = acc
-               .TransferRecipients
-               .AddOrUpdate($"{e.RoutingNumber}_{e.AccountNumber}", e)
+            TransferRecipients = acc.TransferRecipients.AddOrUpdate(
+               $"{e.RoutingNumber}_{e.AccountNumber}",
+               e.AsTransferRecipient()
+            )
          },
 
          RegisteredInternationalTransferRecipient e => acc with {
-            TransferRecipients = acc.TransferRecipients.AddOrUpdate(e.Identification, e)
+            TransferRecipients = acc.TransferRecipients.AddOrUpdate(
+               e.Identification,
+               e.AsTransferRecipient()
+            )
          },
 
          _ => acc
@@ -150,8 +152,8 @@ public static class Account {
       this AccountState state,
       RegisterTransferRecipientCmd cmd
    ) {
-      if (state.TransferRecipients.Find(cmd.Identification).IsSome)
-         return new Err($"Transfer recipient {cmd.Identification} " +
+      if (state.TransferRecipients.Find(cmd.Recipient.Identification).IsSome)
+         return new Err($"Transfer recipient {cmd.Recipient.Identification} " +
             $"already added to account: {cmd.EntityId}");
 
       var evt = cmd.ToEvent().Unwrap();

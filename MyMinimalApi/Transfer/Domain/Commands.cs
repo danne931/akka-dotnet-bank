@@ -35,53 +35,35 @@ public record TransferCmd(
 
 public record RegisterTransferRecipientCmd(
    Guid EntityId,
-   string LastName,
-   string FirstName,
-   string NickName,
-   string Identification,
-   RecipientAccountEnvironment AccountEnvironment,
-   InternationalRecipientAccountIdentificationStrategy IdentificationStrategy,
-   string RoutingNumber,
-   string Currency
+   TransferRecipient Recipient
 )
 : Command(EntityId)
 {
    public TransferRecipientEvent ToEvent() =>
-      AccountEnvironment switch {
+      Recipient.AccountEnvironment switch {
          RecipientAccountEnvironment.Internal => new RegisteredInternalTransferRecipient(
             EntityId: EntityId,
             Timestamp: Timestamp,
-            LastName: LastName,
-            FirstName: FirstName,
-            AccountNumber: Identification
+            LastName: Recipient.LastName,
+            FirstName: Recipient.FirstName,
+            AccountNumber: Recipient.Identification
          ),
          RecipientAccountEnvironment.Domestic => new RegisteredDomesticTransferRecipient(
             EntityId: EntityId,
-            LastName: LastName,
-            FirstName: FirstName,
-            NickName: NickName,
-            AccountNumber: Identification,
-            RoutingNumber: RoutingNumber,
-            Timestamp: Timestamp
+            Timestamp: Timestamp,
+            LastName: Recipient.LastName,
+            FirstName: Recipient.FirstName,
+            AccountNumber: Recipient.Identification,
+            RoutingNumber: Recipient.RoutingNumber
          ),
          RecipientAccountEnvironment.International => new RegisteredInternationalTransferRecipient(
             EntityId: EntityId,
-            LastName: LastName,
-            FirstName: FirstName,
-            NickName: NickName,
-            Identification: Identification,
-            IdentificationStrategy: IdentificationStrategy,
-            Currency: Currency,
+            LastName: Recipient.LastName,
+            FirstName: Recipient.FirstName,
+            Identification: Recipient.Identification,
+            IdentificationStrategy: Recipient.IdentificationStrategy,
+            Currency: Recipient.Currency,
             Timestamp: Timestamp
          )
       };
-}
-
-public static class TransferRecipientExt {
-   public static Event Unwrap(this TransferRecipientEvent evtWrapped) =>
-      evtWrapped.Match<Event>(
-         _ => evtWrapped.AsT0,
-         _ => evtWrapped.AsT1,
-         _ => evtWrapped.AsT2
-      );
 }
