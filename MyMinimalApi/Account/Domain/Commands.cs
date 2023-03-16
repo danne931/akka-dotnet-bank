@@ -1,6 +1,13 @@
+using OneOf;
 using Lib.Types;
 
 namespace Account.Domain;
+
+using TransferRecipientEvent = OneOf<
+   RegisteredInternalTransferRecipient,
+   RegisteredDomesticTransferRecipient,
+   RegisteredInternationalTransferRecipient
+>;
 
 /*
 public static class CommandExt
@@ -27,10 +34,10 @@ public record CreateAccountCmd(
    //public AccountStatus Status { get; init; } = AccountStatus.Active;
 
    public CreatedAccount ToEvent() => new(
-      EntityId: this.EntityId,
-      Timestamp: this.Timestamp,
-      Currency: this.Currency,
-      Balance: this.Balance
+      EntityId: EntityId,
+      Timestamp: Timestamp,
+      Currency: Currency,
+      Balance: Balance
    );
 }
 
@@ -42,9 +49,9 @@ public record DepositCashCmd(
 : Command(EntityId)
 {
    public DepositedCash ToEvent() => new(
-      DepositedAmount: this.Amount,
-      EntityId: this.EntityId,
-      Timestamp: this.Timestamp
+      DepositedAmount: Amount,
+      EntityId: EntityId,
+      Timestamp: Timestamp
    );
 }
 
@@ -58,12 +65,12 @@ public record DebitCmd(
 : Command(EntityId)
 {
    public DebitedAccount ToEvent() => new(
-      EntityId: this.EntityId,
-      DebitedAmount: this.Amount,
-      Date: this.Date,
-      Timestamp: this.Timestamp,
-      Origin: this.Origin,
-      Reference: this.Reference
+      EntityId: EntityId,
+      DebitedAmount: Amount,
+      Date: Date,
+      Timestamp: Timestamp,
+      Origin: Origin,
+      Reference: Reference
    );
 }
 
@@ -80,14 +87,14 @@ public record TransferCmd(
 : Command(EntityId)
 {
    public DebitedTransfer ToEvent() => new(
-      EntityId: this.EntityId,
-      Date: this.Date,
-      Beneficiary: this.Beneficiary,
-      Bic: this.Bic,
-      DebitedAmount: this.Amount,
-      Iban: this.Iban,
-      Reference: this.Reference,
-      Timestamp: this.Timestamp
+      EntityId: EntityId,
+      Date: Date,
+      Beneficiary: Beneficiary,
+      Bic: Bic,
+      DebitedAmount: Amount,
+      Iban: Iban,
+      Reference: Reference,
+      Timestamp: Timestamp
    );
 }
 
@@ -98,9 +105,9 @@ public record LockCardCmd(
 : Command(EntityId)
 {
    public LockedCard ToEvent() => new(
-      EntityId: this.EntityId,
-      Reference: this.Reference,
-      Timestamp: this.Timestamp
+      EntityId: EntityId,
+      Reference: Reference,
+      Timestamp: Timestamp
    );
 }
 
@@ -111,67 +118,61 @@ public record UnlockCardCmd(
 : Command(EntityId)
 {
    public UnlockedCard ToEvent() => new(
-      EntityId: this.EntityId,
-      Reference: this.Reference,
-      Timestamp: this.Timestamp
+      EntityId: EntityId,
+      Reference: Reference,
+      Timestamp: Timestamp
    );
 }
 
-public record RegisterInternalTransferRecipientCmd(
-   Guid EntityId,
-   string LastName,
-   string FirstName,
-   Guid AccountNumber // TODO: change account number generation
-)
-: Command(EntityId)
-{
-   public RegisteredInternalTransferRecipient ToEvent() => new(
-      EntityId: this.EntityId,
-      Timestamp: this.Timestamp,
-      LastName: this.LastName,
-      FirstName: this.FirstName,
-      AccountNumber: this.AccountNumber.ToString()
-   );
-}
-
-public record RegisterDomesticTransferRecipientCmd(
-   Guid EntityId,
-   string LastName,
-   string FirstName,
-   string NickName,
-   string StreetAddress,
-   string City,
-   string State,
-   string AccountNumber,
-   string RoutingNumber
-)
-: Command(EntityId);
-
-public record RegisterInternationalTransferRecipientCmd(
+public record RegisterTransferRecipientCmd(
    Guid EntityId,
    string LastName,
    string FirstName,
    string NickName,
    string Identification,
-   AccountIdentificationMethod IdentificationMethod,
-   string Currency,
-   string StreetAddress,
-   string City,
-   string Country
+   RecipientAccountEnvironment AccountEnvironment,
+   InternationalRecipientAccountIdentificationStrategy IdentificationStrategy,
+   string RoutingNumber,
+   string Currency
 )
 : Command(EntityId)
 {
-   public RegisteredInternationalTransferRecipient ToEvent() => new(
-      EntityId: this.EntityId,
-      LastName: this.LastName,
-      FirstName: this.FirstName,
-      NickName: this.NickName,
-      Identification: this.Identification,
-      IdentificationMethod: this.IdentificationMethod,
-      Currency: this.Currency,
-      StreetAddress: this.StreetAddress,
-      City: this.City,
-      Country: this.Country,
-      Timestamp: this.Timestamp
-   );
+   public TransferRecipientEvent ToEvent() =>
+      AccountEnvironment switch {
+         RecipientAccountEnvironment.Internal => new RegisteredInternalTransferRecipient(
+            EntityId: EntityId,
+            Timestamp: Timestamp,
+            LastName: LastName,
+            FirstName: FirstName,
+            AccountNumber: Identification
+         ),
+         RecipientAccountEnvironment.Domestic => new RegisteredDomesticTransferRecipient(
+            EntityId: EntityId,
+            LastName: LastName,
+            FirstName: FirstName,
+            NickName: NickName,
+            AccountNumber: Identification,
+            RoutingNumber: RoutingNumber,
+            Timestamp: Timestamp
+         ),
+         RecipientAccountEnvironment.International => new RegisteredInternationalTransferRecipient(
+            EntityId: EntityId,
+            LastName: LastName,
+            FirstName: FirstName,
+            NickName: NickName,
+            Identification: Identification,
+            IdentificationStrategy: IdentificationStrategy,
+            Currency: Currency,
+            Timestamp: Timestamp
+         )
+      };
+}
+
+public static class TransferRecipientExt {
+   public static Event Unwrap(this TransferRecipientEvent evtWrapped) =>
+      evtWrapped.Match<Event>(
+         _ => evtWrapped.AsT0,
+         _ => evtWrapped.AsT1,
+         _ => evtWrapped.AsT2
+      );
 }

@@ -68,9 +68,6 @@ public record RegisteredDomesticTransferRecipient(
    string NickName,
    string RoutingNumber,
    string AccountNumber,
-   string StreetAddress,
-   string City,
-   string State,
    DateTime Timestamp
 )
 : Event(EntityId, Timestamp, nameof(RegisteredDomesticTransferRecipient));
@@ -81,11 +78,8 @@ public record RegisteredInternationalTransferRecipient(
    string FirstName,
    string NickName,
    string Identification,
-   AccountIdentificationMethod IdentificationMethod,
+   InternationalRecipientAccountIdentificationStrategy IdentificationStrategy,
    string Currency,
-   string StreetAddress,
-   string City,
-   string Country,
    DateTime Timestamp
 )
 : Event(EntityId, Timestamp, nameof(RegisteredInternationalTransferRecipient));

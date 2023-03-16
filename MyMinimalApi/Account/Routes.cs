@@ -2,6 +2,7 @@ using EventStore.Client;
 using ES = Lib.Persistence.EventStoreManager;
 using System.Collections.Immutable;
 using LanguageExt;
+using Echo;
 
 using Lib;
 using static Lib.Route.Response;
@@ -29,7 +30,10 @@ public static class AccountRoutes {
          Validators.TransferValidation(() => DateTime.UtcNow.Date));
 
       var esClient = ES.Connect();
-      Echo.ProcessConfig.initialise();
+      ProcessConfig.initialise();
+      Process.DeadLetters()
+         .Observe<DeadLetter>()
+         .Subscribe(Console.WriteLine);
 
       builder.Services.AddSingleton<AccountRegistry>(
          new AccountRegistry(
@@ -105,14 +109,14 @@ public static class AccountRoutes {
       .Unwrap<Guid>();
 
    static Task<IResult> RegisterTransferRecipient(
-      RegisterInternalTransferRecipientCmd cmd,
+      RegisterTransferRecipientCmd cmd,
       EventStoreClient es,
       AccountRegistry accounts
    ) =>
-      AccountAPI.ProcessCommand<RegisterInternalTransferRecipientCmd>(
+      AccountAPI.ProcessCommand<RegisterTransferRecipientCmd>(
          cmd,
          accounts,
-         asyncValidate: Validators.RegisterInternalTransferRecipient(es)
+         asyncValidate: Validators.RegisterTransferRecipient(es)
       )
       .Unwrap<Unit>();
 

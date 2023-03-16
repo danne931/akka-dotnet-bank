@@ -1,4 +1,5 @@
 using LanguageExt;
+using OneOf;
 using System.Collections.Immutable;
 
 using Lib.Types;
@@ -6,6 +7,11 @@ using Lib.Types;
 namespace Account.Domain;
 
 using StateTransitionResult = Validation<Err, (Event Event, AccountState NewState)>;
+using TransferRecipient = OneOf<
+   RegisteredInternalTransferRecipient,
+   RegisteredDomesticTransferRecipient,
+   RegisteredInternationalTransferRecipient
+>;
 
 public static class Account {
    public static string StreamName(Guid id) => $"accounts_{id}";
@@ -18,7 +24,9 @@ public static class Account {
          { nameof(DepositedCash), typeof(DepositedCash)},
          { nameof(LockedCard), typeof(LockedCard)},
          { nameof(UnlockedCard), typeof(UnlockedCard)},
-         { nameof(RegisteredInternalTransferRecipient), typeof(RegisteredInternalTransferRecipient) }
+         { nameof(RegisteredInternalTransferRecipient), typeof(RegisteredInternalTransferRecipient) },
+         { nameof(RegisteredDomesticTransferRecipient), typeof(RegisteredDomesticTransferRecipient) },
+         { nameof(RegisteredInternationalTransferRecipient), typeof(RegisteredInternationalTransferRecipient) }
       }
       .ToImmutableDictionary();
 
@@ -40,16 +48,17 @@ public static class Account {
             => acc with { Status = AccountStatus.Active },
 
          RegisteredInternalTransferRecipient e => acc with {
-            TransferRecipients = acc.TransferRecipients.AddOrUpdate(
-               e.AccountNumber,
-               new TransferRecipient(
-                  Identification: e.AccountNumber,
-                  IdentificationMethod: AccountIdentificationMethod.AccountID,
-                  LastName: e.LastName,
-                  Firstname: e.FirstName,
-                  CreatedAt: e.Timestamp
-               )
-            )
+            TransferRecipients = acc.TransferRecipients.AddOrUpdate(e.AccountNumber, e)
+         },
+
+         RegisteredDomesticTransferRecipient e => acc with {
+            TransferRecipients = acc
+               .TransferRecipients
+               .AddOrUpdate($"{e.RoutingNumber}_{e.AccountNumber}", e)
+         },
+
+         RegisteredInternationalTransferRecipient e => acc with {
+            TransferRecipients = acc.TransferRecipients.AddOrUpdate(e.Identification, e)
          },
 
          _ => acc
@@ -65,7 +74,7 @@ public static class Account {
          DepositCashCmd cmd => state.Deposit(cmd),
          LockCardCmd cmd => state.LockCard(cmd),
          UnlockCardCmd cmd => state.UnlockCard(cmd),
-         RegisterInternalTransferRecipientCmd cmd => state.RegisterTransferRecipient(cmd),
+         RegisterTransferRecipientCmd cmd => state.RegisterTransferRecipient(cmd),
          _ => new Err("State Transition not implemented for command.")
       };
 
@@ -138,13 +147,13 @@ public static class Account {
 
    public static StateTransitionResult RegisterTransferRecipient(
       this AccountState state,
-      RegisterInternalTransferRecipientCmd cmd
+      RegisterTransferRecipientCmd cmd
    ) {
-      if (state.TransferRecipients.Find(cmd.AccountNumber.ToString()).IsSome)
-         return new Err($"Transfer recipient {cmd.AccountNumber} " +
+      if (state.TransferRecipients.Find(cmd.Identification).IsSome)
+         return new Err($"Transfer recipient {cmd.Identification} " +
             $"already added to account: {cmd.EntityId}");
 
-      var evt = cmd.ToEvent();
+      var evt = cmd.ToEvent().Unwrap();
       return (evt, state.Apply(evt));
    }
 
@@ -171,17 +180,14 @@ public enum AccountStatus {
    Closed
 }
 
-public record TransferRecipient(
-   string Identification,
-   AccountIdentificationMethod IdentificationMethod,
-   string LastName,
-   string Firstname,
-   DateTime CreatedAt
-);
-
-public enum AccountIdentificationMethod {
-   AccountID,
+public enum InternationalRecipientAccountIdentificationStrategy {
    SwiftBIC,
    IBAN,
    NationalID
+}
+
+public enum RecipientAccountEnvironment {
+   Internal,
+   Domestic,
+   International
 }

@@ -12,6 +12,7 @@
     <PackageReference Include="LanguageExt.Core" Version="4.4.2" />
     <PackageReference Include="LanguageExt.Transformers" Version="4.4.2" />
     <PackageReference Include="MinimalApis.Extensions" Version="0.10.1" />
+    <PackageReference Include="OneOf" Version="3.0.243" />
   </ItemGroup>
 
 </Project>
