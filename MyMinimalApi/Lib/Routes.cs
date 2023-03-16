@@ -1,8 +1,7 @@
 using static Microsoft.AspNetCore.Http.Results;
 using LanguageExt;
 using static LanguageExt.Prelude;
-
-using Account.Domain;
+using Lib.Types;
 
 namespace Lib.Route;
 

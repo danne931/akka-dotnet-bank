@@ -1,15 +1,14 @@
 using EventStore.Client;
-using ES = Lib.Persistence.EventStoreManager;
 using System.Collections.Immutable;
 using LanguageExt;
-using Echo;
 
 using Lib;
 using static Lib.Route.Response;
-using Account.API;
-using Account.Domain;
+using Bank.Account.API;
+using Bank.Account.Domain;
+using static Bank.Account.Domain.Validators;
 
-namespace Account.Routes;
+namespace Bank.Account.Routes;
 
 public static class AccountRoutes {
    public static class Path {
@@ -17,41 +16,8 @@ public static class AccountRoutes {
       public const string Diagnostic = "/diagnostic";
       public const string Deposit = $"{Base}/deposit";
       public const string Debit = $"{Base}/debit";
-      public const string Transfer = $"{Base}/transfer";
       public const string LockCard = $"{Base}/lock";
       public const string UnlockCard = $"{Base}/unlock";
-      public const string TransferRecipient = $"{Base}/transfer-recipient";
-   }
-
-   public static void Configure(WebApplicationBuilder builder) {
-      builder.Services.AddSingleton(Account.Domain.Account.EventTypeMapping);
-
-      builder.Services.AddSingleton<Validator<TransferCmd>>(
-         Validators.TransferValidation(() => DateTime.UtcNow.Date));
-
-      var esClient = ES.Connect();
-      ProcessConfig.initialise();
-      Process.DeadLetters()
-         .Observe<DeadLetter>()
-         .Subscribe(Console.WriteLine);
-
-      builder.Services.AddSingleton<AccountRegistry>(
-         new AccountRegistry(
-            loadAccount: id => AccountAPI.GetAccount(
-               esClient,
-               id,
-               Account.Domain.Account.EventTypeMapping
-            ),
-            saveAndPublish: evt => ES.SaveAndPublish(
-               esClient,
-               Account.Domain.Account.EventTypeMapping,
-               Account.Domain.Account.StreamName(evt.EntityId),
-               evt
-            )
-         )
-      );
-
-      builder.Services.AddSingleton<EventStoreClient>(esClient);
    }
 
    public static void Start(WebApplication app) {
@@ -64,8 +30,6 @@ public static class AccountRoutes {
       app.MapPost(Path.Debit, Debit);
       app.MapPost(Path.LockCard, LockCard);
       app.MapPost(Path.UnlockCard, UnlockCard);
-      app.MapPost(Path.Transfer, Transfer);
-      app.MapPost(Path.TransferRecipient, RegisterTransferRecipient);
 
       app.MapPost("/echo", TestEchoProcess);
    }
@@ -105,29 +69,8 @@ public static class AccountRoutes {
       EventStoreClient es
    )
    => AccountAPI
-      .Create(es, Validators.AccountInitValidation(), cmd)
+      .Create(es, AccountInitValidation(), cmd)
       .Unwrap<Guid>();
-
-   static Task<IResult> RegisterTransferRecipient(
-      RegisterTransferRecipientCmd cmd,
-      EventStoreClient es,
-      AccountRegistry accounts
-   ) =>
-      AccountAPI.ProcessCommand<RegisterTransferRecipientCmd>(
-         cmd,
-         accounts,
-         asyncValidate: Validators.RegisterTransferRecipient(es)
-      )
-      .Unwrap<Unit>();
-
-   public static Task<IResult> Transfer(
-      TransferCmd cmd,
-      Validator<TransferCmd> validate,
-      AccountRegistry accounts
-   )
-   => AccountAPI
-      .ProcessCommand<TransferCmd>(cmd, accounts, validate)
-      .Unwrap<Unit>();
 
    static Task<IResult> Deposit(
       DepositCashCmd cmd,

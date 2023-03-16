@@ -4,7 +4,7 @@ using Echo;
 using static Echo.Process;
 
 using Lib.Types;
-using Account.Domain;
+using Bank.Account.Domain;
 
 namespace Lib;
 

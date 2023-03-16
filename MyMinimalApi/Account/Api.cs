@@ -6,11 +6,12 @@ using EventStore.Client;
 
 using Lib;
 using Lib.Types;
-using AD = Account.Domain.Account;
+using static Lib.Validators;
 using ES = Lib.Persistence.EventStoreManager;
-using Account.Domain;
+using AD = Bank.Account.Domain.Account;
+using Bank.Account.Domain;
 
-namespace Account.API;
+namespace Bank.Account.API;
 
 public static class AccountAPI {
    public static Task<Option<EchoCmd>> TestEchoProcess(EchoCmd cmd) {
@@ -70,7 +71,7 @@ public static class AccountAPI {
    where T : Command
    {
       if (validate is null && asyncValidate is null)
-         validate = Validators.Pass<T>();
+         validate = Pass<T>();
 
       var validation = asyncValidate != null
          ? asyncValidate(command)

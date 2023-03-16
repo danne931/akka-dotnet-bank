@@ -1,14 +1,17 @@
-using Account.Routes;
+using static Bank.Config;
+using Bank.Account.Routes;
+using Bank.Transfer.Routes;
+
+StartActorModel();
+var es = StartEventStore();
 
 var builder = WebApplication.CreateBuilder(args);
-
-AccountRoutes.Configure(builder);
+InjectDependencies(builder, es);
 
 var app = builder.Build();
 
-app.MapGet("/", () => "Hello World!");
-
 AccountRoutes.Start(app);
+TransferRoutes.Start(app);
 
 app.Run();
 

@@ -3,8 +3,9 @@ using OneOf;
 using System.Collections.Immutable;
 
 using Lib.Types;
+using Bank.Transfer.Domain;
 
-namespace Account.Domain;
+namespace Bank.Account.Domain;
 
 using StateTransitionResult = Validation<Err, (Event Event, AccountState NewState)>;
 using TransferRecipient = OneOf<
@@ -178,16 +179,4 @@ public enum AccountStatus {
    Active,
    ActiveWithLockedCard,
    Closed
-}
-
-public enum InternationalRecipientAccountIdentificationStrategy {
-   SwiftBIC,
-   IBAN,
-   NationalID
-}
-
-public enum RecipientAccountEnvironment {
-   Internal,
-   Domestic,
-   International
 }

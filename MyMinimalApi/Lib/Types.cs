@@ -1,4 +1,12 @@
+using LanguageExt;
+using LanguageExt.Common;
+
 namespace Lib.Types;
+
+public delegate Validation<Err, T> Validator<T>(T t);
+public delegate Task<Validation<Err, T>> AsyncValidator<T>(T t);
+
+public record Err(string Message, int Code = 100) : Expected(Message, Code);
 
 public abstract record Command(Guid EntityId) {
    public DateTime Timestamp { get; init; } = DateTime.UtcNow;

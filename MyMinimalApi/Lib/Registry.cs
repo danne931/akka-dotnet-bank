@@ -4,7 +4,7 @@ using LanguageExt;
 using static LanguageExt.Prelude;
 
 using Lib.Types;
-using Account.Domain;
+using Bank.Account.Domain;
 
 namespace Lib;
 
