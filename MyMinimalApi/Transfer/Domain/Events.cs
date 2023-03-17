@@ -14,9 +14,8 @@ public record DebitedTransfer(
    Guid EntityId,
    DateTime Date,
    DateTime Timestamp,
-   string Beneficiary,
-   string Iban,
-   string Bic,
+   string RecipientLastName,
+   string RecipientIdentification,
    decimal DebitedAmount,
    string Reference
 )

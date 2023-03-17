@@ -8,7 +8,6 @@ namespace Bank.Account.Domain;
 
 using StateTransitionResult = Validation<Err, (Event Event, AccountState NewState)>;
 
-
 public static class Account {
    public static string StreamName(Guid id) => $"accounts_{id}";
 
@@ -91,6 +90,9 @@ public static class Account {
       if (state.Balance - cmd.Amount < state.AllowedOverdraft)
          return Errors.InsufficientBalance;
 
+      if (state.TransferRecipients.Find(cmd.RecipientIdentification).IsNone)
+         return TransferErr.RecipientRegistrationRequired(cmd);
+
       var evt = cmd.ToEvent();
       return (evt, state.Apply(evt));
    }
@@ -153,8 +155,7 @@ public static class Account {
       RegisterTransferRecipientCmd cmd
    ) {
       if (state.TransferRecipients.Find(cmd.Recipient.Identification).IsSome)
-         return new Err($"Transfer recipient {cmd.Recipient.Identification} " +
-            $"already added to account: {cmd.EntityId}");
+         return TransferErr.RecipientAlreadyRegistered(cmd);
 
       var evt = cmd.ToEvent().Unwrap();
       return (evt, state.Apply(evt));

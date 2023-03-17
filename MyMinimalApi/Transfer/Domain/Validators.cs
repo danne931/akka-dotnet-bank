@@ -8,9 +8,14 @@ namespace Bank.Transfer.Domain;
 public static class Validators {
    public static Validator<TransferCmd>
       TransferValidation(Func<DateTime> clock) =>
-      cmd => cmd.Date.Date < clock().Date
-         ? Fail<Err, TransferCmd>(Errors.TransferDateIsPast)
-         : Success<Err, TransferCmd>(cmd);
+      cmd => {
+         if (cmd.Date.Date < clock().Date)
+            return Fail<Err, TransferCmd>(TransferErr.DateIsPast);
+         if (isEmpty(cmd.RecipientIdentification))
+            return Fail<Err, TransferCmd>(TransferErr.InvalidDetails);
+
+         return Success<Err, TransferCmd>(cmd);
+      };
 
    public static AsyncValidator<RegisterTransferRecipientCmd>
       RegisterTransferRecipient(
@@ -21,14 +26,14 @@ public static class Validators {
          var rec = cmd.Recipient;
          if (isEmpty(rec.LastName) || isEmpty(rec.Identification)) {
             return Fail<Err, RegisterTransferRecipientCmd>(
-               new Err("LastName & Identification required.")
+               TransferErr.InvalidRecipient
             );
          }
-         if (rec.AccountEnvironment is RecipientAccountEnvironment.Internal &&
+         if (rec.AccountEnvironment is RecipientAccountEnvironment.Domestic &&
             isEmpty(rec.RoutingNumber)
          ) {
             return Fail<Err, RegisterTransferRecipientCmd>(
-               new Err("RoutingNumber required for domestic transfers.")
+               TransferErr.InvalidDomesticRecipient
             );
          }
          // TODO: XXX - use lenses
@@ -36,13 +41,13 @@ public static class Validators {
             isnull(rec.IdentificationStrategy)
          ) {
             return Fail<Err, RegisterTransferRecipientCmd>(
-               new Err("IdentificationMethod required for international transfers.")
+               TransferErr.InvalidInternationalRecipient
             );
          }
          // TODO: Remove Guid play
          var accountExists = await RecipientExists(es, rec);
          if (!accountExists)
-            return Errors.TransferRecipientNotFound(new Guid(rec.Identification));
+            return TransferErr.RecipientNotFound(new Guid(rec.Identification));
 
          return Success<Err, RegisterTransferRecipientCmd>(cmd);
       };

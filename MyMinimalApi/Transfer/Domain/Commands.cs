@@ -11,10 +11,8 @@ using TransferRecipientEvent = OneOf<
 
 public record TransferCmd(
    Guid EntityId,
-   string Beneficiary,
-   string Iban,
-   string Bic,
-
+   string RecipientLastName,
+   string RecipientIdentification,
    DateTime Date,
    decimal Amount,
    string Reference
@@ -24,10 +22,9 @@ public record TransferCmd(
    public DebitedTransfer ToEvent() => new(
       EntityId: EntityId,
       Date: Date,
-      Beneficiary: Beneficiary,
-      Bic: Bic,
+      RecipientLastName: RecipientLastName,
+      RecipientIdentification: RecipientIdentification,
       DebitedAmount: Amount,
-      Iban: Iban,
       Reference: Reference,
       Timestamp: Timestamp
    );
