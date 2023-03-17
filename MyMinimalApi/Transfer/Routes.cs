@@ -30,7 +30,7 @@ public static class TransferRoutes {
       AccountAPI.ProcessCommand<RegisterTransferRecipientCmd>(
          cmd,
          accounts,
-         asyncValidate: Validators.RegisterTransferRecipient(es, BankTransferAPI.RecipientExists)
+         Validators.RegisterTransferRecipient(es, BankTransferAPI.RecipientExists)
       )
       .Unwrap<Unit>();
 

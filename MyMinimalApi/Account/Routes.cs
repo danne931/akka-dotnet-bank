@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using LanguageExt;
 
 using Lib;
+using static Lib.Validators;
 using static Lib.Route.Response;
 using Bank.Account.API;
 using Bank.Account.Domain;
@@ -77,7 +78,7 @@ public static class AccountRoutes {
       AccountRegistry accounts
    )
    => AccountAPI
-      .ProcessCommand<DepositCashCmd>(cmd, accounts)
+      .ProcessCommand<DepositCashCmd>(cmd, accounts, Pass<DepositCashCmd>())
       .Unwrap<Unit>();
 
    static Task<IResult> Debit(
@@ -85,7 +86,7 @@ public static class AccountRoutes {
       AccountRegistry accounts
    )
    => AccountAPI
-      .ProcessCommand<DebitCmd>(cmd, accounts)
+      .ProcessCommand<DebitCmd>(cmd, accounts, Pass<DebitCmd>())
       .Unwrap<Unit>();
 
    static Task<IResult> LockCard(
@@ -93,7 +94,7 @@ public static class AccountRoutes {
       AccountRegistry accounts
    )
    => AccountAPI
-      .ProcessCommand<LockCardCmd>(cmd, accounts)
+      .ProcessCommand<LockCardCmd>(cmd, accounts, Pass<LockCardCmd>())
       .Unwrap<Unit>();
 
    static Task<IResult> UnlockCard(
@@ -101,6 +102,6 @@ public static class AccountRoutes {
       AccountRegistry accounts
    )
    => AccountAPI
-      .ProcessCommand<UnlockCardCmd>(cmd, accounts)
+      .ProcessCommand<UnlockCardCmd>(cmd, accounts, Pass<UnlockCardCmd>())
       .Unwrap<Unit>();
 }

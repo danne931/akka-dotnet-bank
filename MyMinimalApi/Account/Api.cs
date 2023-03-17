@@ -3,6 +3,7 @@ using static LanguageExt.Prelude;
 using static LanguageExt.List;
 using System.Collections.Immutable;
 using EventStore.Client;
+using OneOf;
 
 using Lib;
 using Lib.Types;
@@ -68,17 +69,14 @@ public static class AccountAPI {
    public static TryAsync<Validation<Err, Unit>> ProcessCommand<T>(
       T command,
       AccountRegistry accounts,
-      Validator<T>? validate = null,
-      AsyncValidator<T>? asyncValidate = null
+      OneOf<Validator<T>, AsyncValidator<T>> validate
    )
    where T : Command
    {
-      if (validate is null && asyncValidate is null)
-         validate = Pass<T>();
-
-      var validation = asyncValidate != null
-         ? asyncValidate(command)
-         : TaskSucc(validate(command));
+      var validation = validate.Match(
+         validate => TaskSucc(validate(command)),
+         asyncValidate => asyncValidate(command)
+      );
 
       var getAccountVal = (Command cmd) =>
          accounts

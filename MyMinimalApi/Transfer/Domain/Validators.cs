@@ -1,9 +1,7 @@
 using EventStore.Client;
 using static LanguageExt.Prelude;
 
-using ES = Lib.Persistence.EventStoreManager;
 using Lib.Types;
-using static Bank.Account.Domain.Account;
 
 namespace Bank.Transfer.Domain;
 
