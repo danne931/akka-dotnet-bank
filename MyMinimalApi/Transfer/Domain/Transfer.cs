@@ -1,7 +1,5 @@
 namespace Bank.Transfer.Domain;
 
-public static class Transfers {}
-
 public record TransferRecipient(
    string LastName,
    string FirstName,

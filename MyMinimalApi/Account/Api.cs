@@ -62,6 +62,9 @@ public static class AccountAPI {
       );
    }
 
+   public static Task<bool> Exists(EventStoreClient es, Guid id) =>
+      ES.Exists(es, AD.StreamName(id));
+
    public static TryAsync<Validation<Err, Unit>> ProcessCommand<T>(
       T command,
       AccountRegistry accounts,

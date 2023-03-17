@@ -29,7 +29,6 @@ public static class Config {
       builder.Services.AddSingleton<Validator<TransferCmd>>(
          TransferValidation(() => DateTime.UtcNow.Date));
 
-
       builder.Services.AddSingleton<AccountRegistry>(
          new AccountRegistry(
             loadAccount: id => AccountAPI.GetAccount(

@@ -6,6 +6,7 @@ using Lib.Types;
 using static Lib.Route.Response;
 using Bank.Account.API;
 using Bank.Transfer.Domain;
+using Bank.Transfer.API;
 using Validators = Bank.Transfer.Domain.Validators;
 
 namespace Bank.Transfer.Routes;
@@ -29,7 +30,7 @@ public static class TransferRoutes {
       AccountAPI.ProcessCommand<RegisterTransferRecipientCmd>(
          cmd,
          accounts,
-         asyncValidate: Validators.RegisterTransferRecipient(es)
+         asyncValidate: Validators.RegisterTransferRecipient(es, BankTransferAPI.RecipientExists)
       )
       .Unwrap<Unit>();
 
