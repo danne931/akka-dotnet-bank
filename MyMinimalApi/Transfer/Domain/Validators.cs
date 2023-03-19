@@ -11,7 +11,7 @@ public static class Validators {
       cmd => {
          if (cmd.Date.Date < clock().Date)
             return Fail<Err, TransferCmd>(TransferErr.DateIsPast);
-         if (isEmpty(cmd.RecipientIdentification))
+         if (isEmpty(cmd.Recipient.Identification))
             return Fail<Err, TransferCmd>(TransferErr.InvalidDetails);
 
          return Success<Err, TransferCmd>(cmd);

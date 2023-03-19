@@ -11,8 +11,7 @@ using TransferRecipientEvent = OneOf<
 
 public record TransferCmd(
    Guid EntityId,
-   string RecipientLastName,
-   string RecipientIdentification,
+   TransferRecipient Recipient,
    DateTime Date,
    decimal Amount,
    string Reference
@@ -22,8 +21,7 @@ public record TransferCmd(
    public DebitedTransfer ToEvent() => new(
       EntityId: EntityId,
       Date: Date,
-      RecipientLastName: RecipientLastName,
-      RecipientIdentification: RecipientIdentification,
+      Recipient: Recipient,
       DebitedAmount: Amount,
       Reference: Reference,
       Timestamp: Timestamp

@@ -14,8 +14,7 @@ public record DebitedTransfer(
    Guid EntityId,
    DateTime Date,
    DateTime Timestamp,
-   string RecipientLastName,
-   string RecipientIdentification,
+   TransferRecipient Recipient,
    decimal DebitedAmount,
    string Reference
 )

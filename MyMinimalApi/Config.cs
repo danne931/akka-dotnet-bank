@@ -4,6 +4,7 @@ using EventStore.Client;
 using ES = Lib.Persistence.EventStoreManager;
 using Lib;
 using Lib.Types;
+using Bank.Transfer.API;
 using Bank.Transfer.Domain;
 using static Bank.Transfer.Domain.Validators;
 using Bank.Account.API;
@@ -16,6 +17,9 @@ public static class Config {
       Process.DeadLetters()
          .Observe<DeadLetter>()
          .Subscribe(Console.WriteLine);
+
+      var processIds = BankTransferAPI.StartThirdPartyTransferSystem();
+      Console.WriteLine($"Started 3rd party bank transfer system {processIds}");
    }
 
    public static EventStoreClient StartEventStore() => ES.Connect();

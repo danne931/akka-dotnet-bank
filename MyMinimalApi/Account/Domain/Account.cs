@@ -90,7 +90,7 @@ public static class Account {
       if (state.Balance - cmd.Amount < state.AllowedOverdraft)
          return Errors.InsufficientBalance;
 
-      if (state.TransferRecipients.Find(cmd.RecipientIdentification).IsNone)
+      if (state.TransferRecipients.Find(cmd.Recipient.Identification).IsNone)
          return TransferErr.RecipientRegistrationRequired(cmd);
 
       var evt = cmd.ToEvent();

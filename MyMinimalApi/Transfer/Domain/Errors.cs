@@ -23,7 +23,7 @@ public static class TransferErr {
 
    public static Err RecipientRegistrationRequired(TransferCmd cmd)
       => new Err("Recipient registration required before issuing transfers. " +
-                 $"{cmd.RecipientLastName}/{cmd.RecipientIdentification}");
+                 $"{cmd.Recipient.LastName}/{cmd.Recipient.Identification}");
 
    public static Err RecipientAlreadyRegistered(RegisterTransferRecipientCmd cmd)
       => new Err($"Transfer recipient {cmd.Recipient.LastName}" +

@@ -7,7 +7,6 @@ using OneOf;
 
 using Lib;
 using Lib.Types;
-using static Lib.Validators;
 using ES = Lib.Persistence.EventStoreManager;
 using AD = Bank.Account.Domain.Account;
 using Bank.Account.Domain;
