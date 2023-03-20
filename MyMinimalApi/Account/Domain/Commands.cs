@@ -26,12 +26,8 @@ public record CreateAccountCmd(
 {
    //public AccountStatus Status { get; init; } = AccountStatus.Active;
 
-   public CreatedAccount ToEvent() => new(
-      EntityId: EntityId,
-      Timestamp: Timestamp,
-      Currency: Currency,
-      Balance: Balance
-   );
+   public CreatedAccount ToEvent() =>
+      new(EntityId, Timestamp, Currency, Balance);
 }
 
 public record DepositCashCmd(
@@ -67,17 +63,23 @@ public record DebitCmd(
    );
 }
 
+public record LimitDailyDebitsCmd(
+   Guid EntityId,
+   decimal DebitLimit
+)
+: Command(EntityId)
+{
+   public DailyDebitLimitUpdated ToEvent() =>
+      new(EntityId, DebitLimit, Timestamp);
+}
+
 public record LockCardCmd(
    Guid EntityId,
    string Reference
 )
 : Command(EntityId)
 {
-   public LockedCard ToEvent() => new(
-      EntityId: EntityId,
-      Reference: Reference,
-      Timestamp: Timestamp
-   );
+   public LockedCard ToEvent() => new(EntityId, Timestamp, Reference);
 }
 
 public record UnlockCardCmd(
@@ -86,9 +88,5 @@ public record UnlockCardCmd(
 )
 : Command(EntityId)
 {
-   public UnlockedCard ToEvent() => new(
-      EntityId: EntityId,
-      Reference: Reference,
-      Timestamp: Timestamp
-   );
+   public UnlockedCard ToEvent() => new(EntityId, Timestamp, Reference);
 }

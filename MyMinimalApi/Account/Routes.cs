@@ -17,6 +17,7 @@ public static class AccountRoutes {
       public const string Diagnostic = "/diagnostic";
       public const string Deposit = $"{Base}/deposit";
       public const string Debit = $"{Base}/debit";
+      public const string DailyDebitLimit = $"{Base}/daily-debit-limit";
       public const string LockCard = $"{Base}/lock";
       public const string UnlockCard = $"{Base}/unlock";
    }
@@ -29,6 +30,7 @@ public static class AccountRoutes {
       app.MapPost(Path.Base, CreateAccount);
       app.MapPost(Path.Deposit, Deposit);
       app.MapPost(Path.Debit, Debit);
+      app.MapPost(Path.DailyDebitLimit, UpdateDailyDebitLimit);
       app.MapPost(Path.LockCard, LockCard);
       app.MapPost(Path.UnlockCard, UnlockCard);
 
@@ -87,6 +89,14 @@ public static class AccountRoutes {
    )
    => AccountAPI
       .ProcessCommand<DebitCmd>(cmd, accounts, Pass<DebitCmd>())
+      .Unwrap<Unit>();
+
+   static Task<IResult> UpdateDailyDebitLimit(
+      LimitDailyDebitsCmd cmd,
+      AccountRegistry accounts
+   )
+   => AccountAPI
+      .ProcessCommand<LimitDailyDebitsCmd>(cmd, accounts, DailyDebitLimitValidation())
       .Unwrap<Unit>();
 
    static Task<IResult> LockCard(

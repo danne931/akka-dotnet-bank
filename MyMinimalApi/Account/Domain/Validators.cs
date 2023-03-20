@@ -23,4 +23,9 @@ public static class Validators {
 
          return Success<Err, CreateAccountCmd>(cmd);
       };
+
+   public static Validator<LimitDailyDebitsCmd> DailyDebitLimitValidation() =>
+      cmd => cmd.DebitLimit < 0
+         ? Fail<Err, LimitDailyDebitsCmd>(Errors.InvalidDailyDebitLimit)
+         : Success<Err, LimitDailyDebitsCmd>(cmd);
 }

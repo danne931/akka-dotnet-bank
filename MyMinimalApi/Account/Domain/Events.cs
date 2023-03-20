@@ -39,3 +39,9 @@ public record DebitedAccount(
    string Origin,
    string Reference
 ) : Event(EntityId, Timestamp, nameof(DebitedAccount));
+
+public record DailyDebitLimitUpdated(
+   Guid EntityId,
+   decimal DebitLimit,
+   DateTime Timestamp
+) : Event(EntityId, Timestamp, nameof(DailyDebitLimitUpdated));

@@ -16,6 +16,7 @@ public static class Account {
          { nameof(CreatedAccount), typeof(CreatedAccount) },
          { nameof(DebitedTransfer), typeof(DebitedTransfer) },
          { nameof(DebitedAccount), typeof(DebitedAccount) },
+         { nameof(DailyDebitLimitUpdated), typeof(DailyDebitLimitUpdated) },
          { nameof(DepositedCash), typeof(DepositedCash)},
          { nameof(LockedCard), typeof(LockedCard)},
          { nameof(UnlockedCard), typeof(UnlockedCard)},
@@ -34,7 +35,14 @@ public static class Account {
             => acc with { Balance = acc.Balance - e.DebitedAmount },
 
          DebitedAccount e
-            => acc with { Balance = acc.Balance - e.DebitedAmount },
+            => acc with {
+                  Balance = acc.Balance - e.DebitedAmount,
+                  DailyDebitAccrued = DailyDebitAccrued(acc, e),
+                  LastDebitDate = e.Timestamp
+               },
+
+         DailyDebitLimitUpdated e
+            => acc with { DailyDebitLimit = e.DebitLimit },
 
          LockedCard _
             => acc with { Status = AccountStatus.ActiveWithLockedCard },
@@ -66,6 +74,25 @@ public static class Account {
          _ => acc
       };
 
+   public static Decimal DailyDebitAccrued(AccountState state, DebitedAccount evt) {
+      // When accumulating events into AccountState aggregate...
+      // -> Ignore debits older than a day
+      if (!IsToday(evt.Timestamp)) return 0;
+
+      // When applying a new event to the cached AccountState & the
+      // last debit event did not occur today...
+      // -> Ignore the cached DailyDebitAccrued
+      if (!IsToday(state.LastDebitDate)) return evt.DebitedAmount;
+
+      return state.DailyDebitAccrued + evt.DebitedAmount;
+   }
+
+   public static bool IsToday(DateTime debitDate) {
+      var today = DateTime.UtcNow;
+      return ($"{today.Day}-{today.Month}-{today.Year}" ==
+              $"{debitDate.Day}-{debitDate.Month}-{debitDate.Year}");
+   }
+
    public static StateTransitionResult StateTransition(
       this AccountState state,
       Command command
@@ -73,6 +100,7 @@ public static class Account {
       command switch {
          TransferCmd cmd => state.Transfer(cmd),
          DebitCmd cmd => state.Debit(cmd),
+         LimitDailyDebitsCmd cmd => state.LimitDailyDebits(cmd),
          DepositCashCmd cmd => state.Deposit(cmd),
          LockCardCmd cmd => state.LockCard(cmd),
          UnlockCardCmd cmd => state.UnlockCard(cmd),
@@ -110,6 +138,21 @@ public static class Account {
       if (state.Balance - cmd.Amount < state.AllowedOverdraft)
          return Errors.InsufficientBalance;
 
+      if (state.DailyDebitLimit != -1 &&
+         IsToday(cmd.Timestamp) &&
+         state.DailyDebitAccrued + cmd.Amount > state.DailyDebitLimit
+      ) {
+         return Errors.ExceededDailyDebitLimit(state.DailyDebitLimit);
+      }
+
+      var evt = cmd.ToEvent();
+      return (evt, state.Apply(evt));
+   }
+
+   public static StateTransitionResult LimitDailyDebits(
+      this AccountState state,
+      LimitDailyDebitsCmd cmd
+   ) {
       var evt = cmd.ToEvent();
       return (evt, state.Apply(evt));
    }
@@ -175,6 +218,9 @@ public sealed record AccountState(
    AccountStatus Status = AccountStatus.Active,
    decimal Balance = 0,
    decimal AllowedOverdraft = 0,
+   decimal DailyDebitLimit = -1,
+   decimal DailyDebitAccrued = 0,
+   DateTime LastDebitDate = default,
    Map<string, TransferRecipient> TransferRecipients = default
 );
 

@@ -23,4 +23,10 @@ public static class Errors {
 
    public static Err InvalidStartBalance(decimal balance)
       => new Err($"Unable to open account with {balance} balance.");
+
+   public static Err ExceededDailyDebitLimit(decimal limit)
+      => new Err($"Daily debit limit exceeded {limit}");
+
+   public static Err InvalidDailyDebitLimit
+      => new Err($"Daily debit limit must be 0 or greater.");
 }
