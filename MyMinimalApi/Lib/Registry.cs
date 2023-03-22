@@ -74,8 +74,20 @@ public class AccountRegistry {
 
       return 
          from state in loadAccount(id)
-         from acct in TaskSucc(ask<Option<AccountProcess>>(PID, new RegisterMsg(id, state)))
+         from acct in TaskSucc(Register(state))
          select acct;
+   }
+
+   public Option<AccountProcess> Register(AccountState account) {
+      var process = ask<Option<AccountProcess>>(
+         PID,
+         new RegisterMsg(account.EntityId, account)
+      );
+
+      return process.Map(k => {
+         register(k.PID.Name, k.PID);
+         return k;
+      });
    }
 
    public Unit Delete(Guid id) {

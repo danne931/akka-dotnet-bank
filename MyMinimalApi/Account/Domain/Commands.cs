@@ -20,7 +20,9 @@ public record EchoCmd(
 public record CreateAccountCmd(
    Guid EntityId,
    string Currency,
-   decimal Balance
+   decimal Balance,
+   string FirstName,
+   string LastName
 )
 : Command(EntityId)
 {
@@ -49,7 +51,7 @@ public record DebitCmd(
    DateTime Date,
    decimal Amount,
    string Origin,
-   string Reference
+   string? Reference = default
 )
 : Command(EntityId)
 {

@@ -33,16 +33,9 @@ public static class AccountRoutes {
       app.MapPost(Path.DailyDebitLimit, UpdateDailyDebitLimit);
       app.MapPost(Path.LockCard, LockCard);
       app.MapPost(Path.UnlockCard, UnlockCard);
-
-      app.MapPost("/echo", TestEchoProcess);
    }
 
    // QUERY
-
-   static Task<IResult> TestEchoProcess(
-      EchoCmd cmd
-   )
-   => AccountAPI.TestEchoProcess(cmd).Unwrap<EchoCmd>();
 
    static Task<IResult> GetAccountEvents(
       Guid id,
@@ -69,10 +62,12 @@ public static class AccountRoutes {
 
    static Task<IResult> CreateAccount(
       CreateAccountCmd cmd,
-      EventStoreClient es
+      EventStoreClient es,
+      ImmutableDictionary<string, Type> mapping,
+      AccountRegistry accounts
    )
    => AccountAPI
-      .Create(es, AccountInitValidation(), cmd)
+      .Create(es, accounts, AccountInitValidation(), mapping, cmd)
       .Unwrap<Guid>();
 
    static Task<IResult> Deposit(

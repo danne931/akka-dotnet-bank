@@ -210,6 +210,12 @@ public static class Account {
          Currency: evt.Currency,
          Balance: evt.Balance
       );
+
+   public static class MonthlyMaintenanceFee {
+      public const decimal Amount = 5;
+      public const decimal DailyBalanceThreshold = 1500;
+      public const decimal QualifyingDeposit = 250;
+   }
 }
 
 public sealed record AccountState(
