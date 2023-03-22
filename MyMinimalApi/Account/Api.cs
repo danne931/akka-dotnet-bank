@@ -24,7 +24,7 @@ public static class AccountAPI {
       EventStoreClient client,
       AccountRegistry accounts,
       Validator<CreateAccountCmd> validate,
-      ImmutableDictionary<string, Type> mapping,
+      Func<CreatedAccount, ProcessId> maintenanceFee,
       CreateAccountCmd command
    ) {
       var save = async (CreateAccountCmd cmd) => {
@@ -47,7 +47,7 @@ public static class AccountAPI {
             .AsTask();
       };
       var scheduleMaintenanceFee = (CreatedAccount evt) =>
-         TaskSucc(Pass<ProcessId>()(ScheduleMaintenanceFee(evt, client, mapping)));
+         TaskSucc(Pass<ProcessId>()(maintenanceFee(evt)));
 
       var res =
          from cmd in TaskSucc(validate(command))
@@ -58,20 +58,20 @@ public static class AccountAPI {
       return TryAsync(res);
    }
 
-   public static Task<Option<Lst<object>>> GetAccountEvents(
+   public static Func<Guid, Task<Option<Lst<object>>>> GetAccountEvents(
    //public static TryOptionAsync<Lst<object>> GetAccountEvents(
       EventStoreClient client,
-      Guid accountId,
       ImmutableDictionary<string, Type> mapping
    )
-   => ES.ReadStream(client, AD.StreamName(accountId), mapping);
+   =>
+   id => ES.ReadStream(client, AD.StreamName(id), mapping);
 
-   public static async Task<Option<AccountState>> GetAccount(
-      EventStoreClient client,
-      Guid accountId,
-      ImmutableDictionary<string, Type> mapping
-   ) {
-      var res = await GetAccountEvents(client, accountId, mapping);
+   public static Func<Guid, Task<Option<AccountState>>> GetAccount(
+      Func<Guid, Task<Option<Lst<object>>>> getAccountEvents
+   )
+   =>
+   async accountId => {
+      var res = await getAccountEvents(accountId);
 
       return res.Map(events =>
          fold(
@@ -80,7 +80,7 @@ public static class AccountAPI {
             (state, evt) => state.Apply(evt)
          )
       );
-   }
+   };
 
    public static Task<bool> Exists(EventStoreClient es, Guid id) =>
       ES.Exists(es, AD.StreamName(id));
@@ -136,19 +136,20 @@ public static class AccountAPI {
       return unit;
    }
 
-   public static ProcessId ScheduleMaintenanceFee(
-      CreatedAccount evt,
-      EventStoreClient esClient,
-      ImmutableDictionary<string, Type> mapping
-   ) {
+   public static Func<CreatedAccount, ProcessId> ScheduleMaintenanceFee(
+      Func<Guid, Task<Option<Lst<object>>>> getAccountEvents,
+      Func<DateTime> lookBackDate,
+      Func<TimeSpan> scheduledAt
+   )
+   => (CreatedAccount evt) => {
       var pid = spawn<CreatedAccount>(
          $"monthly_maintenance_fee_{evt.EntityId}",
          async evt => {
             Console.WriteLine($"Monthly maintenance fee: {evt.EntityId}");
-            var eventsOpt = await GetAccountEvents(esClient, evt.EntityId, mapping);
+            var eventsOpt = await getAccountEvents(evt.EntityId);
 
             eventsOpt.IfSome(events => {
-               var date30DaysAgo = DateTime.UtcNow.AddDays(-30);
+               var lookback = lookBackDate();
 
                var res = foldUntil(
                   events,
@@ -160,7 +161,7 @@ public static class AccountAPI {
                   (acc, evt) => {
                      acc.account = acc.account.Apply(evt);
 
-                     if (((Event) evt).Timestamp < date30DaysAgo) {
+                     if (((Event) evt).Timestamp < lookback) {
                         acc.balanceCriteria = acc.account.Balance
                            >= AD.MonthlyMaintenanceFee.DailyBalanceThreshold;
                         return acc;
@@ -196,11 +197,11 @@ public static class AccountAPI {
                ));
             });
 
-            tellSelf(evt, TimeSpan.FromDays(30));
+            tellSelf(evt, scheduledAt());
          }
       );
 
-      tell(pid, evt, TimeSpan.FromDays(30));
+      tell(pid, evt, scheduledAt());
       return pid;
-   }
+   };
 }

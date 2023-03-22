@@ -35,10 +35,11 @@ public static class Config {
 
       builder.Services.AddSingleton<AccountRegistry>(
          new AccountRegistry(
-            loadAccount: id => AccountAPI.GetAccount(
-               esClient,
-               id,
-               Account.Domain.Account.EventTypeMapping
+            loadAccount: AccountAPI.GetAccount(
+               AccountAPI.GetAccountEvents(
+                  esClient,
+                  Account.Domain.Account.EventTypeMapping
+               )
             ),
             saveAndPublish: evt => AccountAPI.SaveAndPublish(
                esClient,

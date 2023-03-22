@@ -42,21 +42,27 @@ public static class AccountRoutes {
       EventStoreClient es,
       ImmutableDictionary<string, Type> mapping
    )
-   => AccountAPI.GetAccountEvents(es, id, mapping).Unwrap<Lst<object>>();
+   => AccountAPI
+      .GetAccountEvents(es, mapping)(id)
+      .Unwrap<Lst<object>>();
 
    static Task<IResult> SoftDeleteEvents(
       Guid id,
       EventStoreClient es,
       AccountRegistry accounts
    )
-   => AccountAPI.SoftDeleteEvents(accounts, es, id).Unwrap<Unit>();
+   => AccountAPI
+      .SoftDeleteEvents(accounts, es, id)
+      .Unwrap<Unit>();
 
    static Task<IResult> GetAccount(
       Guid id,
       EventStoreClient es,
       ImmutableDictionary<string, Type> mapping
    )
-   => AccountAPI.GetAccount(es, id, mapping).Unwrap<AccountState>();
+   => AccountAPI
+      .GetAccount(AccountAPI.GetAccountEvents(es, mapping))(id)
+      .Unwrap<AccountState>();
 
    // COMMAND
 
@@ -67,7 +73,17 @@ public static class AccountRoutes {
       AccountRegistry accounts
    )
    => AccountAPI
-      .Create(es, accounts, AccountInitValidation(), mapping, cmd)
+      .Create(
+         es,
+         accounts,
+         AccountInitValidation(),
+         AccountAPI.ScheduleMaintenanceFee(
+            AccountAPI.GetAccountEvents(es, mapping),
+            lookBackDate: () => DateTime.UtcNow.AddDays(-30),
+            scheduledAt: () => TimeSpan.FromDays(30)
+         ),
+         cmd
+      )
       .Unwrap<Guid>();
 
    static Task<IResult> Deposit(
