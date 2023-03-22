@@ -39,11 +39,10 @@ public static class AccountAPI {
       };
       var registerAccount = (CreatedAccount evt) => {
          var account = AD.Create(evt);
-         var accountProcess = accounts
+         return accounts
             .Register(account)
-            .ToValidation(new Err("Account registration fail"));
-
-         return TaskSucc(accountProcess);
+            .ToValidation(new Err("Account registration fail"))
+            .AsTask();
       };
       var scheduleMaintenanceFee = (CreatedAccount evt) =>
          TaskSucc(Pass<ProcessId>()(ScheduleMaintenanceFee(evt, client, mapping)));
@@ -174,7 +173,7 @@ public static class AccountAPI {
                   evt.EntityId,
                   DateTime.UtcNow,
                   AD.MonthlyMaintenanceFee.Amount,
-                  Origin: "actor"
+                  Origin: AD.MonthlyMaintenanceFee.Origin
                ));
             });
 

@@ -1,4 +1,5 @@
 using LanguageExt;
+using static LanguageExt.Prelude;
 using System.Collections.Immutable;
 
 using Lib.Types;
@@ -78,6 +79,8 @@ public static class Account {
       // When accumulating events into AccountState aggregate...
       // -> Ignore debits older than a day
       if (!IsToday(evt.Timestamp)) return 0;
+
+      if (CanBypassDailyDebitAccrual(evt)) return state.DailyDebitAccrued;
 
       // When applying a new event to the cached AccountState & the
       // last debit event did not occur today...
@@ -212,10 +215,15 @@ public static class Account {
       );
 
    public static class MonthlyMaintenanceFee {
+      public const string Origin = "actor:monthly_maintenance_fee";
       public const decimal Amount = 5;
       public const decimal DailyBalanceThreshold = 1500;
       public const decimal QualifyingDeposit = 250;
    }
+
+   public static bool CanBypassDailyDebitAccrual
+      (DebitedAccount evt) =>
+         List(MonthlyMaintenanceFee.Origin).Contains(evt.Origin);
 }
 
 public sealed record AccountState(
