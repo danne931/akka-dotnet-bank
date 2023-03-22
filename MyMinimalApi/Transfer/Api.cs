@@ -41,27 +41,25 @@ public static class BankTransferAPI {
             Pass<DepositCashCmd>()
          );
       }
-      return TryAsync(ProcessThirdPartyBankTransfer(cmd));
+      return TryAsync(Pass<Unit>()(ProcessThirdPartyBankTransfer(cmd)));
    }
 
-   public static IEnumerable<ProcessId>
-      StartThirdPartyTransferSystem() =>
-         Process.spawnMany<TransferCmd>(
-            10,
-            ThirdPartyBankTransferProcessName,
-            async cmd => {
-               Console.WriteLine("Issuing 3rd party bank transfer");
-               await ThirdPartyBankTransfer(cmd);
-            }
-         );
+   public static ProcessId StartThirdPartyTransferSystem() {
+      var pid = Router.leastBusy<TransferCmd>(
+         ThirdPartyBankTransferProcessName,
+         10,
+         async cmd => {
+            Console.WriteLine("Issuing 3rd party bank transfer: " + cmd.EntityId);
+            await ThirdPartyBankTransfer(cmd);
+         }
+      );
+      register(pid.Name, pid);
+      return pid;
+   }
 
-   public static Validation<Err, Unit> ProcessThirdPartyBankTransfer(TransferCmd cmd) {
-      Console.WriteLine("Process 3rd party bank transfer");
-
-      var pid = find(ThirdPartyBankTransferProcessName);
-      Console.WriteLine("Found PID " + pid);
-      tell(pid, cmd);
-      return Pass<Unit>()(unit);
+   public static Unit ProcessThirdPartyBankTransfer(TransferCmd cmd) {
+      tell("@" + ThirdPartyBankTransferProcessName, cmd);
+      return unit;
    }
 
    public static async Task<Unit> ThirdPartyBankTransfer(TransferCmd cmd) =>
