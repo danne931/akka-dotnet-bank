@@ -56,6 +56,13 @@ public class AccountRegistry {
                   );
                }
                case DeleteMsg m: {
+                  List(
+                     $"accounts_{m.Id}",
+                     $"{Account.MonthlyMaintenanceFee.ActorName}_{m.Id}")
+                  .Do(pid => {
+                     kill("@" + pid);
+                     Console.WriteLine($"Killed process {pid}");
+                  });
                   return cache.Remove(m.Id);
                }
             }

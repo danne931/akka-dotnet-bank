@@ -143,7 +143,7 @@ public static class AccountAPI {
    )
    => (CreatedAccount evt) => {
       var pid = spawn<CreatedAccount>(
-         $"monthly_maintenance_fee_{evt.EntityId}",
+         $"{AD.MonthlyMaintenanceFee.ActorName}_{evt.EntityId}",
          async evt => {
             Console.WriteLine($"Monthly maintenance fee: {evt.EntityId}");
             var eventsOpt = await getAccountEvents(evt.EntityId);
@@ -202,6 +202,7 @@ public static class AccountAPI {
       );
 
       tell(pid, evt, scheduledAt());
+      register(pid.Name, pid);
       return pid;
    };
 }
