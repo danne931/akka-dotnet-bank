@@ -14,6 +14,8 @@ using ES = Lib.Persistence.EventStoreManager;
 using AD = Bank.Account.Domain.Account;
 using Bank.Account.Domain;
 using static Bank.Account.Domain.Errors;
+using Bank.Transfer.API;
+using Bank.Transfer.Domain;
 
 namespace Bank.Account.API;
 
@@ -115,6 +117,23 @@ public static class AccountAPI {
    ) {
       accounts.Delete(accountId);
       return ES.SoftDelete(client, AD.StreamName(accountId));
+   }
+
+   public static async Task<Unit> SaveAndPublish(
+      EventStoreClient esClient,
+      Event evt
+   ) {
+      await ES.SaveAndPublish(
+         esClient,
+         AD.EventTypeMapping,
+         AD.StreamName(evt.EntityId),
+         evt
+      );
+
+      if (evt is DebitedTransfer)
+         BankTransferAPI.IssueTransferToRecipient((DebitedTransfer) evt);
+
+      return unit;
    }
 
    public static ProcessId ScheduleMaintenanceFee(

@@ -25,55 +25,50 @@ public static class BankTransferAPI {
          RecipientAccountEnvironment.International => RecipientExistsInternationally(recipient)
       };
 
-   public static TryAsync<Validation<Err, Unit>> IssueTransferToRecipient(
-      TransferCmd cmd,
-      AccountRegistry accounts
-   ) {
-      var recipient = cmd.Recipient;
+   public static Unit IssueTransferToRecipient(DebitedTransfer evt) {
+      var recipient = evt.Recipient;
       if (recipient.AccountEnvironment is RecipientAccountEnvironment.Internal) {
-         return AccountAPI.ProcessCommand<DepositCashCmd>(
-            new DepositCashCmd(
-               new Guid(cmd.Recipient.Identification),
-               cmd.Date,
-               cmd.Amount
-            ),
-            accounts,
-            Pass<DepositCashCmd>()
-         );
-      }
-      return TryAsync(Pass<Unit>()(ProcessThirdPartyBankTransfer(cmd)));
+         tell($"@accounts_{evt.EntityId}", new DepositCashCmd(
+            new Guid(evt.Recipient.Identification),
+            evt.Date,
+            evt.DebitedAmount
+         ));
+      } else
+         ProcessThirdPartyBankTransfer(evt);
+
+      return unit;
    }
 
    public static ProcessId StartThirdPartyTransferSystem() {
-      var pid = Router.leastBusy<TransferCmd>(
+      var pid = Router.leastBusy<DebitedTransfer>(
          ThirdPartyBankTransferProcessName,
          10,
-         async cmd => {
-            Console.WriteLine("Issuing 3rd party bank transfer: " + cmd.EntityId);
-            await ThirdPartyBankTransfer(cmd);
+         async evt => {
+            Console.WriteLine("Issuing 3rd party bank transfer: " + evt.EntityId);
+            await ThirdPartyBankTransfer(evt);
          }
       );
       register(pid.Name, pid);
       return pid;
    }
 
-   public static Unit ProcessThirdPartyBankTransfer(TransferCmd cmd) {
-      tell("@" + ThirdPartyBankTransferProcessName, cmd);
+   public static Unit ProcessThirdPartyBankTransfer(DebitedTransfer evt) {
+      tell("@" + ThirdPartyBankTransferProcessName, evt);
       return unit;
    }
 
-   public static async Task<Unit> ThirdPartyBankTransfer(TransferCmd cmd) =>
-      cmd.Recipient.AccountEnvironment switch {
+   public static async Task<Unit> ThirdPartyBankTransfer(DebitedTransfer evt) =>
+      evt.Recipient.AccountEnvironment switch {
          RecipientAccountEnvironment.Domestic =>
-            await DomesticTransfer(cmd),
+            await DomesticTransfer(evt),
          RecipientAccountEnvironment.International =>
-            await InternationalTransfer(cmd),
+            await InternationalTransfer(evt),
          _ =>
             throw new Err("Third party transfer requires a " +
                            "domestic or international account.")
       };
 
-   private static async Task<Unit> DomesticTransfer(TransferCmd cmd) {
+   private static async Task<Unit> DomesticTransfer(DebitedTransfer evt) {
       // Simulate network request to send money to domestic bank
       /* 
       await DomesticTransferService.Handle(new {
@@ -87,7 +82,7 @@ public static class BankTransferAPI {
       return unit;
    }
 
-   private static async Task<Unit> InternationalTransfer(TransferCmd cmd) {
+   private static async Task<Unit> InternationalTransfer(DebitedTransfer evt) {
       // await InternationalTransferService.Handle();
       // Simulate network request to verify account in international bank
       await Task.Delay(1*sec);

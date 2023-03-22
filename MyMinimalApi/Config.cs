@@ -40,10 +40,8 @@ public static class Config {
                id,
                Account.Domain.Account.EventTypeMapping
             ),
-            saveAndPublish: evt => ES.SaveAndPublish(
+            saveAndPublish: evt => AccountAPI.SaveAndPublish(
                esClient,
-               Account.Domain.Account.EventTypeMapping,
-               Account.Domain.Account.StreamName(evt.EntityId),
                evt
             )
          )

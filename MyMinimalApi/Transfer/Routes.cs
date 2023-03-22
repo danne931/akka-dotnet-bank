@@ -41,6 +41,5 @@ public static class TransferRoutes {
    )
    => AccountAPI
       .ProcessCommand<TransferCmd>(cmd, accounts, validate)
-      .BindT(_ =>  BankTransferAPI.IssueTransferToRecipient(cmd, accounts))
       .Unwrap<Unit>();
 }
