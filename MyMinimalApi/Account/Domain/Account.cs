@@ -12,7 +12,7 @@ using StateTransitionResult = Validation<Err, (Event Event, AccountState NewStat
 public static class Account {
    public static string StreamName(Guid id) => $"accounts_{id}";
 
-   public static ImmutableDictionary<string, Type> EventTypeMapping =>
+   public static readonly ImmutableDictionary<string, Type> EventTypeMapping =
       new Dictionary<string, Type> {
          { nameof(CreatedAccount), typeof(CreatedAccount) },
          { nameof(DebitedTransfer), typeof(DebitedTransfer) },

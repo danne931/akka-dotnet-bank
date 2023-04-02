@@ -3,7 +3,6 @@ using static LanguageExt.Prelude;
 using static LanguageExt.List;
 using Echo;
 using static Echo.Process;
-using System.Collections.Immutable;
 using EventStore.Client;
 using OneOf;
 
@@ -60,11 +59,10 @@ public static class AccountAPI {
 
    public static Func<Guid, Task<Option<Lst<object>>>> GetAccountEvents(
    //public static TryOptionAsync<Lst<object>> GetAccountEvents(
-      EventStoreClient client,
-      ImmutableDictionary<string, Type> mapping
+      EventStoreClient client
    )
    =>
-   id => ES.ReadStream(client, AD.StreamName(id), mapping);
+   id => ES.ReadStream(client, AD.StreamName(id), AD.EventTypeMapping);
 
    public static Func<Guid, Task<Option<AccountState>>> GetAccount(
       Func<Guid, Task<Option<Lst<object>>>> getAccountEvents

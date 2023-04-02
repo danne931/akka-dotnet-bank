@@ -28,18 +28,13 @@ public static class Config {
       WebApplicationBuilder builder,
       EventStoreClient esClient
    ) {
-      builder.Services.AddSingleton(Account.Domain.Account.EventTypeMapping);
-
       builder.Services.AddSingleton<Validator<TransferCmd>>(
          TransferValidation(() => DateTime.UtcNow.Date));
 
       builder.Services.AddSingleton<AccountRegistry>(
          new AccountRegistry(
             loadAccount: AccountAPI.GetAccount(
-               AccountAPI.GetAccountEvents(
-                  esClient,
-                  Account.Domain.Account.EventTypeMapping
-               )
+               AccountAPI.GetAccountEvents(esClient)
             ),
             saveAndPublish: evt => AccountAPI.SaveAndPublish(
                esClient,

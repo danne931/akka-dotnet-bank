@@ -3,9 +3,8 @@ using static Echo.Process;
 using EventStore.Client;
 using LanguageExt;
 using static LanguageExt.Prelude;
-using Lib;
+
 using Lib.Types;
-using static Lib.Validators;
 using Bank.Account.API;
 using Bank.Account.Domain;
 using Bank.Transfer.Domain;

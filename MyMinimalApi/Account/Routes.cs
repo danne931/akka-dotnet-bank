@@ -1,5 +1,4 @@
 using EventStore.Client;
-using System.Collections.Immutable;
 using LanguageExt;
 
 using Lib;
@@ -39,11 +38,10 @@ public static class AccountRoutes {
 
    static Task<IResult> GetAccountEvents(
       Guid id,
-      EventStoreClient es,
-      ImmutableDictionary<string, Type> mapping
+      EventStoreClient es
    )
    => AccountAPI
-      .GetAccountEvents(es, mapping)(id)
+      .GetAccountEvents(es)(id)
       .Unwrap<Lst<object>>();
 
    static Task<IResult> SoftDeleteEvents(
@@ -57,11 +55,10 @@ public static class AccountRoutes {
 
    static Task<IResult> GetAccount(
       Guid id,
-      EventStoreClient es,
-      ImmutableDictionary<string, Type> mapping
+      EventStoreClient es
    )
    => AccountAPI
-      .GetAccount(AccountAPI.GetAccountEvents(es, mapping))(id)
+      .GetAccount(AccountAPI.GetAccountEvents(es))(id)
       .Unwrap<AccountState>();
 
    // COMMAND
@@ -69,7 +66,6 @@ public static class AccountRoutes {
    static Task<IResult> CreateAccount(
       CreateAccountCmd cmd,
       EventStoreClient es,
-      ImmutableDictionary<string, Type> mapping,
       AccountRegistry accounts
    )
    => AccountAPI
@@ -78,9 +74,11 @@ public static class AccountRoutes {
          accounts,
          AccountInitValidation(),
          AccountAPI.ScheduleMaintenanceFee(
-            AccountAPI.GetAccountEvents(es, mapping),
-            lookBackDate: () => DateTime.UtcNow.AddDays(-30),
-            scheduledAt: () => TimeSpan.FromDays(30)
+            AccountAPI.GetAccountEvents(es),
+            //lookBackDate: () => DateTime.UtcNow.AddDays(-30),
+            //scheduledAt: () => TimeSpan.FromDays(30),
+            lookBackDate: () => DateTime.UtcNow.AddSeconds(-30),
+            scheduledAt: () => TimeSpan.FromSeconds(30)
          ),
          cmd
       )

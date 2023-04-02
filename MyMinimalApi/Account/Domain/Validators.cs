@@ -5,8 +5,7 @@ using Lib.Types;
 namespace Bank.Account.Domain;
 
 public static class Validators {
-   // TODO: Change to a dictionary or something else for better perf?
-   public static Lst<string> Currencies => List(
+   public static readonly Lst<string> Currencies = List(
       "USD",
       "EUR",
       "THB",
