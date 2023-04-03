@@ -1,9 +1,10 @@
 using EventStore.Client;
 using LanguageExt;
 
-using Lib;
 using static Lib.Validators;
 using static Lib.Route.Response;
+using Bank.Account.Actors;
+using AccountRegistry = Bank.Account.Actors.AccountRegistry;
 using Bank.Account.API;
 using Bank.Account.Domain;
 using static Bank.Account.Domain.Validators;
@@ -41,7 +42,7 @@ public static class AccountRoutes {
       EventStoreClient es
    )
    => AccountAPI
-      .GetAccountEvents(es)(id)
+      .GetAccountEvents(es, id)
       .Unwrap<Lst<object>>();
 
    static Task<IResult> SoftDeleteEvents(
@@ -58,7 +59,7 @@ public static class AccountRoutes {
       EventStoreClient es
    )
    => AccountAPI
-      .GetAccount(AccountAPI.GetAccountEvents(es))(id)
+      .GetAccount(id => AccountAPI.GetAccountEvents(es, id), id)
       .Unwrap<AccountState>();
 
    // COMMAND
@@ -73,12 +74,13 @@ public static class AccountRoutes {
          es,
          accounts,
          AccountInitValidation(),
-         AccountAPI.ScheduleMaintenanceFee(
-            AccountAPI.GetAccountEvents(es),
+         createdAcctEvt => MaintenanceFeeActor.ScheduleMaintenanceFee(
+            id => AccountAPI.GetAccountEvents(es, id),
             //lookBackDate: () => DateTime.UtcNow.AddDays(-30),
             //scheduledAt: () => TimeSpan.FromDays(30),
             lookBackDate: () => DateTime.UtcNow.AddSeconds(-30),
-            scheduledAt: () => TimeSpan.FromSeconds(30)
+            scheduledAt: () => TimeSpan.FromSeconds(30),
+            createdAcctEvt
          ),
          cmd
       )

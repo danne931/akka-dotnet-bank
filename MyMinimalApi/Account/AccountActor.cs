@@ -6,7 +6,7 @@ using static Echo.Process;
 using Lib.Types;
 using Bank.Account.Domain;
 
-namespace Lib;
+namespace Bank.Account.Actors;
 
 public class AccountProcess {
    public ProcessId PID { get; init; }
@@ -39,8 +39,8 @@ public class AccountProcess {
             );
          }
       );
-      Console.WriteLine("path " + PID.Path);
-      Console.WriteLine("parent " + PID.Parent);
+      Console.WriteLine("account path " + PID.Path);
+      Console.WriteLine("account parent " + PID.Parent);
    }
 
    // Commands are queued & processed sequentially.

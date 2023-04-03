@@ -2,12 +2,12 @@ using Echo;
 using EventStore.Client;
 
 using ES = Lib.Persistence.EventStoreManager;
-using Lib;
 using Lib.Types;
 using Bank.Transfer.API;
 using Bank.Transfer.Domain;
 using static Bank.Transfer.Domain.Validators;
 using Bank.Account.API;
+using Bank.Account.Actors;
 
 namespace Bank;
 
@@ -33,8 +33,9 @@ public static class Config {
 
       builder.Services.AddSingleton<AccountRegistry>(
          new AccountRegistry(
-            loadAccount: AccountAPI.GetAccount(
-               AccountAPI.GetAccountEvents(esClient)
+            loadAccount: id => AccountAPI.GetAccount(
+               id => AccountAPI.GetAccountEvents(esClient, id),
+               id
             ),
             saveAndPublish: evt => AccountAPI.SaveAndPublish(
                esClient,

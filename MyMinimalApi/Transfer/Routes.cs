@@ -1,10 +1,10 @@
 using EventStore.Client;
 using LanguageExt;
 
-using Lib;
 using Lib.Types;
 using static Lib.Route.Response;
 using Bank.Account.API;
+using Bank.Account.Actors;
 using Bank.Transfer.Domain;
 using Bank.Transfer.API;
 using Validators = Bank.Transfer.Domain.Validators;

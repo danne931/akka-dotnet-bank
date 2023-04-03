@@ -2,11 +2,9 @@ using LanguageExt;
 using static LanguageExt.Prelude;
 using static LanguageExt.List;
 using Echo;
-using static Echo.Process;
 using EventStore.Client;
 using OneOf;
 
-using Lib;
 using Lib.Types;
 using static Lib.Validators;
 using ES = Lib.Persistence.EventStoreManager;
@@ -15,6 +13,7 @@ using Bank.Account.Domain;
 using static Bank.Account.Domain.Errors;
 using Bank.Transfer.API;
 using Bank.Transfer.Domain;
+using Bank.Account.Actors;
 
 namespace Bank.Account.API;
 
@@ -57,18 +56,17 @@ public static class AccountAPI {
       return TryAsync(res);
    }
 
-   public static Func<Guid, Task<Option<Lst<object>>>> GetAccountEvents(
+   public static Task<Option<Lst<object>>> GetAccountEvents(
    //public static TryOptionAsync<Lst<object>> GetAccountEvents(
-      EventStoreClient client
+      EventStoreClient client,
+      Guid id
    )
-   =>
-   id => ES.ReadStream(client, AD.StreamName(id), AD.EventTypeMapping);
+   => ES.ReadStream(client, AD.StreamName(id), AD.EventTypeMapping);
 
-   public static Func<Guid, Task<Option<AccountState>>> GetAccount(
-      Func<Guid, Task<Option<Lst<object>>>> getAccountEvents
-   )
-   =>
-   async accountId => {
+   public static async Task<Option<AccountState>> GetAccount(
+      Func<Guid, Task<Option<Lst<object>>>> getAccountEvents,
+      Guid accountId
+   ) {
       var res = await getAccountEvents(accountId);
 
       return res.Map(events =>
@@ -78,7 +76,7 @@ public static class AccountAPI {
             (state, evt) => state.Apply(evt)
          )
       );
-   };
+   }
 
    public static Task<bool> Exists(EventStoreClient es, Guid id) =>
       ES.Exists(es, AD.StreamName(id));
@@ -130,77 +128,10 @@ public static class AccountAPI {
 
       if (evt is DebitedTransfer)
          BankTransferAPI.IssueTransferToRecipient((DebitedTransfer) evt);
-
+/*
+      if (evt is CreatedAccount)
+         ScheduleMaintenanceFee()
+*/
       return unit;
    }
-
-   public static Func<CreatedAccount, ProcessId> ScheduleMaintenanceFee(
-      Func<Guid, Task<Option<Lst<object>>>> getAccountEvents,
-      Func<DateTime> lookBackDate,
-      Func<TimeSpan> scheduledAt
-   )
-   => (CreatedAccount evt) => {
-      var pid = spawn<CreatedAccount>(
-         $"{AD.MonthlyMaintenanceFee.ActorName}_{evt.EntityId}",
-         async evt => {
-            Console.WriteLine($"Monthly maintenance fee: {evt.EntityId}");
-            var eventsOpt = await getAccountEvents(evt.EntityId);
-
-            eventsOpt.IfSome(events => {
-               var lookback = lookBackDate();
-
-               var res = foldUntil(
-                  events,
-                  (
-                     depositCriteria: false,
-                     balanceCriteria: true,
-                     account: AD.Create((CreatedAccount) head(events))
-                  ),
-                  (acc, evt) => {
-                     acc.account = acc.account.Apply(evt);
-
-                     if (((Event) evt).Timestamp < lookback) {
-                        acc.balanceCriteria = acc.account.Balance
-                           >= AD.MonthlyMaintenanceFee.DailyBalanceThreshold;
-                        return acc;
-                     }
-
-                     // Account balance must meet the balance threshold every day
-                     // for the last month in order to skip the monthly fee.
-                     if (acc.account.Balance < AD.MonthlyMaintenanceFee.DailyBalanceThreshold)
-                        acc.balanceCriteria = false;
-
-                     if (evt is DepositedCash &&
-                         ((DepositedCash) evt).DepositedAmount >= AD.MonthlyMaintenanceFee.QualifyingDeposit
-                     ) acc.depositCriteria = true;
-
-                     return acc;
-                  },
-                  // If qualifying deposit found -> quit folding early.
-                  tup => tup.depositCriteria
-               );
-
-               if (res.depositCriteria || res.balanceCriteria) {
-                  Console.WriteLine(
-                     "Some criteria met for skipping the monthly maintenance fee: " +
-                     $"Deposit ({res.depositCriteria}) / Balance ({res.balanceCriteria})");
-                  return;
-               }
-
-               tell($"@accounts_{evt.EntityId}", new DebitCmd(
-                  evt.EntityId,
-                  DateTime.UtcNow,
-                  AD.MonthlyMaintenanceFee.Amount,
-                  Origin: AD.MonthlyMaintenanceFee.Origin
-               ));
-            });
-
-            tellSelf(evt, scheduledAt());
-         }
-      );
-
-      tell(pid, evt, scheduledAt());
-      register(pid.Name, pid);
-      return pid;
-   };
 }

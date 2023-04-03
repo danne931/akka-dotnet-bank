@@ -5,8 +5,9 @@ using static LanguageExt.Prelude;
 
 using Lib.Types;
 using Bank.Account.Domain;
+using AD = Bank.Account.Domain.Account;
 
-namespace Lib;
+namespace Bank.Account.Actors;
 
 using AccountsCache = Map<Guid, (AccountProcess process, DateTime date)>;
 
@@ -58,7 +59,7 @@ public class AccountRegistry {
                case DeleteMsg m: {
                   List(
                      $"accounts_{m.Id}",
-                     $"{Account.MonthlyMaintenanceFee.ActorName}_{m.Id}")
+                     $"{AD.MonthlyMaintenanceFee.ActorName}_{m.Id}")
                   .Do(pid => {
                      kill("@" + pid);
                      Console.WriteLine($"Killed process {pid}");
