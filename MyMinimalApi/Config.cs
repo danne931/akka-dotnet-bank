@@ -1,5 +1,6 @@
 using Echo;
 using EventStore.Client;
+using static LanguageExt.Prelude;
 
 using ES = Lib.Persistence.EventStoreManager;
 using Lib.Types;
@@ -40,6 +41,16 @@ public static class Config {
             saveAndPublish: evt => AccountAPI.SaveAndPublish(
                esClient,
                evt
+            ),
+            startChildActors: id => List(
+               MaintenanceFeeActor.ScheduleMaintenanceFee(
+                  id => AccountAPI.GetAccountEvents(esClient, id),
+                  //lookBackDate: () => DateTime.UtcNow.AddDays(-30),
+                  //scheduledAt: () => TimeSpan.FromDays(30),
+                  lookBackDate: () => DateTime.UtcNow.AddSeconds(-30),
+                  scheduledAt: () => TimeSpan.FromSeconds(30),
+                  id
+               )
             )
          )
       );

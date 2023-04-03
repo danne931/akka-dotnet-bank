@@ -3,6 +3,7 @@ using static Echo.Process;
 using LanguageExt;
 using static LanguageExt.Prelude;
 using static LanguageExt.List;
+using static System.Console;
 
 using Lib.Types;
 using Bank.Account.Domain;
@@ -15,13 +16,13 @@ public static class MaintenanceFeeActor {
       Func<Guid, Task<Option<Lst<object>>>> getAccountEvents,
       Func<DateTime> lookBackDate,
       Func<TimeSpan> scheduledAt,
-      CreatedAccount evt
+      Guid accountId
    ) {
-      var pid = spawn<CreatedAccount>(
-         $"{AD.MonthlyMaintenanceFee.ActorName}_{evt.EntityId}",
+      var pid = spawn<Guid>(
+         AD.MonthlyMaintenanceFee.ActorName,
          async evt => {
-            Console.WriteLine($"Monthly maintenance fee: {evt.EntityId}");
-            var eventsOpt = await getAccountEvents(evt.EntityId);
+            WriteLine($"Monthly maintenance fee: {accountId}");
+            var eventsOpt = await getAccountEvents(accountId);
 
             eventsOpt.IfSome(events => {
                var lookback = lookBackDate();
@@ -58,14 +59,14 @@ public static class MaintenanceFeeActor {
                );
 
                if (res.depositCriteria || res.balanceCriteria) {
-                  Console.WriteLine(
+                  WriteLine(
                      "Some criteria met for skipping the monthly maintenance fee: " +
                      $"Deposit ({res.depositCriteria}) / Balance ({res.balanceCriteria})");
                   return;
                }
 
-               tell($"@accounts_{evt.EntityId}", new DebitCmd(
-                  evt.EntityId,
+               tell($"@accounts_{accountId}", new DebitCmd(
+                  accountId,
                   DateTime.UtcNow,
                   AD.MonthlyMaintenanceFee.Amount,
                   Origin: AD.MonthlyMaintenanceFee.Origin
@@ -76,12 +77,10 @@ public static class MaintenanceFeeActor {
          }
       );
 
-      tell(pid, evt, scheduledAt());
-      register(pid.Name, pid);
+      tell(pid, accountId, scheduledAt());
 
-      Console.WriteLine("monthly maintenance parent? " + pid.Parent);
-
-      Console.WriteLine("monthly maintenance path? " + pid.Path);
+      WriteLine("monthly maintenance parent? " + pid.Parent);
+      WriteLine("monthly maintenance path? " + pid.Path);
       return pid;
    }
 }

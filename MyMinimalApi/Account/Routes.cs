@@ -74,14 +74,6 @@ public static class AccountRoutes {
          es,
          accounts,
          AccountInitValidation(),
-         createdAcctEvt => MaintenanceFeeActor.ScheduleMaintenanceFee(
-            id => AccountAPI.GetAccountEvents(es, id),
-            //lookBackDate: () => DateTime.UtcNow.AddDays(-30),
-            //scheduledAt: () => TimeSpan.FromDays(30),
-            lookBackDate: () => DateTime.UtcNow.AddSeconds(-30),
-            scheduledAt: () => TimeSpan.FromSeconds(30),
-            createdAcctEvt
-         ),
          cmd
       )
       .Unwrap<Guid>();

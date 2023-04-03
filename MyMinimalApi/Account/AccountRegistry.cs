@@ -5,7 +5,6 @@ using static LanguageExt.Prelude;
 
 using Lib.Types;
 using Bank.Account.Domain;
-using AD = Bank.Account.Domain.Account;
 
 namespace Bank.Account.Actors;
 
@@ -22,7 +21,8 @@ public class AccountRegistry {
 
    public AccountRegistry(
       Func<Guid, Task<Option<AccountState>>> loadAccount,
-      Func<Event, Task<LanguageExt.Unit>> saveAndPublish
+      Func<Event, Task<Unit>> saveAndPublish,
+      Func<Guid, Lst<ProcessId>> startChildActors
    ) {
       this.loadAccount = loadAccount;
      
@@ -48,7 +48,11 @@ public class AccountRegistry {
                      None: () => {
                         Console.WriteLine("2. REGISTER MSG & add to cache:" + m);
 
-                        AccountProcess account = new(m.AccountState, saveAndPublish);
+                        AccountProcess account = new(
+                           m.AccountState,
+                           saveAndPublish,
+                           startChildActors
+                        );
 
                         reply(Some(account));
                         
@@ -57,13 +61,9 @@ public class AccountRegistry {
                   );
                }
                case DeleteMsg m: {
-                  List(
-                     $"accounts_{m.Id}",
-                     $"{AD.MonthlyMaintenanceFee.ActorName}_{m.Id}")
-                  .Do(pid => {
-                     kill("@" + pid);
-                     Console.WriteLine($"Killed process {pid}");
-                  });
+                  var pid = $"accounts_{m.Id}";
+                  kill("@" + pid);
+                  Console.WriteLine($"Killed process {pid}");
                   return cache.Remove(m.Id);
                }
             }

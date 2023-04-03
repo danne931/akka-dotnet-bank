@@ -1,7 +1,6 @@
 using LanguageExt;
 using static LanguageExt.Prelude;
 using static LanguageExt.List;
-using Echo;
 using EventStore.Client;
 using OneOf;
 
@@ -22,7 +21,6 @@ public static class AccountAPI {
       EventStoreClient client,
       AccountRegistry accounts,
       Validator<CreateAccountCmd> validate,
-      Func<CreatedAccount, ProcessId> maintenanceFee,
       CreateAccountCmd command
    ) {
       var save = async (CreateAccountCmd cmd) => {
@@ -44,14 +42,11 @@ public static class AccountAPI {
             .ToValidation(new Err("Account registration fail"))
             .AsTask();
       };
-      var scheduleMaintenanceFee = (CreatedAccount evt) =>
-         TaskSucc(Pass<ProcessId>()(maintenanceFee(evt)));
 
       var res =
          from cmd in TaskSucc(validate(command))
          from evt in save(cmd)
          from _ in registerAccount(evt)
-         from pid in scheduleMaintenanceFee(evt)
          select evt.EntityId;
       return TryAsync(res);
    }
