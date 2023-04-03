@@ -2,7 +2,6 @@ using EventStore.Client;
 using System.Text.Json;
 using LanguageExt;
 using static LanguageExt.Prelude;
-using System.Collections.Immutable;
 
 using Lib.Types;
 
@@ -11,7 +10,7 @@ namespace Lib.Persistence;
 public static class EventStoreManager {
    public async static Task<Unit> SaveAndPublish(
       EventStoreClient es,
-      ImmutableDictionary<string, Type> mapping,
+      Map<string, Type> mapping,
       string streamName,
       Event evt,
       StreamState? expectedStreamState = null
@@ -37,7 +36,7 @@ public static class EventStoreManager {
    //public static async TryOption<Lst<object>> ReadStream(
       EventStoreClient es,
       string streamName,
-      ImmutableDictionary<string, Type> mapping
+      Map<string, Type> mapping
    ) {
       var stream = es.ReadStreamAsync(
          Direction.Forwards,

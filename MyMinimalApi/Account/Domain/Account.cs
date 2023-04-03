@@ -1,6 +1,5 @@
 using LanguageExt;
 using static LanguageExt.Prelude;
-using System.Collections.Immutable;
 
 using Lib.Types;
 using Bank.Transfer.Domain;
@@ -12,20 +11,18 @@ using StateTransitionResult = Validation<Err, (Event Event, AccountState NewStat
 public static class Account {
    public static string StreamName(Guid id) => $"accounts_{id}";
 
-   public static readonly ImmutableDictionary<string, Type> EventTypeMapping =
-      new Dictionary<string, Type> {
-         { nameof(CreatedAccount), typeof(CreatedAccount) },
-         { nameof(DebitedTransfer), typeof(DebitedTransfer) },
-         { nameof(DebitedAccount), typeof(DebitedAccount) },
-         { nameof(DailyDebitLimitUpdated), typeof(DailyDebitLimitUpdated) },
-         { nameof(DepositedCash), typeof(DepositedCash)},
-         { nameof(LockedCard), typeof(LockedCard)},
-         { nameof(UnlockedCard), typeof(UnlockedCard)},
-         { nameof(RegisteredInternalTransferRecipient), typeof(RegisteredInternalTransferRecipient) },
-         { nameof(RegisteredDomesticTransferRecipient), typeof(RegisteredDomesticTransferRecipient) },
-         { nameof(RegisteredInternationalTransferRecipient), typeof(RegisteredInternationalTransferRecipient) }
-      }
-      .ToImmutableDictionary();
+   public static Map<string, Type> EventTypeMapping = (
+      (nameof(CreatedAccount), typeof(CreatedAccount)),
+      (nameof(DebitedTransfer), typeof(DebitedTransfer)),
+      (nameof(DebitedAccount), typeof(DebitedAccount)),
+      (nameof(DailyDebitLimitUpdated), typeof(DailyDebitLimitUpdated)),
+      (nameof(DepositedCash), typeof(DepositedCash)),
+      (nameof(LockedCard), typeof(LockedCard)),
+      (nameof(UnlockedCard), typeof(UnlockedCard)),
+      (nameof(RegisteredInternalTransferRecipient), typeof(RegisteredInternalTransferRecipient)),
+      (nameof(RegisteredDomesticTransferRecipient), typeof(RegisteredDomesticTransferRecipient)),
+      (nameof(RegisteredInternationalTransferRecipient), typeof(RegisteredInternationalTransferRecipient))
+   );
 
    public static AccountState Apply(this AccountState acc, object evt) =>
       evt switch {
