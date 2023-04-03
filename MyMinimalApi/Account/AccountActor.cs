@@ -39,9 +39,11 @@ public class AccountProcess {
             );
          }
       );
+      Console.WriteLine("path " + PID.Path);
+      Console.WriteLine("parent " + PID.Parent);
    }
 
-   // Commands are queued & processed sequentially. 
+   // Commands are queued & processed sequentially.
    public Unit SyncStateChange(Command cmd) {
       Console.WriteLine($"SYNC STATE for process {PID}: {cmd}");
       tell(PID, cmd);

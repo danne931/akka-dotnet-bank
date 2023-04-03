@@ -79,7 +79,7 @@ public class AccountRegistry {
 
       if (account.IsSome) return TaskSucc(account);
 
-      return 
+      return
          from state in loadAccount(id)
          from acct in TaskSucc(Register(state))
          select acct;
