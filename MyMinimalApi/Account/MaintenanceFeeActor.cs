@@ -65,7 +65,7 @@ public static class MaintenanceFeeActor {
                   return;
                }
 
-               tell($"@accounts_{accountId}", new DebitCmd(
+               tellParent(new DebitCmd(
                   accountId,
                   DateTime.UtcNow,
                   AD.MonthlyMaintenanceFee.Amount,

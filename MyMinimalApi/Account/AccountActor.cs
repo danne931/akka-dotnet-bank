@@ -17,7 +17,7 @@ public record AccountRegistry(
    public Task<Option<AccountState>> Lookup(Guid id) {
       var process = "@" + AccountActor.PID(id);
 
-      var alive = Prelude.Try(() => exists(process)).IfFail(err => {
+      var alive = Try(() => exists(process)).IfFail(err => {
          WriteLine($"Echo.Process.exists exception: {process} {err.Message}");
          return false;
       });
