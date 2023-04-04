@@ -37,8 +37,7 @@ public static class AccountAPI {
       };
       var registerAccount = (CreatedAccount evt) => {
          var account = AD.Create(evt);
-         return accounts
-            .Register(account)
+         return Optional(AccountActor.Start(account, accounts))
             .ToValidation(new Err("Account registration fail"))
             .AsTask();
       };
@@ -96,17 +95,16 @@ public static class AccountAPI {
       var res =
          from cmd in validation
          from acc in getAccountVal(cmd)
-         select acc.SyncStateChange(cmd);
+         select AccountActor.SyncStateChange(cmd);
 
       return TryAsync(res);
    }
 
    public static Task<Unit> SoftDeleteEvents(
-      AccountRegistry accounts,
       EventStoreClient client,
       Guid accountId
    ) {
-      accounts.Delete(accountId);
+      AccountActor.Delete(accountId);
       return ES.SoftDelete(client, AD.StreamName(accountId));
    }
 
@@ -123,10 +121,7 @@ public static class AccountAPI {
 
       if (evt is DebitedTransfer)
          BankTransferAPI.IssueTransferToRecipient((DebitedTransfer) evt);
-/*
-      if (evt is CreatedAccount)
-         ScheduleMaintenanceFee()
-*/
+
       return unit;
    }
 }

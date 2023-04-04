@@ -3,7 +3,6 @@ using LanguageExt;
 
 using static Lib.Validators;
 using static Lib.Route.Response;
-using Bank.Account.Actors;
 using AccountRegistry = Bank.Account.Actors.AccountRegistry;
 using Bank.Account.API;
 using Bank.Account.Domain;
@@ -47,11 +46,10 @@ public static class AccountRoutes {
 
    static Task<IResult> SoftDeleteEvents(
       Guid id,
-      EventStoreClient es,
-      AccountRegistry accounts
+      EventStoreClient es
    )
    => AccountAPI
-      .SoftDeleteEvents(accounts, es, id)
+      .SoftDeleteEvents(es, id)
       .Unwrap<Unit>();
 
    static Task<IResult> GetAccount(

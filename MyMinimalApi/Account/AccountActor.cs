@@ -9,54 +9,86 @@ using Bank.Account.Domain;
 
 namespace Bank.Account.Actors;
 
-public class AccountProcess {
-   public ProcessId PID { get; init; }
-   public record StartChildrenCmd(Guid id) : Command(id);
+public record AccountRegistry(
+   Func<Guid, Task<Option<AccountState>>> loadAccount,
+   Func<Event, Task<LanguageExt.Unit>> saveAndPublish,
+   Func<Guid, Lst<ProcessId>> startChildActors
+) {
+   public Task<Option<AccountState>> Lookup(Guid id) {
+      var process = "@" + AccountActor.PID(id);
 
-   public AccountProcess(
+      var alive = Prelude.Try(() => exists(process)).IfFail(err => {
+         WriteLine($"Echo.Process.exists exception: {process} {err.Message}");
+         return false;
+      });
+
+      if (alive) {
+         var account = ask<AccountState>(process, new LookupCmd(id));
+         return TaskSucc(Some(account));
+      }
+
+      return
+         from acct in loadAccount(id)
+         from pid in TaskSucc(Some(AccountActor.Start(acct, this)))
+         select acct;
+   }
+}
+
+public static class AccountActor {
+   public static ProcessId Start(
       AccountState initialState,
-      Func<Event, Task<Unit>> saveAndPublish,
-      Func<Guid, Lst<ProcessId>> startChildActors
+      AccountRegistry registry
    ) {
-      PID = spawn<AccountState, Command>(
-         $"accounts_{initialState.EntityId}",
+      var pid = spawn<AccountState, Command>(
+         PID(initialState.EntityId),
          () => initialState,
          (AccountState account, Command cmd) => {
-            WriteLine("account path " + PID.Path);
-            WriteLine("account parent " + PID.Parent);
-
             if (cmd is StartChildrenCmd) {
-               var pids = startChildActors(account.EntityId);
-               WriteLine($"Account: Started child actors {pids}");
+               var pids = registry.startChildActors(account.EntityId);
+               WriteLine($"AccountActor: Started child actors {pids}");
+               return account;
+            }
+            if (cmd is LookupCmd) {
+               reply(account);
                return account;
             }
 
-            WriteLine($"3. ACCOUNTPROCESS: compute state change from command: {cmd.EntityId}");
             var validation = account.StateTransition(cmd);
 
-            // Persist within block, so that the agent doesn't process
-            // new messages in a non-persisted state.
-            // If the result is Valid, we proceed to save & publish
             return validation.Match(
                Fail: errs => {
-                  WriteLine($"4. Validation Fail: {errs.Head.Message}");
+                  WriteLine($"AccountActor: validation fail {errs.Head.Message}");
                   return account;
                },
                Succ: tup => {
-                  WriteLine($"4. ACCOUNTPROCESS: state transitioned {cmd.EntityId}");
-                  saveAndPublish(tup.Event).Wait();
+                  WriteLine($"AccountActor: state transitioned {cmd.EntityId}");
+                  registry.saveAndPublish(tup.Event).Wait();
                   return tup.NewState;
                }
             );
          }
       );
-      tell(PID, new StartChildrenCmd(initialState.EntityId));
+
+      register(pid.Name, pid);
+      tell(pid, new StartChildrenCmd(initialState.EntityId));
+      return pid;
    }
 
-   // Commands are queued & processed sequentially.
-   public Unit SyncStateChange(Command cmd) {
-      WriteLine($"SYNC STATE for process {PID}: {cmd}");
-      tell(PID, cmd);
+   public static Unit SyncStateChange(Command cmd) {
+      tell("@" + PID(cmd.EntityId), cmd);
       return unit;
    }
+
+   public static Unit Delete(Guid id) {
+      var pid = "@" + PID(id);
+      kill(pid);
+      WriteLine($"Killed process {pid}");
+      return unit;
+   }
+
+   public static string PID(Guid id) => $"accounts_{id}";
+
+   private record StartChildrenCmd(Guid id) : Command(id);
 }
+
+record LookupCmd(Guid Id) : Command(Id);
