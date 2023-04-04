@@ -2,10 +2,11 @@ using static Bank.Config;
 using Bank.Account.Routes;
 using Bank.Transfer.Routes;
 
-StartActorModel();
-var es = StartEventStore();
-
 var builder = WebApplication.CreateBuilder(args);
+
+StartActorModel();
+var es = StartEventStore(builder);
+
 InjectDependencies(builder, es);
 
 var app = builder.Build();

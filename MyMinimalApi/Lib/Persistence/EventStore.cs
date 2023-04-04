@@ -76,6 +76,6 @@ public static class EventStoreManager {
       return (await stream.ReadState != ReadState.StreamNotFound);
    }
 
-   public static EventStoreClient Connect() => new EventStoreClient(
-      EventStoreClientSettings.Create("esdb://127.0.0.1:2113?tls=false&keepAliveTimeout=10000&keepAliveInterval=10000"));
+   public static EventStoreClient Connect(string connString) =>
+      new EventStoreClient(EventStoreClientSettings.Create(connString));
 }
