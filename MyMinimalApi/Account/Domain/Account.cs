@@ -212,8 +212,7 @@ public static class Account {
       );
 
    public static class MonthlyMaintenanceFee {
-      public const string ActorName = "monthly_maintenance_fee";
-      public const string Origin = $"actor:{ActorName}";
+      public const string Origin = $"actor:maintenance_fee";
       public const decimal Amount = 5;
       public const decimal DailyBalanceThreshold = 1500;
       public const decimal QualifyingDeposit = 250;

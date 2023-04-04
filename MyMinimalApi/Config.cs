@@ -4,7 +4,6 @@ using static LanguageExt.Prelude;
 
 using ES = Lib.Persistence.EventStoreManager;
 using Lib.Types;
-using Bank.Transfer.API;
 using Bank.Transfer.Domain;
 using static Bank.Transfer.Domain.Validators;
 using Bank.Account.API;
@@ -18,9 +17,6 @@ public static class Config {
       Process.DeadLetters()
          .Observe<DeadLetter>()
          .Subscribe(Console.WriteLine);
-
-      var processIds = BankTransferAPI.StartThirdPartyTransferSystem();
-      Console.WriteLine($"Started 3rd party bank transfer system {processIds}");
    }
 
    public static EventStoreClient StartEventStore() => ES.Connect();
@@ -43,7 +39,7 @@ public static class Config {
                evt
             ),
             startChildActors: id => List(
-               MaintenanceFeeActor.ScheduleMaintenanceFee(
+               MaintenanceFeeActor.Start(
                   id => AccountAPI.GetAccountEvents(esClient, id),
                   //lookBackDate: () => DateTime.UtcNow.AddDays(-30),
                   //scheduledAt: () => TimeSpan.FromDays(30),

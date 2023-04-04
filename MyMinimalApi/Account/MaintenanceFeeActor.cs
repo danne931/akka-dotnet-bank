@@ -12,14 +12,16 @@ using AD = Bank.Account.Domain.Account;
 namespace Bank.Account.Actors;
 
 public static class MaintenanceFeeActor {
-   public static ProcessId ScheduleMaintenanceFee(
+   public const string ActorName = "monthly_maintenance_fee";
+
+   public static ProcessId Start(
       Func<Guid, Task<Option<Lst<object>>>> getAccountEvents,
       Func<DateTime> lookBackDate,
       Func<TimeSpan> scheduledAt,
       Guid accountId
    ) {
       var pid = spawn<Guid>(
-         AD.MonthlyMaintenanceFee.ActorName,
+         ActorName,
          async evt => {
             WriteLine($"Monthly maintenance fee: {accountId}");
             var eventsOpt = await getAccountEvents(accountId);
@@ -78,9 +80,6 @@ public static class MaintenanceFeeActor {
       );
 
       tell(pid, accountId, scheduledAt());
-
-      WriteLine("monthly maintenance parent? " + pid.Parent);
-      WriteLine("monthly maintenance path? " + pid.Path);
       return pid;
    }
 }

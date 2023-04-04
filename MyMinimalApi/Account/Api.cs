@@ -3,6 +3,7 @@ using static LanguageExt.Prelude;
 using static LanguageExt.List;
 using EventStore.Client;
 using OneOf;
+using static Echo.Process;
 
 using Lib.Types;
 using static Lib.Validators;
@@ -10,8 +11,8 @@ using ES = Lib.Persistence.EventStoreManager;
 using AD = Bank.Account.Domain.Account;
 using Bank.Account.Domain;
 using static Bank.Account.Domain.Errors;
-using Bank.Transfer.API;
 using Bank.Transfer.Domain;
+using Bank.Transfer.Actors;
 using Bank.Account.Actors;
 
 namespace Bank.Account.API;
@@ -119,8 +120,16 @@ public static class AccountAPI {
          evt
       );
 
-      if (evt is DebitedTransfer)
-         BankTransferAPI.IssueTransferToRecipient((DebitedTransfer) evt);
+      switch (evt) {
+         case RegisteredInternalTransferRecipient:
+         case RegisteredDomesticTransferRecipient:
+         case RegisteredInternationalTransferRecipient:
+            TransferRecipientActor.Start();
+            break;
+         case DebitedTransfer:
+            tellChild(TransferRecipientActor.ActorName, (DebitedTransfer) evt);
+            break;
+      }
 
       return unit;
    }
