@@ -11,8 +11,10 @@ namespace Bank.Account.Actors;
 
 public record AccountRegistry(
    Func<Guid, Task<Option<AccountState>>> loadAccount,
-   Func<Event, Task<LanguageExt.Unit>> saveAndPublish,
-   Func<Guid, Lst<ProcessId>> startChildActors
+   Func<Event, Task<Unit>> saveAndPublish,
+   Func<Guid, Lst<ProcessId>> startChildActors,
+   Func<(Event, AccountState), Task> broadcast,
+   Func<string, Task> broadcastError
 ) {
    public Task<Option<AccountState>> Lookup(Guid id) {
       var process = "@" + AccountActor.PID(id);
@@ -57,12 +59,19 @@ public static class AccountActor {
 
             return validation.Match(
                Fail: errs => {
+                  registry.broadcastError(errs.Head.Message);
                   WriteLine($"AccountActor: validation fail {errs.Head.Message}");
                   return account;
                },
                Succ: tup => {
-                  WriteLine($"AccountActor: state transitioned {cmd.EntityId}");
-                  registry.saveAndPublish(tup.Event).Wait();
+                  try {
+                     registry.saveAndPublish(tup.Event).Wait();
+                     registry.broadcast(tup);
+                  } catch (Exception err) {
+                     registry.broadcastError(err.Message);
+                     WriteLine(err);
+                     throw;
+                  }
                   return tup.NewState;
                }
             );

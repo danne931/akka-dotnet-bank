@@ -206,6 +206,8 @@ public static class Account {
 
    public static AccountState Create(CreatedAccount evt) =>
       new AccountState(
+         FirstName: evt.FirstName,
+         LastName: evt.LastName,
          EntityId: evt.EntityId,
          Currency: evt.Currency,
          Balance: evt.Balance
@@ -225,6 +227,8 @@ public static class Account {
 
 public sealed record AccountState(
    Guid EntityId,
+   string FirstName,
+   string LastName,
    string Currency,
    AccountStatus Status = AccountStatus.Active,
    decimal Balance = 0,

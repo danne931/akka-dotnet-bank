@@ -1,13 +1,16 @@
 using Echo;
 using EventStore.Client;
 using static LanguageExt.Prelude;
+using Microsoft.AspNetCore.SignalR;
 
 using ES = Lib.Persistence.EventStoreManager;
 using Lib.Types;
 using Bank.Transfer.Domain;
 using static Bank.Transfer.Domain.Validators;
 using Bank.Account.API;
+using Bank.Account.Domain;
 using Bank.Account.Actors;
+using Bank.Hubs;
 
 namespace Bank;
 
@@ -29,7 +32,7 @@ public static class Config {
       builder.Services.AddSingleton<Validator<TransferCmd>>(
          TransferValidation(() => DateTime.UtcNow.Date));
 
-      builder.Services.AddSingleton<AccountRegistry>(
+      builder.Services.AddSingleton<AccountRegistry>(provider =>
          new AccountRegistry(
             loadAccount: id => AccountAPI.GetAccount(
                id => AccountAPI.GetAccountEvents(esClient, id),
@@ -48,7 +51,21 @@ public static class Config {
                   scheduledAt: () => TimeSpan.FromSeconds(30),
                   id
                )
-            )
+            ),
+            broadcast: ((Event evt, AccountState state) stateTransition) =>
+               provider
+                  .GetRequiredService<IHubContext<AccountHub, IAccountClient>>()
+                  .Clients.Group(stateTransition.Item2.EntityId.ToString())
+                  .ReceiveMessage(
+                     new StateTransitionMessage(
+                        stateTransition.Item1,
+                        stateTransition.Item2
+                     )
+                  ),
+            broadcastError: (string errMsg) =>
+               provider
+                  .GetRequiredService<IHubContext<AccountHub, IAccountClient>>()
+                  .Clients.All.ReceiveError(errMsg)
          )
       );
 

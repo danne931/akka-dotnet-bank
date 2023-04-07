@@ -4,6 +4,8 @@ namespace Bank.Account.Domain;
 
 public record CreatedAccount(
    Guid EntityId,
+   string FirstName,
+   string LastName,
    DateTime Timestamp,
    string Currency,
    decimal Balance

@@ -29,7 +29,7 @@ public record CreateAccountCmd(
    //public AccountStatus Status { get; init; } = AccountStatus.Active;
 
    public CreatedAccount ToEvent() =>
-      new(EntityId, Timestamp, Currency, Balance);
+      new(EntityId, FirstName, LastName, Timestamp, Currency, Balance);
 }
 
 public record DepositCashCmd(
