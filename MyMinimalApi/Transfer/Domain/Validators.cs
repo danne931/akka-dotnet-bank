@@ -6,11 +6,8 @@ using Lib.Types;
 namespace Bank.Transfer.Domain;
 
 public static class Validators {
-   public static Validator<TransferCmd>
-      TransferValidation(Func<DateTime> clock) =>
+   public static Validator<TransferCmd> TransferValidation() =>
       cmd => {
-         if (cmd.Date.Date < clock().Date)
-            return Fail<Err, TransferCmd>(TransferErr.DateIsPast);
          if (isEmpty(cmd.Recipient.Identification))
             return Fail<Err, TransferCmd>(TransferErr.InvalidDetails);
 

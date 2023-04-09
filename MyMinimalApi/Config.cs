@@ -29,8 +29,7 @@ public static class Config {
       WebApplicationBuilder builder,
       EventStoreClient esClient
    ) {
-      builder.Services.AddSingleton<Validator<TransferCmd>>(
-         TransferValidation(() => DateTime.UtcNow.Date));
+      builder.Services.AddSingleton<Validator<TransferCmd>>(TransferValidation());
 
       builder.Services.AddSingleton<AccountRegistry>(provider =>
          new AccountRegistry(
@@ -47,8 +46,8 @@ public static class Config {
                   id => AccountAPI.GetAccountEvents(esClient, id),
                   //lookBackDate: () => DateTime.UtcNow.AddDays(-30),
                   //scheduledAt: () => TimeSpan.FromDays(30),
-                  lookBackDate: () => DateTime.UtcNow.AddSeconds(-30),
-                  scheduledAt: () => TimeSpan.FromSeconds(30),
+                  lookBackDate: () => DateTime.UtcNow.AddMinutes(-2),
+                  scheduledAt: () => TimeSpan.FromMinutes(2),
                   id
                )
             ),

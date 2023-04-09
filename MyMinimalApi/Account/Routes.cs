@@ -58,7 +58,20 @@ public static class AccountRoutes {
    )
    => AccountAPI
       .GetAccount(id => AccountAPI.GetAccountEvents(es, id), id)
-      .Unwrap<AccountState>();
+      .Unwrap<AccountState>(state => {
+         // TEMPORARY fix LanguageExt.Map -> Dictionary
+         // JSON parser doesn't seem to recognize Map type
+         return new {
+            TransferRecipients = state.TransferRecipients.ToDictionary(),
+            EntityId = state.EntityId,
+            FirstName = state.FirstName,
+            LastName = state.LastName,
+            Status = state.Status,
+            Balance = state.Balance,
+            DailyDebitLimit = state.DailyDebitLimit,
+            DailyDebitAccrued = state.DailyDebitAccrued
+         };
+      });
 
    // COMMAND
 

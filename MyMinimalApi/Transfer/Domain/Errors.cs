@@ -3,9 +3,6 @@ using Lib.Types;
 namespace Bank.Transfer.Domain;
 
 public static class TransferErr {
-   public static Err DateIsPast
-      => new Err("Transfer date is past.");
-
    public static Err InvalidDetails
       => new Err("RecipientIdentification required.");
 

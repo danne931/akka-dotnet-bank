@@ -24,8 +24,8 @@ public static class BankTransferAPI {
    public static async Task<Unit> IssueTransferToRecipient(DebitedTransfer evt) {
       var recipient = evt.Recipient;
       if (recipient.AccountEnvironment is RecipientAccountEnvironment.Internal) {
-         tell($"@accounts_{evt.EntityId}", new DepositCashCmd(
-            new Guid(evt.Recipient.Identification),
+         tell($"@accounts_{recipient.Identification}", new DepositCashCmd(
+            new Guid(recipient.Identification),
             evt.Date,
             evt.DebitedAmount
          ));
