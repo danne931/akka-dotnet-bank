@@ -58,7 +58,18 @@ public static class Config {
                   .ReceiveMessage(
                      new StateTransitionMessage(
                         stateTransition.Item1,
-                        stateTransition.Item2
+                        // TEMPORARY fix LanguageExt.Map -> Dictionary
+                        // Parser doesn't seem to recognize Map type
+                        new {
+                           TransferRecipients = stateTransition.Item2.TransferRecipients.ToDictionary(),
+                           EntityId = stateTransition.Item2.EntityId,
+                           FirstName = stateTransition.Item2.FirstName,
+                           LastName = stateTransition.Item2.LastName,
+                           Status = stateTransition.Item2.Status,
+                           Balance = stateTransition.Item2.Balance,
+                           DailyDebitLimit = stateTransition.Item2.DailyDebitLimit,
+                           DailyDebitAccrued = stateTransition.Item2.DailyDebitAccrued
+                        }
                      )
                   ),
             broadcastError: (string errMsg) =>

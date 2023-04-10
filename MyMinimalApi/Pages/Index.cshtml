@@ -62,6 +62,40 @@
     <input type="submit" value="Submit">
 </form>
 
+
+<h5>Register a transfer recipient</h5>
+<form id="register-transfer-recipient-form">
+    <label>
+        Does this account belong to our bank?:
+        <select name="transfer-recipient-account-environment" required>
+            <option value="0" selected>Our bank</option>
+            <option value="1" disabled>Domestic bank</option>
+            <option value="2" disabled>International bank</option>
+        </select>
+    </label>
+
+    <br/>
+
+    <label>
+        First Name:
+        <input name="transfer-recipient-first-name" type="string" required>
+    </label>
+
+    <label>
+        Last Name:
+        <input name="transfer-recipient-last-name" type="string" required>
+    </label>
+
+    <br/>
+
+    <label>
+        Account Number:
+        <input name="transfer-recipient-account-number" type="string" required>
+    </label>
+
+    <input type="submit" value="Submit">
+</form>
+
 <hr/>
 
 <div>

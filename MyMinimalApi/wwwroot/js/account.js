@@ -11,9 +11,13 @@ connection.on('ReceiveError', function (err) {
   notifyError(msg)
 })
 
-connection.on('ReceiveMessage', function (stateTransition) {
-  renderAccountState(stateTransition.newState)
-  renderEventIntoListView(stateTransition.event)
+connection.on('ReceiveMessage', function ({ newState, event }) {
+  renderAccountState(newState)
+  renderEventIntoListView(event)
+  if (event.name === 'RegisteredInternalTransferRecipient') {
+    interpolateTransferRecipientSelection(newState)
+    transferRecipients = newState.transferRecipients
+  }
 })
 
 const accountId = 'ec3e94cc-eba1-4ff4-b3dc-55010ecf67e9'
@@ -49,7 +53,7 @@ function renderAccountState (account) {
     .getElementById('account-daily-debit-limit')
     .textContent = account.dailyDebitLimit !== -1
       ? account.dailyDebitLimit
-      : 'No Limit'
+      : 'No limit set'
   document
     .getElementById('account-daily-debit-accrued')
     .textContent = account.dailyDebitAccrued
@@ -84,7 +88,7 @@ function eventToTransactionString (evt) {
     case 'DepositedCash':
       return `$${evt.depositedAmount} deposited on ${evt.timestamp}`
     case 'DebitedAccount':
-      return `$${evt.debitedAmount} debited from account by ${evt.origin} on ${evt.timestamp}`
+      return `$${evt.debitedAmount} debited by ${evt.origin} on ${evt.timestamp}`
     case 'DailyDebitLimitUpdated':
       return `Daily debit limit updated to ${evt.debitLimit} on ${evt.timestamp}`
     case 'LockedCard':
@@ -144,6 +148,21 @@ listenForFormSubmit(
     recipient: getTransferRecipient(
       formData.get('account-transfer-recipient-id')
     )
+  })
+)
+
+listenForFormSubmit(
+  document.getElementById('register-transfer-recipient-form'),
+  '/transfers/register-recipient',
+  formData => ({
+    entityId: accountId,
+    recipient: {
+      firstName: formData.get('transfer-recipient-first-name'),
+      lastName: formData.get('transfer-recipient-last-name'),
+      identification: formData.get('transfer-recipient-account-number'),
+      accountEnvironment: parseInt(formData.get('transfer-recipient-account-environment')),
+      identificationStrategy: 0
+    }
   })
 )
 

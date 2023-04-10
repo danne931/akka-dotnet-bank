@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
 
-using Bank.Account.Domain;
-
 namespace Bank.Hubs;
 
-public record StateTransitionMessage(object Event, AccountState NewState);
+public record StateTransitionMessage(object Event, object NewState);
 
 public interface IAccountClient {
    Task ReceiveMessage(StateTransitionMessage stateTransition);
