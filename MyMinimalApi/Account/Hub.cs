@@ -10,6 +10,9 @@ public interface IAccountClient {
 }
 
 public class AccountHub : Hub<IAccountClient> {
+   public async Task RemoveFromConnectionGroup(string accountId) =>
+      await Groups.RemoveFromGroupAsync(Context.ConnectionId, accountId);
+
    public async Task AddToConnectionGroup(string accountId) =>
       await Groups.AddToGroupAsync(Context.ConnectionId, accountId);
 }

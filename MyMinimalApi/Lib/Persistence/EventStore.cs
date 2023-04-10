@@ -36,12 +36,14 @@ public static class EventStoreManager {
    //public static async TryOption<Lst<object>> ReadStream(
       EventStoreClient es,
       string streamName,
-      Map<string, Type> mapping
+      Map<string, Type> mapping,
+      bool resolveLinkTos = false
    ) {
       var stream = es.ReadStreamAsync(
          Direction.Forwards,
          streamName,
-         StreamPosition.Start
+         StreamPosition.Start,
+         resolveLinkTos: resolveLinkTos
       );
       if (await stream.ReadState == ReadState.StreamNotFound)
          return None;

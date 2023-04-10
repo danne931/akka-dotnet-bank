@@ -22,6 +22,7 @@ public static class AccountRoutes {
    }
 
    public static void Start(WebApplication app) {
+      app.MapGet(Path.Base, GetAccounts);
       app.MapGet(Path.Base + "/{id}", GetAccount);
       app.MapGet(Path.Diagnostic + "/events/{id}", GetAccountEvents);
       app.MapDelete(Path.Diagnostic + "/events/{id}", SoftDeleteEvents);
@@ -51,6 +52,11 @@ public static class AccountRoutes {
    => AccountAPI
       .SoftDeleteEvents(es, id)
       .Unwrap<Unit>();
+
+   static Task<IResult> GetAccounts(EventStoreClient es) =>
+      AccountAPI
+         .GetAccountCreationEvents(es)
+         .Unwrap<Lst<object>>();
 
    static Task<IResult> GetAccount(
       Guid id,

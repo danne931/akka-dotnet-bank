@@ -5,6 +5,7 @@ using EventStore.Client;
 using OneOf;
 using static Echo.Process;
 
+using Lib;
 using Lib.Types;
 using static Lib.Validators;
 using ES = Lib.Persistence.EventStoreManager;
@@ -72,6 +73,20 @@ public static class AccountAPI {
          )
       );
    }
+
+   /// <summary>
+   /// Get all CreatedAccount events for UI demonstration purposes.
+   /// Allows demonstration consumer to choose what account to process
+   /// transactions on.
+   /// </summary>
+   public static Task<Option<Lst<object>>>
+      GetAccountCreationEvents(EventStoreClient client) =>
+         ES.ReadStream(
+            client,
+            "$et-CreatedAccount",
+            AD.EventTypeMapping,
+            resolveLinkTos: true
+         );
 
    public static Task<bool> Exists(EventStoreClient es, Guid id) =>
       ES.Exists(es, AD.StreamName(id));

@@ -1,6 +1,10 @@
 'use strict'
 
-let transferRecipients = {}
+const state = {
+  accounts: {},
+  selectedAccountId: null,
+  transferRecipients: {}
+}
 
 const connection = new signalR.HubConnectionBuilder()
   .withUrl('/accountHub')
@@ -16,33 +20,90 @@ connection.on('ReceiveMessage', function ({ newState, event }) {
   renderEventIntoListView(event)
   if (event.name === 'RegisteredInternalTransferRecipient') {
     interpolateTransferRecipientSelection(newState)
-    transferRecipients = newState.transferRecipients
+    state.transferRecipients = newState.transferRecipients
   }
 })
 
-const accountId = 'ec3e94cc-eba1-4ff4-b3dc-55010ecf67e9'
 connection
   .start()
-  .then(() => connection.invoke('AddToConnectionGroup', accountId))
-  .then(() => Promise.all([
-    fetch(`/accounts/${accountId}`),
-    fetch(`/diagnostic/events/${accountId}`)
-  ]))
-  .then(responses =>
-    Promise.all(responses.map(res => {
-      if (!res.ok) {
-        throw new Error(`Http status: ${res.status}`)
-      }
-      return res.json()
-    }))
-  )
-  .then(([account, events]) => {
-    renderAccountState(account)
-    interpolateTransferRecipientSelection(account)
-    transferRecipients = account.transferRecipients
-    events.forEach(renderEventIntoListView);
+  .then(() => fetch('/accounts'))
+  .then(res => {
+    if (!res.ok) {
+      throw new Error(`Http status: ${res.status}`)
+    }
+    return res.json()
+  })
+  .then(accounts => {
+    state.accounts = accounts
+    renderAccountsList(accounts)
+    return accountSelected(accounts[0].entityId)
   })
   .catch(notifyError)
+
+function accountSelected (accountId) {
+  return addAccountToConnectionGroup(accountId)
+    .then(() => Promise.all([
+      fetch(`/accounts/${accountId}`),
+      fetch(`/diagnostic/events/${accountId}`)
+    ]))
+    .then(responses =>
+      Promise.all(responses.map(res => {
+        if (!res.ok) {
+          throw new Error(`Http status: ${res.status}`)
+        }
+        return res.json()
+      }))
+    )
+    .then(([account, events]) => {
+      renderAccountState(account)
+      interpolateTransferRecipientSelection(account)
+      state.transferRecipients = account.transferRecipients
+      renderEventsIntoListView(events.reverse())
+    })
+}
+
+function addAccountToConnectionGroup (accountId) {
+  const promise = state.selectedAccountId != null
+    ? connection.invoke('RemoveFromConnectionGroup', state.selectedAccountId)
+    : Promise.resolve()
+
+  return promise
+    .then(() => connection.invoke('AddToConnectionGroup', accountId))
+    .then(() => {
+      state.selectedAccountId = accountId
+      highlightSelectedAccount(accountId)
+    })
+}
+
+function renderAccountsList (accounts) {
+  const accountsAsNodes = accounts.reduce((acc, account) => {
+    const input = document.createElement('input')
+    input.type = 'radio'
+    input.name = 'selected-account'
+    input.value = account.entityId
+    input.id = account.entityId
+
+    const label = document.createElement('label')
+    label.setAttribute('for', account.entityId)
+    label.textContent = `${account.firstName} ${account.lastName} - Account Id: ${account.entityId}`
+
+    acc.push(input)
+    acc.push(label)
+    acc.push(document.createElement('br'))
+
+    return acc
+  }, [])
+
+  document
+    .getElementById('accounts-list')
+    .prepend(...accountsAsNodes)
+}
+
+function highlightSelectedAccount (accountId) {
+  document
+    .querySelector(`#accounts-list input[value=${accountId}]`)
+    .setAttribute('checked', true)
+}
 
 function renderAccountState (account) {
   document.getElementById('account-balance').textContent =
@@ -75,6 +136,17 @@ function interpolateTransferRecipientSelection (account) {
     .replaceChildren(...transferRecipientsAsNodes)
 }
 
+function renderEventsIntoListView (events) {
+  const eventsAsNodes = events.map(evt => {
+    const li = document.createElement('li')
+    li.textContent = eventToTransactionString(evt)
+    return li
+  })
+  document
+    .getElementById('messagesList')
+    .replaceChildren(...eventsAsNodes)
+}
+
 function renderEventIntoListView (evt) {
   const li = document.createElement('li')
   li.textContent = eventToTransactionString(evt)
@@ -104,18 +176,25 @@ function eventToTransactionString (evt) {
   }
 }
 
+const accountsListFormEl = document.getElementById('accounts-list')
+accountsListFormEl.addEventListener('submit', e => {
+  e.preventDefault()
+  const formData = new FormData(accountsListFormEl)
+  accountSelected(formData.get('selected-account'))
+})
+
 function cardLockToggled () {
   const url = document.getElementById('account-debit-card-lock').checked
     ? '/accounts/lock'
     : '/accounts/unlock'
-  jsonPost(url, { entityId: accountId })
+  jsonPost(url, { entityId: state.selectedAccountId })
 }
 
 listenForFormSubmit(
   document.getElementById('account-deposit-form'),
   '/accounts/deposit',
   formData => ({
-    entityId: accountId,
+    entityId: state.selectedAccountId,
     amount: formData.get('account-deposit-amount')
   })
 )
@@ -124,7 +203,7 @@ listenForFormSubmit(
   document.getElementById('account-debit-form'),
   '/accounts/debit',
   formData => ({
-    entityId: accountId,
+    entityId: state.selectedAccountId,
     amount: formData.get('account-debit-amount'),
     origin: formData.get('account-debit-origin')
   })
@@ -134,7 +213,7 @@ listenForFormSubmit(
   document.getElementById('account-daily-debit-limit-form'),
   '/accounts/daily-debit-limit',
   formData => ({
-    entityId: accountId,
+    entityId: state.selectedAccountId,
     debitLimit: formData.get('account-daily-debit-limit')
   })
 )
@@ -143,7 +222,7 @@ listenForFormSubmit(
   document.getElementById('account-transfer-form'),
   '/transfers',
   formData => ({
-    entityId: accountId,
+    entityId: state.selectedAccountId,
     amount: formData.get('account-transfer-amount'),
     recipient: getTransferRecipient(
       formData.get('account-transfer-recipient-id')
@@ -155,7 +234,7 @@ listenForFormSubmit(
   document.getElementById('register-transfer-recipient-form'),
   '/transfers/register-recipient',
   formData => ({
-    entityId: accountId,
+    entityId: state.selectedAccountId,
     recipient: {
       firstName: formData.get('transfer-recipient-first-name'),
       lastName: formData.get('transfer-recipient-last-name'),
@@ -175,7 +254,7 @@ function listenForFormSubmit (formEl, url, formDataToProps) {
 }
 
 function getTransferRecipient (recipientId) {
-  return transferRecipients[recipientId]
+  return state.transferRecipients[recipientId]
 }
 
 function jsonPost (url, props) {
