@@ -23,7 +23,7 @@ public static class Config {
    }
 
    public static EventStoreClient StartEventStore(WebApplicationBuilder builder)
-      => ES.Connect(builder.Configuration.GetConnectionString("EventStore"));
+      => ES.Connect(builder.Configuration.GetConnectionString("EventStore")!);
 
    public static void InjectDependencies(
       WebApplicationBuilder builder,

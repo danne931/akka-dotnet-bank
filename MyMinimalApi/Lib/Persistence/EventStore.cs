@@ -33,7 +33,6 @@ public static class EventStoreManager {
    }
 
    public static async Task<Option<Lst<object>>> ReadStream(
-   //public static async TryOption<Lst<object>> ReadStream(
       EventStoreClient es,
       string streamName,
       Map<string, Type> mapping,

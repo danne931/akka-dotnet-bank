@@ -40,8 +40,7 @@ public static class BankTransferAPI {
          RecipientAccountEnvironment.Domestic => DomesticTransfer(evt),
          RecipientAccountEnvironment.International => InternationalTransfer(evt),
          _ =>
-            throw new Err("Third party transfer requires a " +
-                          "domestic or international account.")
+            throw new Err("Third party transfer requires a domestic or international account.")
       };
 
    private static Task<bool> RecipientExistsInternally(

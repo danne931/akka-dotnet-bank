@@ -5,7 +5,6 @@ using EventStore.Client;
 using OneOf;
 using static Echo.Process;
 
-using Lib;
 using Lib.Types;
 using static Lib.Validators;
 using ES = Lib.Persistence.EventStoreManager;
@@ -21,7 +20,7 @@ namespace Bank.Account.API;
 public static class AccountAPI {
    public static TryAsync<Validation<Err, Guid>> Create(
       EventStoreClient client,
-      AccountRegistry accounts,
+      AccountRegistry registry,
       Validator<CreateAccountCmd> validate,
       CreateAccountCmd command
    ) {
@@ -37,12 +36,10 @@ public static class AccountAPI {
          );
          return Pass<CreatedAccount>()(evt);
       };
-      var registerAccount = (CreatedAccount evt) => {
-         var account = AD.Create(evt);
-         return Optional(AccountActor.Start(account, accounts))
+      var registerAccount = (CreatedAccount evt) =>
+         Optional(AccountActor.Start(AD.Create(evt), registry))
             .ToValidation(new Err("Account registration fail"))
             .AsTask();
-      };
 
       var res =
          from cmd in TaskSucc(validate(command))
@@ -53,7 +50,6 @@ public static class AccountAPI {
    }
 
    public static Task<Option<Lst<object>>> GetAccountEvents(
-   //public static TryOptionAsync<Lst<object>> GetAccountEvents(
       EventStoreClient client,
       Guid id
    )
@@ -93,7 +89,7 @@ public static class AccountAPI {
 
    public static TryAsync<Validation<Err, Unit>> ProcessCommand<T>(
       T command,
-      AccountRegistry accounts,
+      AccountRegistry registry,
       OneOf<Validator<T>, AsyncValidator<T>> validate
    )
    where T : Command
@@ -104,7 +100,7 @@ public static class AccountAPI {
       );
 
       var getAccountVal = (Command cmd) =>
-         accounts
+         registry
             .Lookup(cmd.EntityId)
             .Map(opt => opt.ToValidation(UnknownAccountId(cmd.EntityId)));
 

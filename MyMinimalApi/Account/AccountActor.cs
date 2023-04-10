@@ -4,6 +4,7 @@ using Echo;
 using static Echo.Process;
 using static System.Console;
 
+using Lib;
 using Lib.Types;
 using Bank.Account.Domain;
 
@@ -19,12 +20,7 @@ public record AccountRegistry(
    public Task<Option<AccountState>> Lookup(Guid id) {
       var process = "@" + AccountActor.PID(id);
 
-      var alive = Try(() => exists(process)).IfFail(err => {
-         WriteLine($"Echo.Process.exists exception: {process} {err.Message}");
-         return false;
-      });
-
-      if (alive) {
+      if (ActorUtil.IsAlive(process)) {
          var account = ask<AccountState>(process, new LookupCmd(id));
          return TaskSucc(Some(account));
       }

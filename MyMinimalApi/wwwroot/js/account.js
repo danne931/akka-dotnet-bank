@@ -87,11 +87,7 @@ function renderAccountsList (accounts) {
     label.setAttribute('for', account.entityId)
     label.textContent = `${account.firstName} ${account.lastName} - Account Id: ${account.entityId}`
 
-    acc.push(input)
-    acc.push(label)
-    acc.push(document.createElement('br'))
-
-    return acc
+    return acc.concat([input, label, document.createElement('br')])
   }, [])
 
   document
