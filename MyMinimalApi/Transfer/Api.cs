@@ -24,10 +24,12 @@ public static class BankTransferAPI {
    public static async Task<Unit> IssueTransferToRecipient(DebitedTransfer evt) {
       var recipient = evt.Recipient;
       if (recipient.AccountEnvironment is RecipientAccountEnvironment.Internal) {
+         var origin = evt.EntityId.ToString();
          tell($"@accounts_{recipient.Identification}", new DepositCashCmd(
             new Guid(recipient.Identification),
             evt.Date,
-            evt.DebitedAmount
+            evt.DebitedAmount,
+            Origin: $"Account ({origin.Substring(origin.Length - 4)})"
          ));
       } else
          await ThirdPartyBankTransfer(evt);

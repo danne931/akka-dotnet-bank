@@ -154,7 +154,7 @@ function eventToTransactionString (evt) {
     case 'CreatedAccount':
       return `Created account for ${evt.firstName} ${evt.lastName} on ${evt.timestamp}`
     case 'DepositedCash':
-      return `$${evt.depositedAmount} deposited on ${evt.timestamp}`
+      return `$${evt.depositedAmount} deposited on ${evt.timestamp} by ${evt.origin}`
     case 'DebitedAccount':
       return `$${evt.debitedAmount} debited by ${evt.origin} on ${evt.timestamp}`
     case 'DailyDebitLimitUpdated':

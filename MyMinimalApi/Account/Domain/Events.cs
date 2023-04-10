@@ -29,7 +29,8 @@ public record UnlockedCard(
 public record DepositedCash(
    Guid EntityId,
    DateTime Timestamp,
-   decimal DepositedAmount
+   decimal DepositedAmount,
+   string Origin
 )
 : Event(EntityId, Timestamp, nameof(DepositedCash));
 

@@ -2,15 +2,6 @@ using Lib.Types;
 
 namespace Bank.Account.Domain;
 
-/*
-public static class CommandExt
-{
-   // When a command is received by the server, set a timestamp
-   public static T SetTimestamp<T>(this T cmd) where T : Command
-   => cmd with { Timestamp = DateTime.UtcNow };
-}
-*/
-
 public record EchoCmd(
    Guid EntityId,
    string Message
@@ -26,8 +17,6 @@ public record CreateAccountCmd(
 )
 : Command(EntityId)
 {
-   //public AccountStatus Status { get; init; } = AccountStatus.Active;
-
    public CreatedAccount ToEvent() =>
       new(EntityId, FirstName, LastName, Timestamp, Currency, Balance);
 }
@@ -35,14 +24,16 @@ public record CreateAccountCmd(
 public record DepositCashCmd(
    Guid EntityId,
    DateTime Date,
-   decimal Amount
+   decimal Amount,
+   string Origin = "ATM"
 )
 : Command(EntityId)
 {
    public DepositedCash ToEvent() => new(
       DepositedAmount: Amount,
       EntityId: EntityId,
-      Timestamp: Timestamp
+      Timestamp: Timestamp,
+      Origin: Origin
    );
 }
 
