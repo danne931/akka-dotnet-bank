@@ -18,7 +18,7 @@ using Bank.Account.Actors;
 namespace Bank.Account.API;
 
 public static class AccountAPI {
-   public static TryAsync<Validation<Err, Guid>> Create(
+   public static Task<Validation<Err, Guid>> Create(
       EventStoreClient client,
       AccountRegistry registry,
       Validator<CreateAccountCmd> validate,
@@ -41,12 +41,11 @@ public static class AccountAPI {
             .ToValidation(new Err("Account registration fail"))
             .AsTask();
 
-      var res =
+      return
          from cmd in TaskSucc(validate(command))
          from evt in save(cmd)
          from _ in registerAccount(evt)
          select evt.EntityId;
-      return TryAsync(res);
    }
 
    public static Task<Option<Lst<object>>> GetAccountEvents(
@@ -87,7 +86,7 @@ public static class AccountAPI {
    public static Task<bool> Exists(EventStoreClient es, Guid id) =>
       ES.Exists(es, AD.StreamName(id));
 
-   public static TryAsync<Validation<Err, Unit>> ProcessCommand<T>(
+   public static Task<Validation<Err, Unit>> ProcessCommand<T>(
       T command,
       AccountRegistry registry,
       OneOf<Validator<T>, AsyncValidator<T>> validate
@@ -104,12 +103,10 @@ public static class AccountAPI {
             .Lookup(cmd.EntityId)
             .Map(opt => opt.ToValidation(UnknownAccountId(cmd.EntityId)));
 
-      var res =
+      return
          from cmd in validation
          from acc in getAccountVal(cmd)
          select AccountActor.SyncStateChange(cmd);
-
-      return TryAsync(res);
    }
 
    public static Task<Unit> SoftDeleteEvents(
