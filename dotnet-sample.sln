@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "MyMinimalApi\App.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{49E7744A-4320-4A73-B428-EBFC7F1FE89B}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharpWithAkka", "FSharpWithAkka\FSharpWithAkka.fsproj", "{F1221316-7335-45E9-BB68-773D4BA5EFA5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{49E7744A-4320-4A73-B428-EBFC7F1FE89B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{49E7744A-4320-4A73-B428-EBFC7F1FE89B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{49E7744A-4320-4A73-B428-EBFC7F1FE89B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F1221316-7335-45E9-BB68-773D4BA5EFA5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1221316-7335-45E9-BB68-773D4BA5EFA5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1221316-7335-45E9-BB68-773D4BA5EFA5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1221316-7335-45E9-BB68-773D4BA5EFA5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
