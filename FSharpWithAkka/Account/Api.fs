@@ -5,27 +5,17 @@ open System.Threading.Tasks
 open Microsoft.FSharp.Core.Option
 open EventStore.Client
 open FSharp.Control
+open type Echo.Process
 
 open BankTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Lib.Types
 
-(*
-using static Lib.Validators;
-using static Bank.Account.Domain.Errors;
-using Bank.Transfer.Actors;
-*)
-
-type Valida =
-   | Validator of Validator<AccountCommand>
-   | AsyncValidator of AsyncValidator<AccountCommand>
-
 let processCommand
-   (command)
+   (command: 't :> Command)
    (registry: AccountActor.AccountRegistry)
-   (validate: Valida)
-   : Task<Result<AccountCommand, string>>
+   (validate: Validators<'t>)
    =
    task {
       let! validation =
@@ -33,8 +23,8 @@ let processCommand
          | Validator v -> v command |> Task.FromResult
          | AsyncValidator v -> v command
 
-      let getAccountVal (cmd: AccountCommand) =
-         AccountActor.Lookup registry Guid.Empty //cmd.EntityId
+      let getAccountVal (cmd: Command) =
+         AccountActor.lookup registry cmd.EntityId
       //|> Option.bind (fun opt ->
       //      Option.)
       //opt.ToValidation(Error "UnknownAccountId(cmd.EntityId)"))
@@ -46,7 +36,7 @@ let processCommand
 
          if isSome accountOpt then
             AccountActor.syncStateChange command
-            return Ok command
+            return Ok()
          else
             return Error "UnknownAccountId(cmd.entityid)"
    }
@@ -67,11 +57,8 @@ let getAccount
       return map foldEventsIntoAccount evtsOption
    }
 
-let accountExists (es: EventStoreClient) (id: Guid) =
-   EventStoreManager.exists es (Account.streamName id)
-
 let softDeleteEvents (client: EventStoreClient) (accountId: Guid) =
-   //AccountActor.delete accountId
+   AccountActor.delete accountId
    EventStoreManager.softDelete client (Account.streamName accountId)
 
 /// <summary>
@@ -94,23 +81,21 @@ let saveAndPublish
             props
             None
 
-      (*
-      match box evt with
-      | :? TransferRecipientEvent ->
-         printf "start transfer recipient actor"
-         //TransferRecipientActor.start()
+      match event with
+      | InternalTransferRecipient _
+      | DomesticTransferRecipient _
+      | InternationalTransferRecipient _ ->
+         TransferRecipientActor.start () |> ignore
+      | DebitedTransfer e ->
+         printfn "tell child (Transfer recipient actor) (DebitedTransfer)"
+         tellChild (TransferRecipientActor.ActorName, e) |> ignore
          ()
-      | :? DebitedTransfer ->
-         printf "tell child (Transfer recipient actor) (DebitedTransfer)"
-         //tellChild(TransferRecipientActor.ActorName, (DebitedTransfer) evt);
-         ()
-      *)
-      return ()
+      | _ -> ()
    }
 
 let createAccount
    (es: EventStoreClient)
-   //(registry: AccountRegistry)
+   (registry: AccountActor.AccountRegistry)
    (validate: CreateAccountCommand -> Result<CreateAccountCommand, string>)
    (command: CreateAccountCommand)
    =
@@ -126,11 +111,11 @@ let createAccount
             EventStoreManager.saveAndPublish
                es
                (Account.streamName evt.EntityId)
-               (Envelope.unwrap evt)
+               (evt |> Envelope.wrap |> Envelope.unwrap)
                // Create event stream only if it doesn't already exist.
                (Some StreamState.NoStream)
 
          let acct = Account.create evt
-         //AccountActor.start acct registry
+         AccountActor.start acct registry |> ignore
          return Ok evt.EntityId
    }

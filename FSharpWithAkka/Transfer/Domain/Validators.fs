@@ -8,14 +8,19 @@ open Microsoft.FSharp.Core.Option
 open Lib.Types
 
 module Validators =
-   let DailyDebitLimitValidation () : Validator<TransferCommand> =
-      (fun (cmd: TransferCommand) -> Ok cmd)
+   let transfer () =
+      (fun (cmd: TransferCommand) ->
+         if cmd.Amount <= 0 then
+            Error "InvalidTransferAmount"
+         else
+            Ok())
+      |> Validator
 
-   let RegisterTransferRecipient
-      (es: EventStoreClient)
-      (cmd: RegisterTransferRecipientCommand)
-      (RecipientExists: EventStoreClient -> TransferRecipient -> bool Task)
-      : AsyncValidator<RegisterTransferRecipientCommand>
+   let registerTransferRecipient
+      (
+         es: EventStoreClient,
+         recipientExists: EventStoreClient -> TransferRecipient -> bool Task
+      )
       =
       (fun (cmd: RegisterTransferRecipientCommand) ->
          task {
@@ -28,11 +33,11 @@ module Validators =
                return Error "TransferErr.InvalidDomesticRecipient"
             elif
                recipient.AccountEnvironment = RecipientAccountEnvironment.International
-               && isNone recipient.Currency
+               && isNull recipient.Currency
             then
                return Error "TransferErr.InvalidInternationalRecipient"
             else
-               let! exists = RecipientExists es recipient
+               let! exists = recipientExists es recipient
 
                // TODO: Remove Guid play
                if not exists then
@@ -40,5 +45,6 @@ module Validators =
                      Error
                         $"TransferErr.RecipientNotFound(Guid(recipient.Identification))"
                else
-                  return Ok cmd
+                  return Ok()
          })
+      |> AsyncValidator

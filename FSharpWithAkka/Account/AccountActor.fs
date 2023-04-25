@@ -13,10 +13,10 @@ open Lib.Types
 
 let private PID (id: Guid) = $"accounts_{id}"
 
-type private Command =
+type private ActorCommand =
    | StartChildrenCommand of Guid
    | LookupCommand of Guid
-   | AccountCommand of AccountCommand
+   | StateChangeCommand of Command
 
 type AccountRegistry = {
    loadAccount: Guid -> Account.AccountState option Task
@@ -26,9 +26,9 @@ type AccountRegistry = {
    broadcastError: string -> Task
 }
 
-let syncStateChange (cmd: AccountCommand) =
-   //let pid = "@" + PID cmd.EntityId
-   //tell (pid, cmd) |> ignore
+let syncStateChange (cmd: Command) =
+   let pid = "@" + PID cmd.EntityId
+   tell (pid, cmd |> StateChangeCommand) |> ignore
    ()
 
 let delete (id: Guid) =
@@ -37,16 +37,16 @@ let delete (id: Guid) =
    printfn "Killed process %A" pid
    ()
 
-let Start
+let start
    (initialState: Account.AccountState)
    (registry: AccountRegistry)
    : ProcessId
    =
    let pid =
-      spawn<Account.AccountState, Command> (
+      spawn<Account.AccountState, ActorCommand> (
          PID initialState.EntityId,
          (fun () -> initialState),
-         (fun (account: Account.AccountState) (command: Command) ->
+         (fun (account: Account.AccountState) (command: ActorCommand) ->
             match command with
             | StartChildrenCommand id ->
                let pids = registry.startChildActors id
@@ -55,7 +55,7 @@ let Start
             | LookupCommand _ ->
                reply account |> ignore
                account
-            | AccountCommand cmd ->
+            | StateChangeCommand cmd ->
                let validation = Account.stateTransition account cmd
 
                match validation with
@@ -79,7 +79,7 @@ let Start
    tell (pid, StartChildrenCommand initialState.EntityId) |> ignore
    pid
 
-let Lookup
+let lookup
    (registry: AccountRegistry)
    (id: Guid)
    : Account.AccountState option Task
@@ -94,7 +94,7 @@ let Lookup
          let! accountOpt = registry.loadAccount id
 
          if isSome accountOpt then
-            Start accountOpt.Value registry |> ignore
+            start accountOpt.Value registry |> ignore
             return accountOpt
          else
             return None

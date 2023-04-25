@@ -1,17 +1,16 @@
 module Bank.Transfer.Api
 
 open System
-open type Echo.Process
 open EventStore.Client
 open FSharp.Control
 open System.Threading.Tasks
+open type Echo.Process
 
 open Lib.Types
-open Bank.Account.Api
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 
-let DomesticTransfer (evt: BankEvent<DebitedTransfer>) =
+let domesticTransfer (evt: BankEvent<DebitedTransfer>) =
    task {
       // Simulate network request to send money to domestic bank
       (*
@@ -26,62 +25,65 @@ let DomesticTransfer (evt: BankEvent<DebitedTransfer>) =
    }
 
 // Simulate network request to send money to international bank
-let InternationalTransfer (evt: BankEvent<DebitedTransfer>) =
+let internationalTransfer (evt: BankEvent<DebitedTransfer>) =
    Task.Delay(1000) |> Task.ofTask
 
-let RecipientExistsInternally
+let recipientExistsInternally
    (es: EventStoreClient)
    (recipient: TransferRecipient)
    =
-   accountExists es (Guid recipient.Identification)
+   EventStoreManager.exists
+      es
+      (recipient.Identification |> Guid |> Account.streamName)
 
 // Simulate network request to verify account in domestic bank
-let RecipientExistsDomestically (recipient: TransferRecipient) =
+let recipientExistsDomestically (recipient: TransferRecipient) =
    Task.Delay(1000).ContinueWith(fun _ -> true)
 
 // Simulate network request to verify account in international bank
-let RecipientExistsInternationally (recipient: TransferRecipient) =
+let recipientExistsInternationally (recipient: TransferRecipient) =
    Task.Delay(1000).ContinueWith(fun _ -> true)
 
-let RecipientExists (es: EventStoreClient) (recipient: TransferRecipient) =
+let recipientExists (es: EventStoreClient) (recipient: TransferRecipient) =
    match recipient.AccountEnvironment with
    | RecipientAccountEnvironment.Internal ->
-      RecipientExistsInternally es recipient
+      recipientExistsInternally es recipient
    | RecipientAccountEnvironment.Domestic ->
-      RecipientExistsDomestically recipient
+      recipientExistsDomestically recipient
    | RecipientAccountEnvironment.International ->
-      RecipientExistsInternationally recipient
+      recipientExistsInternationally recipient
 
 
-let ThirdPartyBankTransfer (evt: BankEvent<DebitedTransfer>) =
+let thirdPartyBankTransfer (evt: BankEvent<DebitedTransfer>) =
    match evt.Data.Recipient.AccountEnvironment with
-   | RecipientAccountEnvironment.Domestic -> DomesticTransfer evt
-   | RecipientAccountEnvironment.International -> InternationalTransfer evt
+   | RecipientAccountEnvironment.Domestic -> domesticTransfer evt
+   | RecipientAccountEnvironment.International -> internationalTransfer evt
    | _ ->
       raise (
          Exception
             "Third party transfer requires a domestic or international account."
       )
 
-let IssueTransferToRecipient (evt: BankEvent<DebitedTransfer>) =
+let issueTransferToRecipient (evt: BankEvent<DebitedTransfer>) =
    task {
       let recipient = evt.Data.Recipient
+      printfn "recipient %A" recipient
 
       if
          recipient.AccountEnvironment = RecipientAccountEnvironment.Internal
       then
+         (*
          let origin = evt.EntityId.ToString()
-
          tell (
-            $"@accounts_{recipient.Identification}",
-            {
-               EntityId = Guid recipient.Identification
-               Timestamp = evt.Data.Date
-               Amount = evt.Data.DebitedAmount
-               Origin = Some $"Account ({origin.Substring(origin.Length - 4)})"
-            }
+            $"@accounts_{recipient.Identification}", DepositCashCommand(
+               Guid recipient.Identification,
+               evt.Data.DebitedAmount,
+               $"Account ({origin.Substring(origin.Length - 4)})"
+            )
          )
          |> ignore
+      *)
+         ()
       else
-         do! ThirdPartyBankTransfer(evt)
+         do! thirdPartyBankTransfer (evt)
    }

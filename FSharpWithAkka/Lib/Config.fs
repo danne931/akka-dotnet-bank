@@ -15,9 +15,15 @@ open Bank.Hubs
 open type AccountActor.AccountRegistry
 
 let startActorModel () =
-   //ProcessConfig.initialise() |> ignore
-   //Process.DeadLetters
-   None
+   ProcessConfig.initialise () |> ignore
+
+   Process
+      .DeadLetters()
+      .Observe<DeadLetter>()
+      .Subscribe(fun i -> printfn "Dead Process: %A" i)
+   |> ignore
+
+   ()
 
 let startEventStore (builder: WebApplicationBuilder) =
    EventStoreManager.connect
@@ -27,8 +33,6 @@ let injectDependencies
    (builder: WebApplicationBuilder)
    (esClient: EventStoreClient)
    =
-   //builder.Services.AddSingleton<Validator<TransferCmd>>(TransferValidation())
-
    builder.Services.AddSingleton<AccountActor.AccountRegistry>(fun provider -> {
       loadAccount = getAccount (getAccountEvents esClient)
       saveAndPublish = saveAndPublish esClient
@@ -59,4 +63,5 @@ let injectDependencies
    })
    |> ignore
 
-   builder.Services.AddSingleton<EventStoreClient>(esClient)
+   builder.Services.AddSingleton<EventStoreClient>(esClient) |> ignore
+   ()

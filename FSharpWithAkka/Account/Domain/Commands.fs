@@ -1,61 +1,44 @@
 namespace Bank.Account.Domain
 
 open System
-open Microsoft.FSharp.Core.Option
 open Lib.Types
 
-type CreateAccountCommand = {
-   Currency: string option
-   Balance: decimal
-   FirstName: string
-   LastName: string
-   EntityId: Guid
-   Timestamp: DateTime
-}
+type CreateAccountCommand
+   (
+      entityId,
+      balance: decimal,
+      firstName: string,
+      lastName: string,
+      currency: string
+   ) =
+   inherit Command(entityId)
+   member x.Currency = if isNull currency then "USD" else currency
+   member x.Balance = balance
+   member x.FirstName = firstName
+   member x.LastName = lastName
 
-module CreateAccountCommand =
-   let create (cmd: CreateAccountCommand) = {
-      cmd with
-         Timestamp = DateTime.UtcNow
-         Currency = if isSome cmd.Currency then cmd.Currency else Some "USD"
-   }
+type DepositCashCommand(entityId, amount: decimal, origin: string) =
+   inherit Command(entityId)
+   member x.Amount = amount
+   member x.Origin = if isNull origin then "ATM" else origin
 
-type DepositCashCommand = {
-   Amount: decimal
-   Origin: string option
-   EntityId: Guid
-   Timestamp: DateTime
-}
+type DebitCommand
+   (entityId, date: DateTime, amount: decimal, origin: string, reference: string)
+   =
+   inherit Command(entityId)
+   member x.Date = date
+   member x.Amount = amount
+   member x.Origin = origin
+   member x.Reference = reference
 
-module DepositCashCommand =
-   let create (cmd: DepositCashCommand) = {
-      cmd with
-         Origin = if isSome cmd.Origin then cmd.Origin else Some "ATM"
-   }
+type LimitDailyDebitsCommand(entityId, debitLimit: decimal) =
+   inherit Command(entityId)
+   member x.DebitLimit = debitLimit
 
-type DebitCommand = {
-   EntityId: Guid
-   Date: DateTime
-   Amount: decimal
-   Origin: string
-   Reference: string option
-   Timestamp: DateTime
-}
+type LockCardCommand(entityId, reference: string) =
+   inherit Command(entityId)
+   member x.Reference = reference
 
-type LimitDailyDebitsCommand = {
-   EntityId: Guid
-   Timestamp: DateTime
-   DebitLimit: decimal
-}
-
-type LockCardCommand = {
-   EntityId: Guid
-   Timestamp: DateTime
-   Reference: string
-}
-
-type UnlockCardCommand = {
-   EntityId: Guid
-   Timestamp: DateTime
-   Reference: string
-}
+type UnlockCardCommand(entityId, reference: string) =
+   inherit Command(entityId)
+   member x.Reference = reference

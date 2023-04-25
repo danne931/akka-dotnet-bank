@@ -41,5 +41,5 @@ let deserialize (data: byte array) (eventName: string) =
    let deserialized =
       JsonSerializer.Deserialize(data, eventTypeMapping[eventName], jsonOptions)
 
-   let (event, _) = Envelope.unwrap deserialized
+   let (event, _) = deserialized |> Envelope.wrap |> Envelope.unwrap
    event

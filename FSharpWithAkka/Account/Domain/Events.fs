@@ -19,26 +19,38 @@ module CreatedAccountEvent =
          FirstName = cmd.FirstName
          LastName = cmd.LastName
          Balance = cmd.Balance
-         Currency = cmd.Currency.Value
+         Currency = cmd.Currency
       }
    }
 
-type LockedCard = { Reference: string }
+type LockedCard = { Reference: string option }
 
 module LockedCardEvent =
    let create (cmd: LockCardCommand) = {
       EntityId = cmd.EntityId
       Timestamp = cmd.Timestamp
-      Data = { Reference = cmd.Reference }
+      Data = {
+         Reference =
+            if String.IsNullOrEmpty cmd.Reference then
+               None
+            else
+               Some cmd.Reference
+      }
    }
 
-type UnlockedCard = { Reference: string }
+type UnlockedCard = { Reference: string option }
 
 module UnlockedCardEvent =
    let create (cmd: UnlockCardCommand) = {
       EntityId = cmd.EntityId
       Timestamp = cmd.Timestamp
-      Data = { Reference = cmd.Reference }
+      Data = {
+         Reference =
+            if String.IsNullOrEmpty cmd.Reference then
+               None
+            else
+               Some cmd.Reference
+      }
    }
 
 type DepositedCash = {
@@ -52,7 +64,7 @@ module DepositedCashEvent =
       Timestamp = cmd.Timestamp
       Data = {
          DepositedAmount = cmd.Amount
-         Origin = cmd.Origin.Value
+         Origin = cmd.Origin
       }
    }
 
@@ -60,7 +72,7 @@ type DebitedAccount = {
    Date: DateTime
    DebitedAmount: decimal
    Origin: string
-   Reference: string
+   Reference: string option
 }
 
 module DebitedAccountEvent =
@@ -71,7 +83,11 @@ module DebitedAccountEvent =
          DebitedAmount = cmd.Amount
          Origin = cmd.Origin
          Date = cmd.Date
-         Reference = cmd.Reference.Value
+         Reference =
+            if String.IsNullOrEmpty cmd.Reference then
+               None
+            else
+               Some cmd.Reference
       }
    }
 

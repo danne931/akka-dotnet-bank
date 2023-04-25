@@ -50,6 +50,8 @@ let DailyDebitAccrued state (evt: BankEvent<DebitedAccount>) : decimal =
       0
    elif evt.Data.Origin = MonthlyMaintenanceFee.Origin then
       state.DailyDebitAccrued
+   elif Option.isNone state.LastDebitDate then
+      evt.Data.DebitedAmount
    // When applying a new event to the cached AccountState & the
    // last debit event did not occur today...
    // -> Ignore the cached DailyDebitAccrued
@@ -74,33 +76,33 @@ let create (e: BankEvent<CreatedAccount>) = {
 
 let applyEvent (state: AccountState) (evt: AccountEvent) =
    match evt with
-   | DepositedCash(e) -> {
+   | DepositedCash e -> {
       state with
          Balance = state.Balance + e.Data.DepositedAmount
      }
-   | DebitedAccount(e) -> {
+   | DebitedAccount e -> {
       state with
          Balance = state.Balance - e.Data.DebitedAmount
          DailyDebitAccrued = DailyDebitAccrued state e
          LastDebitDate = Some e.Timestamp
      }
-   | DailyDebitLimitUpdated(e) -> {
+   | DailyDebitLimitUpdated e -> {
       state with
          DailyDebitLimit = e.Data.DebitLimit
      }
-   | LockedCard(_) -> {
+   | LockedCard _ -> {
       state with
          Status = AccountStatus.ActiveWithLockedCard
      }
-   | UnlockedCard(_) -> {
+   | UnlockedCard _ -> {
       state with
          Status = AccountStatus.Active
      }
-   | DebitedTransfer(e) -> {
+   | DebitedTransfer e -> {
       state with
          Balance = state.Balance - e.Data.DebitedAmount
      }
-   | InternalTransferRecipient(e) -> {
+   | InternalTransferRecipient e -> {
       state with
          TransferRecipients =
             state.TransferRecipients.Add(
@@ -110,7 +112,7 @@ let applyEvent (state: AccountState) (evt: AccountEvent) =
                )
             )
      }
-   | DomesticTransferRecipient(e) -> {
+   | DomesticTransferRecipient e -> {
       state with
          TransferRecipients =
             state.TransferRecipients.Add(
@@ -120,7 +122,7 @@ let applyEvent (state: AccountState) (evt: AccountEvent) =
                )
             )
      }
-   | InternationalTransferRecipient(e) -> {
+   | InternationalTransferRecipient e -> {
       state with
          TransferRecipients =
             state.TransferRecipients.Add(
@@ -173,7 +175,7 @@ module private StateTransition =
       then
          Error $"ExceededDailyDebit {state.DailyDebitLimit}"
       else
-         let evt = (DebitedAccountEvent.create cmd) |> DebitedAccount
+         let evt = DebitedAccountEvent.create cmd |> DebitedAccount
          Ok(evt, applyEvent state evt)
 
    let transfer state (cmd: TransferCommand) =
@@ -209,7 +211,7 @@ module private StateTransition =
          Ok(evt, applyEvent state evt)
 
 
-let stateTransition state (command: AccountCommand) =
+let stateTransition state (command: Command) =
    match box command with
    | :? DepositCashCommand as cmd -> StateTransition.deposit state cmd
    | :? DebitCommand as cmd -> StateTransition.debit state cmd

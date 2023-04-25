@@ -1,32 +1,31 @@
 namespace Bank.Transfer.Domain
 
 open System
-open Microsoft.FSharp.Core.Option
 
-type TransferCommand = {
-   Recipient: TransferRecipient
-   Date: DateTime
-   Amount: decimal
-   Reference: string
-   EntityId: Guid
-   Timestamp: DateTime
-}
+open Lib.Types
 
-//module TransferCommand =
-//   let create cmd = { cmd with Timestamp = DateTime.UtcNow }
+type TransferCommand
+   (
+      entityId,
+      recipient: TransferRecipient,
+      date: DateTime,
+      amount: decimal,
+      reference: string
+   ) =
+   inherit Command(entityId)
+   member x.Recipient = recipient
+   member x.Date = date
+   member x.Amount = amount
+   member x.Reference = reference
 
-type RegisterTransferRecipientCommand = {
-   Recipient: TransferRecipient
-   EntityId: Guid
-   Timestamp: DateTime
-}
+type RegisterTransferRecipientCommand(entityId, recipient: TransferRecipient) =
+   inherit Command(entityId)
 
-module RegisterTransferRecipientCommand =
-   let create (cmd: RegisterTransferRecipientCommand) = {
-      cmd with
-         Timestamp = DateTime.UtcNow
-         Recipient = {
-            cmd.Recipient with
-               Currency = cmd.Recipient.Currency |> orElse (Some "USD")
-         }
+   member x.Recipient = {
+      recipient with
+         Currency =
+            if isNull recipient.Currency then
+               "USD"
+            else
+               recipient.Currency
    }

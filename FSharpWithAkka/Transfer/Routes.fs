@@ -11,28 +11,31 @@ open System.Threading.Tasks
 open BankTypes
 open Bank.Transfer.Domain
 open Bank.Account.Api
+open Bank.Transfer.Api
 
 module private Path =
    let Base = "/transfers"
    let TransferRecipient = Base + "/register-recipient"
 
-//let private registerTransferRecipient (es: EventStoreClient) (options: JsonSerializerOptions) cmd  =
-let private registerTransferRecipient (es: EventStoreClient) cmd =
-   cmd
-   |> RegisterTransferRecipientCommand.create
-   |> RegisterInternalTransferRecipientEvent.create
-   |> fun evt -> saveAndPublish es (Envelope.unwrap evt)
-   |> RouteUtil.Unwrap
-
-let private transfer cmd = cmd |> Results.Ok //|> TransferCommand.create |> Results.Ok
-
 let startTransferRoutes (app: WebApplication) (es: EventStoreClient) =
-   app.MapPost(Path.Base, Func<TransferCommand, IResult>(transfer)) |> ignore
-
    app.MapPost(
       Path.TransferRecipient,
-      Func<RegisterTransferRecipientCommand, Task<IResult>>(
-         registerTransferRecipient es
+      Func<AccountActor.AccountRegistry, RegisterTransferRecipientCommand, Task<IResult>>(
+         (fun registry command ->
+            processCommand
+               command
+               registry
+               (Validators.registerTransferRecipient (es, recipientExists))
+            |> RouteUtil.UnwrapValidation)
       )
+   )
+   |> ignore
+
+   app.MapPost(
+      Path.Base,
+      Func<AccountActor.AccountRegistry, TransferCommand, Task<IResult>>
+         (fun registry command ->
+            processCommand command registry (Validators.transfer ())
+            |> RouteUtil.UnwrapValidation)
    )
    |> ignore

@@ -8,16 +8,11 @@ open Bank.Transfer.Routes
 open Bank.Hubs
 
 let builder = WebApplication.CreateBuilder()
-(*
-builder.Services.ConfigureHttpJsonOptions(fun opts ->
-   JsonFSharpOptions.Default().AddToJsonSerializerOptions(opts.SerializerOptions)
-   ()) |> ignore
-*)
 
 builder.Services.AddSignalR() |> ignore
 builder.Services.AddRazorPages() |> ignore
 
-Config.startActorModel () |> ignore
+Config.startActorModel ()
 let es = Config.startEventStore builder
 
 Config.injectDependencies builder es

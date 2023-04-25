@@ -3,6 +3,10 @@ module Lib.Types
 open System
 open System.Threading.Tasks
 
+[<AbstractClass>]
+type Command(entityId: Guid) =
+   member x.EntityId = entityId
+   member x.Timestamp = DateTime.UtcNow
 
 type BankEvent<'E> =
    {
@@ -19,5 +23,11 @@ type Envelope = {
    EventName: string
 }
 
-type Validator<'a> = 'a -> Result<'a, string>
-type AsyncValidator<'a> = 'a -> Task<Result<'a, string>>
+type Validator<'t> = 't -> Result<unit, string>
+type AsyncValidator<'t> = 't -> Task<Result<unit, string>>
+
+type Validators<'t when 't :> Command> =
+   | Validator of Validator<'t>
+   | AsyncValidator of AsyncValidator<'t>
+
+let PassValidation () = (fun _ -> Ok()) |> Validator

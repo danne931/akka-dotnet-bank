@@ -18,5 +18,5 @@ type TransferRecipient = {
    AccountEnvironment: RecipientAccountEnvironment
    IdentificationStrategy: RecipientAccountIdentificationStrategy
    RoutingNumber: string option
-   Currency: string option
+   Currency: string
 }

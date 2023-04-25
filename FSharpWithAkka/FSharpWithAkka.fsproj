@@ -18,12 +18,12 @@
     <Compile Include="Account/MaintenanceFeeActor.fs" />
     <Compile Include="Account/AccountActor.fs" />
     <Compile Include="Account/Domain/Validators.fs" /> 
+    <Compile Include="Transfer/Api.fs" />
+    <Compile Include="Transfer/TransferRecipientActor.fs" />
     <Compile Include="Account/Api.fs" />
     <Compile Include="Lib/Routes.fs" />
     <Compile Include="Account/Routes.fs" />
     <Compile Include="Transfer/Domain/Validators.fs" />
-    <Compile Include="Transfer/Api.fs" />
-    <Compile Include="Transfer/TransferRecipientActor.fs" />
     <Compile Include="Transfer/Routes.fs" />
     <Compile Include="Lib/Config.fs" />
     <Compile Include="Program.fs" />

@@ -4,13 +4,6 @@ open Lib.Types
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 
-type AccountCommand =
-   | DepositCashCommand
-   | DebitCommand
-   | LimitDailyDebitsCommand
-   | LockCardCommand
-   | UnlockCardCommand
-
 type AccountEvent =
    | CreatedAccount of BankEvent<CreatedAccount>
    | DepositedCash of BankEvent<DepositedCash>
@@ -24,7 +17,6 @@ type AccountEvent =
    | InternationalTransferRecipient of
       BankEvent<RegisteredInternationalTransferRecipient>
 
-
 type OpenEventEnvelope = AccountEvent * Envelope
 
 [<RequireQualifiedAccess>]
@@ -37,31 +29,43 @@ module Envelope =
 
    let bind (transformer: obj -> 't) (evt: AccountEvent) =
       match evt with
-      | CreatedAccount(evt) -> transformer evt
-      | DepositedCash(evt) -> transformer evt
-      | DebitedAccount(evt) -> transformer evt
-      | DailyDebitLimitUpdated(evt) -> transformer evt
-      | LockedCard(evt) -> transformer evt
-      | UnlockedCard(evt) -> transformer evt
-      | InternalTransferRecipient(evt) -> transformer evt
-      | DomesticTransferRecipient(evt) -> transformer evt
-      | InternationalTransferRecipient(evt) -> transformer evt
-      | DebitedTransfer(evt) -> transformer evt
+      | CreatedAccount evt -> transformer evt
+      | DepositedCash evt -> transformer evt
+      | DebitedAccount evt -> transformer evt
+      | DailyDebitLimitUpdated evt -> transformer evt
+      | LockedCard evt -> transformer evt
+      | UnlockedCard evt -> transformer evt
+      | InternalTransferRecipient evt -> transformer evt
+      | DomesticTransferRecipient evt -> transformer evt
+      | InternationalTransferRecipient evt -> transformer evt
+      | DebitedTransfer evt -> transformer evt
 
-   let unwrap (o: obj) : OpenEventEnvelope =
+   let wrap (o: obj) : AccountEvent =
       match o with
-      | :? BankEvent<CreatedAccount> as evt -> (evt |> CreatedAccount, get evt)
-      | :? BankEvent<DepositedCash> as evt -> (evt |> DepositedCash, get evt)
-      | :? BankEvent<DebitedAccount> as evt -> (evt |> DebitedAccount, get evt)
+      | :? BankEvent<CreatedAccount> as evt -> evt |> CreatedAccount
+      | :? BankEvent<DepositedCash> as evt -> evt |> DepositedCash
+      | :? BankEvent<DebitedAccount> as evt -> evt |> DebitedAccount
       | :? BankEvent<DailyDebitLimitUpdated> as evt ->
-         (evt |> DailyDebitLimitUpdated, get evt)
-      | :? BankEvent<LockedCard> as evt -> (evt |> LockedCard, get evt)
-      | :? BankEvent<UnlockedCard> as evt -> (evt |> UnlockedCard, get evt)
+         evt |> DailyDebitLimitUpdated
+      | :? BankEvent<LockedCard> as evt -> evt |> LockedCard
+      | :? BankEvent<UnlockedCard> as evt -> evt |> UnlockedCard
       | :? BankEvent<RegisteredInternalTransferRecipient> as evt ->
-         (evt |> InternalTransferRecipient, get evt)
+         evt |> InternalTransferRecipient
       | :? BankEvent<RegisteredDomesticTransferRecipient> as evt ->
-         (evt |> DomesticTransferRecipient, get evt)
+         evt |> DomesticTransferRecipient
       | :? BankEvent<RegisteredInternationalTransferRecipient> as evt ->
-         (evt |> InternationalTransferRecipient, get evt)
-      | :? BankEvent<DebitedTransfer> as evt ->
-         (evt |> DebitedTransfer, get evt)
+         evt |> InternationalTransferRecipient
+      | :? BankEvent<DebitedTransfer> as evt -> evt |> DebitedTransfer
+
+   let unwrap (o: AccountEvent) : OpenEventEnvelope =
+      match o with
+      | CreatedAccount evt -> (wrap evt, get evt)
+      | DepositedCash evt -> (wrap evt, get evt)
+      | DebitedAccount evt -> (wrap evt, get evt)
+      | DailyDebitLimitUpdated evt -> (wrap evt, get evt)
+      | LockedCard evt -> (wrap evt, get evt)
+      | UnlockedCard evt -> (wrap evt, get evt)
+      | InternalTransferRecipient evt -> (wrap evt, get evt)
+      | DomesticTransferRecipient evt -> (wrap evt, get evt)
+      | InternationalTransferRecipient evt -> (wrap evt, get evt)
+      | DebitedTransfer evt -> (wrap evt, get evt)

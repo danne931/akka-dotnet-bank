@@ -8,7 +8,7 @@ type DebitedTransfer = {
    Recipient: TransferRecipient
    Date: DateTime
    DebitedAmount: decimal
-   Reference: string
+   Reference: string option
 }
 
 module TransferEvent =
@@ -19,7 +19,11 @@ module TransferEvent =
          Recipient = cmd.Recipient
          Date = cmd.Date
          DebitedAmount = cmd.Amount
-         Reference = cmd.Reference
+         Reference =
+            if String.IsNullOrEmpty cmd.Reference then
+               None
+            else
+               Some cmd.Reference
       }
    }
 
@@ -27,6 +31,7 @@ type RegisteredInternalTransferRecipient = {
    LastName: string
    FirstName: string
    AccountNumber: string
+   Currency: string
 }
 
 type RegisteredDomesticTransferRecipient = {
@@ -34,6 +39,7 @@ type RegisteredDomesticTransferRecipient = {
    FirstName: string
    RoutingNumber: string option
    AccountNumber: string
+   Currency: string
 }
 
 type RegisteredInternationalTransferRecipient = {
@@ -41,7 +47,7 @@ type RegisteredInternationalTransferRecipient = {
    FirstName: string
    Identification: string
    IdentificationStrategy: RecipientAccountIdentificationStrategy
-   Currency: string option
+   Currency: string
 }
 
 module RegisterInternalTransferRecipientEvent =
@@ -52,6 +58,7 @@ module RegisterInternalTransferRecipientEvent =
          AccountNumber = cmd.Recipient.Identification
          LastName = cmd.Recipient.LastName
          FirstName = cmd.Recipient.FirstName
+         Currency = cmd.Recipient.Currency
       }
    }
 
@@ -64,6 +71,7 @@ module RegisterDomesticTransferRecipientEvent =
          FirstName = cmd.Recipient.FirstName
          AccountNumber = cmd.Recipient.Identification
          RoutingNumber = cmd.Recipient.RoutingNumber
+         Currency = cmd.Recipient.Currency
       }
    }
 
@@ -99,7 +107,7 @@ module RegisterTransferRecipientEvent =
          Identification = e.Data.AccountNumber
          IdentificationStrategy =
             RecipientAccountIdentificationStrategy.AccountId
-         Currency = None
+         Currency = e.Data.Currency
          RoutingNumber = None
         }
       | RegisteredDomesticTransferRecipient e -> {
@@ -109,7 +117,7 @@ module RegisterTransferRecipientEvent =
          Identification = e.Data.AccountNumber
          IdentificationStrategy =
             RecipientAccountIdentificationStrategy.AccountId
-         Currency = None
+         Currency = e.Data.Currency
          RoutingNumber = e.Data.RoutingNumber
         }
       | RegisteredInternationalTransferRecipient e -> {

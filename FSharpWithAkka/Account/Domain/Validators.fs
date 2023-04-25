@@ -1,6 +1,8 @@
 namespace Bank.Account.Domain
 
 open System
+open Lib.Types
+open BankTypes
 
 type private Currencies =
    | USD = 0
@@ -14,14 +16,31 @@ module Validators =
          // TODO: handle varying currency codes
          if cmd.Balance < 100 then
             Error $"InvalidStartBalance {cmd.Balance}"
-         elif not (Enum.IsDefined(typeof<Currencies>, cmd.Currency.Value)) then
+         elif not (Enum.IsDefined(typeof<Currencies>, cmd.Currency)) then
             Error $"Invalid currency {cmd.Currency}"
          else
             Ok cmd)
 
-   let DailyDebitLimitValidation () =
+   let dailyDebitLimit () =
       (fun (cmd: LimitDailyDebitsCommand) ->
          if cmd.DebitLimit < 0 then
             Error "InvalidDailyDebitLimit"
          else
-            Ok cmd)
+            Ok())
+      |> Validator
+
+   let deposit () =
+      (fun (cmd: DepositCashCommand) ->
+         if cmd.Amount < 1 then
+            Error $"InvalidDepositAmount {cmd.Amount}"
+         else
+            Ok())
+      |> Validator
+
+   let debit () =
+      (fun (cmd: DebitCommand) ->
+         if cmd.Amount <= 0 then
+            Error $"InvalidDebitAmount {cmd.Amount}"
+         else
+            Ok())
+      |> Validator
