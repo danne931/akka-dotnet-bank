@@ -1,3 +1,4 @@
+# fantomas -r .
 [**/*.{fs,fsx}]
 indent_size = 3
 fsharp_multiline_bracket_style = stroustrup
