@@ -8,6 +8,14 @@ type Command(entityId: Guid) =
    member x.EntityId = entityId
    member x.Timestamp = DateTime.UtcNow
 
+type ActorCommand =
+   | StartChildrenCommand of Guid
+   | LookupCommand of Guid
+   | StateChangeCommand of Command
+
+module ActorStateChangeCommand =
+   let init (command: Command) = command |> StateChangeCommand
+
 type BankEvent<'E> =
    {
       EntityId: Guid

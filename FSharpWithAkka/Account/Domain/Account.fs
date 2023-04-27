@@ -30,25 +30,22 @@ type AccountState =
       TransferRecipients: Map<string, TransferRecipient>
    }
 
-   member this.FullName = $"{this.FirstName} {this.LastName}"
+   member x.FullName = $"{x.FirstName} {x.LastName}"
+
+module Constants =
+   let DebitOriginMaintenanceFee = "actor:maintenance_fee"
 
 // Move to lib folder
 let IsToday (debitDate: DateTime) =
    let today = DateTime.UtcNow
    $"{today.Day}-{today.Month}-{today.Year}" = $"{debitDate.Day}-{debitDate.Month}-{debitDate.Year}"
 
-module MonthlyMaintenanceFee =
-   let Origin = "actor:maintenance_fee"
-   let Amount = decimal 5
-   let DailyBalanceThreshold = decimal 1500
-   let QualifyingDeposit = decimal 250
-
 let DailyDebitAccrued state (evt: BankEvent<DebitedAccount>) : decimal =
    // When accumulating events into AccountState aggregate...
    // -> Ignore debits older than a day
    if not <| IsToday evt.Timestamp then
       0
-   elif evt.Data.Origin = MonthlyMaintenanceFee.Origin then
+   elif evt.Data.Origin = Constants.DebitOriginMaintenanceFee then
       state.DailyDebitAccrued
    elif Option.isNone state.LastDebitDate then
       evt.Data.DebitedAmount
@@ -222,3 +219,13 @@ let stateTransition state (command: Command) =
    | :? TransferCommand as cmd -> StateTransition.transfer state cmd
    | :? RegisterTransferRecipientCommand as cmd ->
       StateTransition.registerTransferRecipient state cmd
+
+let initialAccountStateFromEventHistory events =
+   let (CreatedAccount createdEvt) = List.head events
+   create createdEvt
+
+let foldEventsIntoAccount events =
+   List.fold
+      applyEvent
+      (initialAccountStateFromEventHistory events)
+      (List.tail events)

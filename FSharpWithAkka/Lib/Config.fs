@@ -1,6 +1,7 @@
 [<RequireQualifiedAccess>]
 module Config
 
+open System
 open Echo
 open EventStore.Client
 open Microsoft.AspNetCore.SignalR
@@ -45,16 +46,13 @@ let injectDependencies
       saveAndPublish = saveAndPublish esClient
       startChildActors =
          (fun id -> [
-         (*
-            MaintenanceFeeActor.Start
-                AccountAPI.GetAccountEvents esClient
-                //lookBackDate: () => DateTime.UtcNow.AddDays(-30),
-                //scheduledAt: () => TimeSpan.FromDays(30),
-                //lookBackDate: () => DateTime.UtcNow.AddMinutes(-2),
-                //scheduledAt: () => TimeSpan.FromMinutes(2),
-                id
-            )
-            *)
+            MaintenanceFeeActor.start
+               (getAccountEvents esClient)
+               //(fun _ -> DateTime.UtcNow.AddDays -30)
+               //(fun _ -> TimeSpan.FromDays 30)
+               (fun _ -> DateTime.UtcNow.AddMinutes -2)
+               (fun _ -> TimeSpan.FromMinutes 2)
+               id
          ])
       broadcast =
          (fun (event, accountState) ->

@@ -67,7 +67,6 @@ let thirdPartyBankTransfer (evt: BankEvent<DebitedTransfer>) =
 let issueTransferToRecipient (evt: BankEvent<DebitedTransfer>) =
    task {
       let recipient = evt.Data.Recipient
-      printfn "recipient %A" recipient
 
       if
          recipient.AccountEnvironment = RecipientAccountEnvironment.Internal
@@ -80,9 +79,10 @@ let issueTransferToRecipient (evt: BankEvent<DebitedTransfer>) =
                evt.Data.DebitedAmount,
                $"Account ({origin.Substring(origin.Length - 4)})"
             )
+            |> ActorStateChangeCommand.init
          )
          |> ignore
-      *)
+         *)
          ()
       else
          do! thirdPartyBankTransfer (evt)

@@ -44,17 +44,13 @@ let processCommand
 let getAccountEvents (esClient: EventStoreClient) id =
    EventStoreManager.readStream esClient (Account.streamName id) false
 
-let private foldEventsIntoAccount evts =
-   let (CreatedAccount createdEvt) = List.head evts
-   List.fold Account.applyEvent (Account.create createdEvt) (List.tail evts)
-
 let getAccount
    (getAccountEvents: Guid -> AccountEvent list option Task)
    (accountId: Guid)
    =
    task {
       let! evtsOption = getAccountEvents accountId
-      return map foldEventsIntoAccount evtsOption
+      return map Account.foldEventsIntoAccount evtsOption
    }
 
 let softDeleteEvents (client: EventStoreClient) (accountId: Guid) =

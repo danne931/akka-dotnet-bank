@@ -13,11 +13,6 @@ open Lib.Types
 
 let private PID (id: Guid) = $"accounts_{id}"
 
-type private ActorCommand =
-   | StartChildrenCommand of Guid
-   | LookupCommand of Guid
-   | StateChangeCommand of Command
-
 type AccountRegistry = {
    loadAccount: Guid -> Account.AccountState option Task
    saveAndPublish: OpenEventEnvelope -> unit Task
@@ -28,8 +23,7 @@ type AccountRegistry = {
 
 let syncStateChange (cmd: Command) =
    let pid = "@" + PID cmd.EntityId
-   tell (pid, cmd |> StateChangeCommand) |> ignore
-   ()
+   tell (pid, ActorStateChangeCommand.init cmd) |> ignore
 
 let delete (id: Guid) =
    let pid = "@" + PID id

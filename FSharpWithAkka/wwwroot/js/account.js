@@ -165,7 +165,7 @@ function eventToTransactionString (evt) {
       return `Debit card unlocked on ${evt.timestamp}`
     case 'DebitedTransfer':
       return `$${evt.debitedAmount} transferred to ${evt.recipient.firstName} ${evt.recipient.lastName} on ${evt.timestamp}`
-    case 'RegisteredInternalTransferRecipient':
+    case 'InternalTransferRecipient':
       return `Registered transfer recipient ${evt.firstName} ${evt.lastName} on ${evt.timestamp}`
     default:
       return 'Unknown event'
