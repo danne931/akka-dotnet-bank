@@ -9,8 +9,16 @@ open Lib.Types
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 
+let private mergeJsonOptions (options: JsonSerializerOptions) =
+   options.Converters.Add(JsonStringEnumConverter())
+   options.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
+
 let jsonOptions = JsonFSharpOptions.Default().ToJsonSerializerOptions()
-jsonOptions.Converters.Add(JsonStringEnumConverter())
+mergeJsonOptions jsonOptions
+
+let withInjectedOptions opts =
+   mergeJsonOptions opts
+   JsonFSharpOptions.Default().AddToJsonSerializerOptions opts
 
 let private eventTypeMapping =
    Map [

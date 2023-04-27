@@ -24,6 +24,13 @@ module private Path =
 
 let startAccountRoutes (app: WebApplication) (esClient: EventStoreClient) =
    app.MapGet(
+      Path.Base,
+      Func<Task<IResult>>(fun _ ->
+         getAccountCreationEvents esClient |> RouteUtil.UnwrapOption)
+   )
+   |> ignore
+
+   app.MapGet(
       Path.Account,
       Func<Guid, Task<IResult>>(fun id ->
          getAccount (getAccountEvents esClient) id |> RouteUtil.UnwrapOption)

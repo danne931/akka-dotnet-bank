@@ -16,6 +16,7 @@ connection.on('ReceiveError', function (err) {
 })
 
 connection.on('ReceiveMessage', function ({ newState, event }) {
+  event = serverToClientEventMapping(event)
   renderAccountState(newState)
   renderEventIntoListView(event)
   if (event.name === 'RegisteredInternalTransferRecipient') {
@@ -34,7 +35,7 @@ connection
     return res.json()
   })
   .then(accounts => {
-    state.accounts = accounts
+    state.accounts = accounts = accounts.map(serverToClientEventMapping)
     renderAccountsList(accounts)
     return accountSelected(accounts[0].entityId)
   })
@@ -58,7 +59,7 @@ function accountSelected (accountId) {
       renderAccountState(account)
       interpolateTransferRecipientSelection(account)
       state.transferRecipients = account.transferRecipients
-      renderEventsIntoListView(events.reverse())
+      renderEventsIntoListView(events.map(serverToClientEventMapping).reverse())
     })
 }
 
@@ -115,8 +116,7 @@ function renderAccountState (account) {
     .getElementById('account-daily-debit-accrued')
     .textContent = account.dailyDebitAccrued
   document.getElementById('account-debit-card-lock').checked =
-    // TODO: Send string to client instead of enum
-    account.status === 1
+    account.status === 'ActiveWithLockedCard'
 }
 
 function interpolateTransferRecipientSelection (account) {
@@ -266,4 +266,13 @@ function notifyError (err) {
   const errMsg = err.toString()
   console.error(errMsg)
   alert(errMsg)
+}
+
+function serverToClientEventMapping (evt) {
+  return {
+    name: evt.Case,
+    entityId: evt.Fields[0].entityId,
+    timestamp: evt.Fields[0].timestamp,
+    ...evt.Fields[0].data
+  }
 }

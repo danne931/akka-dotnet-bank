@@ -5,10 +5,14 @@ open System.Threading.Tasks
 
 open BankTypes
 
-type StateTransitionMessage = AccountEvent * Account.AccountState
-
 type IAccountClient =
-   abstract member ReceiveMessage: StateTransitionMessage -> Task
+   abstract member ReceiveMessage:
+      {|
+         event: AccountEvent
+         newState: Account.AccountState
+      |} ->
+         Task
+
    abstract member ReceiveError: string -> Task
 
 type AccountHub() =

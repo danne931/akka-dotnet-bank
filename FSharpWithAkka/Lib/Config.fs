@@ -7,9 +7,6 @@ open Microsoft.AspNetCore.SignalR
 open Microsoft.AspNetCore.Builder
 open Microsoft.Extensions.DependencyInjection
 
-open Lib.Types
-open Bank.Transfer.Domain
-open Bank.Account.Domain
 open Bank.Account.Api
 open Bank.Hubs
 open type AccountActor.AccountRegistry
@@ -23,11 +20,21 @@ let startActorModel () =
       .Subscribe(fun i -> printfn "Dead Process: %A" i)
    |> ignore
 
-   ()
+let startSignalR (builder: WebApplicationBuilder) =
+   builder.Services
+      .AddSignalR()
+      .AddJsonProtocol(fun opts ->
+         Serialization.withInjectedOptions opts.PayloadSerializerOptions)
+   |> ignore
 
 let startEventStore (builder: WebApplicationBuilder) =
-   EventStoreManager.connect
-      "esdb://127.0.0.1:2113?tls=false&keepAliveTimeout=10000&keepAliveInterval=10000" // builder.Configuration.GetConnectionString "EventStore"
+   let connString =
+      builder.Configuration.GetSection("ConnectionStrings").Item "EventStore"
+
+   if isNull connString then
+      failwith "EventStore connection string not found in appsettings"
+
+   EventStoreManager.connect connString
 
 let injectDependencies
    (builder: WebApplicationBuilder)
@@ -54,7 +61,12 @@ let injectDependencies
             provider
                .GetRequiredService<IHubContext<AccountHub, IAccountClient>>()
                .Clients.Group(accountState.EntityId.ToString())
-               .ReceiveMessage((event, accountState)))
+               .ReceiveMessage(
+                  {|
+                     event = event
+                     newState = accountState
+                  |}
+               ))
       broadcastError =
          (fun errMsg ->
             provider

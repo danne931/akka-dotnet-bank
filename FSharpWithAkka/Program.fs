@@ -1,5 +1,4 @@
 open Microsoft.AspNetCore.Builder
-open Microsoft.Extensions.DependencyInjection
 open Echo
 
 open Bank.Account.Routes
@@ -8,7 +7,7 @@ open Bank.Hubs
 
 let builder = WebApplication.CreateBuilder()
 
-builder.Services.AddSignalR() |> ignore
+Config.startSignalR builder
 
 Config.startActorModel ()
 let es = Config.startEventStore builder
@@ -19,6 +18,7 @@ let app = builder.Build()
 
 app.UseDefaultFiles() |> ignore
 app.UseStaticFiles() |> ignore
+
 app.MapHub<AccountHub>("/accountHub") |> ignore
 
 startTransferRoutes app es
