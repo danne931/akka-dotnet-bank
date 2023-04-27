@@ -12,11 +12,11 @@
     <Compile Include="Account/Domain/Events.fs" />
     <Compile Include="Lib/BankTypes.fs" />
     <Compile Include="Account/Domain/Account.fs" />
-    <Compile Include="Account/Domain/MaintenanceFee.fs" />
+    <Compile Include="MaintenanceFee/Domain/MaintenanceFee.fs" />
     <Compile Include="Account/Hub.fs" />
     <Compile Include="Lib/Serialization.fs" />
     <Compile Include="Lib/Persistence/EventStore.fs" />
-    <Compile Include="Account/MaintenanceFeeActor.fs" />
+    <Compile Include="MaintenanceFee/MaintenanceFeeActor.fs" />
     <Compile Include="Account/AccountActor.fs" />
     <Compile Include="Account/Domain/Validators.fs" /> 
     <Compile Include="Transfer/Api.fs" />

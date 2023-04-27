@@ -4,11 +4,12 @@ module MaintenanceFeeActor
 open type Echo.Process
 open System
 open System.Threading.Tasks
+open Microsoft.FSharp.Core.Option
 
 open Lib.Types
 open BankTypes
 open Bank.Account.Domain
-open Microsoft.FSharp.Core.Option
+open MaintenanceFee
 
 let private canIssueMaintenanceFee
    (getAccountEvents: Guid -> AccountEvent List Option Task)
@@ -19,7 +20,7 @@ let private canIssueMaintenanceFee
 
    eventsOpt
    |> Option.bind (fun events ->
-      let res = MaintenanceFee.computeFeeCriteria lookBackDate events
+      let res = computeFeeCriteria lookBackDate events
 
       if res.depositCriteria || res.balanceCriteria then
          printfn
@@ -50,7 +51,7 @@ let start
                   DebitCommand(
                      accountId,
                      DateTime.UtcNow,
-                     MaintenanceFee.Constants.Fee,
+                     Constants.Fee,
                      Account.Constants.DebitOriginMaintenanceFee,
                      "Monthly Maintenance Fee"
                   )
