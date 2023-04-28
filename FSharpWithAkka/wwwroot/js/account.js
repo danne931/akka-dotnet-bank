@@ -19,7 +19,7 @@ connection.on('ReceiveMessage', function ({ newState, event }) {
   event = serverToClientEventMapping(event)
   renderAccountState(newState)
   renderEventIntoListView(event)
-  if (event.name === 'RegisteredInternalTransferRecipient') {
+  if (event.name === 'InternalTransferRecipient') {
     interpolateTransferRecipientSelection(newState)
     state.transferRecipients = newState.transferRecipients
   }
@@ -220,6 +220,7 @@ listenForFormSubmit(
   formData => ({
     entityId: state.selectedAccountId,
     amount: formData.get('account-transfer-amount'),
+    date: new Date(),
     recipient: getTransferRecipient(
       formData.get('account-transfer-recipient-id')
     )

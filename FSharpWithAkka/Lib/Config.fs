@@ -12,6 +12,11 @@ open Bank.Account.Api
 open Bank.Hubs
 open type AccountActor.AccountRegistry
 
+let enableDefaultHttpJsonSerialization (builder: WebApplicationBuilder) =
+   builder.Services.ConfigureHttpJsonOptions(fun opts ->
+      Serialization.mergeDefaultJsonOptions opts.SerializerOptions
+      ())
+
 let startActorModel () =
    ProcessConfig.initialise () |> ignore
 

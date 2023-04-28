@@ -7,6 +7,8 @@ open Bank.Hubs
 
 let builder = WebApplication.CreateBuilder()
 
+Config.enableDefaultHttpJsonSerialization builder
+
 Config.startSignalR builder
 
 Config.startActorModel ()

@@ -71,10 +71,11 @@ let issueTransferToRecipient (evt: BankEvent<DebitedTransfer>) =
       if
          recipient.AccountEnvironment = RecipientAccountEnvironment.Internal
       then
-         (*
          let origin = evt.EntityId.ToString()
+
          tell (
-            $"@accounts_{recipient.Identification}", DepositCashCommand(
+            $"@accounts_{recipient.Identification}",
+            DepositCashCommand(
                Guid recipient.Identification,
                evt.Data.DebitedAmount,
                $"Account ({origin.Substring(origin.Length - 4)})"
@@ -82,8 +83,6 @@ let issueTransferToRecipient (evt: BankEvent<DebitedTransfer>) =
             |> ActorStateChangeCommand.init
          )
          |> ignore
-         *)
-         ()
       else
          do! thirdPartyBankTransfer (evt)
    }
