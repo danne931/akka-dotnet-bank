@@ -2,7 +2,8 @@
 module Config
 
 open System
-open Echo
+open Akka.Event
+open Akka.FSharp
 open EventStore.Client
 open Microsoft.AspNetCore.SignalR
 open Microsoft.AspNetCore.Builder
@@ -16,15 +17,20 @@ let enableDefaultHttpJsonSerialization (builder: WebApplicationBuilder) =
    builder.Services.ConfigureHttpJsonOptions(fun opts ->
       Serialization.mergeDefaultJsonOptions opts.SerializerOptions
       ())
+   |> ignore
 
 let startActorModel () =
-   ProcessConfig.initialise () |> ignore
+   let system = System.create "bank" (Configuration.load ())
 
-   Process
-      .DeadLetters()
-      .Observe<DeadLetter>()
-      .Subscribe(fun i -> printfn "Dead Process: %A" i)
-   |> ignore
+   let monitorActor =
+      spawn
+         system
+         "deadletters"
+         (actorOf (fun i -> printfn "Dead Process: %A" i))
+
+   system.EventStream.Subscribe(monitorActor, typeof<AllDeadLetters>) |> ignore
+   system
+
 
 let startSignalR (builder: WebApplicationBuilder) =
    builder.Services
@@ -45,18 +51,21 @@ let startEventStore (builder: WebApplicationBuilder) =
 let injectDependencies
    (builder: WebApplicationBuilder)
    (esClient: EventStoreClient)
+   (actorSystem: Akka.Actor.ActorSystem)
    =
    builder.Services.AddSingleton<AccountActor.AccountRegistry>(fun provider -> {
+      system = actorSystem
       loadAccount = getAccount (getAccountEvents esClient)
       saveAndPublish = saveAndPublish esClient
       startChildActors =
-         (fun id -> [
+         (fun mailbox id -> [
             MaintenanceFeeActor.start
                (getAccountEvents esClient)
                //(fun _ -> DateTime.UtcNow.AddDays -30)
                //(fun _ -> TimeSpan.FromDays 30)
                (fun _ -> DateTime.UtcNow.AddMinutes -2)
                (fun _ -> TimeSpan.FromMinutes 2)
+               mailbox
                id
          ])
       broadcast =

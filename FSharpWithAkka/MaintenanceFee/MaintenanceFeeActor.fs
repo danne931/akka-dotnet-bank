@@ -1,10 +1,10 @@
 [<RequireQualifiedAccess>]
 module MaintenanceFeeActor
 
-open type Echo.Process
 open System
 open System.Threading.Tasks
 open Microsoft.FSharp.Core.Option
+open Akkling
 
 open Lib.Types
 open BankTypes
@@ -37,31 +37,33 @@ let start
    (getAccountEvents: Guid -> AccountEvent List Option Task)
    (lookBackDate: _ -> DateTime)
    (scheduledAt: _ -> TimeSpan)
+   (mailbox: Actor<_>)
    (accountId: Guid)
    =
-   let pid =
-      spawn<Guid> (
-         "monthly_maintenance_fee",
-         (fun id ->
-            let criteriaMet =
-               canIssueMaintenanceFee getAccountEvents (lookBackDate ()) id
+   let handler (ctx: Actor<Guid>) id =
+      let criteriaMet =
+         canIssueMaintenanceFee getAccountEvents (lookBackDate ()) id
 
-            if isSome criteriaMet then
-               tellParent (
-                  DebitCommand(
-                     accountId,
-                     DateTime.UtcNow,
-                     Constants.Fee,
-                     Account.Constants.DebitOriginMaintenanceFee,
-                     "Monthly Maintenance Fee"
-                  )
-                  |> ActorStateChangeCommand.init
-               )
-               |> ignore
+      if isSome criteriaMet then
+         ctx.Parent()
+         <! (DebitCommand(
+                accountId,
+                DateTime.UtcNow,
+                Constants.Fee,
+                Account.Constants.DebitOriginMaintenanceFee,
+                "Monthly Maintenance Fee"
+             )
+             |> ActorStateChangeCommand.init)
 
-            // Schedule the next maintenance fee check
-            tellSelf (accountId, scheduledAt ()) |> ignore)
-      )
+      ignored ()
 
-   tell (pid, accountId, scheduledAt ()) |> ignore
-   pid
+   let aref = spawn mailbox "monthly_maintenance_fee" (props (actorOf2 handler))
+
+   mailbox.System.Scheduler.ScheduleTellRepeatedly(
+      TimeSpan.FromMilliseconds 0,
+      scheduledAt (),
+      aref,
+      accountId
+   )
+
+   aref

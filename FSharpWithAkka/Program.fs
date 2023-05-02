@@ -1,5 +1,4 @@
 open Microsoft.AspNetCore.Builder
-open Echo
 
 open Bank.Account.Routes
 open Bank.Transfer.Routes
@@ -11,10 +10,10 @@ Config.enableDefaultHttpJsonSerialization builder
 
 Config.startSignalR builder
 
-Config.startActorModel ()
+let actorSystem = Config.startActorModel ()
 let es = Config.startEventStore builder
 
-Config.injectDependencies builder es
+Config.injectDependencies builder es actorSystem
 
 let app = builder.Build()
 

@@ -1,10 +1,14 @@
 module ActorUtil
 
-open type Echo.Process
+open System
+open Akkling
 
-let isAlive pid =
-   try
-      exists pid
-   with ex when true ->
-      printfn "Echo.Process.exists exception: %A %A" pid ex.Message
-      false
+let getActorRef actorCtx path =
+   task {
+      try
+         let! aref = (select actorCtx path).ResolveOne(TimeSpan.FromSeconds 3)
+         return Some aref
+      with ex when true ->
+         printfn "ActorNotFoundException: %A %A" path ex
+         return None
+   }

@@ -30,7 +30,9 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Echo.Process" Version="2.2.0-beta" />
+    <PackageReference Include="Akka" Version="1.5.4" />
+    <PackageReference Include="Akka.FSharp" Version="1.5.4" />
+    <PackageReference Include="Akkling" Version="0.13.0" />
     <PackageReference Include="EventStore.Client.Grpc.Streams" Version="23.0.0" />
     <PackageReference Include="FSharp.Control.TaskSeq" Version="0.3.0" />
     <PackageReference Include="FSharp.SystemTextJson" Version="1.1.23" />

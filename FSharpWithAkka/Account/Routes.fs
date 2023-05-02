@@ -59,8 +59,8 @@ let startAccountRoutes (app: WebApplication) (esClient: EventStoreClient) =
 
    app.MapDelete(
       Path.AccountEvents,
-      Func<Guid, Task<IResult>>(fun id ->
-         softDeleteEvents esClient id |> RouteUtil.Unwrap)
+      Func<AccountActor.AccountRegistry, Guid, Task<IResult>>(fun registry id ->
+         softDeleteEvents esClient registry id |> RouteUtil.Unwrap)
    )
    |> ignore
 

@@ -3,75 +3,76 @@ module AccountActor
 
 open System
 open System.Threading.Tasks
-open Echo
-open type Echo.Process
 open Microsoft.FSharp.Core.Option
 open FSharp.Control
+open Akka.Actor
+open Akkling
 
 open BankTypes
 open Lib.Types
+open ActorUtil
 
-let private PID (id: Guid) = $"accounts_{id}"
+let actorName (id: Guid) = $"accounts_{id}"
+let PID (id: Guid) = $"akka://bank/user/{actorName id}"
 
-type AccountRegistry = {
-   loadAccount: Guid -> Account.AccountState option Task
-   saveAndPublish: OpenEventEnvelope -> unit Task
-   startChildActors: Guid -> ProcessId list
-   broadcast: AccountEvent * Account.AccountState -> Task
-   broadcastError: string -> Task
-}
+type AccountRegistry =
+   {
+      loadAccount: Guid -> Account.AccountState option Task
+      saveAndPublish: Actor<ActorCommand> -> OpenEventEnvelope -> unit Task
+      startChildActors: Actor<ActorCommand> -> Guid -> IActorRef<Guid> list
+      broadcast: AccountEvent * Account.AccountState -> Task
+      broadcastError: string -> Task
+      system: ActorSystem
+   }
 
-let syncStateChange (cmd: Command) =
-   let pid = "@" + PID cmd.EntityId
-   tell (pid, ActorStateChangeCommand.init cmd) |> ignore
+   member x.delete(id: Guid) =
+      let aref = select x.system (PID id)
+      stop aref |> ignore
 
-let delete (id: Guid) =
-   let pid = "@" + PID id
-   kill pid |> ignore
-   printfn "Killed process %A" pid
-   ()
+   member x.syncStateChange(cmd: Command) =
+      let ref = select x.system (PID cmd.EntityId)
+      ref <! ActorStateChangeCommand.init cmd
 
-let start
-   (initialState: Account.AccountState)
-   (registry: AccountRegistry)
-   : ProcessId
-   =
-   let pid =
-      spawn<Account.AccountState, ActorCommand> (
-         PID initialState.EntityId,
-         (fun () -> initialState),
-         (fun (account: Account.AccountState) (command: ActorCommand) ->
-            match command with
-            | StartChildrenCommand id ->
-               let pids = registry.startChildActors id
-               printfn "AccountActor: Started child actors %A" pids
-               account
-            | LookupCommand _ ->
-               reply account |> ignore
-               account
-            | StateChangeCommand cmd ->
-               let validation = Account.stateTransition account cmd
+let start (initialState: Account.AccountState) (registry: AccountRegistry) =
+   let rec handler
+      (account: Account.AccountState)
+      (mailbox: Actor<ActorCommand>)
+      =
+      function
+      | StartChildrenCommand(id: Guid) ->
+         let refs = registry.startChildActors mailbox id
+         printfn "AccountActor: Started child actors %A" refs
+         ignored ()
+      | LookupCommand _ ->
+         mailbox.Sender() <! account
+         ignored ()
+      | StateChangeCommand cmd ->
+         let validation = Account.stateTransition account cmd
 
-               match validation with
-               | Error(err) ->
-                  registry.broadcastError err |> ignore
-                  printfn "AccountActor: validation fail %A" err
-                  account
-               | Ok((event, newState) as validationResult) ->
-                  try
-                     registry.saveAndPublish(Envelope.unwrap event).Wait()
-                     registry.broadcast validationResult |> ignore
-                  with err when true ->
-                     registry.broadcastError err.Message |> ignore
-                     printfn "%A" err
-                     reraise ()
+         match validation with
+         | Error(err) ->
+            registry.broadcastError err |> ignore
+            printfn "AccountActor: validation fail %A" err
+            become (handler account mailbox)
+         | Ok((event, newState) as validationResult) ->
+            try
+               (registry.saveAndPublish mailbox (Envelope.unwrap event)).Wait()
+               registry.broadcast validationResult |> ignore
+            with err when true ->
+               registry.broadcastError err.Message |> ignore
+               printfn "%A" err
+               reraise ()
 
-                  newState)
-      )
+            become (handler newState mailbox)
 
-   register (pid.Name, pid) |> ignore
-   tell (pid, StartChildrenCommand initialState.EntityId) |> ignore
-   pid
+   let aref =
+      spawn
+         registry.system
+         (actorName initialState.EntityId)
+         (initialState |> handler |> actorOf2 |> props)
+
+   aref <! StartChildrenCommand initialState.EntityId
+   aref
 
 let lookup
    (registry: AccountRegistry)
@@ -79,17 +80,17 @@ let lookup
    : Account.AccountState option Task
    =
    task {
-      let pid = "@" + PID id
+      let! aref = getActorRef registry.system (PID id)
 
-      if ActorUtil.isAlive pid then
-         let account = ask<Account.AccountState> (pid, (LookupCommand id))
+      if isSome aref then
+         let! account = aref.Value <? (LookupCommand id)
          return Some account
       else
          let! accountOpt = registry.loadAccount id
 
-         if isSome accountOpt then
-            start accountOpt.Value registry |> ignore
-            return accountOpt
-         else
-            return None
+         return
+            accountOpt
+            |> Option.map (fun acct ->
+               start acct registry |> ignore
+               acct)
    }
