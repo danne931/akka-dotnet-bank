@@ -24,9 +24,6 @@ let processCommand
 
       let getAccountVal (cmd: Command) =
          AccountActor.lookup registry cmd.EntityId
-      //|> Option.bind (fun opt ->
-      //      Option.)
-      //opt.ToValidation(Error "UnknownAccountId(cmd.EntityId)"))
 
       if Result.isError validation then
          return validation

@@ -6,7 +6,6 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
 open EventStore.Client
 
-open BankTypes
 open Lib.Types
 open Bank.Account.Domain
 open Bank.Account.Api
