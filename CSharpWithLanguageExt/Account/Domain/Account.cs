@@ -1,6 +1,6 @@
 using LanguageExt;
-using static LanguageExt.Prelude;
 
+using Time = Lib.Time;
 using Lib.Types;
 using Bank.Transfer.Domain;
 
@@ -75,22 +75,16 @@ public static class Account {
    public static Decimal DailyDebitAccrued(AccountState state, DebitedAccount evt) {
       // When accumulating events into AccountState aggregate...
       // -> Ignore debits older than a day
-      if (!IsToday(evt.Timestamp)) return 0;
+      if (!Time.IsToday(evt.Timestamp)) return 0;
 
-      if (CanBypassDailyDebitAccrual(evt)) return state.DailyDebitAccrued;
+      if (evt.Origin == MonthlyMaintenanceFee.Origin) return state.DailyDebitAccrued;
 
       // When applying a new event to the cached AccountState & the
       // last debit event did not occur today...
       // -> Ignore the cached DailyDebitAccrued
-      if (!IsToday(state.LastDebitDate)) return evt.DebitedAmount;
+      if (!Time.IsToday(state.LastDebitDate)) return evt.DebitedAmount;
 
       return state.DailyDebitAccrued + evt.DebitedAmount;
-   }
-
-   public static bool IsToday(DateTime debitDate) {
-      var today = DateTime.UtcNow;
-      return ($"{today.Day}-{today.Month}-{today.Year}" ==
-              $"{debitDate.Day}-{debitDate.Month}-{debitDate.Year}");
    }
 
    public static StateTransitionResult StateTransition(
@@ -139,7 +133,9 @@ public static class Account {
          return Errors.InsufficientBalance;
 
       if (state.DailyDebitLimit != -1 &&
-         IsToday(cmd.Timestamp) &&
+         // Maintenance fee does not count toward daily debit accrual
+         cmd.Origin != MonthlyMaintenanceFee.Origin &&
+         Time.IsToday(cmd.Timestamp) &&
          state.DailyDebitAccrued + cmd.Amount > state.DailyDebitLimit
       ) {
          return Errors.ExceededDailyDebitLimit(state.DailyDebitLimit);
@@ -214,15 +210,11 @@ public static class Account {
       );
 
    public static class MonthlyMaintenanceFee {
-      public const string Origin = $"actor:maintenance_fee";
+      public const string Origin = "actor:maintenance_fee";
       public const decimal Amount = 5;
       public const decimal DailyBalanceThreshold = 1500;
       public const decimal QualifyingDeposit = 250;
    }
-
-   public static bool CanBypassDailyDebitAccrual
-      (DebitedAccount evt) =>
-         List(MonthlyMaintenanceFee.Origin).Contains(evt.Origin);
 }
 
 public sealed record AccountState(

@@ -158,7 +158,7 @@ function eventToTransactionString (evt) {
     case 'DebitedAccount':
       return `$${evt.debitedAmount} debited by ${evt.origin} on ${evt.timestamp}`
     case 'DailyDebitLimitUpdated':
-      return `Daily debit limit updated to ${evt.debitLimit} on ${evt.timestamp}`
+      return `Daily debit limit updated to $${evt.debitLimit} on ${evt.timestamp}`
     case 'LockedCard':
       return `Debit card locked on ${evt.timestamp}`
     case 'UnlockedCard':

@@ -7,6 +7,7 @@ open BankTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Lib.Types
+open Lib.Time
 
 let streamName (id: Guid) = "accounts_" + id.ToString()
 
@@ -34,11 +35,6 @@ type AccountState =
 
 module Constants =
    let DebitOriginMaintenanceFee = "actor:maintenance_fee"
-
-// Move to lib folder
-let IsToday (debitDate: DateTime) =
-   let today = DateTime.UtcNow
-   $"{today.Day}-{today.Month}-{today.Year}" = $"{debitDate.Day}-{debitDate.Month}-{debitDate.Year}"
 
 let DailyDebitAccrued state (evt: BankEvent<DebitedAccount>) : decimal =
    // When accumulating events into AccountState aggregate...
@@ -167,6 +163,8 @@ module private StateTransition =
          Error "InsufficientBalance"
       elif
          state.DailyDebitLimit <> -1
+         // Maintenance fee does not count toward daily debit accrual
+         && cmd.Origin <> Constants.DebitOriginMaintenanceFee
          && IsToday cmd.Timestamp
          && state.DailyDebitAccrued + cmd.Amount > state.DailyDebitLimit
       then

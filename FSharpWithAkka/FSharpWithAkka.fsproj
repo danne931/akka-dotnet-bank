@@ -3,6 +3,7 @@
     <TargetFramework>net7.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Lib/Time.fs" />
     <Compile Include="Lib/Types.fs" />
     <Compile Include="Lib/Actor.fs" />
     <Compile Include="Transfer/Domain/Transfer.fs" />
