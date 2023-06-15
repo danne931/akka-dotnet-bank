@@ -34,7 +34,7 @@ public static class MaintenanceFee {
                return acc;
             }
 
-            // Account balance must meet the balance threshold every day
+            // Account balance must meet the balance threshold EVERY day
             // for the last month in order to skip the monthly fee.
             if (acc.account.Balance < DailyBalanceThreshold)
                acc.balanceCriteria = false;

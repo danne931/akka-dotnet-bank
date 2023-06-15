@@ -125,6 +125,7 @@ let applyEvent (state: AccountState) (evt: AccountEvent) =
                )
             )
      }
+   | _ -> state
 
 module private StateTransition =
    let deposit state (cmd: DepositCashCommand) =

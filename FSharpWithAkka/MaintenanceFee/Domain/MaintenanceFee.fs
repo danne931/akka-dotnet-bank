@@ -34,10 +34,11 @@ let computeFeeCriteria (lookback: DateTime) (events: AccountEvent list) =
 
             acc
          else
-            // Account balance must meet the balance threshold every day
+            // Account balance must meet the balance threshold EVERY day
             // for the last month in order to skip the monthly fee.
-            acc.balanceCriteria <-
-               acc.account.Balance >= Constants.DailyBalanceThreshold
+            match acc.account.Balance < Constants.DailyBalanceThreshold with
+            | true -> acc.balanceCriteria <- false
+            | false -> ()
 
             match event with
             | DepositedCash(e) ->
@@ -47,4 +48,4 @@ let computeFeeCriteria (lookback: DateTime) (events: AccountEvent list) =
 
             acc)
       (initFeeCriteria events)
-      (List.tail events)
+      events
