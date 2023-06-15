@@ -77,7 +77,7 @@ public static class Account {
       // -> Ignore debits older than a day
       if (!Time.IsToday(evt.Timestamp)) return 0;
 
-      if (evt.Origin == MonthlyMaintenanceFee.Origin) return state.DailyDebitAccrued;
+      if (evt.Origin == Constants.DebitOriginMaintenanceFee) return state.DailyDebitAccrued;
 
       // When applying a new event to the cached AccountState & the
       // last debit event did not occur today...
@@ -134,7 +134,7 @@ public static class Account {
 
       if (state.DailyDebitLimit != -1 &&
          // Maintenance fee does not count toward daily debit accrual
-         cmd.Origin != MonthlyMaintenanceFee.Origin &&
+         cmd.Origin != Constants.DebitOriginMaintenanceFee &&
          Time.IsToday(cmd.Timestamp) &&
          state.DailyDebitAccrued + cmd.Amount > state.DailyDebitLimit
       ) {
@@ -209,11 +209,8 @@ public static class Account {
          Balance: evt.Balance
       );
 
-   public static class MonthlyMaintenanceFee {
-      public const string Origin = "actor:maintenance_fee";
-      public const decimal Amount = 5;
-      public const decimal DailyBalanceThreshold = 1500;
-      public const decimal QualifyingDeposit = 250;
+   public static class Constants {
+      public const string DebitOriginMaintenanceFee = "actor:maintenance_fee";
    }
 }
 
