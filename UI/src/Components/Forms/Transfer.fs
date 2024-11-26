@@ -144,7 +144,7 @@ let formInternalCrossOrg
    let internalCrossOrgOptions =
       orgs
       |> List.choose (fun org ->
-         org.Permissions.SocialTransferDiscoveryPrimaryAccountId
+         org.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId
          |> Option.map (fun id -> string id, org.Name))
       |> List.sortBy snd
 
@@ -175,7 +175,7 @@ let formInternalCrossOrg
       let org =
          orgs
          |> List.find (fun o ->
-            string o.Permissions.SocialTransferDiscoveryPrimaryAccountId = selectedId)
+            string o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId = selectedId)
 
       let transfer: InternalTransferInput = {
          ScheduledDateSeedOverride = None
@@ -287,6 +287,7 @@ let formDomestic
          then
             DomesticTransferCommand.create
                account.CompositeId
+               (Guid.NewGuid() |> CorrelationId)
                initiatedBy
                transfer
             |> AccountCommand.DomesticTransfer
@@ -372,7 +373,7 @@ let TransferFormComponent
                      orgs
                      |> List.head
                      |> (fun o ->
-                        o.Permissions.SocialTransferDiscoveryPrimaryAccountId)
+                        o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId)
                      |> Option.map (fun accountId -> {
                         initValues with
                            RecipientId = string accountId

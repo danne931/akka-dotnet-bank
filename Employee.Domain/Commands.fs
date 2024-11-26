@@ -5,6 +5,7 @@ open System
 
 open Lib.SharedTypes
 open Lib.Validators
+open Bank.Transfer.Domain
 
 type CreateAccountOwnerInput = {
    Email: string
@@ -50,7 +51,7 @@ type CreateEmployeeInput = {
    LastName: string
    OrgId: OrgId
    Role: Role
-   OrgRequiresEmployeeInviteApproval: bool
+   OrgRequiresEmployeeInviteApproval: CommandApprovalRuleId option
    CardInfo: EmployeeInviteSupplementaryCardInfo option
 }
 
@@ -96,10 +97,7 @@ module CreateEmployeeCommand =
             }
       }
 
-type RefreshInvitationTokenInput = {
-   OrgRequiresEmployeeInviteApproval: bool
-   Reason: string option
-}
+type RefreshInvitationTokenInput = { Reason: string option }
 
 type RefreshInvitationTokenCommand = Command<RefreshInvitationTokenInput>
 
@@ -124,8 +122,6 @@ module RefreshInvitationTokenCommand =
          cmd
          {
             InviteToken = InviteToken.generate ()
-            OrgRequiresEmployeeInviteApproval =
-               cmd.Data.OrgRequiresEmployeeInviteApproval
             Reason = cmd.Data.Reason
          }
       |> Ok
@@ -283,6 +279,69 @@ module DeclineDebitCommand =
       : ValidationResult<BankEvent<DebitDeclined>>
       =
       BankEvent.create<DebitDeclined> cmd |> Ok
+
+type RequestDomesticTransferCommand = Command<DomesticTransferInput>
+
+module RequestDomesticTransferCommand =
+   let create
+      (employeeId: EmployeeId, orgId: OrgId)
+      (data: DomesticTransferInput)
+      =
+      Command.create
+         (EmployeeId.toEntityId employeeId)
+         orgId
+         (CorrelationId.create ())
+         (InitiatedById employeeId)
+         data
+
+   let toEvent
+      (cmd: RequestDomesticTransferCommand)
+      : ValidationResult<BankEvent<DomesticTransferRequested>>
+      =
+      BankEvent.create2<DomesticTransferInput, DomesticTransferRequested> cmd {
+         Info = cmd.Data
+      }
+      |> Ok
+
+type ConfirmDomesticTransferCommand = Command<DomesticTransferConfirmed>
+
+module ConfirmDomesticTransferCommand =
+   let create
+      (employeeId: EmployeeId, orgId: OrgId)
+      (data: DomesticTransferConfirmed)
+      =
+      Command.create
+         (EmployeeId.toEntityId employeeId)
+         orgId
+         (data.Info.TransferId |> TransferId.get |> CorrelationId)
+         (InitiatedById employeeId)
+         data
+
+   let toEvent
+      (cmd: ConfirmDomesticTransferCommand)
+      : ValidationResult<BankEvent<DomesticTransferConfirmed>>
+      =
+      BankEvent.create<DomesticTransferConfirmed> cmd |> Ok
+
+type DeclineDomesticTransferCommand = Command<DomesticTransferDeclined>
+
+module DeclineDomesticTransferCommand =
+   let create
+      (employeeId: EmployeeId, orgId: OrgId)
+      (data: DomesticTransferDeclined)
+      =
+      Command.create
+         (EmployeeId.toEntityId employeeId)
+         orgId
+         (data.Info.TransferId |> TransferId.get |> CorrelationId)
+         (InitiatedById employeeId)
+         data
+
+   let toEvent
+      (cmd: DeclineDomesticTransferCommand)
+      : ValidationResult<BankEvent<DomesticTransferDeclined>>
+      =
+      BankEvent.create<DomesticTransferDeclined> cmd |> Ok
 
 type LimitDailyDebitsCommand = Command<DailyDebitLimitUpdated>
 
@@ -474,58 +533,6 @@ module ConfirmInvitationCommand =
       =
       Ok <| BankEvent.create<InvitationConfirmed> cmd
 
-type ApproveInvitationInput = {
-   Email: Email
-   Approvers: EmployeeId list
-}
-
-type ApproveInvitationCommand = Command<ApproveInvitationInput>
-
-module ApproveInvitationCommand =
-   let create
-      (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
-      (data: ApproveInvitationInput)
-      =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         (CorrelationId.create ())
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: ApproveInvitationCommand)
-      : ValidationResult<BankEvent<InvitationApproved>>
-      =
-      BankEvent.create2<ApproveInvitationInput, InvitationApproved> cmd {
-         Email = cmd.Data.Email
-         Approvers = cmd.Data.Approvers
-         InviteToken = InviteToken.generate ()
-      }
-      |> Ok
-
-type DenyInvitationCommand = Command<InvitationDenied>
-
-module DenyInvitationCommand =
-   let create
-      (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
-      (data: InvitationDenied)
-      =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         (CorrelationId.create ())
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: DenyInvitationCommand)
-      : ValidationResult<BankEvent<InvitationDenied>>
-      =
-      Ok <| BankEvent.create<InvitationDenied> cmd
-
 type RestoreAccessCommand = Command<AccessRestored>
 
 module RestoreAccessCommand =
@@ -546,3 +553,25 @@ module RestoreAccessCommand =
       : ValidationResult<BankEvent<AccessRestored>>
       =
       Ok <| BankEvent.create<AccessRestored> cmd
+
+type ApproveAccessCommand = Command<AccessApproved>
+
+module ApproveAccessCommand =
+   let create
+      (employeeId: EmployeeId, orgId: OrgId)
+      (initiatedBy: InitiatedById)
+      (correlationId: CorrelationId)
+      (data: AccessApproved)
+      =
+      Command.create
+         (EmployeeId.toEntityId employeeId)
+         orgId
+         correlationId
+         initiatedBy
+         data
+
+   let toEvent
+      (cmd: ApproveAccessCommand)
+      : ValidationResult<BankEvent<AccessApproved>>
+      =
+      Ok <| BankEvent.create<AccessApproved> cmd

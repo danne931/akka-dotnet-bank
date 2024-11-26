@@ -477,6 +477,7 @@ type DomesticTransferCommand = Command<DomesticTransferInput>
 module DomesticTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
+      (correlationId: CorrelationId)
       (initiatedBy: InitiatedById)
       (data: DomesticTransferInput)
       : DomesticTransferCommand
@@ -484,7 +485,7 @@ module DomesticTransferCommand =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
-         (CorrelationId.create ())
+         correlationId
          initiatedBy
          data
 
@@ -568,22 +569,17 @@ module ScheduleDomesticTransferCommand =
       =
       let info = data.BaseInfo
 
-      let cmd =
-         DomesticTransferCommand.create
-            (info.Sender.AccountId, info.Sender.OrgId)
-            info.InitiatedBy
-            {
-               Amount = info.Amount
-               Sender = info.Sender
-               Recipient = info.Recipient
-               Memo = info.Memo
-               ScheduledDateSeedOverride = None
-            }
-
-      {
-         cmd with
-            CorrelationId = info.TransferId |> TransferId.get |> CorrelationId
-      }
+      DomesticTransferCommand.create
+         (info.Sender.AccountId, info.Sender.OrgId)
+         (info.TransferId |> TransferId.get |> CorrelationId)
+         info.InitiatedBy
+         {
+            Amount = info.Amount
+            Sender = info.Sender
+            Recipient = info.Recipient
+            Memo = info.Memo
+            ScheduledDateSeedOverride = None
+         }
 
 type ApproveDomesticTransferCommand = Command<DomesticTransferApproved>
 

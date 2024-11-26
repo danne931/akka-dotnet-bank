@@ -262,18 +262,10 @@ let createOrgs () =
       ])
 
       $"""
-      INSERT into {OrganizationSqlMapper.permissionsTable} (
-         {OrgFields.orgId},
-         {OrgFields.requiresEmployeeInviteApproval}
-      )
-      VALUES (@orgId, @requiresEmployeeInviteApproval);
+      INSERT into {OrganizationSqlMapper.featureFlagsTable} ({OrgFields.orgId})
+      VALUES (@orgId);
       """,
-      orgs
-      |> List.map (fun (orgId, _) -> [
-         "orgId", OrgSqlWriter.orgId orgId
-         "requiresEmployeeInviteApproval",
-         OrgSqlWriter.requiresEmployeeInviteApproval false
-      ])
+      orgs |> List.map (fun (orgId, _) -> [ "orgId", OrgSqlWriter.orgId orgId ])
    ]
 
 let enableOrgSocialTransferDiscovery () =
@@ -284,7 +276,7 @@ let enableOrgSocialTransferDiscovery () =
             unnest(@orgIds) AS org,
             unnest(@accountIds) AS account
       )
-      UPDATE {OrganizationSqlMapper.permissionsTable} op
+      UPDATE {OrganizationSqlMapper.featureFlagsTable} op
       SET {OrgFields.socialTransferDiscoveryAccountId} = u.account
       FROM updates u
       WHERE op.{OrgFields.orgId} = u.org;
@@ -567,7 +559,7 @@ let mockEmployees =
          LastName = "Pongkool"
          OrgId = orgId
          Role = Role.Admin
-         OrgRequiresEmployeeInviteApproval = false
+         OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
       CreateEmployeeCommand.create mockAccountOwnerId {
@@ -576,7 +568,7 @@ let mockEmployees =
          LastName = "Eisenbarger"
          OrgId = orgId
          Role = Role.CardOnly
-         OrgRequiresEmployeeInviteApproval = false
+         OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
       CreateEmployeeCommand.create mockAccountOwnerId {
@@ -585,7 +577,7 @@ let mockEmployees =
          LastName = "Waruntorn"
          OrgId = orgId
          Role = Role.CardOnly
-         OrgRequiresEmployeeInviteApproval = false
+         OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
       CreateEmployeeCommand.create mockAccountOwnerId {
@@ -594,7 +586,7 @@ let mockEmployees =
          LastName = "Zimmer"
          OrgId = orgId
          Role = Role.CardOnly
-         OrgRequiresEmployeeInviteApproval = false
+         OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
       CreateEmployeeCommand.create mockAccountOwnerId {
@@ -603,7 +595,7 @@ let mockEmployees =
          LastName = "Vau"
          OrgId = orgId
          Role = Role.CardOnly
-         OrgRequiresEmployeeInviteApproval = false
+         OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
       CreateEmployeeCommand.create mockAccountOwnerId {
@@ -612,7 +604,7 @@ let mockEmployees =
          LastName = "Adu"
          OrgId = orgId
          Role = Role.CardOnly
-         OrgRequiresEmployeeInviteApproval = false
+         OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
    ]
@@ -652,7 +644,7 @@ let mockEmployeesPendingInviteConfirmation =
          LastName = "Fwasa"
          OrgId = orgId
          Role = Role.Admin
-         OrgRequiresEmployeeInviteApproval = false
+         OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
       CreateEmployeeCommand.create mockAccountOwnerId {
@@ -661,7 +653,7 @@ let mockEmployeesPendingInviteConfirmation =
          LastName = "Meyers"
          OrgId = orgId
          Role = Role.Scholar
-         OrgRequiresEmployeeInviteApproval = false
+         OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
    ]
@@ -974,6 +966,7 @@ let seedAccountOwnerActions
       let transferCmd = {
          DomesticTransferCommand.create
             (account.AccountId, orgId)
+            (Guid.NewGuid() |> CorrelationId)
             mockAccountOwnerId
             {
                ScheduledDateSeedOverride = Some timestamp

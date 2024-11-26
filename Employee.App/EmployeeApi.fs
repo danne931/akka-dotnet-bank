@@ -64,6 +64,18 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
          ConfirmInvitationCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | RestoreAccess cmd ->
          RestoreAccessCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
+      | ConfigureApprovalRule cmd ->
+         CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
+         |> Result.map EmployeeEnvelope.get
+      | AcquireCommandApproval cmd ->
+         CommandApprovalProgress.AcquireCommandApproval.toEvent cmd
+         |> Result.map EmployeeEnvelope.get
+      | DeclineCommandApproval cmd ->
+         CommandApprovalProgress.DeclineCommandApproval.toEvent cmd
+         |> Result.map EmployeeEnvelope.get
+      | RequestDomesticTransfer cmd ->
+         RequestDomesticTransferCommand.toEvent cmd
+         |> Result.map EmployeeEnvelope.get
       | cmd ->
          Error
          <| ValidationErrors.create "" [
@@ -75,7 +87,23 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
    let actorRef =
       EmployeeActor.get system (EmployeeId.fromEntityId res.EntityId)
 
-   actorRef <! EmployeeMessage.StateChange command
+   let msg =
+      match command with
+      | UpdateRole cmd ->
+         EmployeeMessage.ApprovableStateChange(
+            ApprovableCommand.UpdateEmployeeRole cmd
+         )
+      | RequestDomesticTransfer cmd ->
+         EmployeeMessage.ApprovableStateChange(
+            ApprovableCommand.DomesticTransfer cmd
+         )
+      (*
+      | Payment
+      | InternalTransferBetweenOrgs
+      *)
+      | cmd -> EmployeeMessage.StateChange cmd
+
+   actorRef <! msg
    return res
 }
 
@@ -162,7 +190,6 @@ let filtersToEventNames
            | EmployeeEventGroupFilter.Invitation -> [
               typeof<CreatedEmployee>.Name
               typeof<InvitationConfirmed>.Name
-              typeof<InvitationDenied>.Name
               typeof<InvitationCancelled>.Name
              ]
            | EmployeeEventGroupFilter.CardFrozenUnfrozen -> [

@@ -395,6 +395,16 @@ let transactionUIFriendly
             Amount = Some <| Money.format p.Amount
             MoneyFlow = None
       }
+   | AutoTransferRuleConfigured evt -> {
+      props with
+         Name = "Auto Transfer Rule Configured"
+         Info = $"Created auto transfer rule {evt.Data.Config.Info.Display}"
+     }
+   | AutoTransferRuleDeleted _ -> {
+      props with
+         Name = "Auto Transfer Rule Deleted"
+         Info = $"Deleted auto transfer rule"
+     }
    | InternalAutomatedTransferPending evt ->
       let info = evt.Data.BaseInfo
 

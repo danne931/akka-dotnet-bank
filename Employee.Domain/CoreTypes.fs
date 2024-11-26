@@ -113,8 +113,12 @@ module InviteToken =
 [<RequireQualifiedAccess>]
 type EmployeeStatus =
    | InitialEmptyState
+   /// Requires approval from other admins before sending an invite.
    | PendingInviteApproval
+   /// Approval obtained (or no approval rule configured) so employee is ready
+   /// for invite email.
    | PendingInviteConfirmation of InviteToken
+   /// Employee has confirmed their invitation.
    | Active
    | Closed
    | PendingRestoreAccessApproval
@@ -123,8 +127,8 @@ type EmployeeStatus =
    member x.Display =
       match x with
       | InitialEmptyState -> ""
-      | PendingInviteConfirmation _ -> "Pending Invite Confirmation"
       | PendingInviteApproval -> "Pending Invite Approval"
+      | PendingInviteConfirmation _ -> "Pending Invite Confirmation"
       | Active -> "Active"
       | Closed -> "Closed"
       | PendingRestoreAccessApproval -> "Pending Restore Approval"
@@ -278,3 +282,9 @@ module CardQuery =
 
    let accountIdsFromQueryString =
       listFromQueryString (Guid.parseOptional >> Option.map AccountId)
+
+type EmployeeDailyAccrual = {
+   PaymentsPaid: decimal
+   InternalTransferBetweenOrgs: decimal
+   DomesticTransfer: decimal
+}

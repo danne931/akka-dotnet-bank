@@ -126,6 +126,34 @@ module CardId =
       let (CardId id) = cardId
       id
 
+type CommandApprovalRuleId =
+   | CommandApprovalRuleId of Guid
+
+   override x.ToString() = string x.Value
+
+   member x.Value: Guid =
+      let (CommandApprovalRuleId ruleId) = x
+      ruleId
+
+type CommandApprovalProgressId =
+   | CommandApprovalProgressId of CorrelationId
+
+   override x.ToString() = string x.Value
+
+   member x.Value: Guid =
+      let (CommandApprovalProgressId progressId) = x
+      let (CorrelationId id) = progressId
+      id
+
+type CommandEnvelope = {
+   Id: EventId
+   EntityId: EntityId
+   OrgId: OrgId
+   Timestamp: DateTime
+   CorrelationId: CorrelationId
+   InitiatedById: InitiatedById
+}
+
 type Command<'C> = {
    Id: EventId
    EntityId: EntityId
@@ -154,6 +182,15 @@ module Command =
          InitiatedBy = initiatedById
          Data = data
       }
+
+   let envelope (cmd: Command<_>) : CommandEnvelope = {
+      Id = cmd.Id
+      EntityId = cmd.EntityId
+      OrgId = cmd.OrgId
+      Timestamp = cmd.Timestamp
+      CorrelationId = cmd.CorrelationId
+      InitiatedById = cmd.InitiatedBy
+   }
 
 type BankEvent<'E> = {
    Id: EventId

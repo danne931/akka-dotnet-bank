@@ -76,17 +76,6 @@ type Merchant = {
    Alias: string option
 }
 
-type OrgPermissions = {
-   RequiresEmployeeInviteApproval: bool
-   SocialTransferDiscoveryPrimaryAccountId: AccountId option
-}
-
-type Org = {
-   OrgId: OrgId
-   Name: string
-   Permissions: OrgPermissions
-}
-
 [<RequireQualifiedAccess>]
 type MoneyFlow =
    | In
@@ -180,3 +169,13 @@ module TransactionQuery =
       listFromQueryString (
          Guid.parseOptional >> Option.map (EmployeeId >> InitiatedById)
       )
+
+type OrgFeatureFlag = {
+   SocialTransferDiscoveryPrimaryAccountId: AccountId option
+}
+
+type Org = {
+   OrgId: OrgId
+   Name: string
+   FeatureFlags: OrgFeatureFlag
+}

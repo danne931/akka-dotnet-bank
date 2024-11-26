@@ -19,9 +19,10 @@ let GetEmployeeHistory = Access all
 let CreateEmployee = Access [ admin ]
 let UpdateRole = Access [ admin ]
 let DebitRequest = Access [ admin; card ]
-let CancelEmployeeInvitation = Access [ admin ]
-let RestoreEmployeeAccess = Access [ admin ]
+let ManageEmployeeAccess = Access [ admin ]
 let ResendInviteNotification = Access [ admin; scholar ]
+let ConfigureCommandApprovalRule = Access [ admin; scholar ]
+let ManageCommandApprovalProgress = Access [ admin ]
 
 // Card
 let UpdatePurchaseLimit = Access [ admin ]

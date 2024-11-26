@@ -81,7 +81,7 @@ let formPlatformPayment
    let orgPayerOptions =
       orgs
       |> List.choose (fun org ->
-         org.Permissions.SocialTransferDiscoveryPrimaryAccountId
+         org.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId
          |> Option.map (fun _ -> string org.OrgId, org.Name))
       |> List.sortBy snd
 

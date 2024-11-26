@@ -21,14 +21,14 @@ let accountTable = AccountSqlMapper.table
 
 let getAccount (id: AccountId) =
    pgQuerySingle<Account>
-      $"SELECT * FROM {accountTable} 
+      $"SELECT * FROM {accountTable}
         WHERE {Fields.accountId} = @accountId"
       (Some [ "accountId", Writer.accountId id ])
       Reader.account
 
 let getAccountsByIds (accountIds: AccountId list) =
    pgQuery<Account>
-      $"SELECT * FROM {accountTable} 
+      $"SELECT * FROM {accountTable}
         WHERE {Fields.accountId} = ANY(@accountIds)"
       (Some [
          "accountIds",
@@ -105,10 +105,9 @@ let getOrg (id: OrgId) =
       SELECT
          o.{OrgFields.orgId},
          o.{OrgFields.name},
-         op.{OrgFields.requiresEmployeeInviteApproval},
-         op.{OrgFields.socialTransferDiscoveryAccountId}
+         features.{OrgFields.socialTransferDiscoveryAccountId}
       FROM {OrganizationSqlMapper.table} o
-      JOIN {OrganizationSqlMapper.permissionsTable} op using({OrgFields.orgId})
+      JOIN {OrganizationSqlMapper.featureFlagsTable} features using({OrgFields.orgId})
       WHERE {OrgFields.orgId} = @orgId
       """
 
@@ -132,8 +131,7 @@ let getOrgAndAccountProfiles
          $"""
          SELECT
             o.{OrgFields.name},
-            op.{OrgFields.requiresEmployeeInviteApproval},
-            op.{OrgFields.socialTransferDiscoveryAccountId},
+            features.{OrgFields.socialTransferDiscoveryAccountId},
             a.*,
             dta.internal_transfer_accrued as dita,
             dta.domestic_transfer_accrued as dida,
@@ -142,7 +140,7 @@ let getOrgAndAccountProfiles
             {mpaView}.amount_accrued as mpa,
             {dpaView}.amount_accrued as dpa
          FROM {OrganizationSqlMapper.table} o
-         JOIN {OrganizationSqlMapper.permissionsTable} op using({OrgFields.orgId})
+         JOIN {OrganizationSqlMapper.featureFlagsTable} features using({OrgFields.orgId})
          JOIN {accountTable} a using({OrgFields.orgId})
          LEFT JOIN (SELECT * FROM {transferAccrued}(@orgId, 'Day')) dta using({Fields.accountId})
          LEFT JOIN (SELECT * FROM {transferAccrued}(@orgId, 'Month')) mta using({Fields.accountId})
@@ -190,14 +188,13 @@ let searchOrgTransferSocialDiscovery (fromOrgId: OrgId) (nameQuery: string) =
       SELECT
          o.{{OrgFields.orgId}},
          o.{{OrgFields.name}},
-         op.{{OrgFields.requiresEmployeeInviteApproval}},
-         op.{{OrgFields.socialTransferDiscoveryAccountId}}
+         features.{{OrgFields.socialTransferDiscoveryAccountId}}
       FROM {{OrganizationSqlMapper.table}} o
-      JOIN {{OrganizationSqlMapper.permissionsTable}} op using({{OrgFields.orgId}})
-      WHERE 
+      JOIN {{OrganizationSqlMapper.featureFlagsTable}} features using({{OrgFields.orgId}})
+      WHERE
          o.{{OrgFields.orgId}} <> @orgIdToExclude
          AND o.{{OrgFields.name}} %> @nameQuery
-         AND op.{{OrgFields.socialTransferDiscoveryAccountId}} IS NOT NULL
+         AND features.{{OrgFields.socialTransferDiscoveryAccountId}} IS NOT NULL
       ORDER BY o.{{OrgFields.name}} <-> @nameQuery DESC
       """
 
