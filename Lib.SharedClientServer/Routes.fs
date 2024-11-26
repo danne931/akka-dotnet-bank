@@ -99,6 +99,25 @@ module EmployeePath =
    let History = Get + "/history"
    let history (orgId: OrgId) = get orgId + "/history"
 
+   let ConfigureCommandApprovalRule = Base + "/configure-command-approval-rule"
+   let GetCommandApprovalRule = Get + "/command-approval-rule/{commandType}"
+
+   let getCommandApprovalRule (orgId: OrgId) (commandType: string) =
+      get orgId + $"/command-approval-rule/{commandType}"
+
+   let AcquireCommandApproval = Base + "/acquire-command-approval"
+
+   let DeclineCommandApproval = Base + "/decline-command-approval"
+
+   let GetCommandApprovalProgressWithRule =
+      Base + "/command-approval-progress/{employeeId}/{commandType}"
+
+   let getCommandApprovalProgressWithRule
+      (employeeId: EmployeeId)
+      (commandType: string)
+      =
+      Base + $"/command-approval-progress/{employeeId}/{commandType}"
+
 module CardPath =
    let Base = $"{API}/cards"
    let Get = Base + "/{orgId}"

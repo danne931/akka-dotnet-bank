@@ -22,7 +22,11 @@ DROP TABLE IF EXISTS merchant;
 DROP TABLE IF EXISTS ancillarytransactioninfo;
 DROP TABLE IF EXISTS transaction;
 DROP TABLE IF EXISTS card;
-DROP TABLE IF EXISTS org_permissions;
+DROP TABLE IF EXISTS command_approval_progress;
+DROP TABLE IF EXISTS command_approval_rule_amount_daily_limit;
+DROP TABLE IF EXISTS command_approval_rule_amount_per_command;
+DROP TABLE IF EXISTS command_approval_rule;
+DROP TABLE IF EXISTS org_feature_flag;
 DROP TABLE IF EXISTS account;
 DROP TABLE IF EXISTS employee_event;
 DROP TABLE IF EXISTS employee;
@@ -48,6 +52,9 @@ DROP TYPE IF EXISTS domestic_transfer_recipient_status;
 DROP TYPE IF EXISTS domestic_transfer_status;
 DROP TYPE IF EXISTS internal_transfer_status;
 DROP TYPE IF EXISTS transfer_category;
+DROP TYPE IF EXISTS approvable_command;
+DROP TYPE IF EXISTS command_approval_criteria;
+DROP TYPE IF EXISTS command_approval_status;
 
 -- Drop Akka event sourcing tables.
 -- These tables are initiated in Infrastructure/Akka.fs.
@@ -203,22 +210,21 @@ COMMENT ON COLUMN account.last_billing_cycle_at IS
 StartBillingCycleCommand to.';
 
 
---- ORG PERMISSIONS ---
-CREATE TABLE org_permissions (
-   requires_employee_invite_approval BOOLEAN NOT NULL,
+--- ORG FEATURE FLAGS ---
+CREATE TABLE org_feature_flag (
    social_transfer_discovery_account_id UUID REFERENCES account,
    org_id UUID NOT NULL UNIQUE REFERENCES organization,
    id UUID PRIMARY KEY DEFAULT gen_random_uuid()
 );
 
-SELECT add_created_at_column('org_permissions');
-SELECT add_updated_at_column_and_trigger('org_permissions');
+SELECT add_created_at_column('org_feature_flag');
+SELECT add_updated_at_column_and_trigger('org_feature_flag');
 
-CREATE INDEX org_permissions_social_transfer_discovery_account_id_idx
-ON org_permissions (social_transfer_discovery_account_id)
+CREATE INDEX org_feature_flag_social_transfer_discovery_account_id_idx
+ON org_feature_flag (social_transfer_discovery_account_id)
 WHERE social_transfer_discovery_account_id IS NOT NULL;
 
-COMMENT ON COLUMN org_permissions.social_transfer_discovery_account_id IS
+COMMENT ON COLUMN org_feature_flag.social_transfer_discovery_account_id IS
 'An organization can choose to make one of their accounts discoverable by other
 orgs on the platform.  If set, other orgs will be able to search for this organization
 by name/email and then transfer money to the configured "social transfer discovery account"
@@ -712,6 +718,66 @@ TODO:
 This table will be developed more after researching
 Plaid and seeing what data will be necessary for paying by ACH/card.
 This table is currently not in use.';
+
+
+--- APPROVAL RULES ---
+CREATE TYPE approvable_command AS ENUM (
+   'InviteEmployee',
+   'UpdateEmployeeRole',
+   'SendPayment',
+   'SendInternalTransferBetweenOrgs',
+   'SendDomesticTransfer'
+);
+
+CREATE TYPE command_approval_criteria AS ENUM (
+   'AmountDailyLimit',
+   'AmountPerCommand',
+   'PerCommand'
+);
+
+CREATE TYPE command_approval_status AS ENUM ('Pending', 'Approved', 'Declined');
+
+CREATE TABLE command_approval_rule(
+   rule_id UUID PRIMARY KEY,
+   org_id UUID REFERENCES organization,
+   command_type approvable_command NOT NULL,
+   criteria command_approval_criteria NOT NULL,
+   criteria_detail JSONB NOT NULL,
+   permitted_approvers UUID[] NOT NULL,
+
+   -- Ensure only one approval rule exists for (organization, command type)
+   UNIQUE (org_id, command_type)
+);
+
+--- APPROVAL RULES to apply when a daily limit is exceeded ---
+CREATE TABLE command_approval_rule_amount_daily_limit(
+   rule_id UUID PRIMARY KEY REFERENCES command_approval_rule,
+   org_id UUID REFERENCES organization,
+   daily_limit MONEY NOT NULL
+);
+
+
+--- APPROVAL RULES to apply when a transaction amount is within some range ---
+CREATE TABLE command_approval_rule_amount_per_command(
+   rule_id UUID PRIMARY KEY REFERENCES command_approval_rule,
+   org_id UUID REFERENCES organization,
+   lower_bound MONEY,
+   upper_bound MONEY
+);
+-- write pre-check to verify lower bound or upper bound has been set
+
+
+--- COMMAND APPROVAL PROGRESS ---
+CREATE TABLE command_approval_progress(
+   command_id UUID PRIMARY KEY,
+   rule_id UUID REFERENCES command_approval_rule,
+   org_id UUID REFERENCES organization,
+   employee_id UUID REFERENCES employee,
+   status command_approval_status NOT NULL,
+   approved_by UUID[],
+   command_type approvable_command NOT NULL,
+   command_to_initiate_on_approval JSONB NOT NULL
+);
 
 
 CREATE OR REPLACE PROCEDURE seed_balance_history()

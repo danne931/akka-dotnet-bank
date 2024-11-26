@@ -93,6 +93,7 @@ builder.Services.AddAkka(
                   <| Env.config.AccountActorSupervisor
                   <| persistenceId
                   <| AccountActor.get system
+                  <| Bank.CommandApproval.Api.commandRequiresApproval
 
                props),
             ClusterMetadata.employeeShardRegion.messageExtractor,

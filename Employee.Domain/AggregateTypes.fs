@@ -20,9 +20,23 @@ type EmployeeCommand =
    | CancelInvitation of CancelInvitationCommand
    | RefreshInvitationToken of RefreshInvitationTokenCommand
    | ConfirmInvitation of ConfirmInvitationCommand
-   | ApproveInvitation of ApproveInvitationCommand
-   | DenyInvitation of DenyInvitationCommand
    | RestoreAccess of RestoreAccessCommand
+   | ApproveAccess of ApproveAccessCommand
+   (*
+   | RequestPlatformPayment of RequestPlatformPaymentCommand
+   | ConfirmPlatformPayment of ConfirmPlatformPaymentCommand
+   | DeclinePlatformPayment of DeclinePlatformPaymentCommand
+   | RequestInternalTransferBetweenOrgs of RequestInternalTransferBetweenOrgsCommand
+   | ConfirmInternalTransferBetweenOrgs of ConfirmInternalTransferBetweenOrgsCommand
+   | DeclineInternalTransferBetweenOrgs of DeclineInternalTransferBetweenOrgsCommand
+   *)
+   | RequestDomesticTransfer of RequestDomesticTransferCommand
+   | ConfirmDomesticTransfer of ConfirmDomesticTransferCommand
+   //| DeclineDomesticTransfer of DeclineDomesticTransferCommand
+   | ConfigureApprovalRule of CommandApprovalRule.ConfigureApprovalRuleCommand
+   | RequestCommandApproval of CommandApprovalProgress.RequestCommandApproval
+   | AcquireCommandApproval of CommandApprovalProgress.AcquireCommandApproval
+   | DeclineCommandApproval of CommandApprovalProgress.DeclineCommandApproval
 
 type EmployeeEvent =
    | CreatedAccountOwner of BankEvent<CreatedAccountOwner>
@@ -31,6 +45,8 @@ type EmployeeEvent =
    | DebitRequested of BankEvent<DebitRequested>
    | DebitApproved of BankEvent<DebitApproved>
    | DebitDeclined of BankEvent<DebitDeclined>
+   | DomesticTransferRequested of BankEvent<DomesticTransferRequested>
+   | DomesticTransferConfirmed of BankEvent<DomesticTransferConfirmed>
    | DailyDebitLimitUpdated of BankEvent<DailyDebitLimitUpdated>
    | MonthlyDebitLimitUpdated of BankEvent<MonthlyDebitLimitUpdated>
    | LockedCard of BankEvent<LockedCard>
@@ -40,9 +56,15 @@ type EmployeeEvent =
    | InvitationCancelled of BankEvent<InvitationCancelled>
    | InvitationTokenRefreshed of BankEvent<InvitationTokenRefreshed>
    | InvitationConfirmed of BankEvent<InvitationConfirmed>
-   | InvitationApproved of BankEvent<InvitationApproved>
-   | InvitationDenied of BankEvent<InvitationDenied>
    | AccessRestored of BankEvent<AccessRestored>
+   | AccessApproved of BankEvent<AccessApproved>
+   | CommandApprovalRuleConfigured of BankEvent<CommandApprovalRule.T>
+   | CommandApprovalRequested of
+      BankEvent<CommandApprovalProgress.CommandApprovalRequested>
+   | CommandApprovalAcquired of
+      BankEvent<CommandApprovalProgress.CommandApprovalAcquired>
+   | CommandApprovalDeclined of
+      BankEvent<CommandApprovalProgress.CommandApprovalDeclined>
 
 type OpenEmployeeEventEnvelope = EmployeeEvent * Envelope
 
@@ -66,6 +88,10 @@ module EmployeeEnvelope =
       | :? BankEvent<DebitRequested> as evt -> DebitRequested evt
       | :? BankEvent<DebitApproved> as evt -> DebitApproved evt
       | :? BankEvent<DebitDeclined> as evt -> DebitDeclined evt
+      | :? BankEvent<DomesticTransferRequested> as evt ->
+         DomesticTransferRequested evt
+      | :? BankEvent<DomesticTransferConfirmed> as evt ->
+         DomesticTransferConfirmed evt
       | :? BankEvent<DailyDebitLimitUpdated> as evt ->
          DailyDebitLimitUpdated evt
       | :? BankEvent<MonthlyDebitLimitUpdated> as evt ->
@@ -78,9 +104,16 @@ module EmployeeEnvelope =
       | :? BankEvent<InvitationTokenRefreshed> as evt ->
          InvitationTokenRefreshed evt
       | :? BankEvent<InvitationConfirmed> as evt -> InvitationConfirmed evt
-      | :? BankEvent<InvitationApproved> as evt -> InvitationApproved evt
-      | :? BankEvent<InvitationDenied> as evt -> InvitationDenied evt
       | :? BankEvent<AccessRestored> as evt -> AccessRestored evt
+      | :? BankEvent<AccessApproved> as evt -> AccessApproved evt
+      | :? BankEvent<CommandApprovalRule.T> as evt ->
+         CommandApprovalRuleConfigured evt
+      | :? BankEvent<CommandApprovalProgress.CommandApprovalRequested> as evt ->
+         CommandApprovalRequested evt
+      | :? BankEvent<CommandApprovalProgress.CommandApprovalAcquired> as evt ->
+         CommandApprovalAcquired evt
+      | :? BankEvent<CommandApprovalProgress.CommandApprovalDeclined> as evt ->
+         CommandApprovalDeclined evt
       | _ -> failwith "Missing definition for EmployeeEvent message"
 
    let unwrap (o: EmployeeEvent) : OpenEmployeeEventEnvelope =
@@ -91,6 +124,8 @@ module EmployeeEnvelope =
       | DebitRequested evt -> wrap evt, get evt
       | DebitApproved evt -> wrap evt, get evt
       | DebitDeclined evt -> wrap evt, get evt
+      | DomesticTransferRequested evt -> wrap evt, get evt
+      | DomesticTransferConfirmed evt -> wrap evt, get evt
       | DailyDebitLimitUpdated evt -> wrap evt, get evt
       | MonthlyDebitLimitUpdated evt -> wrap evt, get evt
       | LockedCard evt -> wrap evt, get evt
@@ -100,12 +135,16 @@ module EmployeeEnvelope =
       | InvitationCancelled evt -> wrap evt, get evt
       | InvitationTokenRefreshed evt -> wrap evt, get evt
       | InvitationConfirmed evt -> wrap evt, get evt
-      | InvitationApproved evt -> wrap evt, get evt
-      | InvitationDenied evt -> wrap evt, get evt
       | AccessRestored evt -> wrap evt, get evt
+      | AccessApproved evt -> wrap evt, get evt
+      | CommandApprovalRuleConfigured evt -> wrap evt, get evt
+      | CommandApprovalRequested evt -> wrap evt, get evt
+      | CommandApprovalAcquired evt -> wrap evt, get evt
+      | CommandApprovalDeclined evt -> wrap evt, get evt
 
 type EmployeeMessage =
    | GetEmployee
+   | ApprovableStateChange of ApprovableCommand
    | StateChange of EmployeeCommand
    | Event of EmployeeEvent
    | Delete
@@ -136,7 +175,7 @@ type Employee = {
 
    member x.PendingAccessApproval =
       match x.Status with
-      | EmployeeStatus.PendingInviteApproval
+      | EmployeeStatus.PendingInviteApproval -> true
       | EmployeeStatus.PendingRestoreAccessApproval -> true
       | _ -> false
 

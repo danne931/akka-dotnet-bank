@@ -1,6 +1,9 @@
 namespace Bank.Employee.Domain
 
+open System
+
 open Lib.SharedTypes
+open Bank.Transfer.Domain
 
 type CreatedAccountOwner = {
    Email: Email
@@ -14,27 +17,18 @@ type CreatedEmployee = {
    Email: Email
    FirstName: string
    LastName: string
-   OrgRequiresEmployeeInviteApproval: bool
+   OrgRequiresEmployeeInviteApproval: CommandApprovalRuleId option
    CardInfo: EmployeeInviteSupplementaryCardInfo option
 }
 
 type InvitationConfirmed = {
    Email: Email
-   AuthProviderUserId: System.Guid
+   AuthProviderUserId: Guid
    Reference: string option
 }
 
-type InvitationApproved = {
-   Email: Email
-   InviteToken: InviteToken
-   Approvers: EmployeeId list
-}
-
-type InvitationDenied = { Reason: string option }
-
 type InvitationTokenRefreshed = {
    InviteToken: InviteToken
-   OrgRequiresEmployeeInviteApproval: bool
    Reason: string option
 }
 
@@ -49,6 +43,15 @@ type DebitApproved = { Info: DebitInfo }
 type DebitDeclined = {
    Info: DebitInfo
    Reason: PurchaseDeclinedReason
+}
+
+type DomesticTransferRequested = { Info: DomesticTransferInput }
+
+type DomesticTransferConfirmed = { Info: BaseDomesticTransferInfo }
+
+type DomesticTransferDeclined = {
+   Info: BaseDomesticTransferInfo
+   Reason: InternalTransferDeclinedReason
 }
 
 type DailyDebitLimitUpdated = {
@@ -88,5 +91,7 @@ type CardNicknamed = {
    PriorName: string option
    CardId: CardId
 }
+
+type AccessApproved = { Reference: string option }
 
 type AccessRestored = { Reference: string option }

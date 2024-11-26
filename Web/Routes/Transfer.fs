@@ -15,6 +15,8 @@ open Bank.Account.Domain
 open RoutePaths
 open Bank.UserSession.Middleware
 
+open Bank.Employee.Domain
+
 let startTransferRoutes (app: WebApplication) =
    app
       .MapPost(
@@ -93,7 +95,14 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.Domestic,
          Func<ActorSystem, DomesticTransferCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (AccountCommand.DomesticTransfer cmd)
+               let cmd =
+                  RequestDomesticTransferCommand.create
+                     (InitiatedById.toEmployeeId cmd.InitiatedBy, cmd.OrgId)
+                     cmd.Data
+
+               Bank.Employee.Api.processCommand
+                  sys
+                  (EmployeeCommand.RequestDomesticTransfer cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.SubmitTransfer)

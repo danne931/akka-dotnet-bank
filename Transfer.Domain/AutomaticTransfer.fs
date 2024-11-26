@@ -277,6 +277,16 @@ type AutomaticTransferRule =
    | PercentDistribution of PercentDistributionRule.T
    | TargetBalance of TargetBalanceRule
 
+   member x.Display =
+      match x with
+      | ZeroBalance o ->
+         $"(zero balance) from {o.Sender.Name} to {o.Recipient.Name}"
+      | TargetBalance o ->
+         $"(target balance) with target {o.TargetAccount.Name} & managing partner {o.ManagingPartnerAccount.Name}"
+      | PercentDistribution o ->
+         let o = PercentDistributionRule.get o
+         $"(percent distribution) from {o.Sender.Name} among {o.DestinationAccounts.Length} accounts"
+
 type AutoTransferDerivedFromRule = {
    Rule: AutomaticTransferRule
    Transfer: AutoTransfer

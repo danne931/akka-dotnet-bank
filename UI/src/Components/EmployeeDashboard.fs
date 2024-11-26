@@ -131,7 +131,6 @@ let selectedEmployee
    | _ -> None
 
 let renderPendingTableRow
-   dispatch
    (employee: Employee)
    (selectedEmployeeId: EmployeeId option)
    =
@@ -155,20 +154,11 @@ let renderPendingTableRow
 
          Html.td (string employee.Email)
 
-         Html.td "Restore requested by you today"
-
-         Html.td [
-            Html.button [
-               attr.text "Cancel"
-
-               attr.onClick (fun e -> e.preventDefault ())
-            ]
-         ]
+         Html.td employee.Status.Display
       ]
    ]
 
 let renderPendingTable
-   dispatch
    (employees: Employee list)
    (selectedEmployeeId: EmployeeId option)
    =
@@ -183,12 +173,14 @@ let renderPendingTable
                Html.th [ attr.scope "col"; attr.text "Name" ]
 
                Html.th [ attr.scope "col"; attr.text "Email" ]
+
+               Html.th [ attr.scope "col"; attr.text "Info" ]
             ]
          ]
 
          Html.tbody [
             for employee in employees ->
-               renderPendingTableRow dispatch employee selectedEmployeeId
+               renderPendingTableRow employee selectedEmployeeId
          ]
       ]
    ]
@@ -379,10 +371,7 @@ let EmployeeDashboardComponent
                      if pendingApproval.IsEmpty then
                         Html.small "No pending requests."
                      else
-                        renderPendingTable
-                           dispatch
-                           pendingApproval
-                           selectedEmployeeId
+                        renderPendingTable pendingApproval selectedEmployeeId
 
                      Html.hr []
 

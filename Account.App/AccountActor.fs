@@ -242,6 +242,17 @@ let actorProps
                   )
 
                getDomesticTransferActor mailbox.System <! msg
+
+               let employeeId = InitiatedById.toEmployeeId e.InitiatedById
+
+               let msg =
+                  ConfirmDomesticTransferCommand.create (employeeId, e.OrgId) {
+                     Info = e.Data.BaseInfo
+                  }
+                  |> EmployeeCommand.ConfirmDomesticTransfer
+                  |> EmployeeMessage.StateChange
+
+               getEmployeeRef employeeId <! msg
             | InternalTransferBetweenOrgsDeposited e ->
                let msg =
                   EmailActor.EmailMessage.InternalTransferBetweenOrgsDeposited(

@@ -8,8 +8,8 @@ open Akka.Actor
 open Akkling
 
 open Bank.Employee.Domain
-open Bank.Account.Api
 open Bank.Employee.Api
+open Bank.CommandApproval.Api
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
@@ -100,7 +100,7 @@ let startEmployeeRoutes (app: WebApplication) =
                processCommand sys (EmployeeCommand.CancelInvitation cmd)
                |> RouteUtil.unwrapTaskResult)
       )
-      .RBAC(Permissions.CancelEmployeeInvitation)
+      .RBAC(Permissions.ManageEmployeeAccess)
    |> ignore
 
    app
@@ -110,7 +110,7 @@ let startEmployeeRoutes (app: WebApplication) =
             processCommand sys (EmployeeCommand.RestoreAccess cmd)
             |> RouteUtil.unwrapTaskResult)
       )
-      .RBAC(Permissions.RestoreEmployeeAccess)
+      .RBAC(Permissions.ManageEmployeeAccess)
    |> ignore
 
    app
@@ -120,25 +120,17 @@ let startEmployeeRoutes (app: WebApplication) =
             match employee.Status with
             | EmployeeStatus.PendingInviteConfirmation token ->
                if token.IsExpired() then
-                  match! getOrg employee.OrgId with
-                  | Error err -> return RouteUtil.badRequest err
-                  | Ok None -> return Results.NotFound()
-                  | Ok(Some org) ->
-                     let cmd =
-                        RefreshInvitationTokenCommand.create
-                           employee.CompositeId
-                           (InitiatedById
-                              Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON)
-                           {
-                              OrgRequiresEmployeeInviteApproval =
-                                 org.Permissions.RequiresEmployeeInviteApproval
-                              Reason = None
-                           }
-                        |> EmployeeCommand.RefreshInvitationToken
+                  let cmd =
+                     RefreshInvitationTokenCommand.create
+                        employee.CompositeId
+                        (InitiatedById
+                           Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON)
+                        { Reason = None }
+                     |> EmployeeCommand.RefreshInvitationToken
 
-                     match! (processCommand sys cmd) with
-                     | Ok _ -> return Results.Ok()
-                     | Error e -> return RouteUtil.badRequest e
+                  match! (processCommand sys cmd) with
+                  | Ok _ -> return Results.Ok()
+                  | Error e -> return RouteUtil.badRequest e
                else
                   let invite: EmailActor.EmployeeInviteEmailInfo = {
                      OrgId = employee.OrgId
@@ -161,4 +153,75 @@ let startEmployeeRoutes (app: WebApplication) =
          })
       )
       .RBAC(Permissions.ResendInviteNotification)
+   |> ignore
+
+   app.MapGet(
+      EmployeePath.GetCommandApprovalRule,
+      Func<Guid, string, Task<IResult>>(fun orgId commandType ->
+         match ApprovableCommandType.fromString commandType with
+         | None ->
+            Task.FromResult(Results.BadRequest "Invalid ApprovableCommandType")
+         | Some commandType ->
+            approvalRuleExistsForCommandType (OrgId orgId) commandType
+            |> RouteUtil.unwrapTaskResult)
+   )
+   |> ignore
+
+   app.MapGet(
+      EmployeePath.GetCommandApprovalProgressWithRule,
+      Func<Guid, string, Task<IResult>>(fun employeeId commandType ->
+         match ApprovableCommandType.fromString commandType with
+         | None ->
+            Task.FromResult(Results.BadRequest "Invalid ApprovableCommandType")
+         | Some commandType ->
+            getCommandApprovalProgressWithRule
+               (EmployeeId employeeId)
+               commandType
+            |> RouteUtil.unwrapTaskResultOption)
+   )
+   |> ignore
+
+   app
+      .MapPost(
+         EmployeePath.ConfigureCommandApprovalRule,
+         Func<
+            ActorSystem,
+            CommandApprovalRule.ConfigureApprovalRuleCommand,
+            Task<IResult>
+          >
+            (fun sys cmd ->
+               processCommand sys (EmployeeCommand.ConfigureApprovalRule cmd)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ConfigureCommandApprovalRule)
+   |> ignore
+
+   app
+      .MapPost(
+         EmployeePath.AcquireCommandApproval,
+         Func<
+            ActorSystem,
+            CommandApprovalProgress.AcquireCommandApproval,
+            Task<IResult>
+          >
+            (fun sys cmd ->
+               processCommand sys (EmployeeCommand.AcquireCommandApproval cmd)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ManageCommandApprovalProgress)
+   |> ignore
+
+   app
+      .MapPost(
+         EmployeePath.DeclineCommandApproval,
+         Func<
+            ActorSystem,
+            CommandApprovalProgress.DeclineCommandApproval,
+            Task<IResult>
+          >
+            (fun sys cmd ->
+               processCommand sys (EmployeeCommand.DeclineCommandApproval cmd)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ManageCommandApprovalProgress)
    |> ignore

@@ -26,8 +26,8 @@ type Values = {
 
 let form
    (initiatedBy: UserSession)
-   (org: Org)
    (accounts: Map<AccountId, Account>)
+   (employeeInviteRuleIdOpt: CommandApprovalRuleId option)
    (onRoleSelect: Role -> unit)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -87,8 +87,7 @@ let form
             LastName = lastName
             Role = role
             OrgId = initiatedBy.OrgId
-            OrgRequiresEmployeeInviteApproval =
-               org.Permissions.RequiresEmployeeInviteApproval
+            OrgRequiresEmployeeInviteApproval = employeeInviteRuleIdOpt
             CardInfo = cardInfo
          }
          |> EmployeeCommand.CreateEmployee
@@ -171,7 +170,23 @@ let EmployeeCreateFormComponent
    (onSubmit: ParentOnSubmitHandler)
    =
    let orgCtx = React.useContext OrgProvider.context
+
+   let employeeInviteRequiresApproval, setApproval =
+      React.useState<Deferred<Result<CommandApprovalRuleId option, Err>>>
+         Deferred.Idle
+
    let pendingRole, setRole = React.useState Role.CardOnly
+
+   React.useEffectOnce (fun () ->
+      async {
+         let! approvalRequired =
+            EmployeeService.orgRequiresCommandApproval
+               session.OrgId
+               ApprovableCommandType.InviteEmployee
+
+         setApproval (Deferred.Resolved approvalRequired)
+      }
+      |> Async.StartImmediate)
 
    let formProps: Values = {
       FirstName = ""
@@ -186,17 +201,17 @@ let EmployeeCreateFormComponent
    classyNode Html.div [ "grid" ] [
       EmployeePermissions.render pendingRole
 
-      match orgCtx with
-      | Deferred.Resolved(Ok(Some org)) ->
+      match orgCtx, employeeInviteRequiresApproval with
+      | Deferred.Resolved(Ok(Some org)),
+        Deferred.Resolved(Ok employeeInviteRuleIdOpt) ->
          let submitText =
-            if org.Org.Permissions.RequiresEmployeeInviteApproval then
-               "Request Employee Invite Approval"
-            else
-               "Invite Employee"
+            match employeeInviteRuleIdOpt with
+            | Some _ -> "Request Employee Invite Approval"
+            | None -> "Invite Employee"
 
          EmployeeFormContainer
             formProps
-            (form session org.Org org.Accounts setRole)
+            (form session org.Accounts employeeInviteRuleIdOpt setRole)
             onSubmit
             (Some <| Form.View.Action.SubmitOnly submitText)
       | _ -> Html.progress []
