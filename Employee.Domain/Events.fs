@@ -81,6 +81,7 @@ type UnlockedCard = {
 }
 
 type RoleUpdated = {
+   Name: string
    Role: Role
    PriorRole: Role
    CardInfo: EmployeeInviteSupplementaryCardInfo option
@@ -92,6 +93,12 @@ type CardNicknamed = {
    CardId: CardId
 }
 
-type AccessApproved = { Reference: string option }
+type AccessApproved = {
+   Name: string
+   Reference: string option
+}
 
-type AccessRestored = { Reference: string option }
+type AccessRestored = {
+   Name: string
+   Reference: string option
+}

@@ -36,6 +36,11 @@ module Reader =
       |> read.text
       |> Serialization.deserializeUnsafe<Criteria>
 
+   let approvableCommandType (read: RowReader) : ApprovableCommandType =
+      Fields.approvableCommandType
+      |> read.string
+      |> ApprovableCommandType.fromStringUnsafe
+
    let permittedApprovers (read: RowReader) : EmployeeId list =
       Fields.permittedApprovers
       |> read.uuidArray

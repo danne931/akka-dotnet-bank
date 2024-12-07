@@ -249,6 +249,11 @@ let sqlParamReducer
          "updatedStatus",
          CommandApprovalProgressSqlMapper.Writer.status
             CommandApprovalProgress.Status.Declined
+
+         "declinedBy",
+         CommandApprovalProgressSqlMapper.Writer.declinedBy (
+            Some(InitiatedById.toEmployeeId e.Data.DeclinedBy)
+         )
       ]
 
       {
@@ -473,7 +478,9 @@ let upsertReadModels
       if not sqlParams.CommandApprovalDeclined.IsEmpty then
          $"""
          UPDATE {CommandApprovalProgressSqlMapper.table}
-         SET {status} = @updatedStatus::{statusTypecast}
+         SET
+            {status} = @updatedStatus::{statusTypecast},
+            {CommandApprovalProgressSqlMapper.Fields.declinedBy} = @declinedBy
          WHERE
             {commandId} = @commandId
             AND {status} = @expectedCurrentStatus::{statusTypecast};

@@ -81,6 +81,19 @@ let private postJson (command: EmployeeCommand) =
 
    Http.postJson url serialized
 
+let getEmployee (orgId: OrgId) (employeeId: EmployeeId) : Async<EmployeeMaybe> = async {
+   let! (code, responseText) =
+      Http.get (RoutePaths.EmployeePath.getEmployee orgId employeeId)
+
+   if code = 404 then
+      return Ok None
+   elif code <> 200 then
+      return Error <| Err.InvalidStatusCodeError(serviceName, code)
+   else
+      return
+         responseText |> Serialization.deserialize<Employee> |> Result.map Some
+}
+
 let private getEmployeesWithPath (path: string) : Async<EmployeesMaybe> = async {
    let! (code, responseText) = Http.get path
 
@@ -153,6 +166,26 @@ let getCommandApprovalProgressWithRule
          return
             responseText
             |> Serialization.deserialize<CommandApprovalProgressWithRule>
+            |> Result.map Some
+   }
+
+let getCommandApprovals
+   (orgId: OrgId)
+   : Async<Result<CommandApprovalProgressWithRule list option, Err>>
+   =
+   async {
+      let path = EmployeePath.getCommandApprovals orgId
+
+      let! (code, responseText) = Http.get path
+
+      if code = 404 then
+         return Ok None
+      elif code <> 200 then
+         return Error <| Err.InvalidStatusCodeError(serviceName, code)
+      else
+         return
+            responseText
+            |> Serialization.deserialize<CommandApprovalProgressWithRule list>
             |> Result.map Some
    }
 

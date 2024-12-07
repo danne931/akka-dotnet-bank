@@ -73,6 +73,8 @@ type ApprovableCommand =
 
    member x.InitiatedBy = ApprovableCommand.envelope x |> _.InitiatedById
 
+   member x.EntityId = ApprovableCommand.envelope x |> _.EntityId
+
    member x.OrgId = ApprovableCommand.envelope x |> _.OrgId
 
    member x.Amount =
@@ -185,6 +187,7 @@ module CommandApprovalProgress =
       OrgId: OrgId
       Status: Status
       ApprovedBy: CommandApprovalRule.Approver list
+      DeclinedBy: CommandApprovalRule.Approver option
       CommandToInitiateOnApproval: ApprovableCommand
    }
 
@@ -273,9 +276,13 @@ module CommandApprovalProgress =
 type CommandApprovalProgressWithRule = {
    RuleId: CommandApprovalRuleId
    CommandProgressId: CommandApprovalProgressId
+   Command: ApprovableCommand
    Criteria: CommandApprovalRule.Criteria
    PermittedApprovers: CommandApprovalRule.Approver list
    ApprovedBy: CommandApprovalRule.Approver list option
+   DeclinedBy: CommandApprovalRule.Approver option
+   Status: CommandApprovalProgress.Status
+   LastUpdate: DateTime
 }
 
 module CommandApprovalProgressWithRule =
@@ -285,7 +292,9 @@ module CommandApprovalProgressWithRule =
       (progress: CommandApprovalProgressWithRule)
       (eId: EmployeeId)
       =
-      progress.PermittedApprovers |> List.exists (fun o -> o.EmployeeId = eId)
+      progress.Status = CommandApprovalProgress.Status.Pending
+      && progress.PermittedApprovers
+         |> List.exists (fun o -> o.EmployeeId = eId)
       && (progress.ApprovedBy
           |> Option.map (List.exists (fun o -> o.EmployeeId <> eId))
           |> Option.defaultValue true)

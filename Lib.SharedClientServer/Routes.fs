@@ -88,6 +88,10 @@ module EmployeePath =
    let Get = Base + "/{orgId}"
    let get (orgId: OrgId) = $"{Base}/{orgId}"
    let Search = Base + "/search/{orgId}/{searchQuery}"
+   let GetEmployee = Get + "/{employeeId}"
+
+   let getEmployee (orgId: OrgId) (employeeId: EmployeeId) =
+      $"{get orgId}/{employeeId}"
 
    let search (orgId: OrgId) (searchQuery: string) =
       $"{Base}/search/{orgId}/{searchQuery}"
@@ -117,6 +121,10 @@ module EmployeePath =
       (commandType: string)
       =
       Base + $"/command-approval-progress/{employeeId}/{commandType}"
+
+   let GetCommandApprovals = Base + "/command-approvals/{orgId}"
+
+   let getCommandApprovals (orgId: OrgId) = Base + $"/command-approvals/{orgId}"
 
 module CardPath =
    let Base = $"{API}/cards"

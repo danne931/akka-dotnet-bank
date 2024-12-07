@@ -6,6 +6,7 @@ open Bank.Employee.Domain
 type private MenuUrl =
    | Analytics
    | Account
+   | Approvals
    | Transaction
    | EmployeeHistory
    | Employee
@@ -24,6 +25,7 @@ let private renderListItem (item: MenuItem) =
       match item.Url, item.SelectedUrl with
       | Analytics, Routes.IndexUrl.Analytics _ -> attr.classes [ "selected" ]
       | Account, Routes.IndexUrl.Account _ -> attr.classes [ "selected" ]
+      | Approvals, Routes.IndexUrl.Approvals _ -> attr.classes [ "selected" ]
       | Transaction, Routes.IndexUrl.Transaction _ ->
          attr.classes [ "selected" ]
       | EmployeeHistory, Routes.IndexUrl.EmployeeHistory _ ->
@@ -55,6 +57,13 @@ let render (currentUrl: Routes.IndexUrl) (session: UserSession) =
                SelectedUrl = currentUrl
                Name = "Accounts"
                Href = Routes.AccountUrl.BasePath
+            }
+
+            renderListItem {
+               Url = Approvals
+               SelectedUrl = currentUrl
+               Name = "Approvals"
+               Href = Routes.ApprovalsUrl.BasePath
             }
 
             renderListItem {

@@ -137,7 +137,10 @@ let actorProps
                                     employee.CompositeId
                                     e.InitiatedById
                                     e.CorrelationId
-                                    { Reference = None }
+                                    {
+                                       Name = employee.Name
+                                       Reference = None
+                                    }
                            }
                         |> EmployeeCommand.RequestCommandApproval
 

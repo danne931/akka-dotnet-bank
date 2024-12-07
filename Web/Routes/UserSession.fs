@@ -41,22 +41,23 @@ let startUserSessionRoutes (app: WebApplication) =
    app.MapPost(
       UserSessionPath.Login,
       Func<HttpContext, Task<IResult>>(fun context -> task {
-         context.Session.SetString("FirstName", "Daniel")
-         context.Session.SetString("LastName", "Eisenbarger")
-         context.Session.SetString("Email", "fish@gmail.com")
+         let! employeeRes =
+            getEmployee Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON
 
-         context.Session.SetString(
-            "EmployeeId",
-            string Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON
-         )
+         match employeeRes with
+         | Error err -> return Results.BadRequest err
+         | Ok None -> return Results.NotFound()
+         | Ok(Some employee) ->
+            context.Session.SetString("FirstName", employee.FirstName)
+            context.Session.SetString("LastName", employee.LastName)
+            context.Session.SetString("Email", string employee.Email)
 
-         context.Session.SetString(
-            "OrgId",
-            string Constants.ORG_ID_REMOVE_SOON
-         )
+            context.Session.SetString("EmployeeId", string employee.EmployeeId)
 
-         context.Session.SetString("Role", string Role.Admin)
-         return Results.Ok()
+            context.Session.SetString("OrgId", string employee.OrgId)
+
+            context.Session.SetString("Role", string employee.Role)
+            return Results.Ok()
       })
    )
    |> ignore

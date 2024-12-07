@@ -18,11 +18,13 @@ module Fields =
    let employeeId = EmployeeSqlMapper.EmployeeFields.employeeId
    let status = "status"
    let approvedBy = "approved_by"
+   let declinedBy = "declined_by"
 
    let approvableCommandType =
       CommandApprovalRuleSqlMapper.Fields.approvableCommandType
 
    let commandToInitiateOnApproval = "command_to_initiate_on_approval"
+   let updatedAt = "updated_at"
 
 module Reader =
    let commandId (read: RowReader) =
@@ -45,10 +47,15 @@ module Reader =
    let approvedBy (read: RowReader) : EmployeeId list =
       Fields.approvedBy |> read.uuidArray |> Array.toList |> List.map EmployeeId
 
+   let declinedBy (read: RowReader) : EmployeeId option =
+      Fields.declinedBy |> read.uuidOrNone |> Option.map EmployeeId
+
    let commandToInitiateOnApproval (read: RowReader) : ApprovableCommand =
       Fields.commandToInitiateOnApproval
       |> read.text
       |> Serialization.deserializeUnsafe<ApprovableCommand>
+
+   let updatedAt (read: RowReader) = read.dateTime Fields.updatedAt
 
 module Writer =
    let commandId (id: CommandApprovalProgressId) = Sql.uuid id.Value
@@ -61,6 +68,9 @@ module Writer =
 
    let approvedBy (ids: EmployeeId list) =
       ids |> List.map EmployeeId.get |> Array.ofList |> Sql.uuidArray
+
+   let declinedBy (ids: EmployeeId option) =
+      ids |> Option.map EmployeeId.get |> Sql.uuidOrNone
 
    let approvableCommandType =
       CommandApprovalRuleSqlMapper.Writer.approvableCommandType

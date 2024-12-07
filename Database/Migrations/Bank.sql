@@ -749,12 +749,18 @@ CREATE TABLE command_approval_rule(
    UNIQUE (org_id, command_type)
 );
 
+SELECT add_created_at_column('command_approval_rule');
+SELECT add_updated_at_column_and_trigger('command_approval_rule');
+
 --- APPROVAL RULES to apply when a daily limit is exceeded ---
 CREATE TABLE command_approval_rule_amount_daily_limit(
    rule_id UUID PRIMARY KEY REFERENCES command_approval_rule,
    org_id UUID REFERENCES organization,
    daily_limit MONEY NOT NULL
 );
+
+SELECT add_created_at_column('command_approval_rule_amount_daily_limit');
+SELECT add_updated_at_column_and_trigger('command_approval_rule_amount_daily_limit');
 
 
 --- APPROVAL RULES to apply when a transaction amount is within some range ---
@@ -766,6 +772,8 @@ CREATE TABLE command_approval_rule_amount_per_command(
 );
 -- write pre-check to verify lower bound or upper bound has been set
 
+SELECT add_created_at_column('command_approval_rule_amount_per_command');
+SELECT add_updated_at_column_and_trigger('command_approval_rule_amount_per_command');
 
 --- COMMAND APPROVAL PROGRESS ---
 CREATE TABLE command_approval_progress(
@@ -775,10 +783,13 @@ CREATE TABLE command_approval_progress(
    employee_id UUID REFERENCES employee,
    status command_approval_status NOT NULL,
    approved_by UUID[],
+   declined_by UUID REFERENCES employee(employee_id),
    command_type approvable_command NOT NULL,
    command_to_initiate_on_approval JSONB NOT NULL
 );
 
+SELECT add_created_at_column('command_approval_progress');
+SELECT add_updated_at_column_and_trigger('command_approval_progress');
 
 CREATE OR REPLACE PROCEDURE seed_balance_history()
 AS $$

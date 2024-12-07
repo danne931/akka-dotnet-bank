@@ -57,6 +57,7 @@ let private form
             employee.CompositeId
             (InitiatedById initiatedBy.EmployeeId)
             {
+               Name = employee.Name
                PriorRole = employee.Role
                Role = role
                CardInfo = cardInfo
