@@ -18,6 +18,16 @@ open Lib.NetworkQuery
 let startEmployeeRoutes (app: WebApplication) =
    app
       .MapGet(
+         EmployeePath.GetEmployee,
+         Func<Guid, Task<IResult>>(fun employeeId ->
+            getEmployee (EmployeeId employeeId)
+            |> RouteUtil.unwrapTaskResultOption)
+      )
+      .RBAC(Permissions.GetEmployees)
+   |> ignore
+
+   app
+      .MapGet(
          EmployeePath.Get,
          Func<Guid, string, string, Task<IResult>>
             (fun orgId ([<FromQuery>] employeeIds) ([<FromQuery>] roles) ->
@@ -178,6 +188,13 @@ let startEmployeeRoutes (app: WebApplication) =
                (EmployeeId employeeId)
                commandType
             |> RouteUtil.unwrapTaskResultOption)
+   )
+   |> ignore
+
+   app.MapGet(
+      EmployeePath.GetCommandApprovals,
+      Func<Guid, Task<IResult>>(fun orgId ->
+         getCommandApprovals (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
    )
    |> ignore
 

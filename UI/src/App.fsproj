@@ -84,6 +84,7 @@
     <Compile Include="Components/AutomaticTransferRule.fs" />
     <Compile Include="Components/AutomaticBalanceManagementDashboard.fs" />
     <Compile Include="Components/AccountDashboard.fs" />
+    <Compile Include="Components/ApprovalDashboard.fs" />
     <Compile Include="Components/CardDetail.fs" />
     <Compile Include="Components/CardDashboard.fs" />
     <Compile Include="Components/EmployeeDetail.fs" />

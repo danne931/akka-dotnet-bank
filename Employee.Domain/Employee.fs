@@ -513,13 +513,26 @@ module private StateTransition =
       (state: EmployeeWithEvents)
       (cmd: CommandApprovalProgress.DeclineCommandApproval)
       =
-      if state.Info.Status <> EmployeeStatus.Active then
-         transitionErr EmployeeNotActive
-      else
+      let em = state.Info
+
+      let applyApprovalDeclined () =
          map
             CommandApprovalDeclined
             state
             (CommandApprovalProgress.DeclineCommandApproval.toEvent cmd)
+
+      match cmd.Data.CommandType with
+      | ApprovableCommandType.InviteEmployee ->
+         if em.Status <> EmployeeStatus.PendingInviteApproval then
+            transitionErr
+            <| EmployeeStatusDisallowsInviteProgression(string em.Status)
+         else
+            applyApprovalDeclined ()
+      | _ ->
+         if em.Status <> EmployeeStatus.Active then
+            transitionErr EmployeeNotActive
+         else
+            applyApprovalDeclined ()
 
 let stateTransition (state: EmployeeWithEvents) (command: EmployeeCommand) =
    match command with

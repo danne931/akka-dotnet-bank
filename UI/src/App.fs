@@ -34,6 +34,10 @@ let App () =
          AccountDashboard.AccountDashboardComponent url
          |> UserSessionSuspense
          |> (UserSessionProvider << OrgProvider)
+      | Routes.IndexUrl.Approvals url ->
+         ApprovalDashboard.ApprovalDashboardComponent url
+         |> UserSessionSuspense
+         |> (UserSessionProvider << OrgProvider)
       | Routes.IndexUrl.Employees url ->
          EmployeeDashboard.EmployeeDashboardComponent url
          |> UserSessionSuspense

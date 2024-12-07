@@ -5,6 +5,8 @@ open Bank.Employee.Domain
 open Lib.SharedTypes
 open Lib.NetworkQuery
 
+type EmployeeMaybe = Result<Employee option, Err>
+
 type EmployeesMaybe = Result<Employee list option, Err>
 
 type EmployeeHistoryMaybe = Result<EmployeeHistory list option, Err>

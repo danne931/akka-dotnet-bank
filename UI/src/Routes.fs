@@ -84,6 +84,24 @@ module AccountUrl =
       | _ -> AccountUrl.NotFound
 
 [<RequireQualifiedAccess>]
+type ApprovalsUrl =
+   | Approvals
+   | ApprovalRuleManagement
+   | NotFound
+
+module ApprovalsUrl =
+   [<Literal>]
+   let BasePath = "approvals"
+
+   let ApprovalRuleManagementPath = [| BasePath; "approval-rule-management" |]
+
+   let parse =
+      function
+      | [] -> ApprovalsUrl.Approvals
+      | [ "approval-rule-management" ] -> ApprovalsUrl.ApprovalRuleManagement
+      | _ -> ApprovalsUrl.NotFound
+
+[<RequireQualifiedAccess>]
 type TransactionUrl =
    | Account
    | AccountSelected of AccountId
@@ -208,6 +226,7 @@ module PaymentUrl =
 type IndexUrl =
    | Analytics of AnalyticsUrl
    | Account of AccountUrl
+   | Approvals of ApprovalsUrl
    | Transaction of TransactionUrl
    | EmployeeHistory of EmployeeHistoryUrl
    | Employees of EmployeeUrl
@@ -228,6 +247,8 @@ module IndexUrl =
          IndexUrl.Analytics(AnalyticsUrl.parse segments)
       | AccountUrl.BasePath :: segments ->
          IndexUrl.Account(AccountUrl.parse segments)
+      | ApprovalsUrl.BasePath :: segments ->
+         IndexUrl.Approvals(ApprovalsUrl.parse segments)
       // Matches /transactions/{TransactionUrl}
       | TransactionUrl.BasePath :: segments ->
          IndexUrl.Transaction(TransactionUrl.parse segments)
