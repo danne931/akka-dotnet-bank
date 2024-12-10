@@ -209,7 +209,10 @@ let update
             RestoreAccessCommand.create
                employee.CompositeId
                (InitiatedById session.EmployeeId)
-               { Reference = None }
+               {
+                  Name = employee.Name
+                  Reference = None
+               }
             |> EmployeeCommand.RestoreAccess
 
          let! res = EmployeeService.submitCommand employee cmd
