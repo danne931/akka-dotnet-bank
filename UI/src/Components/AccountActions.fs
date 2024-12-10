@@ -173,15 +173,11 @@ let AccountActionsComponent
       AccountId = Some account.AccountId
       OnReceive =
          fun conf ->
-            let moneyFlow =
-               transactionUIFriendly conf.Account conf.EventPersisted
-               |> _.MoneyFlow
-
             // Update account context so AccountSummary & AccountSelection
             // components are up to date with the latest balance
-            // & other metrics info.
-            if moneyFlow.IsSome then
-               orgDispatch (OrgProvider.Msg.AccountUpdated conf)
+            // & other metrics info. Ensure we are using current account info
+            // when attempting to initiate transactions against an account.
+            orgDispatch (OrgProvider.Msg.AccountUpdated conf)
 
             // Handle closing the ScreenOverlayPortal containing the
             // submitted form or redirecting to another form.
