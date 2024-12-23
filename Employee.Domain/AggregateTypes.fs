@@ -175,7 +175,7 @@ type Employee = {
 
    member x.PendingAccessApproval =
       match x.Status with
-      | EmployeeStatus.PendingInviteApproval -> true
+      | EmployeeStatus.PendingInviteApproval _ -> true
       | EmployeeStatus.PendingRestoreAccessApproval -> true
       | _ -> false
 

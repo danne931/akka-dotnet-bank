@@ -122,30 +122,28 @@ let actorProps
                }
             | EmployeeEvent.CreatedEmployee e ->
                match employee.Status with
-               | EmployeeStatus.PendingInviteApproval ->
-                  match e.Data.OrgRequiresEmployeeInviteApproval with
-                  | Some ruleId ->
-                     let cmd =
-                        CommandApprovalProgress.RequestCommandApproval.create
-                           employee.CompositeId
-                           e.InitiatedById
-                           {
-                              RuleId = ruleId
-                              Command =
-                                 ApprovableCommand.InviteEmployee
-                                 <| ApproveAccessCommand.create
-                                    employee.CompositeId
-                                    e.InitiatedById
-                                    e.CorrelationId
-                                    {
-                                       Name = employee.Name
-                                       Reference = None
-                                    }
-                           }
-                        |> EmployeeCommand.RequestCommandApproval
+               | EmployeeStatus.PendingInviteApproval approval ->
+                  let cmd =
+                     CommandApprovalProgress.RequestCommandApproval.create
+                        employee.CompositeId
+                        e.InitiatedById
+                        e.CorrelationId
+                        {
+                           RuleId = approval.RuleId
+                           Command =
+                              ApprovableCommand.InviteEmployee
+                              <| ApproveAccessCommand.create
+                                 employee.CompositeId
+                                 e.InitiatedById
+                                 e.CorrelationId
+                                 {
+                                    Name = employee.Name
+                                    Reference = None
+                                 }
+                        }
+                     |> EmployeeCommand.RequestCommandApproval
 
-                     mailbox.Parent() <! EmployeeMessage.StateChange cmd
-                  | None -> ()
+                  mailbox.Parent() <! EmployeeMessage.StateChange cmd
                | EmployeeStatus.PendingInviteConfirmation token ->
                   getEmailActor mailbox.System
                   <! EmailActor.EmailMessage.EmployeeInvite {
@@ -287,6 +285,7 @@ let actorProps
                      CommandApprovalProgress.RequestCommandApproval.create
                         employee.CompositeId
                         cmd.InitiatedBy
+                        cmd.CorrelationId
                         { RuleId = ruleId; Command = cmd }
                      |> EmployeeCommand.RequestCommandApproval
 

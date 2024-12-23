@@ -110,11 +110,16 @@ module InviteToken =
       Expiration = DateTime.UtcNow.AddDays 7.
    }
 
+type InviteApproval = {
+   RuleId: CommandApprovalRuleId
+   ProgressId: CommandApprovalProgressId
+}
+
 [<RequireQualifiedAccess>]
 type EmployeeStatus =
    | InitialEmptyState
    /// Requires approval from other admins before sending an invite.
-   | PendingInviteApproval
+   | PendingInviteApproval of InviteApproval
    /// Approval obtained (or no approval rule configured) so employee is ready
    /// for invite email.
    | PendingInviteConfirmation of InviteToken
@@ -127,7 +132,7 @@ type EmployeeStatus =
    member x.Display =
       match x with
       | InitialEmptyState -> ""
-      | PendingInviteApproval -> "Pending Invite Approval"
+      | PendingInviteApproval _ -> "Pending Invite Approval"
       | PendingInviteConfirmation _ -> "Pending Invite Confirmation"
       | Active -> "Active"
       | Closed -> "Closed"
@@ -137,7 +142,7 @@ type EmployeeStatus =
    override x.ToString() =
       match x with
       | InitialEmptyState -> "InitialEmptyState"
-      | PendingInviteApproval -> "PendingInviteApproval"
+      | PendingInviteApproval _ -> "PendingInviteApproval"
       | PendingInviteConfirmation _ -> "PendingInviteConfirmation"
       | Active -> "Active"
       | Closed -> "Closed"
@@ -184,7 +189,9 @@ type UserSession = {
    LastName: string
    Email: Email
    Role: Role
-}
+} with
+
+   member x.Name = x.FirstName + " " + x.LastName
 
 [<RequireQualifiedAccess>]
 type EmployeeEventGroupFilter =

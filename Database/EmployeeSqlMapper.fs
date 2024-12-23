@@ -21,6 +21,7 @@ module EmployeeFields =
    let lastName = "last_name"
    let cards = "cards"
    let status = "status"
+   let statusDetail = "status_detail"
    let pendingPurchases = "pending_purchases"
    let onboardingTasks = "onboarding_tasks"
    let searchQuery = "search_query"
@@ -57,23 +58,9 @@ module EmployeeSqlReader =
          token
          exp
 
-   let status (read: RowReader) =
-      let status = read.string EmployeeFields.status
-
-      match status.ToLower() with
-      | "active" -> EmployeeStatus.Active
-      | "closed" -> EmployeeStatus.Closed
-      | "pendingrestoreaccessapproval" ->
-         EmployeeStatus.PendingRestoreAccessApproval
-      | "readyfordelete" -> EmployeeStatus.ReadyForDelete
-      | "pendinginviteapproval" -> EmployeeStatus.PendingInviteApproval
-      | "pendinginviteconfirmation" ->
-         match inviteToken read with
-         | Some token -> EmployeeStatus.PendingInviteConfirmation token
-         | None ->
-            failwith
-               "Employee should not have status PendingInviteInvite without a token"
-      | _ -> failwith "Error attempting to read EmployeeStatus"
+   let statusDetail (read: RowReader) =
+      read.text EmployeeFields.statusDetail
+      |> Serialization.deserializeUnsafe<EmployeeStatus>
 
    let pendingPurchases (read: RowReader) =
       read.text EmployeeFields.pendingPurchases
@@ -94,7 +81,7 @@ module EmployeeSqlReader =
       FirstName = firstName read
       LastName = lastName read
       Cards = cards read |> List.map (fun o -> o.CardId, o) |> Map.ofList
-      Status = status read
+      Status = statusDetail read
       PendingPurchases =
          pendingPurchases read
          |> List.map (fun o -> o.CorrelationId, o)
@@ -124,6 +111,9 @@ module EmployeeSqlWriter =
       cards.Values |> Seq.toList |> Serialization.serialize |> Sql.jsonb
 
    let status (status: EmployeeStatus) = status |> string |> Sql.string
+
+   let statusDetail (status: EmployeeStatus) =
+      status |> Serialization.serialize |> Sql.jsonb
 
    let pendingPurchases (pendingPurchases: Map<CorrelationId, DebitInfo>) =
       pendingPurchases.Values

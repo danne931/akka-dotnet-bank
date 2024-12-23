@@ -394,3 +394,28 @@ let getCards (orgId: OrgId) (query: CardQuery) =
          read.decimalOrNone "mpa" |> Option.defaultValue 0m
       Employee = Reader.employee read
    })
+
+let getDemoUserSessions (orgId: OrgId) =
+   let query =
+      $"SELECT
+           {Fields.employeeId},
+           {Fields.orgId},
+           {Fields.firstName},
+           {Fields.lastName},
+           {Fields.email},
+           {Fields.role}
+        FROM {table}
+        WHERE {Fields.orgId} = @orgId
+        ORDER BY {Fields.firstName} || {Fields.lastName}"
+
+   pgQuery<UserSession>
+      query
+      (Some [ "orgId", Writer.orgId orgId ])
+      (fun read -> {
+         EmployeeId = Reader.employeeId read
+         OrgId = Reader.orgId read
+         FirstName = Reader.firstName read
+         LastName = Reader.lastName read
+         Email = Reader.email read
+         Role = Reader.role read
+      })

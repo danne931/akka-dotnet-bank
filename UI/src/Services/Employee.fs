@@ -146,15 +146,11 @@ let orgRequiresCommandApproval
    }
 
 let getCommandApprovalProgressWithRule
-   (employeeId: EmployeeId)
-   (commandType: ApprovableCommandType)
+   (progressId: CommandApprovalProgressId)
    : Async<Result<CommandApprovalProgressWithRule option, Err>>
    =
    async {
-      let path =
-         EmployeePath.getCommandApprovalProgressWithRule
-            employeeId
-            (string commandType)
+      let path = EmployeePath.getCommandApprovalProgressWithRule progressId
 
       let! (code, responseText) = Http.get path
 

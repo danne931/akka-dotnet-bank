@@ -1,7 +1,5 @@
 module RoutePaths
 
-open System
-
 open Lib.SharedTypes
 
 let private API = "/api"
@@ -114,13 +112,12 @@ module EmployeePath =
    let DeclineCommandApproval = Base + "/decline-command-approval"
 
    let GetCommandApprovalProgressWithRule =
-      Base + "/command-approval-progress/{employeeId}/{commandType}"
+      Base + "/command-approval-progress/{progressId}"
 
    let getCommandApprovalProgressWithRule
-      (employeeId: EmployeeId)
-      (commandType: string)
+      (progressId: CommandApprovalProgressId)
       =
-      Base + $"/command-approval-progress/{employeeId}/{commandType}"
+      Base + $"/command-approval-progress/{progressId}"
 
    let GetCommandApprovals = Base + "/command-approvals/{orgId}"
 
@@ -142,6 +139,12 @@ module UserSessionPath =
    let GetSession = "/session"
    let AuthorizeInvite = "/auth/invite"
    let AuthorizationCallback = "/auth/callback"
+   let GetDemoUserSessions = GetSession + "/{orgId}"
+   let getDemoUserSessions (orgId: OrgId) = $"{GetSession}/{orgId}"
+   let OverrideDemoUserSession = "/session-override/{employeeId}"
+
+   let overrideDemoUserSession (employeeId: EmployeeId) =
+      $"/session-override/{employeeId}"
 
 module AnalyticsPath =
    let Base = $"{API}/analytics"

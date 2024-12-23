@@ -125,7 +125,6 @@ type private Approver = {
    EmployeeId: System.Guid
 }
 
-
 let private commandApprovalProgressWithRuleQuery (whereClause: string option) =
    $"""
    SELECT
@@ -136,26 +135,30 @@ let private commandApprovalProgressWithRuleQuery (whereClause: string option) =
       progressT.{Fields.status},
       progressT.{Fields.updatedAt},
       progressT.{Fields.declinedBy},
+      progressT.{Fields.requestedBy},
       MIN(e3.{EmployeeSqlMapper.EmployeeFields.firstName} || ' ' || e3.{EmployeeSqlMapper.EmployeeFields.lastName}) as declined_by_name,
+      MIN(e4.{EmployeeSqlMapper.EmployeeFields.firstName} || ' ' || e4.{EmployeeSqlMapper.EmployeeFields.lastName}) as requested_by_name,
       jsonb_agg(
          DISTINCT jsonb_build_object(
-            'EmployeeId', e1.{Fields.employeeId},
+            'EmployeeId', e1.{EmployeeSqlMapper.EmployeeFields.employeeId},
             'Name', e1.{EmployeeSqlMapper.EmployeeFields.firstName} || ' ' || e1.{EmployeeSqlMapper.EmployeeFields.lastName}
          )
       ) AS permitted_approvers,
       jsonb_agg(
          DISTINCT jsonb_build_object(
-            'EmployeeId', e2.{Fields.employeeId},
+            'EmployeeId', e2.{EmployeeSqlMapper.EmployeeFields.employeeId},
             'Name', e2.{EmployeeSqlMapper.EmployeeFields.firstName} || ' ' || e2.{EmployeeSqlMapper.EmployeeFields.lastName}
          )
-      ) FILTER (WHERE e2.{Fields.employeeId} IS NOT NULL) AS approved_by
+      ) FILTER (WHERE e2.{EmployeeSqlMapper.EmployeeFields.employeeId} IS NOT NULL) AS approved_by
    FROM {CommandApprovalProgressSqlMapper.table} progressT
    JOIN {CommandApprovalRuleSqlMapper.table} ruleT using({Fields.ruleId})
    JOIN LATERAL unnest(ruleT.{Fields.permittedApprovers}) AS permitted_approver_id ON TRUE
-   JOIN {EmployeeSqlMapper.table} e1 ON e1.{Fields.employeeId} = permitted_approver_id
+   JOIN {EmployeeSqlMapper.table} e1 ON e1.{EmployeeSqlMapper.EmployeeFields.employeeId} = permitted_approver_id
    LEFT JOIN LATERAL unnest(progressT.{Fields.approvedBy}) AS approver_id ON TRUE
-   LEFT JOIN {EmployeeSqlMapper.table} e2 ON e2.{Fields.employeeId} = approver_id
-   LEFT JOIN {EmployeeSqlMapper.table} e3 ON e3.{Fields.employeeId} = {Fields.declinedBy}
+   LEFT JOIN {EmployeeSqlMapper.table} e2 ON e2.{EmployeeSqlMapper.EmployeeFields.employeeId} = approver_id
+   LEFT JOIN {EmployeeSqlMapper.table} e3 ON e3.{EmployeeSqlMapper.EmployeeFields.employeeId} = {Fields.declinedBy}
+   JOIN {EmployeeSqlMapper.table} e4 ON e4.{EmployeeSqlMapper.EmployeeFields.employeeId} = progressT.{Fields.requestedBy}
+
    WHERE {whereClause |> Option.defaultValue ""}
    GROUP BY
       {Fields.ruleId},
@@ -208,34 +211,31 @@ let private commandApprovalProgressWithRuleReader reader = {
          (Reader.declinedBy reader)
          (reader.textOrNone "declined_by_name")
 
+   RequestedBy = {
+      Id = Reader.requestedBy reader
+      Name = reader.text "requested_by_name"
+   }
+
    LastUpdate = Reader.updatedAt reader
 }
 
-/// Get command approval progress info for a particular employee / command type.
+/// Get command approval progress info.
 /// Returns who has approved the command so far & the list of permitted approvers
 /// for a rule as well as the rule criteria.
 let getCommandApprovalProgressWithRule
-   (employeeId: EmployeeId)
-   (commandType: ApprovableCommandType)
+   (progressId: CommandApprovalProgressId)
    : Result<CommandApprovalProgressWithRule option, Err> Task
    =
    let query =
-      commandApprovalProgressWithRuleQuery (
-         Some
-            $"""
-            progressT.{Fields.status} = @status::{TypeCast.status}
-            AND progressT.{Fields.employeeId} = @employeeId
-            AND progressT.{Fields.approvableCommandType} = @commandType::{TypeCast.approvableCommand}
-            """
-      )
+      $"progressT.{Fields.commandId} = @progressId"
+      |> Some
+      |> commandApprovalProgressWithRuleQuery
+
+   let queryParams = Some [ "progressId", Writer.commandId progressId ]
 
    pgQuerySingle<CommandApprovalProgressWithRule>
       query
-      (Some [
-         "employeeId", Writer.employeeId employeeId
-         "commandType", Writer.approvableCommandType commandType
-         "status", Writer.status CommandApprovalProgress.Status.Pending
-      ])
+      queryParams
       commandApprovalProgressWithRuleReader
 
 /// Get all command approval progress infos for an org

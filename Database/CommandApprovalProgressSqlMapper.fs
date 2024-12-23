@@ -15,7 +15,7 @@ module Fields =
    let commandId = "command_id"
    let ruleId = CommandApprovalRuleSqlMapper.Fields.ruleId
    let orgId = OrganizationSqlMapper.OrgFields.orgId
-   let employeeId = EmployeeSqlMapper.EmployeeFields.employeeId
+   let requestedBy = "requested_by_id"
    let status = "status"
    let approvedBy = "approved_by"
    let declinedBy = "declined_by"
@@ -37,7 +37,8 @@ module Reader =
 
    let orgId = OrganizationSqlMapper.OrgSqlReader.orgId
 
-   let employeeId = EmployeeSqlMapper.EmployeeSqlReader.employeeId
+   let requestedBy (read: RowReader) =
+      Fields.requestedBy |> read.uuid |> EmployeeId |> InitiatedById
 
    let status (read: RowReader) : CommandApprovalProgress.Status =
       Fields.status
@@ -61,7 +62,8 @@ module Writer =
    let commandId (id: CommandApprovalProgressId) = Sql.uuid id.Value
    let ruleId = CommandApprovalRuleSqlMapper.Writer.ruleId
    let orgId = OrganizationSqlMapper.OrgSqlWriter.orgId
-   let employeeId = EmployeeSqlMapper.EmployeeSqlWriter.employeeId
+
+   let requestedBy = InitiatedById.get >> Sql.uuid
 
    let status (cmd: CommandApprovalProgress.Status) =
       cmd |> string |> Sql.string

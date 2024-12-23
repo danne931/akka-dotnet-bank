@@ -29,32 +29,31 @@ let App () =
       | Routes.IndexUrl.Analytics url ->
          AnalyticsDashboard.AnalyticsDashboardComponent url
          |> UserSessionSuspense
-         |> (UserSessionProvider << OrgProvider)
+         |> OrgProvider
       | Routes.IndexUrl.Account url ->
          AccountDashboard.AccountDashboardComponent url
          |> UserSessionSuspense
-         |> (UserSessionProvider << OrgProvider)
+         |> OrgProvider
       | Routes.IndexUrl.Approvals url ->
          ApprovalDashboard.ApprovalDashboardComponent url
          |> UserSessionSuspense
-         |> (UserSessionProvider << OrgProvider)
+         |> OrgProvider
       | Routes.IndexUrl.Employees url ->
          EmployeeDashboard.EmployeeDashboardComponent url
          |> UserSessionSuspense
-         |> (UserSessionProvider << OrgProvider)
+         |> OrgProvider
       | Routes.IndexUrl.EmployeeHistory url ->
          EmployeeHistoryDashboard.EmployeeHistoryDashboardComponent url
          |> UserSessionSuspense
-         |> (UserSessionProvider << OrgProvider)
+         |> OrgProvider
       | Routes.IndexUrl.Cards url ->
          CardDashboard.CardDashboardComponent url
          |> UserSessionSuspense
-         |> (UserSessionProvider << OrgProvider)
+         |> OrgProvider
       | Routes.IndexUrl.Transaction url ->
          TransactionDashboard.TransactionDashboardComponent url
          |> UserSessionSuspense
-         |> (UserSessionProvider
-             << OrgProvider
+         |> (OrgProvider
              << SignalRConnectionProvider
              << SignalRAccountEventProvider
              << MerchantProvider
@@ -62,11 +61,11 @@ let App () =
       | Routes.IndexUrl.Payments url ->
          PaymentDashboard.PaymentDashboardComponent url
          |> UserSessionSuspense
-         |> (UserSessionProvider << OrgProvider)
+         |> OrgProvider
       | Routes.IndexUrl.NotFound -> Html.h1 "Not Found"
 
    [
-      Navigation.element
+      Navigation.NavigationComponent()
 
       Html.div [
          React.router [
@@ -75,9 +74,7 @@ let App () =
                classyNode Html.div [ "container-fluid"; "app-shell" ] [
                   classyNode Html.div [ "grid" ] [
                      classyNode Html.aside [ "menu" ] [
-                        SidebarMenu.render currentUrl
-                        |> UserSessionSuspense
-                        |> UserSessionProvider
+                        SidebarMenu.render currentUrl |> UserSessionSuspense
                      ]
 
                      Html.section [ activePage ]
@@ -90,4 +87,5 @@ let App () =
    |> React.strictMode
 
 let root = ReactDOM.createRoot <| document.getElementById "bank-react-root"
-root.render <| App()
+
+App() |> UserSessionProvider |> root.render

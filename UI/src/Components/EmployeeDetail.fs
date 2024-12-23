@@ -20,7 +20,7 @@ type State = {
 
 type Msg =
    | GetEmployeePendingInviteApproval of
-      EmployeeId *
+      CommandApprovalProgressId *
       AsyncOperationStatus<Result<CommandApprovalProgressWithRule option, Err>>
    | OpenRoleEdit
    | CancelRoleEdit
@@ -29,18 +29,22 @@ type Msg =
    | ResendInviteNotification of
       Employee *
       AsyncOperationStatus<Result<unit, Err>>
-   | ShowInviteCancellationConfirmation of Employee
+   | ShowInviteCancellationConfirmation of UserSession * Employee
    | ConfirmInviteCancellation of
+      UserSession *
       Employee *
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
    | RestoreAccess of
+      UserSession *
       Employee *
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
    | ApproveAccess of
+      UserSession *
       Employee *
       CommandApprovalProgressId *
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
    | DisapproveAccess of
+      UserSession *
       Employee *
       CommandApprovalProgressId *
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
@@ -53,9 +57,9 @@ let init (employee: Employee) =
       EmployeeInviteApprovalProgress = Deferred.Idle
    },
    match employee.Status with
-   | EmployeeStatus.PendingInviteApproval ->
+   | EmployeeStatus.PendingInviteApproval approval ->
       Cmd.ofMsg
-      <| GetEmployeePendingInviteApproval(employee.EmployeeId, Started)
+      <| GetEmployeePendingInviteApproval(approval.ProgressId, Started)
    | _ -> Cmd.none
 
 let closeRoleSelect state = {
@@ -64,21 +68,14 @@ let closeRoleSelect state = {
       PendingRole = None
 }
 
-let update
-   (notifyParentOnUpdate: EmployeeCommandReceipt -> unit)
-   (session: UserSession)
-   msg
-   state
-   =
+let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
    match msg with
-   | GetEmployeePendingInviteApproval(employeeId, Started) ->
+   | GetEmployeePendingInviteApproval(progressId, Started) ->
       let get = async {
          let! res =
-            EmployeeService.getCommandApprovalProgressWithRule
-               employeeId
-               ApprovableCommandType.InviteEmployee
+            EmployeeService.getCommandApprovalProgressWithRule progressId
 
-         return Msg.GetEmployeePendingInviteApproval(employeeId, Finished res)
+         return Msg.GetEmployeePendingInviteApproval(progressId, Finished res)
       }
 
       {
@@ -117,13 +114,13 @@ let update
       state,
       Alerts.toastCommand
       <| Err.NetworkError(exn $"Issue resending invite to {employee.Email}")
-   | ShowInviteCancellationConfirmation employee ->
+   | ShowInviteCancellationConfirmation(session, employee) ->
       let confirm =
          ConfirmAlert(
             "",
             function
             | ConfirmAlertResult.Confirmed ->
-               Msg.ConfirmInviteCancellation(employee, Started)
+               Msg.ConfirmInviteCancellation(session, employee, Started)
             | ConfirmAlertResult.Dismissed _ -> Msg.DismissInviteCancellation
          )
             .Title("Are you sure you want to cancel this invitation?")
@@ -131,7 +128,7 @@ let update
             .ShowCloseButton(true)
 
       state, SweetAlert.Run confirm
-   | ConfirmInviteCancellation(employee, Started) ->
+   | ConfirmInviteCancellation(session, employee, Started) ->
       let cancel = async {
          let cmd =
             CancelInvitationCommand.create
@@ -141,21 +138,21 @@ let update
             |> EmployeeCommand.CancelInvitation
 
          let! res = EmployeeService.submitCommand employee cmd
-         return ConfirmInviteCancellation(employee, Finished res)
+         return ConfirmInviteCancellation(session, employee, Finished res)
       }
 
       state, Cmd.fromAsync cancel
-   | ConfirmInviteCancellation(employee, Finished(Ok receipt)) ->
+   | ConfirmInviteCancellation(_, employee, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
       state, Alerts.toastSuccessCommand $"Cancelling invite for {employee.Name}"
-   | ConfirmInviteCancellation(employee, Finished(Error err)) ->
+   | ConfirmInviteCancellation(_, employee, Finished(Error err)) ->
       Log.error (string err)
 
       state,
       Alerts.toastCommand
       <| Err.NetworkError(exn $"Issue cancelling invite for {employee.Name}")
    | DismissInviteCancellation -> state, Cmd.none
-   | ApproveAccess(employee, cmdApprovalProgressId, Started) ->
+   | ApproveAccess(session, employee, cmdApprovalProgressId, Started) ->
       let approve = async {
          let cmd =
             CommandApprovalProgress.AcquireCommandApproval.create
@@ -168,17 +165,25 @@ let update
             |> EmployeeCommand.AcquireCommandApproval
 
          let! res = EmployeeService.submitCommand employee cmd
-         return Msg.ApproveAccess(employee, cmdApprovalProgressId, Finished res)
+
+         return
+            Msg.ApproveAccess(
+               session,
+               employee,
+               cmdApprovalProgressId,
+               Finished res
+            )
       }
 
       state, Cmd.fromAsync approve
-   | ApproveAccess(employee, _, Finished(Ok receipt)) ->
+   | ApproveAccess(_, employee, _, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
 
       state,
       Alerts.toastSuccessCommand $"Access approval acquired for {employee.Name}"
-   | ApproveAccess(_, _, Finished(Error err)) -> state, Alerts.toastCommand err
-   | DisapproveAccess(employee, cmdApprovalProgressId, Started) ->
+   | ApproveAccess(_, _, _, Finished(Error err)) ->
+      state, Alerts.toastCommand err
+   | DisapproveAccess(session, employee, cmdApprovalProgressId, Started) ->
       let approve = async {
          let cmd =
             CommandApprovalProgress.DeclineCommandApproval.create
@@ -193,17 +198,22 @@ let update
          let! res = EmployeeService.submitCommand employee cmd
 
          return
-            Msg.DisapproveAccess(employee, cmdApprovalProgressId, Finished res)
+            Msg.DisapproveAccess(
+               session,
+               employee,
+               cmdApprovalProgressId,
+               Finished res
+            )
       }
 
       state, Cmd.fromAsync approve
-   | DisapproveAccess(employee, _, Finished(Ok receipt)) ->
+   | DisapproveAccess(_, employee, _, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
 
       state, Alerts.toastSuccessCommand $"Access denied for {employee.Name}"
-   | DisapproveAccess(_, _, Finished(Error err)) ->
+   | DisapproveAccess(_, _, _, Finished(Error err)) ->
       state, Alerts.toastCommand err
-   | RestoreAccess(employee, Started) ->
+   | RestoreAccess(session, employee, Started) ->
       let send = async {
          let cmd =
             RestoreAccessCommand.create
@@ -216,14 +226,14 @@ let update
             |> EmployeeCommand.RestoreAccess
 
          let! res = EmployeeService.submitCommand employee cmd
-         return Msg.RestoreAccess(employee, Finished res)
+         return Msg.RestoreAccess(session, employee, Finished res)
       }
 
       state, Cmd.fromAsync send
-   | RestoreAccess(employee, Finished(Ok receipt)) ->
+   | RestoreAccess(_, employee, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
       state, Alerts.toastSuccessCommand $"Access restored for {employee.Name}"
-   | RestoreAccess(_, Finished(Error err)) -> state, Alerts.toastCommand err
+   | RestoreAccess(_, _, Finished(Error err)) -> state, Alerts.toastCommand err
 
 [<ReactComponent>]
 let EmployeeDetailComponent
@@ -232,7 +242,7 @@ let EmployeeDetailComponent
    (notifyParentOnUpdate: EmployeeCommandReceipt -> unit)
    =
    let state, dispatch =
-      React.useElmish (init employee, update notifyParentOnUpdate session, [||])
+      React.useElmish (init employee, update notifyParentOnUpdate, [||])
 
    let dropdownMenuOptions =
       match employee.Status with
@@ -244,7 +254,7 @@ let EmployeeDetailComponent
                IsSelected = state.IsEditingRole
             }
          ]
-      | EmployeeStatus.PendingInviteApproval ->
+      | EmployeeStatus.PendingInviteApproval _ ->
          match state.EmployeeInviteApprovalProgress with
          | Deferred.Resolved(Ok(Some progress)) when
             CommandApprovalProgressWithRule.mayApproveOrDeny
@@ -258,6 +268,7 @@ let EmployeeDetailComponent
                      fun _ ->
                         dispatch
                         <| Msg.ApproveAccess(
+                           session,
                            employee,
                            progress.CommandProgressId,
                            Started
@@ -271,6 +282,7 @@ let EmployeeDetailComponent
                      fun _ ->
                         dispatch
                         <| Msg.DisapproveAccess(
+                           session,
                            employee,
                            progress.CommandProgressId,
                            Started
@@ -285,7 +297,11 @@ let EmployeeDetailComponent
                Text = "Cancel Invite"
                OnClick =
                   fun _ ->
-                     dispatch <| Msg.ShowInviteCancellationConfirmation employee
+                     dispatch
+                     <| Msg.ShowInviteCancellationConfirmation(
+                        session,
+                        employee
+                     )
                IsSelected = false
             }
             {
@@ -302,7 +318,8 @@ let EmployeeDetailComponent
                IsSelected = false
                Text = "Restore Access"
                OnClick =
-                  fun _ -> dispatch <| Msg.RestoreAccess(employee, Started)
+                  fun _ ->
+                     dispatch <| Msg.RestoreAccess(session, employee, Started)
             }
          ]
       | _ -> None
@@ -321,7 +338,7 @@ let EmployeeDetailComponent
                match employee.Status with
                | EmployeeStatus.InitialEmptyState
                | EmployeeStatus.Active -> ()
-               | EmployeeStatus.PendingInviteApproval
+               | EmployeeStatus.PendingInviteApproval _
                | EmployeeStatus.PendingRestoreAccessApproval
                | EmployeeStatus.PendingInviteConfirmation _ ->
                   attr.classes [ "pending" ]

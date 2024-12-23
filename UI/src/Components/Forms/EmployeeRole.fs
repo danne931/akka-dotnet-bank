@@ -134,7 +134,7 @@ let EmployeeRoleFormComponent
    }
 
    match orgCtx, session with
-   | Deferred.Resolved(Ok(Some org)), Deferred.Resolved session ->
+   | Deferred.Resolved(Ok(Some org)), Deferred.Resolved(Ok session) ->
       EmployeeFormContainer
       <| formProps
       <| form session employee org.Accounts onSelect

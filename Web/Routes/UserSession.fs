@@ -36,29 +36,50 @@ let private authorizeInvite
 
    processCommand system cmd
 
-let startUserSessionRoutes (app: WebApplication) =
-   // TODO: Integrate with auth provider
-   app.MapPost(
-      UserSessionPath.Login,
-      Func<HttpContext, Task<IResult>>(fun context -> task {
-         let! employeeRes =
-            getEmployee Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON
+let private setUserSessionContext
+   (context: HttpContext)
+   (employeeId: EmployeeId)
+   =
+   task {
+      let! employeeRes = getEmployee employeeId
 
+      return
          match employeeRes with
-         | Error err -> return Results.BadRequest err
-         | Ok None -> return Results.NotFound()
+         | Error err -> Results.BadRequest err
+         | Ok None -> Results.NotFound()
          | Ok(Some employee) ->
             context.Session.SetString("FirstName", employee.FirstName)
             context.Session.SetString("LastName", employee.LastName)
             context.Session.SetString("Email", string employee.Email)
-
             context.Session.SetString("EmployeeId", string employee.EmployeeId)
-
             context.Session.SetString("OrgId", string employee.OrgId)
-
             context.Session.SetString("Role", string employee.Role)
-            return Results.Ok()
-      })
+
+            Results.Ok()
+   }
+
+let startUserSessionRoutes (app: WebApplication) =
+   app.MapGet(
+      UserSessionPath.GetDemoUserSessions,
+      Func<Guid, Task<IResult>>(fun orgId ->
+         getDemoUserSessions (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
+   )
+   |> ignore
+
+   app.MapPut(
+      UserSessionPath.OverrideDemoUserSession,
+      Func<Guid, HttpContext, Task<IResult>>(fun employeeId context ->
+         setUserSessionContext context (EmployeeId employeeId))
+   )
+   |> ignore
+
+   // TODO: Integrate with auth provider
+   app.MapPost(
+      UserSessionPath.Login,
+      Func<HttpContext, Task<IResult>>(fun context ->
+         setUserSessionContext
+            context
+            Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON)
    )
    |> ignore
 
