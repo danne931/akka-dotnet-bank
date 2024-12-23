@@ -22,11 +22,15 @@ type Msg =
       AsyncOperationStatus<
          Result<CommandApprovalProgressWithRule list option, Err>
        >
-   | ShowCommandDeclineConfirmation of CommandApprovalProgressWithRule
+   | ShowCommandDeclineConfirmation of
+      UserSession *
+      CommandApprovalProgressWithRule
    | AcquireCommandApproval of
+      UserSession *
       CommandApprovalProgressWithRule *
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
    | DeclineCommand of
+      UserSession *
       CommandApprovalProgressWithRule *
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
    | DismissConfirmation
@@ -38,7 +42,7 @@ let init (orgCtx: OrgProvider.State) () =
       Cmd.ofMsg (Msg.GetCommandApprovals(o.Org.OrgId, Started))
    | _ -> Cmd.none
 
-let update (session: UserSession) msg state =
+let update msg state =
    match msg with
    | GetCommandApprovals(orgId, Started) ->
       let getApprovals = async {
@@ -63,13 +67,13 @@ let update (session: UserSession) msg state =
             Approvals = Deferred.Resolved(Error err)
       },
       Cmd.none
-   | ShowCommandDeclineConfirmation approvalProgress ->
+   | ShowCommandDeclineConfirmation(session, approvalProgress) ->
       let confirm =
          ConfirmAlert(
             "",
             function
             | ConfirmAlertResult.Confirmed ->
-               Msg.DeclineCommand(approvalProgress, Started)
+               Msg.DeclineCommand(session, approvalProgress, Started)
             | ConfirmAlertResult.Dismissed _ -> Msg.DismissConfirmation
          )
             .Title(
@@ -79,7 +83,7 @@ let update (session: UserSession) msg state =
             .ShowCloseButton(true)
 
       state, SweetAlert.Run confirm
-   | AcquireCommandApproval(approval, Started) ->
+   | AcquireCommandApproval(session, approval, Started) ->
       let acquireApproval = async {
          let! employeeRes =
             EmployeeService.getEmployee
@@ -88,10 +92,16 @@ let update (session: UserSession) msg state =
 
          match employeeRes with
          | Error err ->
-            return Msg.AcquireCommandApproval(approval, Finished(Error err))
+            return
+               Msg.AcquireCommandApproval(
+                  session,
+                  approval,
+                  Finished(Error err)
+               )
          | Ok None ->
             return
                Msg.AcquireCommandApproval(
+                  session,
                   approval,
                   Finished(
                      Error(Err.UnexpectedError "Missing dependency: Employee")
@@ -109,11 +119,11 @@ let update (session: UserSession) msg state =
                |> EmployeeCommand.AcquireCommandApproval
 
             let! res = EmployeeService.submitCommand employee cmd
-            return Msg.AcquireCommandApproval(approval, Finished res)
+            return Msg.AcquireCommandApproval(session, approval, Finished res)
       }
 
       state, Cmd.fromAsync acquireApproval
-   | AcquireCommandApproval(approval, Finished(Ok _)) ->
+   | AcquireCommandApproval(session, approval, Finished(Ok _)) ->
       {
          state with
             Approvals =
@@ -123,7 +133,7 @@ let update (session: UserSession) msg state =
                   |> List.map (fun a ->
                      if a.CommandProgressId = approval.CommandProgressId then
                         let approver: CommandApprovalRule.Approver = {
-                           Name = session.FirstName + " " + session.LastName
+                           Name = session.Name
                            EmployeeId = session.EmployeeId
                         }
 
@@ -143,10 +153,10 @@ let update (session: UserSession) msg state =
                | _ -> state.Approvals
       },
       Cmd.none
-   | AcquireCommandApproval(_, Finished(Error err)) ->
+   | AcquireCommandApproval(_, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
-   | DeclineCommand(approval, Started) ->
+   | DeclineCommand(session, approval, Started) ->
       let decline = async {
          let! employeeRes =
             EmployeeService.getEmployee
@@ -154,10 +164,12 @@ let update (session: UserSession) msg state =
                (EmployeeId.fromEntityId approval.Command.EntityId)
 
          match employeeRes with
-         | Error err -> return Msg.DeclineCommand(approval, Finished(Error err))
+         | Error err ->
+            return Msg.DeclineCommand(session, approval, Finished(Error err))
          | Ok None ->
             return
                Msg.DeclineCommand(
+                  session,
                   approval,
                   Finished(
                      Error(Err.UnexpectedError "Missing dependency: Employee")
@@ -175,11 +187,11 @@ let update (session: UserSession) msg state =
                |> EmployeeCommand.DeclineCommandApproval
 
             let! res = EmployeeService.submitCommand employee cmd
-            return Msg.DeclineCommand(approval, Finished res)
+            return Msg.DeclineCommand(session, approval, Finished res)
       }
 
       state, Cmd.fromAsync decline
-   | DeclineCommand(approval, Finished(Ok _)) ->
+   | DeclineCommand(session, approval, Finished(Ok _)) ->
       {
          state with
             Approvals =
@@ -206,7 +218,7 @@ let update (session: UserSession) msg state =
                | _ -> state.Approvals
       },
       Cmd.none
-   | DeclineCommand(_, Finished(Error err)) ->
+   | DeclineCommand(_, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
    | DismissConfirmation -> state, Cmd.none
@@ -259,7 +271,8 @@ let renderPendingApprovals
                         e.preventDefault ()
 
                         if mayApproveOrDeny then
-                           dispatch <| Msg.AcquireCommandApproval(o, Started))
+                           dispatch
+                           <| Msg.AcquireCommandApproval(session, o, Started))
 
                      attr.custom ("data-tooltip", "Approve")
                      attr.custom ("data-placement", "bottom")
@@ -278,7 +291,8 @@ let renderPendingApprovals
                         e.preventDefault ()
 
                         if mayApproveOrDeny then
-                           dispatch <| Msg.ShowCommandDeclineConfirmation o)
+                           dispatch
+                           <| Msg.ShowCommandDeclineConfirmation(session, o))
 
                      attr.custom ("data-tooltip", "Decline")
                      attr.custom ("data-placement", "bottom")
@@ -289,16 +303,16 @@ let renderPendingApprovals
             Html.p (
                match o.Command with
                | ApprovableCommand.DomesticTransfer c ->
-                  $"{Money.format c.Data.Amount} domestic transfer from {c.Data.Sender.Name} to {c.Data.Recipient.Name}."
+                  $"{Money.format c.Data.Amount} domestic transfer from {c.Data.Sender.Name} to {c.Data.Recipient.Name} requested by {o.RequestedBy.Name}."
                | ApprovableCommand.InviteEmployee c ->
-                  $"Invite employee {c.Data.Name}"
+                  $"Invite employee {c.Data.Name} requested by {o.RequestedBy.Name}"
                | ApprovableCommand.UpdateEmployeeRole c ->
-                  $"Update {c.Data.Name}'s role from {c.Data.PriorRole} to {c.Data.Role}."
+                  $"Update {c.Data.Name}'s role from {c.Data.PriorRole} to {c.Data.Role} requested by {o.RequestedBy.Name}."
                | ApprovableCommand.FulfillPlatformPayment c ->
                   let pay = c.Data.RequestedPayment.BaseInfo
-                  $"{Money.format pay.Amount} payment requested to {pay.Payer.OrgName}"
+                  $"{Money.format pay.Amount} payment requested to {pay.Payer.OrgName} by {o.RequestedBy.Name}"
                | ApprovableCommand.InternalTransferBetweenOrgs c ->
-                  $"{Money.format c.Data.Amount} transfer to {c.Data.Recipient.Name}."
+                  $"{Money.format c.Data.Amount} transfer to {c.Data.Recipient.Name} requested by {o.RequestedBy.Name}."
             )
 
             match o.Status with
@@ -345,8 +359,7 @@ let ApprovalDashboardComponent
    let orgCtx = React.useContext OrgProvider.context
    let orgDispatch = React.useContext OrgProvider.dispatchContext
 
-   let state, dispatch =
-      React.useElmish (init orgCtx, update session, [| box orgCtx |])
+   let state, dispatch = React.useElmish (init orgCtx, update, [| box orgCtx |])
 
    classyNode Html.div [ "approval-dashboard" ] [
       classyNode Html.main [ "container-fluid" ] [

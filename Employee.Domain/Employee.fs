@@ -85,7 +85,13 @@ let applyEvent
          Cards = Map.empty
          Status =
             match e.Data.OrgRequiresEmployeeInviteApproval with
-            | Some _ -> EmployeeStatus.PendingInviteApproval
+            | Some ruleId ->
+               EmployeeStatus.PendingInviteApproval(
+                  {
+                     RuleId = ruleId
+                     ProgressId = CommandApprovalProgressId e.CorrelationId
+                  }
+               )
             | None ->
                EmployeeStatus.PendingInviteConfirmation(InviteToken.generate ())
          PendingPurchases = Map.empty
@@ -430,11 +436,12 @@ module private StateTransition =
    let approveAccess (state: EmployeeWithEvents) (cmd: ApproveAccessCommand) =
       let em = state.Info
 
-      if em.Status <> EmployeeStatus.PendingInviteApproval then
+      match em.Status with
+      | EmployeeStatus.PendingInviteApproval _ ->
+         map AccessApproved state (ApproveAccessCommand.toEvent cmd)
+      | _ ->
          transitionErr
          <| EmployeeStatusDisallowsInviteProgression(string em.Status)
-      else
-         map AccessApproved state (ApproveAccessCommand.toEvent cmd)
 
    let restoreAccess (state: EmployeeWithEvents) (cmd: RestoreAccessCommand) =
       let em = state.Info
@@ -470,11 +477,11 @@ module private StateTransition =
 
       match cmd.Data.Command with
       | ApprovableCommand.InviteEmployee _ ->
-         if em.Status <> EmployeeStatus.PendingInviteApproval then
+         match em.Status with
+         | EmployeeStatus.PendingInviteApproval _ -> applyApprovalRequest ()
+         | _ ->
             transitionErr
             <| EmployeeStatusDisallowsInviteProgression(string em.Status)
-         else
-            applyApprovalRequest ()
       | _ ->
          if em.Status <> EmployeeStatus.Active then
             transitionErr EmployeeNotActive
@@ -498,11 +505,11 @@ module private StateTransition =
 
       match cmd.Data.CommandType with
       | ApprovableCommandType.InviteEmployee ->
-         if em.Status <> EmployeeStatus.PendingInviteApproval then
+         match em.Status with
+         | EmployeeStatus.PendingInviteApproval _ -> applyApprovalAcquired ()
+         | _ ->
             transitionErr
             <| EmployeeStatusDisallowsInviteProgression(string em.Status)
-         else
-            applyApprovalAcquired ()
       | _ ->
          if state.Info.Status <> EmployeeStatus.Active then
             transitionErr EmployeeNotActive
@@ -523,11 +530,11 @@ module private StateTransition =
 
       match cmd.Data.CommandType with
       | ApprovableCommandType.InviteEmployee ->
-         if em.Status <> EmployeeStatus.PendingInviteApproval then
+         match em.Status with
+         | EmployeeStatus.PendingInviteApproval _ -> applyApprovalDeclined ()
+         | _ ->
             transitionErr
             <| EmployeeStatusDisallowsInviteProgression(string em.Status)
-         else
-            applyApprovalDeclined ()
       | _ ->
          if em.Status <> EmployeeStatus.Active then
             transitionErr EmployeeNotActive

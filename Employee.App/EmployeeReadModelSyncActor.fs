@@ -195,10 +195,8 @@ let sqlParamReducer
 
          "orgId", CommandApprovalProgressSqlMapper.Writer.orgId e.OrgId
 
-         "employeeId",
-         CommandApprovalProgressSqlMapper.Writer.employeeId (
-            EmployeeId.fromEntityId e.EntityId
-         )
+         "requestedById",
+         e.InitiatedById |> CommandApprovalProgressSqlMapper.Writer.requestedBy
 
          "status",
          CommandApprovalProgressSqlMapper.Writer.status
@@ -251,9 +249,10 @@ let sqlParamReducer
             CommandApprovalProgress.Status.Declined
 
          "declinedBy",
-         CommandApprovalProgressSqlMapper.Writer.declinedBy (
-            Some(InitiatedById.toEmployeeId e.Data.DeclinedBy)
-         )
+         e.Data.DeclinedBy
+         |> InitiatedById.toEmployeeId
+         |> Some
+         |> CommandApprovalProgressSqlMapper.Writer.declinedBy
       ]
 
       {
@@ -269,6 +268,7 @@ let sqlParamsFromEmployee (employee: Employee) : (string * SqlValue) list = [
    "firstName", EmployeeSqlWriter.firstName employee.FirstName
    "lastName", EmployeeSqlWriter.lastName employee.LastName
    "status", EmployeeSqlWriter.status employee.Status
+   "statusDetail", EmployeeSqlWriter.statusDetail employee.Status
    "role", EmployeeSqlWriter.role employee.Role
    "cards", EmployeeSqlWriter.cards employee.Cards
    "pendingPurchases",
@@ -312,6 +312,7 @@ let upsertReadModels
           {EmployeeFields.lastName},
           {EmployeeFields.cards},
           {EmployeeFields.status},
+          {EmployeeFields.statusDetail},
           {EmployeeFields.pendingPurchases},
           {EmployeeFields.onboardingTasks},
           {EmployeeFields.inviteToken},
@@ -326,6 +327,7 @@ let upsertReadModels
           @lastName,
           @cards,
           @status::{EmployeeTypeCast.status},
+          @statusDetail,
           @pendingPurchases,
           @onboardingTasks,
           @inviteToken,
@@ -334,6 +336,7 @@ let upsertReadModels
       ON CONFLICT ({EmployeeFields.employeeId})
       DO UPDATE SET
          {EmployeeFields.status} = @status::{EmployeeTypeCast.status},
+         {EmployeeFields.statusDetail} = @statusDetail,
          {EmployeeFields.cards} = @cards,
          {EmployeeFields.pendingPurchases} = @pendingPurchases,
          {EmployeeFields.onboardingTasks} = @onboardingTasks,
@@ -444,7 +447,7 @@ let upsertReadModels
             ({CommandApprovalProgressSqlMapper.Fields.commandId},
              {CommandApprovalProgressSqlMapper.Fields.ruleId},
              {CommandApprovalProgressSqlMapper.Fields.orgId},
-             {CommandApprovalProgressSqlMapper.Fields.employeeId},
+             {CommandApprovalProgressSqlMapper.Fields.requestedBy},
              {CommandApprovalProgressSqlMapper.Fields.status},
              {CommandApprovalProgressSqlMapper.Fields.approvedBy},
              {CommandApprovalProgressSqlMapper.Fields.approvableCommandType},
@@ -453,7 +456,7 @@ let upsertReadModels
             (@commandId,
              @ruleId,
              @orgId,
-             @employeeId,
+             @requestedById,
              @status::{CommandApprovalProgressSqlMapper.TypeCast.status},
              @approvedBy,
              @approvableCommandType::{commandTypecast},

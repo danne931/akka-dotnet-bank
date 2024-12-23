@@ -58,7 +58,7 @@ let AccountSelectionComponent
                      attr.custom ("aria-haspopup", "listbox")
                      attr.role "link"
                      attr.classes [ "contrast" ]
-                     attr.text "Accounts"
+                     attr.text "Account"
                   ]
 
                   Html.ul [

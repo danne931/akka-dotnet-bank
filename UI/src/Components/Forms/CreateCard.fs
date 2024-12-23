@@ -155,7 +155,7 @@ let CreateCardFormComponent
    (onSubmit: ParentOnSubmitHandler)
    (employee: Employee)
    =
-   let session = React.useContext UserSessionProvider.context
+   let sessionCtx = React.useContext UserSessionProvider.context
    let orgCtx = React.useContext OrgProvider.context
 
    let formProps: Values = {
@@ -167,8 +167,8 @@ let CreateCardFormComponent
       IsVirtual = true
    }
 
-   match orgCtx, session with
-   | Deferred.Resolved(Ok(Some org)), Deferred.Resolved session ->
+   match orgCtx, sessionCtx with
+   | Deferred.Resolved(Ok(Some org)), Deferred.Resolved(Ok session) ->
       EmployeeFormContainer
       <| formProps
       <| form session employee org.Accounts

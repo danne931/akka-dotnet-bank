@@ -20,6 +20,7 @@
     <Compile Include="Services/Diagnostics.fs" />
     <Compile Include="Services/Transaction.fs" />
     <Compile Include="Services/Account.fs" />
+    <Compile Include="Services/UserSession.fs" />
     <Compile Include="Services/Employee.fs" />
     <Compile Include="Services/Organization.fs" />
     <Compile Include="Routes.fs" />

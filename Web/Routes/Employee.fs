@@ -126,41 +126,47 @@ let startEmployeeRoutes (app: WebApplication) =
    app
       .MapPost(
          EmployeePath.ResendInviteNotification,
-         Func<ActorSystem, Employee, Task<IResult>>(fun sys employee -> task {
-            match employee.Status with
-            | EmployeeStatus.PendingInviteConfirmation token ->
-               if token.IsExpired() then
-                  let cmd =
-                     RefreshInvitationTokenCommand.create
-                        employee.CompositeId
-                        (InitiatedById
-                           Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON)
-                        { Reason = None }
-                     |> EmployeeCommand.RefreshInvitationToken
+         Func<ActorSystem, Employee, HttpContext, Task<IResult>>
+            (fun sys employee context -> task {
+               match employee.Status with
+               | EmployeeStatus.PendingInviteConfirmation token ->
+                  if token.IsExpired() then
+                     let initiatedBy =
+                        context.Session.GetString("EmployeeId")
+                        |> Guid.Parse
+                        |> EmployeeId
+                        |> InitiatedById
 
-                  match! (processCommand sys cmd) with
-                  | Ok _ -> return Results.Ok()
-                  | Error e -> return RouteUtil.badRequest e
-               else
-                  let invite: EmailActor.EmployeeInviteEmailInfo = {
-                     OrgId = employee.OrgId
-                     Name = employee.Name
-                     Email = employee.Email
-                     Token = token
-                  }
+                     let cmd =
+                        RefreshInvitationTokenCommand.create
+                           employee.CompositeId
+                           initiatedBy
+                           { Reason = None }
+                        |> EmployeeCommand.RefreshInvitationToken
 
-                  EmailActor.getForwarder sys
-                  <! EmailActor.EmailMessage.EmployeeInvite invite
+                     match! (processCommand sys cmd) with
+                     | Ok _ -> return Results.Ok()
+                     | Error e -> return RouteUtil.badRequest e
+                  else
+                     let invite: EmailActor.EmployeeInviteEmailInfo = {
+                        OrgId = employee.OrgId
+                        Name = employee.Name
+                        Email = employee.Email
+                        Token = token
+                     }
 
-                  return Results.Ok()
-            | _ ->
-               let msg =
-                  $"Employee status {employee.Status} not in a state to invite."
+                     EmailActor.getForwarder sys
+                     <! EmailActor.EmailMessage.EmployeeInvite invite
 
-               ActorUtil.SystemLog.error sys (exn msg) msg
-               //return Results.Forbid()
-               return Results.NotFound()
-         })
+                     return Results.Ok()
+               | _ ->
+                  let msg =
+                     $"Employee status {employee.Status} not in a state to invite."
+
+                  ActorUtil.SystemLog.error sys (exn msg) msg
+                  //return Results.Forbid()
+                  return Results.NotFound()
+            })
       )
       .RBAC(Permissions.ResendInviteNotification)
    |> ignore
@@ -179,15 +185,11 @@ let startEmployeeRoutes (app: WebApplication) =
 
    app.MapGet(
       EmployeePath.GetCommandApprovalProgressWithRule,
-      Func<Guid, string, Task<IResult>>(fun employeeId commandType ->
-         match ApprovableCommandType.fromString commandType with
-         | None ->
-            Task.FromResult(Results.BadRequest "Invalid ApprovableCommandType")
-         | Some commandType ->
-            getCommandApprovalProgressWithRule
-               (EmployeeId employeeId)
-               commandType
-            |> RouteUtil.unwrapTaskResultOption)
+      Func<Guid, Task<IResult>>(fun progressId ->
+         getCommandApprovalProgressWithRule (
+            CommandApprovalProgressId(CorrelationId progressId)
+         )
+         |> RouteUtil.unwrapTaskResultOption)
    )
    |> ignore
 

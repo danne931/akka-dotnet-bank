@@ -7,7 +7,6 @@ open Elmish
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open UIDomain.Account
 
 type State = Deferred<Result<OrgWithAccountProfiles option, Err>>
 
@@ -195,7 +194,7 @@ let OrgProvider (child: Fable.React.ReactElement) =
    React.useEffect (
       fun () ->
          match session with
-         | Deferred.Resolved session when state = Deferred.Idle ->
+         | Deferred.Resolved(Ok session) when state = Deferred.Idle ->
             dispatch <| Msg.Load(session.OrgId, Started)
          | _ -> ()
       , [| box session |]

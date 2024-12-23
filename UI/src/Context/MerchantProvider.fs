@@ -36,7 +36,7 @@ let MerchantProvider (child: Fable.React.ReactElement) =
    React.useEffect (
       fun () ->
          match session with
-         | Deferred.Resolved session ->
+         | Deferred.Resolved(Ok session) ->
             async {
                match! TransactionService.getMerchants session.OrgId with
                | Ok merchants -> dispatch (SetMerchants merchants)

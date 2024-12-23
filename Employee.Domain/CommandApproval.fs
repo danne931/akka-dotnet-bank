@@ -77,6 +77,8 @@ type ApprovableCommand =
 
    member x.OrgId = ApprovableCommand.envelope x |> _.OrgId
 
+   member x.CorrelationId = ApprovableCommand.envelope x |> _.CorrelationId
+
    member x.Amount =
       match x with
       | InviteEmployee _ -> 0m
@@ -152,6 +154,8 @@ module CommandApprovalRule =
 
 
 module CommandApprovalProgress =
+   type Requester = { Name: string; Id: InitiatedById }
+
    [<RequireQualifiedAccess>]
    type Status =
       | Pending
@@ -214,12 +218,13 @@ module CommandApprovalProgress =
       let create
          (employeeId: EmployeeId, orgId: OrgId)
          (initiatedBy: InitiatedById)
+         (correlationId: CorrelationId)
          (data: CommandApprovalRequested)
          =
          Command.create
             (EmployeeId.toEntityId employeeId)
             orgId
-            (CorrelationId.create ())
+            correlationId
             initiatedBy
             data
 
@@ -281,6 +286,7 @@ type CommandApprovalProgressWithRule = {
    PermittedApprovers: CommandApprovalRule.Approver list
    ApprovedBy: CommandApprovalRule.Approver list option
    DeclinedBy: CommandApprovalRule.Approver option
+   RequestedBy: CommandApprovalProgress.Requester
    Status: CommandApprovalProgress.Status
    LastUpdate: DateTime
 }
