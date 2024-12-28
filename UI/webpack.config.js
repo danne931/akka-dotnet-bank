@@ -14,7 +14,8 @@ module.exports = (env, argv) => {
     entry: './dist/App.js',
     output: {
       path: staticPath,
-      filename: '[name].js'
+      filename: '[name].js',
+      chunkFilename: '[name].[contenthash].js'
     },
 
     devServer: {

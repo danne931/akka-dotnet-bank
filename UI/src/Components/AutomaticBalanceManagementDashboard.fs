@@ -98,11 +98,16 @@ let computeArrowLayout (accounts: Map<AccountId, Account>) =
 
 [<ReactComponent>]
 let AutomaticBalanceManagementDashboardComponent
-   (session: UserSession)
-   (accounts: Map<AccountId, Account>)
-   (url: Routes.AccountUrl)
+   (props:
+      {|
+         Session: UserSession
+         Accounts: Map<AccountId, Account>
+         Url: Routes.AccountUrl
+      |})
    =
    let orgProviderDispatch = React.useContext OrgProvider.dispatchContext
+   let session = props.Session
+   let accounts = props.Accounts
 
    let onRuleSave =
       fun (receipt: AccountCommandReceipt) ->
@@ -184,7 +189,7 @@ let AutomaticBalanceManagementDashboardComponent
       React.createDisposable removeArrows)
 
    classyNode Html.div [ "automatic-balance-management" ] [
-      match url with
+      match props.Url with
       | Routes.AccountUrl.CreateRule ruleRoute ->
          classyNode Html.article [
             "form-wrapper"
@@ -382,3 +387,6 @@ let AutomaticBalanceManagementDashboardComponent
          ]
       ]
    ]
+
+// exportDefault necessary for dynamic import resolution.
+Fable.Core.JsInterop.exportDefault AutomaticBalanceManagementDashboardComponent
