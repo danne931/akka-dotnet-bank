@@ -3,12 +3,12 @@ module AccountDashboard
 open Feliz
 open Feliz.Router
 open Fable.FontAwesome
+open Fable.Core.JsInterop
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
 open Bank.Account.Forms.AccountCreateForm
-open AutomaticBalanceManagementDashboard
 
 [<ReactComponent>]
 let AccountNumberComponent (account: Account) =
@@ -168,10 +168,23 @@ let AccountDashboardComponent (url: Routes.AccountUrl) (session: UserSession) =
          | Routes.AccountUrl.EditRule _ ->
             match orgCtx with
             | Deferred.Resolved(Ok(Some org)) ->
-               AutomaticBalanceManagementDashboardComponent
-                  session
-                  org.Accounts
-                  url
+               // Lazy import to avoid fetching LeaderLine library when not
+               // needed.  LeaderLine, the SVG line drawing library, is used
+               // only by AutomaticBalanceDashboardComponent.
+               React.suspense (
+                  [
+                     React.lazy' (
+                        fun () ->
+                           importDynamic "./AutomaticBalanceManagementDashboard"
+                        , {|
+                           Session = session
+                           Accounts = org.Accounts
+                           Url = url
+                        |}
+                     )
+                  ],
+                  Html.progress []
+               )
             | _ -> ()
          | Routes.AccountUrl.NotFound -> Html.p "Uh oh! Unknown URL."
       ]
