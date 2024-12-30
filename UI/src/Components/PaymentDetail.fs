@@ -24,12 +24,14 @@ type Confirmation =
 type Msg =
    | TogglePaymentFulfillment
    | DismissConfirmation
-   | ShowConfirmation of Confirmation
+   | ShowConfirmation of UserSession * Confirmation
    | ConfirmCancelPaymentRequest of
+      UserSession *
       reason: string option *
       Payment *
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
    | ConfirmDeclinePaymentRequest of
+      UserSession *
       reason: string option *
       Payment *
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
@@ -43,12 +45,7 @@ let getAccount (payment: Payment) =
    |> fun p -> p.Payee.AccountId
    |> AccountService.getAccount
 
-let update
-   (notifyParentOnUpdate: AccountCommandReceipt -> unit)
-   (session: UserSession)
-   msg
-   state
-   =
+let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
    match msg with
    | TogglePaymentFulfillment ->
       {
@@ -57,7 +54,7 @@ let update
       },
       Cmd.none
    | DismissConfirmation -> state, Cmd.none
-   | ShowConfirmation confirmation ->
+   | ShowConfirmation(session, confirmation) ->
       let confAction =
          match confirmation with
          | Confirmation.DeclinePayment _ -> "decline"
@@ -75,9 +72,9 @@ let update
 
                match confirmation with
                | Confirmation.DeclinePayment p ->
-                  Msg.ConfirmDeclinePaymentRequest(reason, p, Started)
+                  Msg.ConfirmDeclinePaymentRequest(session, reason, p, Started)
                | Confirmation.CancelPayment p ->
-                  Msg.ConfirmCancelPaymentRequest(reason, p, Started)
+                  Msg.ConfirmCancelPaymentRequest(session, reason, p, Started)
             | InputAlertResult.Dismissed _ -> Msg.DismissConfirmation
          )
             .Title(
@@ -89,7 +86,7 @@ let update
             .ShowCloseButton(true)
 
       state, SweetAlert.Run confirm
-   | ConfirmCancelPaymentRequest(reason, payment, Started) ->
+   | ConfirmCancelPaymentRequest(session, reason, payment, Started) ->
       let cancel = async {
          let! accountOpt = getAccount payment
 
@@ -100,7 +97,13 @@ let update
                |> Err.NotImplementedError
                |> Error
 
-            return ConfirmCancelPaymentRequest(reason, payment, Finished err)
+            return
+               ConfirmCancelPaymentRequest(
+                  session,
+                  reason,
+                  payment,
+                  Finished err
+               )
          | Payment.Platform p, Ok(Some account) ->
             let cmd =
                let initiator = InitiatedById session.EmployeeId
@@ -115,23 +118,37 @@ let update
                |> AccountCommand.CancelPlatformPayment
 
             let! res = AccountService.submitCommand account cmd
-            return ConfirmCancelPaymentRequest(reason, payment, Finished res)
+
+            return
+               ConfirmCancelPaymentRequest(
+                  session,
+                  reason,
+                  payment,
+                  Finished res
+               )
          | _ ->
             let err = Err.UnexpectedError "Error" |> Error
-            return ConfirmCancelPaymentRequest(reason, payment, Finished err)
+
+            return
+               ConfirmCancelPaymentRequest(
+                  session,
+                  reason,
+                  payment,
+                  Finished err
+               )
       }
 
       state, Cmd.fromAsync cancel
-   | ConfirmCancelPaymentRequest(_, p, Finished(Ok receipt)) ->
+   | ConfirmCancelPaymentRequest(session, _, p, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
 
       state,
       Alerts.toastSuccessCommand
          $"Cancelled payment request to {Payment.payer p}"
-   | ConfirmCancelPaymentRequest(_, _, Finished(Error err)) ->
+   | ConfirmCancelPaymentRequest(session, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
-   | ConfirmDeclinePaymentRequest(reason, payment, Started) ->
+   | ConfirmDeclinePaymentRequest(session, reason, payment, Started) ->
       let decline = async {
          let! accountOpt = getAccount payment
 
@@ -142,7 +159,13 @@ let update
                |> Err.NotImplementedError
                |> Error
 
-            return ConfirmDeclinePaymentRequest(reason, payment, Finished err)
+            return
+               ConfirmDeclinePaymentRequest(
+                  session,
+                  reason,
+                  payment,
+                  Finished err
+               )
          | Payment.Platform p, Ok(Some account) ->
             let cmd =
                let initiator = InitiatedById session.EmployeeId
@@ -157,18 +180,32 @@ let update
                |> AccountCommand.DeclinePlatformPayment
 
             let! res = AccountService.submitCommand account cmd
-            return ConfirmDeclinePaymentRequest(reason, payment, Finished res)
+
+            return
+               ConfirmDeclinePaymentRequest(
+                  session,
+                  reason,
+                  payment,
+                  Finished res
+               )
          | _ ->
             let err = Err.UnexpectedError "Error" |> Error
-            return ConfirmDeclinePaymentRequest(reason, payment, Finished err)
+
+            return
+               ConfirmDeclinePaymentRequest(
+                  session,
+                  reason,
+                  payment,
+                  Finished err
+               )
       }
 
       state, Cmd.fromAsync decline
-   | ConfirmDeclinePaymentRequest(_, p, Finished(Ok receipt)) ->
+   | ConfirmDeclinePaymentRequest(session, _, p, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
       let payee = (Payment.baseInfo p).Payee.OrgName
       state, Alerts.toastSuccessCommand $"Declined payment request from {payee}"
-   | ConfirmDeclinePaymentRequest(_, _, Finished(Error err)) ->
+   | ConfirmDeclinePaymentRequest(session, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
 
@@ -180,7 +217,7 @@ let PaymentDetailComponent
    (notifyParentOnUpdate: AccountCommandReceipt -> unit)
    =
    let state, dispatch =
-      React.useElmish (init, update notifyParentOnUpdate session, [||])
+      React.useElmish (init, update notifyParentOnUpdate, [||])
 
    let baseInfo = Payment.baseInfo payment
    let isPaymentOutgoing = session.OrgId = baseInfo.Payee.OrgId
@@ -281,7 +318,7 @@ let PaymentDetailComponent
                attr.classes [ "outline" ]
                attr.text "Cancel payment request"
                attr.onClick (fun _ ->
-                  Confirmation.CancelPayment payment
+                  (session, Confirmation.CancelPayment payment)
                   |> Msg.ShowConfirmation
                   |> dispatch)
             ]
@@ -291,7 +328,7 @@ let PaymentDetailComponent
                   attr.classes [ "outline" ]
                   attr.text "Decline to pay"
                   attr.onClick (fun _ ->
-                     Confirmation.DeclinePayment payment
+                     (session, Confirmation.DeclinePayment payment)
                      |> Msg.ShowConfirmation
                      |> dispatch)
                ]

@@ -20,8 +20,12 @@ type State = {
 
 type Msg =
    | DismissConfirmation
-   | ShowDeleteRuleConfirmation of Account * AutomaticTransferConfig
+   | ShowDeleteRuleConfirmation of
+      UserSession *
+      Account *
+      AutomaticTransferConfig
    | ConfirmDeleteRule of
+      UserSession *
       Account *
       AutomaticTransferConfig *
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
@@ -29,21 +33,16 @@ type Msg =
 let init () =
    { DeleteProgress = Deferred.Idle }, Cmd.none
 
-let update
-   (onDeleted: AccountCommandReceipt -> unit)
-   (session: UserSession)
-   msg
-   (state: State)
-   =
+let update (onDeleted: AccountCommandReceipt -> unit) msg (state: State) =
    match msg with
    | DismissConfirmation -> state, Cmd.none
-   | ShowDeleteRuleConfirmation(account, ruleConfig) ->
+   | ShowDeleteRuleConfirmation(session, account, ruleConfig) ->
       let confirm =
          ConfirmAlert(
             "Are you sure you want to delete this rule?",
             function
             | ConfirmAlertResult.Confirmed ->
-               Msg.ConfirmDeleteRule(account, ruleConfig, Started)
+               Msg.ConfirmDeleteRule(session, account, ruleConfig, Started)
             | ConfirmAlertResult.Dismissed _ -> Msg.DismissConfirmation
          )
             .ConfirmButtonText("Yes")
@@ -51,7 +50,7 @@ let update
             .ShowCloseButton(true)
 
       state, SweetAlert.Run confirm
-   | ConfirmDeleteRule(account, ruleConfig, Started) ->
+   | ConfirmDeleteRule(session, account, ruleConfig, Started) ->
       let cmd =
          DeleteAutoTransferRuleCommand.create
             (account.AccountId, account.OrgId)
@@ -61,7 +60,9 @@ let update
 
       let delete = async {
          let! res = AccountService.submitCommand account cmd
-         return Msg.ConfirmDeleteRule(account, ruleConfig, Finished res)
+
+         return
+            Msg.ConfirmDeleteRule(session, account, ruleConfig, Finished res)
       }
 
       {
@@ -69,7 +70,7 @@ let update
             DeleteProgress = Deferred.InProgress
       },
       Cmd.fromAsync delete
-   | ConfirmDeleteRule(_, _, Finished(Ok receipt)) ->
+   | ConfirmDeleteRule(_, _, _, Finished(Ok receipt)) ->
       onDeleted receipt
 
       {
@@ -77,7 +78,7 @@ let update
             DeleteProgress = Deferred.Idle
       },
       Alerts.toastSuccessCommand $"Deleted rule"
-   | ConfirmDeleteRule(_, _, Finished(Error err)) ->
+   | ConfirmDeleteRule(_, _, _, Finished(Error err)) ->
       Log.error (string err)
 
       {
@@ -123,8 +124,7 @@ let AutoTransferRuleComponent
          OnMouseLeave: unit -> unit
       |})
    =
-   let _, dispatch =
-      React.useElmish (init, update props.onRuleDeleted props.Session, [||])
+   let _, dispatch = React.useElmish (init, update props.onRuleDeleted, [||])
 
    let rule = props.AutoTransferConfig.Info
 
@@ -157,6 +157,7 @@ let AutoTransferRuleComponent
                      fun _ ->
                         dispatch
                         <| Msg.ShowDeleteRuleConfirmation(
+                           props.Session,
                            props.TargetAccount,
                            props.AutoTransferConfig
                         )
