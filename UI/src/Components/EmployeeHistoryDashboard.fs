@@ -47,11 +47,11 @@ let init (browserQuery: EmployeeHistoryBrowserQuery) () =
    },
    Cmd.ofMsg (LoadHistory(query, Started))
 
-let update (session: UserSession) msg state =
+let update orgId msg state =
    match msg with
    | LoadHistory(query, Started) ->
       let load = async {
-         let! res = EmployeeService.getEmployeeHistory session.OrgId query
+         let! res = EmployeeService.getEmployeeHistory orgId query
          return LoadHistory(query, Finished res)
       }
 
@@ -205,7 +205,7 @@ let EmployeeHistoryDashboardComponent
    let state, dispatch =
       React.useElmish (
          init browserQuery,
-         update session,
+         update session.OrgId,
          [| box browserQuery |]
       )
 

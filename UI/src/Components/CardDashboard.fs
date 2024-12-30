@@ -59,11 +59,11 @@ let init (browserQuery: CardBrowserQuery) () =
    { Query = query; Cards = Deferred.Idle },
    Cmd.ofMsg <| LoadCards(query, Started)
 
-let update (session: UserSession) msg state =
+let update orgId msg state =
    match msg with
    | LoadCards(query, Started) ->
       let load = async {
-         let! res = EmployeeService.getCards session.OrgId query
+         let! res = EmployeeService.getCards orgId query
          return LoadCards(query, Finished res)
       }
 
@@ -228,7 +228,7 @@ let CardDashboardComponent (url: Routes.CardUrl) (session: UserSession) =
    let state, dispatch =
       React.useElmish (
          init browserQuery,
-         update session,
+         update session.OrgId,
          [| box browserQuery.ChangeDetection |]
       )
 

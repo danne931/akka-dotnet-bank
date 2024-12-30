@@ -5,7 +5,6 @@ open Feliz.UseElmish
 open Elmish
 open Feliz.Router
 open Fable.FontAwesome
-open System
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
@@ -52,11 +51,11 @@ let updatePlatformPaymentStatus
    else
       payment
 
-let update (session: UserSession) msg state =
+let update orgId msg state =
    match msg with
    | LoadPayments Started ->
       let loadPayments = async {
-         let! res = AccountService.getPayments session.OrgId
+         let! res = AccountService.getPayments orgId
          return LoadPayments(Finished res)
       }
 
@@ -287,7 +286,7 @@ let renderTable
 
 [<ReactComponent>]
 let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
-   let state, dispatch = React.useElmish (init, update session, [||])
+   let state, dispatch = React.useElmish (init, update session.OrgId, [||])
    let orgCtx = React.useContext OrgProvider.context
 
    let accountsOpt =

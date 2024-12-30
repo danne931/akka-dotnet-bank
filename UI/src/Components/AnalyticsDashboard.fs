@@ -67,7 +67,7 @@ let init () =
    },
    Cmd.ofMsg (LoadInitialAnalytics Started)
 
-let update (session: UserSession) msg state =
+let update orgId msg state =
    match msg with
    | SelectTimeSeriesChart c ->
       {
@@ -83,7 +83,7 @@ let update (session: UserSession) msg state =
       Cmd.none
    | SelectDateFilter f ->
       let load = async {
-         let! res = AnalyticsService.loadTimeSeriesAnalytics session.OrgId f
+         let! res = AnalyticsService.loadTimeSeriesAnalytics orgId f
          return Msg.ResolvedTimeSeriesFilterUpdate res
       }
 
@@ -95,7 +95,7 @@ let update (session: UserSession) msg state =
       Cmd.fromAsync load
    | SelectTopNMonth date ->
       let load = async {
-         let! res = AnalyticsService.loadTopNAnalytics session.OrgId date
+         let! res = AnalyticsService.loadTopNAnalytics orgId date
          return Msg.ResolvedTopNFilterUpdate res
       }
 
@@ -107,8 +107,7 @@ let update (session: UserSession) msg state =
       Cmd.fromAsync load
    | SelectTopNPurchasersMonth date ->
       let load = async {
-         let! res =
-            AnalyticsService.loadTopNPurchasersAnalytics session.OrgId date
+         let! res = AnalyticsService.loadTopNPurchasersAnalytics orgId date
 
          return Msg.ResolvedTopNPurchasersFilterUpdate res
       }
@@ -168,7 +167,7 @@ let update (session: UserSession) msg state =
       let load = async {
          let! res =
             AnalyticsService.loadInitialAnalytics
-               session.OrgId
+               orgId
                state.SelectedTimeSeriesDateFilter
 
          return LoadInitialAnalytics(Finished res)
@@ -638,7 +637,10 @@ let AnalyticsDashboardComponent
       |})
    =
    let session = props.Session
-   let state, dispatch = React.useElmish (init, update session, [||])
+
+   let state, dispatch =
+      React.useElmish (init, update session.OrgId, [| box session.OrgId |])
+
    let orgCtx = React.useContext OrgProvider.context
 
    classyNode Html.div [ "analytics-dashboard" ] [
