@@ -223,3 +223,7 @@ let AccountSummaryComponent (profile: AccountProfile) =
          | _ -> ()
       ]
    ]
+
+// Necessary for dynamic import resolution. (Component lazily loaded so
+// charting library fetched only when necessary.)
+Fable.Core.JsInterop.exportDefault AccountSummaryComponent

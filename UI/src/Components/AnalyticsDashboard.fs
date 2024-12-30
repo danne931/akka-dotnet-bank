@@ -631,9 +631,13 @@ let renderTopPurchasers (topN: EmployeePurchaserTopN list) =
 
 [<ReactComponent>]
 let AnalyticsDashboardComponent
-   (url: Routes.AnalyticsUrl)
-   (session: UserSession)
+   (props:
+      {|
+         Url: Routes.AnalyticsUrl
+         Session: UserSession
+      |})
    =
+   let session = props.Session
    let state, dispatch = React.useElmish (init, update session, [||])
    let orgCtx = React.useContext OrgProvider.context
 
@@ -746,3 +750,7 @@ let AnalyticsDashboardComponent
          | _ -> Html.progress []
       ]
    ]
+
+// Necessary for dynamic import resolution. (Component lazily loaded so
+// charting library fetched only when necessary.)
+Fable.Core.JsInterop.exportDefault AnalyticsDashboardComponent
