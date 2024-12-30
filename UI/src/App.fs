@@ -27,8 +27,16 @@ let App () =
    let activePage =
       match currentUrl with
       | Routes.IndexUrl.Analytics url ->
-         AnalyticsDashboard.AnalyticsDashboardComponent url
-         |> UserSessionSuspense
+         UserSessionSuspense(fun session ->
+            React.suspense (
+               [
+                  React.lazy' (
+                     fun () -> importDynamic "./Components/AnalyticsDashboard"
+                     , {| Session = session; Url = url |}
+                  )
+               ],
+               Html.progress []
+            ))
          |> OrgProvider
       | Routes.IndexUrl.Account url ->
          AccountDashboard.AccountDashboardComponent url

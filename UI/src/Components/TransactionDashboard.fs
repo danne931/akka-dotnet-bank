@@ -2,6 +2,7 @@ module TransactionDashboard
 
 open Feliz
 open Feliz.Router
+open Fable.Core.JsInterop
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
@@ -86,7 +87,16 @@ let TransactionDashboardComponent
       match orgCtx, accountIdOpt with
       | Deferred.Resolved(Ok(Some org)), Some accountId ->
          match org.AccountProfiles.TryFind accountId with
-         | Some profile -> AccountSummary.AccountSummaryComponent profile
+         | Some profile ->
+            React.suspense (
+               [
+                  React.lazy' (
+                     fun () -> importDynamic "./AccountSummary"
+                     , profile
+                  )
+               ],
+               Html.progress []
+            )
          | None -> ()
       | _ -> ()
    ]
