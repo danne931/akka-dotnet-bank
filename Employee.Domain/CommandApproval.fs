@@ -121,6 +121,23 @@ module CommandApprovalRule =
          | AmountPerCommand _ -> "AmountPerCommand"
          | PerCommand -> "PerCommand"
 
+      static member validate
+         (criteria: Criteria)
+         : Result<Criteria, ValidationErrors> =
+         match criteria with
+         | Criteria.AmountPerCommand range ->
+            match range.LowerBound, range.UpperBound with
+            | None, None ->
+               ValidationErrors.create "amount per command criteria" [
+                  "Expecting lower bound, upper bound, or both."
+               ]
+               |> Error
+            | _ -> Ok criteria
+         | Criteria.AmountDailyLimit limit ->
+            Lib.Validators.amountValidator "daily limit criteria" limit
+            |> Result.map (fun _ -> criteria)
+         | Criteria.PerCommand -> Ok criteria
+
    type Approver = { Name: string; EmployeeId: EmployeeId }
 
    type T = {
@@ -137,7 +154,8 @@ module CommandApprovalRule =
       let create
          (employeeId: EmployeeId, orgId: OrgId)
          (initiatedBy: InitiatedById)
-         (data: ConfigureApprovalRuleCommand)
+         (data: T)
+         : ConfigureApprovalRuleCommand
          =
          Command.create
             (EmployeeId.toEntityId employeeId)
@@ -150,8 +168,10 @@ module CommandApprovalRule =
          (cmd: ConfigureApprovalRuleCommand)
          : ValidationResult<BankEvent<T>>
          =
-         Ok <| BankEvent.create<T> cmd
-
+         validate {
+            let! _ = Criteria.validate cmd.Data.Criteria
+            return BankEvent.create<T> cmd
+         }
 
 module CommandApprovalProgress =
    type Requester = { Name: string; Id: InitiatedById }

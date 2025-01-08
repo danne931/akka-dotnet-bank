@@ -10,6 +10,49 @@ open Bank.Employee.Domain
 
 open CommandApprovalRuleSqlMapper
 
+type private Approver = {
+   Name: string
+   EmployeeId: System.Guid
+}
+
+let getApprovalRules (orgId: OrgId) =
+   let query =
+      $"""
+      SELECT
+         {Fields.ruleId},
+         {Fields.approvableCommandType},
+         {Fields.criteriaDetail},
+         jsonb_agg(
+            DISTINCT jsonb_build_object(
+               'EmployeeId', e.{EmployeeSqlMapper.EmployeeFields.employeeId},
+               'Name', e.{EmployeeSqlMapper.EmployeeFields.firstName} || ' ' || e.{EmployeeSqlMapper.EmployeeFields.lastName}
+            )
+         ) AS permitted_approvers
+      FROM {table}
+      JOIN LATERAL unnest({Fields.permittedApprovers}) AS permitted_approver_id ON TRUE
+      JOIN {EmployeeSqlMapper.table} e ON e.{EmployeeSqlMapper.EmployeeFields.employeeId} = permitted_approver_id
+      WHERE {table}.{Fields.orgId} = @orgId
+      GROUP BY {Fields.ruleId}
+      """
+
+   pgQuery<CommandApprovalRule.T>
+      query
+      (Some [ "orgId", Writer.orgId orgId ])
+      (fun reader -> {
+         OrgId = orgId
+         RuleId = Reader.ruleId reader
+         CommandType = Reader.approvableCommandType reader
+         Criteria = Reader.criteriaDetail reader
+         Approvers =
+            "permitted_approvers"
+            |> reader.text
+            |> Serialization.deserializeUnsafe<Approver list>
+            |> List.map (fun o -> {
+               Name = o.Name
+               EmployeeId = EmployeeId o.EmployeeId
+            })
+      })
+
 let approvalRuleExistsForCommandType
    (orgId: OrgId)
    (commandType: ApprovableCommandType)
@@ -119,11 +162,6 @@ let commandRequiresApproval
    }
 
 open CommandApprovalProgressSqlMapper
-
-type private Approver = {
-   Name: string
-   EmployeeId: System.Guid
-}
 
 let private commandApprovalProgressWithRuleQuery (whereClause: string option) =
    $"""

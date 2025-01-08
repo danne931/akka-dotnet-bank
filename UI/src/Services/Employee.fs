@@ -133,7 +133,10 @@ let orgRequiresCommandApproval
    : Async<Result<CommandApprovalRuleId option, Err>>
    =
    async {
-      let path = EmployeePath.getCommandApprovalRule orgId (string commandType)
+      let path =
+         EmployeePath.getCommandApprovalRuleByCommandType
+            orgId
+            (string commandType)
 
       let! (code, responseText) = Http.get path
 
@@ -143,6 +146,28 @@ let orgRequiresCommandApproval
          return
             responseText
             |> Serialization.deserialize<CommandApprovalRuleId option>
+   }
+
+let getCommandApprovalRules
+   (orgId: OrgId)
+   : Async<Result<CommandApprovalRule.T list option, Err>>
+   =
+   async {
+      let path = EmployeePath.getCommandApprovalRules orgId
+
+      let! (code, responseText) = Http.get path
+
+      if code = 404 then
+         return Ok None
+      elif code <> 200 then
+         return Error <| Err.InvalidStatusCodeError(serviceName, code)
+      else
+         printfn "RESPONSE %A" responseText
+
+         return
+            responseText
+            |> Serialization.deserialize<CommandApprovalRule.T list>
+            |> Result.map Some
    }
 
 let getCommandApprovalProgressWithRule
