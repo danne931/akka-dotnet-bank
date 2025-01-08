@@ -102,9 +102,18 @@ module EmployeePath =
    let history (orgId: OrgId) = get orgId + "/history"
 
    let ConfigureCommandApprovalRule = Base + "/configure-command-approval-rule"
-   let GetCommandApprovalRule = Get + "/command-approval-rule/{commandType}"
+   let GetCommandApprovalRules = Get + "/command-approval-rule"
 
-   let getCommandApprovalRule (orgId: OrgId) (commandType: string) =
+   let getCommandApprovalRules (orgId: OrgId) =
+      get orgId + "/command-approval-rule"
+
+   let GetCommandApprovalRuleByCommandType =
+      Get + "/command-approval-rule/{commandType}"
+
+   let getCommandApprovalRuleByCommandType
+      (orgId: OrgId)
+      (commandType: string)
+      =
       get orgId + $"/command-approval-rule/{commandType}"
 
    let AcquireCommandApproval = Base + "/acquire-command-approval"

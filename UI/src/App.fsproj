@@ -67,6 +67,7 @@
     <Compile Include="Components/Forms/EmployeeCreate.fs" />
     <Compile Include="Components/Forms/AccountCreate.fs" />
     <Compile Include="Components/Forms/CreateCard.fs" />
+    <Compile Include="Components/Forms/CommandApprovalRule.fs" />
     <Compile Include="Components/ServiceHealth.fs" />
     <Compile Include="Components/AccountSelection.fs" />
     <Compile Include="Components/NavigationPortal.fs" />

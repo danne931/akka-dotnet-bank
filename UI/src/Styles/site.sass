@@ -422,6 +422,17 @@ p[role='employee-tag']
     margin-bottom: 1rem
 
 .approval-dashboard
+  .approval-rule
+    padding: 1rem 2rem
+    ul
+      margin-bottom: 0
+    button
+      margin-bottom: 0
+  .approval-rule-create
+    display: flex
+    justify-content: space-around
+    button
+      width: 40%
   .command-pending-approval
     header
       margin-bottom: 1rem
@@ -579,8 +590,9 @@ main
   .app-shell
     > .grid
       grid-template-columns: 13% auto
-    ul
-      padding-left: 0
+    .menu
+      ul
+        padding-left: 0
 
   main > .grid
     grid-template-columns: auto 5%

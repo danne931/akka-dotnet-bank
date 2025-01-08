@@ -744,10 +744,7 @@ CREATE TABLE command_approval_rule(
    command_type approvable_command NOT NULL,
    criteria command_approval_criteria NOT NULL,
    criteria_detail JSONB NOT NULL,
-   permitted_approvers UUID[] NOT NULL,
-
-   -- Ensure only one approval rule exists for (organization, command type)
-   UNIQUE (org_id, command_type)
+   permitted_approvers UUID[] NOT NULL
 );
 
 SELECT add_created_at_column('command_approval_rule');

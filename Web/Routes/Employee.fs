@@ -172,7 +172,7 @@ let startEmployeeRoutes (app: WebApplication) =
    |> ignore
 
    app.MapGet(
-      EmployeePath.GetCommandApprovalRule,
+      EmployeePath.GetCommandApprovalRuleByCommandType,
       Func<Guid, string, Task<IResult>>(fun orgId commandType ->
          match ApprovableCommandType.fromString commandType with
          | None ->
@@ -197,6 +197,13 @@ let startEmployeeRoutes (app: WebApplication) =
       EmployeePath.GetCommandApprovals,
       Func<Guid, Task<IResult>>(fun orgId ->
          getCommandApprovals (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
+   )
+   |> ignore
+
+   app.MapGet(
+      EmployeePath.GetCommandApprovalRules,
+      Func<Guid, Task<IResult>>(fun orgId ->
+         getApprovalRules (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
    )
    |> ignore
 

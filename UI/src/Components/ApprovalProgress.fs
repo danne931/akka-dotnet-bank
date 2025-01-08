@@ -34,12 +34,9 @@ type Msg =
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
    | DismissConfirmation
 
-let init (orgCtx: OrgProvider.State) () =
+let init orgId () =
    { Approvals = Deferred.Idle },
-   match orgCtx with
-   | Deferred.Resolved(Ok(Some o)) ->
-      Cmd.ofMsg (Msg.GetCommandApprovals(o.Org.OrgId, Started))
-   | _ -> Cmd.none
+   Cmd.ofMsg (Msg.GetCommandApprovals(orgId, Started))
 
 let update msg state =
    match msg with
@@ -230,8 +227,8 @@ let approversMsg (approvers: CommandApprovalRule.Approver list) =
 
 [<ReactComponent>]
 let ApprovalProgressComponent (session: UserSession) =
-   let orgCtx = React.useContext OrgProvider.context
-   let state, dispatch = React.useElmish (init orgCtx, update, [| box orgCtx |])
+   let state, dispatch =
+      React.useElmish (init session.OrgId, update, [| box session.OrgId |])
 
    match state.Approvals with
    | Deferred.Resolved(Ok(Some approvals)) ->

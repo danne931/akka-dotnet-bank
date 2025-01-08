@@ -44,7 +44,8 @@ let ApprovalDashboardComponent
          | Routes.ApprovalsUrl.Approvals ->
             ApprovalProgress.ApprovalProgressComponent session
          | Routes.ApprovalsUrl.ApprovalRuleManagement ->
-            ApprovalRule.ApprovalRuleComponent session
+            ApprovalRuleManagement.ApprovalRuleManagementDashboardComponent
+               session
          | Routes.ApprovalsUrl.NotFound -> Html.p "Uh oh! Unknown URL."
       ]
    ]
