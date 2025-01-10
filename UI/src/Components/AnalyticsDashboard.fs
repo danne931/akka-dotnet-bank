@@ -8,6 +8,7 @@ open Fable.FontAwesome
 open Feliz.Recharts
 open System
 
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Lib.SharedTypes

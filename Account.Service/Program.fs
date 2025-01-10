@@ -8,6 +8,7 @@ open Akka.Persistence.Sql.Hosting
 open Akka.Routing
 open Akkling
 
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Infrastructure
@@ -22,6 +23,10 @@ builder.Services.AddSingleton<AccountBroadcast>(fun provider ->
 let journalOpts = AkkaInfra.getJournalOpts ()
 
 journalOpts.Adapters
+   .AddEventAdapter<OrganizationEventPersistenceAdapter>(
+      "org-v1",
+      [ typedefof<OrgMessage> ]
+   )
    .AddEventAdapter<AccountEventPersistenceAdapter>(
       "account-v1",
       [ typedefof<AccountMessage> ]
@@ -39,6 +44,7 @@ builder.Services.AddAkka(
    (fun builder provider ->
       let initConfig =
          AkkaInfra.withClustering [|
+            ClusterMetadata.roles.org
             ClusterMetadata.roles.account
             ClusterMetadata.roles.signalR
             ClusterMetadata.roles.employee
@@ -63,6 +69,23 @@ builder.Services.AddAkka(
          .WithSingletonProxy<ActorMetadata.SchedulingMarker>(
             ActorMetadata.scheduling.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.scheduling)
+         )
+         .WithShardRegion<ActorMetadata.OrgMarker>(
+            ClusterMetadata.orgShardRegion.name,
+            (fun persistenceId ->
+               let system = provider.GetRequiredService<ActorSystem>()
+
+               let props =
+                  OrgActor.initProps
+                     system
+                     // TODO: Create org-specific Environment file & replace
+                     //       account env var here.
+                     Env.config.AccountActorSupervisor
+                     persistenceId
+
+               props),
+            ClusterMetadata.orgShardRegion.messageExtractor,
+            ShardOptions(Role = ClusterMetadata.roles.org)
          )
          .WithShardRegion<ActorMetadata.AccountMarker>(
             ClusterMetadata.accountShardRegion.name,
@@ -144,6 +167,21 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
+         .WithSingleton<ActorMetadata.OrgReadModelSyncMarker>(
+            ActorMetadata.orgReadModelSync.Name,
+            (fun system _ _ ->
+               let typedProps =
+                  OrgReadModelSyncActor.initProps
+                     (OrgActor.get system)
+                     // TODO: Create org-specific Environment file & replace
+                     //       account env var here.
+                     Env.config.AccountEventProjectionChunking
+                     Env.config.AccountEventReadModelPersistenceBackoffRestart
+                     Env.config.AccountEventReadModelRetryPersistenceAfter
+
+               typedProps.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.org)
+         )
          .WithSingleton<ActorMetadata.AccountReadModelSyncMarker>(
             ActorMetadata.accountReadModelSync.Name,
             (fun system _ _ ->
@@ -163,6 +201,8 @@ builder.Services.AddAkka(
                let typedProps =
                   EmployeeReadModelSyncActor.initProps
                      (EmployeeActor.get system)
+                     // TODO: Create employee-specific Environment file & replace
+                     //       account env var here.
                      Env.config.AccountEventProjectionChunking
                      Env.config.AccountEventReadModelPersistenceBackoffRestart
                      Env.config.AccountEventReadModelRetryPersistenceAfter
@@ -194,12 +234,11 @@ builder.Services.AddAkka(
          .WithSingleton<ActorMetadata.AccountSeederMarker>(
             ActorMetadata.accountSeeder.Name,
             (fun system _ _ ->
-               let typedProps =
-                  AccountSeederActor.actorProps
-                  <| AccountActor.get system
-                  <| EmployeeActor.get system
-
-               typedProps.ToProps()),
+               AccountSeederActor.actorProps
+                  (OrgActor.get system)
+                  (AccountActor.get system)
+                  (EmployeeActor.get system)
+               |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          .WithSingleton<ActorMetadata.CircuitBreakerMarker>(

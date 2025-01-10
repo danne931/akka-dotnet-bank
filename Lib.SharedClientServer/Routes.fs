@@ -14,6 +14,9 @@ module OrgPath =
    let search (orgId: OrgId) (searchQuery: string) =
       $"{Base}/search/{orgId}/{searchQuery}"
 
+   let Merchants = Base + "/merchants/{orgId}"
+   let merchants (orgId: OrgId) = $"{Base}/merchants/{orgId}"
+
 module AccountPath =
    let Base = $"{API}/accounts"
    let account (id: AccountId) = $"{Base}/{id}"
@@ -58,8 +61,6 @@ module TransactionPath =
    let AccountTransactions = Base + "/{id}"
    let accountTransactions (id: AccountId) = $"{Base}/{id}"
    let Categories = Base + "/categories"
-   let Merchants = Base + "/merchants/{orgId}"
-   let merchants (orgId: OrgId) = $"{Base}/merchants/{orgId}"
 
    let TransactionInfo = Base + "/transaction/{txnId}"
 

@@ -5,7 +5,7 @@ open Feliz.UseElmish
 open Elmish
 open System
 
-open Bank.Account.Domain
+open Bank.Org.Domain
 open Lib.SharedTypes
 
 type State = {

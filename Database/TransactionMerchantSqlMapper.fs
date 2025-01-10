@@ -1,7 +1,7 @@
 module TransactionMerchantSqlMapper
 
 open OrganizationSqlMapper
-open Bank.Account.Domain
+open Bank.Org.Domain
 
 let table = "merchant"
 

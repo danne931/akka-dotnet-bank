@@ -146,21 +146,3 @@ let startTransactionRoutes (app: WebApplication) =
       )
       .RBAC(Permissions.ManageTransactionNotes)
    |> ignore
-
-   app
-      .MapGet(
-         TransactionPath.Merchants,
-         Func<Guid, Task<IResult>>(fun orgId ->
-            getMerchants (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
-      )
-      .RBAC(Permissions.GetMerchants)
-   |> ignore
-
-   app
-      .MapPost(
-         TransactionPath.Merchants,
-         Func<Merchant, Task<IResult>>(fun merchant ->
-            upsertMerchant merchant |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.ManageMerchants)
-   |> ignore

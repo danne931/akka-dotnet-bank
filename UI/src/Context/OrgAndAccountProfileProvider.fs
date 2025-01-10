@@ -5,6 +5,7 @@ open Feliz.UseElmish
 open Elmish
 
 open Lib.SharedTypes
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 

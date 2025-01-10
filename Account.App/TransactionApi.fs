@@ -11,7 +11,6 @@ open Bank.Transfer.Domain
 open CategorySqlMapper
 open AncillaryTransactionInfoSqlMapper
 open TransactionSqlMapper
-open TransactionMerchantSqlMapper
 
 module Fields = TransactionFields
 module Writer = TransactionSqlWriter
@@ -338,37 +337,3 @@ let getTransactionInfo (txnId: EventId) =
       query
       (Some [ "transactionId", Writer.transactionId txnId ])
       rowReader
-
-module Fields = MerchantFields
-module Writer = MerchantSqlWriter
-module Reader = MerchantSqlReader
-
-let getMerchants (orgId: OrgId) =
-   let query =
-      $"""
-      SELECT {Fields.orgId}, {Fields.name}, {Fields.alias}
-      FROM {TransactionMerchantSqlMapper.table}
-      WHERE {Fields.orgId} = @orgId
-      """
-
-   pgQuery<Merchant>
-      query
-      (Some [ "@orgId", Writer.orgId orgId ])
-      Reader.merchant
-
-let upsertMerchant (merchant: Merchant) =
-   let query =
-      $"""
-      INSERT INTO {TransactionMerchantSqlMapper.table}
-         ({Fields.orgId}, {Fields.name}, {Fields.alias})
-      VALUES
-         (@orgId, @name, @alias)
-      ON CONFLICT ({Fields.orgId}, {Fields.name})
-      DO UPDATE SET {Fields.alias} = @alias
-      """
-
-   pgPersist query [
-      "orgId", Writer.orgId merchant.OrgId
-      "name", Writer.name <| merchant.Name.ToLower()
-      "alias", Writer.alias merchant.Alias
-   ]

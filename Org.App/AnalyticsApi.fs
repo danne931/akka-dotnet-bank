@@ -7,6 +7,7 @@ open FsToolkit.ErrorHandling
 open Lib.SharedTypes
 open Lib.Postgres
 open Lib.Time
+open Bank.Org.Domain
 open Bank.Account.Domain
 open TransactionSqlMapper
 

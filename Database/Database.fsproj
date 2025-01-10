@@ -6,6 +6,7 @@
   <ItemGroup>
     <Compile Include="Postgres.fs" />
     <Compile Include="OrganizationSqlMapper.fs" />
+    <Compile Include="OrganizationEventSqlMapper.fs" /> 
     <Compile Include="AccountSqlMapper.fs" />
     <Compile Include="CategorySqlMapper.fs" />
     <Compile Include="TransactionMerchantSqlMapper.fs" />
@@ -33,5 +34,6 @@
     <ProjectReference Include="../Billing.Domain/Billing.Domain.fsproj" />
     <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
     <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" />
+    <ProjectReference Include="../Org.Domain/Org.Domain.fsproj" /> 
   </ItemGroup>
 </Project>

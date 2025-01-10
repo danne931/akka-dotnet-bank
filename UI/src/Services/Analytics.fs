@@ -6,7 +6,7 @@ open System
 open Fable.SimpleHttp
 open Lib.SharedTypes
 open RoutePaths
-open Bank.Account.Domain
+open Bank.Org.Domain
 open UIDomain
 
 let private serviceName = "Analytics Service"

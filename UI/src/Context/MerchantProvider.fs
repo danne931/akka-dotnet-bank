@@ -2,7 +2,7 @@ module MerchantProvider
 
 open Feliz
 
-open Bank.Account.Domain
+open Bank.Org.Domain
 
 type Action =
    | SetMerchants of Map<string, Merchant>
@@ -38,7 +38,7 @@ let MerchantProvider (child: Fable.React.ReactElement) =
          match session with
          | Deferred.Resolved(Ok session) ->
             async {
-               match! TransactionService.getMerchants session.OrgId with
+               match! OrgService.getMerchants session.OrgId with
                | Ok merchants -> dispatch (SetMerchants merchants)
                | Error err -> Log.error $"Error fetching merchants: {err}"
             }

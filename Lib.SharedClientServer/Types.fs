@@ -11,18 +11,6 @@ module Guid =
       with _ ->
          None
 
-type OrgId =
-   | OrgId of Guid
-
-   override x.ToString() =
-      let (OrgId id) = x
-      string id
-
-module OrgId =
-   let get (orgId: OrgId) : Guid =
-      let (OrgId id) = orgId
-      id
-
 type EntityId =
    | EntityId of Guid
 
@@ -55,6 +43,26 @@ type EventId =
    override x.ToString() =
       let (EventId id) = x
       string id
+
+type OrgId =
+   | OrgId of Guid
+
+   override x.ToString() =
+      let (OrgId id) = x
+      string id
+
+module OrgId =
+   let get (orgId: OrgId) : Guid =
+      let (OrgId id) = orgId
+      id
+
+   let toEntityId (orgId: OrgId) : EntityId =
+      let (OrgId id) = orgId
+      EntityId id
+
+   let fromEntityId (entityId: EntityId) : OrgId =
+      let (EntityId id) = entityId
+      OrgId id
 
 type AccountId =
    | AccountId of Guid
@@ -238,6 +246,11 @@ type Envelope = {
    InitiatedById: InitiatedById
 }
 
+type OrgStateTransitionError =
+   | OrgNotReadyToStartOnboarding
+   | OrgNotReadyToActivate
+   | OrgNotActive
+
 type AccountStateTransitionError =
    | AccountNotReadyToActivate
    | AccountNotActive
@@ -270,6 +283,7 @@ type EmployeeStateTransitionError =
 type Err =
    | DatabaseError of exn
    | ValidationError of ValidationErrors
+   | OrgStateTransitionError of OrgStateTransitionError
    | AccountStateTransitionError of AccountStateTransitionError
    | EmployeeStateTransitionError of EmployeeStateTransitionError
    | SerializationError of string
@@ -283,6 +297,7 @@ type Err =
       match x with
       | DatabaseError e -> $"DatabaseError: %s{e.Message}"
       | ValidationError e -> $"ValidationError: {ValidationErrors.toList e}"
+      | OrgStateTransitionError e -> $"OrgStateTransitionError: {e}"
       | AccountStateTransitionError e -> $"AccountStateTransitionError: {e}"
       | EmployeeStateTransitionError e -> $"EmployeeStateTransitionError: {e}"
       | InvalidStatusCodeError(service, code) ->
@@ -307,6 +322,11 @@ type Err =
          |> ValidationErrors.toList
          |> List.fold (fun acc errMsg -> acc + errMsg + ", ") ""
          |> fun str -> str.Remove(str.Length - 2)
+      | OrgStateTransitionError e ->
+         match e with
+         | OrgStateTransitionError.OrgNotActive -> "Org Not Active"
+         | OrgStateTransitionError.OrgNotReadyToActivate ->
+            "Org Not Ready to Activate"
       | AccountStateTransitionError e ->
          match e with
          | AccountStateTransitionError.AccountNotActive -> "Account Not Active"

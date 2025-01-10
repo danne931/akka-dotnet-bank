@@ -16,10 +16,10 @@ open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
 open Lib.Postgres
-open OrganizationSqlMapper
 open EmployeeEventSqlMapper
 open TransactionSqlMapper
 open Bank.Account.Api
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
@@ -238,8 +238,7 @@ let enableUpdatePreventionTriggers () =
       "ALTER TABLE transaction ENABLE TRIGGER prevent_update;", []
    ]
 
-// TODO: Temporarily create org here until fleshed out
-let createOrgs () =
+let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
    let myOrg = orgId, orgName
 
    let otherOrgs =
@@ -247,52 +246,34 @@ let createOrgs () =
 
    let orgs = myOrg :: otherOrgs
 
-   pgTransaction [
-      $"""
-      INSERT into {OrganizationSqlMapper.table} (
-         {OrgFields.orgId},
-         {OrgFields.name}
-      )
-      VALUES (@orgId, @name);
-      """,
-      orgs
-      |> List.map (fun (orgId, name) -> [
-         "orgId", OrgSqlWriter.orgId orgId
-         "name", OrgSqlWriter.name name
-      ])
+   for orgId, name in orgs do
+      let cmd =
+         CreateOrgCommand.create {
+            Name = name
+            OrgId = orgId
+            InitiatedBy = InitiatedById Constants.SYSTEM_USER_ID
+         }
+         |> OrgCommand.CreateOrg
 
-      $"""
-      INSERT into {OrganizationSqlMapper.featureFlagsTable} ({OrgFields.orgId})
-      VALUES (@orgId);
-      """,
-      orgs |> List.map (fun (orgId, _) -> [ "orgId", OrgSqlWriter.orgId orgId ])
-   ]
+      (getOrgRef orgId) <! OrgMessage.StateChange cmd
 
-let enableOrgSocialTransferDiscovery () =
-   let query =
-      $"""
-      WITH updates AS (
-         SELECT
-            unnest(@orgIds) AS org,
-            unnest(@accountIds) AS account
-      )
-      UPDATE {OrganizationSqlMapper.featureFlagsTable} op
-      SET {OrgFields.socialTransferDiscoveryAccountId} = u.account
-      FROM updates u
-      WHERE op.{OrgFields.orgId} = u.org;
-      """
+let enableOrgSocialTransferDiscovery
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
+   =
+   for org in otherOrgs do
+      let cmd =
+         ConfigureFeatureFlagCommand.create
+            org.OrgId
+            (InitiatedById Constants.SYSTEM_USER_ID)
+            {
+               Config = {
+                  SocialTransferDiscoveryPrimaryAccountId =
+                     Some org.PrimaryAccountId
+               }
+            }
+         |> OrgCommand.ConfigureFeatureFlag
 
-   let orgIds = otherOrgs |> List.map (_.OrgId >> OrgId.get) |> List.toArray
-
-   let accountIds =
-      otherOrgs
-      |> List.map (_.PrimaryAccountId >> AccountId.get)
-      |> List.toArray
-
-   pgPersist query [
-      "orgIds", Sql.uuidArray orgIds
-      "accountIds", Sql.uuidArray accountIds
-   ]
+      (getOrgRef org.OrgId) <! OrgMessage.StateChange cmd
 
 // NOTE:
 // Initial employee purchase requests are configured with timestamps
@@ -1449,6 +1430,7 @@ let private initState = {
 }
 
 let actorProps
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    =
@@ -1479,41 +1461,36 @@ let actorProps
                   logInfo "Seed postgres with accounts"
                   do! disableUpdatePreventionTriggers ()
 
-                  match! createOrgs () with
-                  | Error err ->
-                     logError
-                        ctx
-                        $"Seed accounts: Error creating organization. {err}"
+                  createOrgs getOrgRef
 
-                     scheduleInitialization ctx
-                     return! loop state
-                  | Ok _ ->
-                     createAccountOwners getEmployeeRef
+                  do! Task.Delay 10_000
 
-                     do! Task.Delay 10_000
+                  createAccountOwners getEmployeeRef
 
-                     let remaining =
-                        getRemainingAccountsToCreate
-                           verified
-                           state.AccountsToCreate
+                  do! Task.Delay 10_000
 
-                     for command in remaining.Values do
-                        let accountRef = getAccountRef command.Data.AccountId
+                  let remaining =
+                     getRemainingAccountsToCreate
+                        verified
+                        state.AccountsToCreate
 
-                        let msg =
-                           command
-                           |> AccountCommand.CreateAccount
-                           |> AccountMessage.StateChange
+                  for command in remaining.Values do
+                     let accountRef = getAccountRef command.Data.AccountId
 
-                        accountRef <! msg
+                     let msg =
+                        command
+                        |> AccountCommand.CreateAccount
+                        |> AccountMessage.StateChange
 
-                     scheduleVerification ctx 5.
+                     accountRef <! msg
 
-                     return!
-                        loop {
-                           state with
-                              Status = AwaitingVerification
-                        }
+                  scheduleVerification ctx 5.
+
+                  return!
+                     loop {
+                        state with
+                           Status = AwaitingVerification
+                     }
          | AccountSeederMessage.VerifyAccountsCreated ->
             let! verified = getVerifiedAccounts state.AccountsToCreate
 
@@ -1541,12 +1518,12 @@ let actorProps
             if verified.Length = state.AccountsToCreate.Count then
                logInfo "Finished seeding accounts"
 
-               match! enableOrgSocialTransferDiscovery () with
-               | Ok _ -> logInfo "Enabled social transfer discovery"
-               | Error err ->
-                  logError ctx $"Error enabling social transfer discovery {err}"
+               enableOrgSocialTransferDiscovery getOrgRef
+
+               logInfo "Enabled social transfer discovery"
 
                do! Task.Delay 50_000
+
                let! res = seedBalanceHistory ()
                do! enableUpdatePreventionTriggers ()
 
