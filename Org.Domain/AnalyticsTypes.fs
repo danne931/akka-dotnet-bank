@@ -1,6 +1,7 @@
-namespace Bank.Account.Domain
+namespace Bank.Org.Domain
 
 open System
+open Bank.Account.Domain
 
 open Lib.SharedTypes
 

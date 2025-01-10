@@ -16,19 +16,18 @@ open Bank.Transfer.Domain
 module Fields = AccountSqlMapper.AccountFields
 module Reader = AccountSqlMapper.AccountSqlReader
 module Writer = AccountSqlMapper.AccountSqlWriter
-module TypeCast = AccountSqlMapper.AccountTypeCast
-let accountTable = AccountSqlMapper.table
+let table = AccountSqlMapper.table
 
 let getAccount (id: AccountId) =
    pgQuerySingle<Account>
-      $"SELECT * FROM {accountTable}
+      $"SELECT * FROM {table}
         WHERE {Fields.accountId} = @accountId"
       (Some [ "accountId", Writer.accountId id ])
       Reader.account
 
 let getAccountsByIds (accountIds: AccountId list) =
    pgQuery<Account>
-      $"SELECT * FROM {accountTable}
+      $"SELECT * FROM {table}
         WHERE {Fields.accountId} = ANY(@accountIds)"
       (Some [
          "accountIds",
@@ -96,115 +95,6 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
    ref <! AccountMessage.StateChange command
    return res
 }
-
-open OrganizationSqlMapper
-
-let getOrg (id: OrgId) =
-   let query =
-      $"""
-      SELECT
-         o.{OrgFields.orgId},
-         o.{OrgFields.name},
-         features.{OrgFields.socialTransferDiscoveryAccountId}
-      FROM {OrganizationSqlMapper.table} o
-      JOIN {OrganizationSqlMapper.featureFlagsTable} features using({OrgFields.orgId})
-      WHERE {OrgFields.orgId} = @orgId
-      """
-
-   pgQuerySingle<Org>
-      query
-      (Some [ "orgId", OrgSqlWriter.orgId id ])
-      OrgSqlReader.org
-
-let getOrgAndAccountProfiles
-   (orgId: OrgId)
-   : Task<Result<Option<OrgWithAccountProfiles>, Err>>
-   =
-   taskResultOption {
-      let dpaView = TransactionSqlMapper.TransactionViews.dailyPurchaseAccrued
-      let mpaView = TransactionSqlMapper.TransactionViews.monthlyPurchaseAccrued
-
-      let transferAccrued =
-         TransactionSqlMapper.TransactionFunctions.transferAccrued
-
-      let query =
-         $"""
-         SELECT
-            o.{OrgFields.name},
-            features.{OrgFields.socialTransferDiscoveryAccountId},
-            a.*,
-            dta.internal_transfer_accrued as dita,
-            dta.domestic_transfer_accrued as dida,
-            mta.internal_transfer_accrued as mita,
-            mta.domestic_transfer_accrued as mida,
-            {mpaView}.amount_accrued as mpa,
-            {dpaView}.amount_accrued as dpa
-         FROM {OrganizationSqlMapper.table} o
-         JOIN {OrganizationSqlMapper.featureFlagsTable} features using({OrgFields.orgId})
-         JOIN {accountTable} a using({OrgFields.orgId})
-         LEFT JOIN (SELECT * FROM {transferAccrued}(@orgId, 'Day')) dta using({Fields.accountId})
-         LEFT JOIN (SELECT * FROM {transferAccrued}(@orgId, 'Month')) mta using({Fields.accountId})
-         LEFT JOIN {dpaView} using({Fields.accountId})
-         LEFT JOIN {mpaView} using({Fields.accountId})
-         WHERE {Fields.orgId} = @orgId
-         """
-
-      let! res =
-         pgQuery<Org * AccountProfile>
-            query
-            (Some [ "orgId", Writer.orgId orgId ])
-            (fun read ->
-               OrgSqlReader.org read,
-               {
-                  Account = Reader.account read
-                  Metrics = {
-                     DailyInternalTransferAccrued =
-                        read.decimalOrNone "dita" |> Option.defaultValue 0m
-                     DailyDomesticTransferAccrued =
-                        read.decimalOrNone "dida" |> Option.defaultValue 0m
-                     MonthlyInternalTransferAccrued =
-                        read.decimalOrNone "mita" |> Option.defaultValue 0m
-                     MonthlyDomesticTransferAccrued =
-                        read.decimalOrNone "mida" |> Option.defaultValue 0m
-                     DailyPurchaseAccrued =
-                        read.decimalOrNone "dpa" |> Option.defaultValue 0m
-                     MonthlyPurchaseAccrued =
-                        read.decimalOrNone "mpa" |> Option.defaultValue 0m
-                  }
-               })
-
-      return {
-         Org = fst (List.head res)
-         AccountProfiles =
-            [ for _, profile in res -> profile.Account.AccountId, profile ]
-            |> Map.ofList
-         Balance = res |> List.sumBy (snd >> _.Account.Balance)
-      }
-   }
-
-let searchOrgTransferSocialDiscovery (fromOrgId: OrgId) (nameQuery: string) =
-   let query =
-      $$"""
-      SELECT
-         o.{{OrgFields.orgId}},
-         o.{{OrgFields.name}},
-         features.{{OrgFields.socialTransferDiscoveryAccountId}}
-      FROM {{OrganizationSqlMapper.table}} o
-      JOIN {{OrganizationSqlMapper.featureFlagsTable}} features using({{OrgFields.orgId}})
-      WHERE
-         o.{{OrgFields.orgId}} <> @orgIdToExclude
-         AND o.{{OrgFields.name}} %> @nameQuery
-         AND features.{{OrgFields.socialTransferDiscoveryAccountId}} IS NOT NULL
-      ORDER BY o.{{OrgFields.name}} <-> @nameQuery DESC
-      """
-
-   pgQuery<Org>
-      query
-      (Some [
-         "orgIdToExclude", OrgSqlWriter.orgId fromOrgId
-         "nameQuery", OrgSqlWriter.name nameQuery
-      ])
-      OrgSqlReader.org
 
 // Diagnostic
 let getAccountFromAkka

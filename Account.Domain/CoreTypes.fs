@@ -70,12 +70,6 @@ type AccountDepository =
 
 type TransactionCategory = { Id: int; Name: string }
 
-type Merchant = {
-   OrgId: OrgId
-   Name: string
-   Alias: string option
-}
-
 [<RequireQualifiedAccess>]
 type MoneyFlow =
    | In
@@ -169,13 +163,3 @@ module TransactionQuery =
       listFromQueryString (
          Guid.parseOptional >> Option.map (EmployeeId >> InitiatedById)
       )
-
-type OrgFeatureFlag = {
-   SocialTransferDiscoveryPrimaryAccountId: AccountId option
-}
-
-type Org = {
-   OrgId: OrgId
-   Name: string
-   FeatureFlags: OrgFeatureFlag
-}

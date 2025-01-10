@@ -9,11 +9,34 @@ open Akka.Persistence.Journal
 open Akka.Persistence.Extras
 open Akkling.Cluster.Sharding
 
+open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open BillingStatement
 open Lib.SharedTypes
+
+type OrganizationEventPersistenceAdapter() =
+   let envelopeFromJournal (entry: obj) : Envelope =
+      let (OrgMessage.Event evt) = unbox entry
+      let _, envelope = OrgEnvelope.unwrap evt
+      envelope
+
+   interface IEventAdapter with
+      member x.Manifest(evt: obj) = envelopeFromJournal(evt).EventName
+
+      member x.ToJournal(evt: obj) : obj =
+         let envelope = envelopeFromJournal evt
+
+         Tagged(
+            evt,
+            Set.empty<string>
+               .Add(Constants.AKKA_ORG_JOURNAL)
+               .Add(envelope.EventName)
+         )
+
+      member x.FromJournal(evt: obj, manifest: string) : IEventSequence =
+         EventSequence.Single(evt)
 
 type AccountEventPersistenceAdapter() =
    let envelopeFromJournal (entry: obj) : Envelope =
@@ -59,6 +82,12 @@ type EmployeeEventPersistenceAdapter() =
       member x.FromJournal(evt: obj, manifest: string) : IEventSequence =
          EventSequence.Single(evt)
 
+type private OrgShardEnvelope = {
+   EntityId: string
+   ShardId: string
+   Message: OrgMessage
+}
+
 type private AccountShardEnvelope = {
    EntityId: string
    ShardId: string
@@ -82,6 +111,12 @@ type BankSerializer(system: ExtendedActorSystem) =
       match o with
       | :? ConfirmableMessageEnvelope -> "ConfirmableMessageEnvelope"
       | :? Lib.ReadModelSyncActor.State -> "ReadModelSyncState"
+      | :? OrgWithEvents -> "OrgWithEvents"
+      | :? Option<Org> -> "OrgOption"
+      | :? OrgMessage as msg ->
+         match msg with
+         | OrgMessage.Event _ -> "OrgEvent"
+         | _ -> "OrgMessage"
       | :? EmployeeWithEvents -> "EmployeeWithEvents"
       | :? Option<Employee> -> "EmployeeOption"
       | :? EmployeeMessage as msg ->
@@ -114,6 +149,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? AutomaticTransfer.Message -> "AutomaticTransferActorMessage"
       | :? ShardEnvelope as e ->
          match e.Message with
+         | :? OrgMessage -> "OrgShardEnvelope"
          | :? AccountMessage -> "AccountShardEnvelope"
          | :? EmployeeMessage -> "EmployeeShardEnvelope"
          | _ -> raise <| NotImplementedException()
@@ -133,14 +169,16 @@ type BankSerializer(system: ExtendedActorSystem) =
       // Akka ShardRegionProxy.
       | :? ShardEnvelope as e ->
          match e.Message with
+         | :? OrgMessage ->
+            JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | :? AccountMessage ->
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | :? EmployeeMessage ->
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | _ -> raise <| NotImplementedException()
-      // AccountEvent messages to be persisted are wrapped in
-      // Akka.Persistence.Extras ConfirmableMessageEnvelope to
-      // ensure failed Persist calls are retried & messages received
+      // AccountEvent, EmployeeEvent, & OrgEvent messages to be persisted
+      // are wrapped in Akka.Persistence.Extras ConfirmableMessageEnvelope
+      // to ensure failed Persist calls are retried & messages received
       // during backoff period are not lost.
       | :? ConfirmableMessageEnvelope
       // AccountEventPersisted messages sent over DistributedPubSub
@@ -194,7 +232,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | msg ->
             JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       // EmployeeMessage.GetEmployee response serialized for message sent
-      // from account cluster nodes to Web node.
+      // from employee cluster nodes to Web node.
       | :? Option<Employee>
       // EmployeeActor persistence snapshot.
       | :? EmployeeWithEvents as o ->
@@ -203,6 +241,19 @@ type BankSerializer(system: ExtendedActorSystem) =
          match msg with
          // EmployeeEvent actor message replay
          | EmployeeMessage.Event e ->
+            JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
+         | msg ->
+            JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+      // OrgMessage.GetOrg response serialized for message sent
+      // from org cluster nodes to Web node.
+      | :? Option<Org>
+      // OrgActor persistence snapshot.
+      | :? OrgWithEvents as o ->
+         JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
+      | :? OrgMessage as msg ->
+         match msg with
+         // OrgEvent actor message replay
+         | OrgMessage.Event e ->
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | msg ->
             JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
@@ -228,6 +279,10 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AccountLoadTestMessage" ->
             typeof<AccountLoadTestTypes.AccountLoadTestMessage>
          | "ReadModelSyncState" -> typeof<Lib.ReadModelSyncActor.State>
+         | "OrgWithEvents" -> typeof<OrgWithEvents>
+         | "OrgOption" -> typeof<Org option>
+         | "OrgEvent" -> typeof<OrgEvent>
+         | "OrgMessage" -> typeof<OrgMessage>
          | "EmployeeWithEvents" -> typeof<EmployeeWithEvents>
          | "EmployeeOption" -> typeof<Employee option>
          | "EmployeeEvent" -> typeof<EmployeeEvent>
@@ -280,6 +335,14 @@ type BankSerializer(system: ExtendedActorSystem) =
 
          envelope
       | :? EmployeeShardEnvelope as e ->
+         let envelope: ShardEnvelope = {
+            EntityId = e.EntityId
+            ShardId = e.ShardId
+            Message = e.Message
+         }
+
+         envelope
+      | :? OrgShardEnvelope as e ->
          let envelope: ShardEnvelope = {
             EntityId = e.EntityId
             ShardId = e.ShardId

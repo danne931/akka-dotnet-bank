@@ -2,6 +2,7 @@ module UIDomain.Account
 
 open System
 
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Lib.SharedTypes

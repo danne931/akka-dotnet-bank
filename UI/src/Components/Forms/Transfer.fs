@@ -6,6 +6,7 @@ open Fable.Form.Simple
 open System
 
 open Fable.Form.Simple.Pico
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain

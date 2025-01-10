@@ -13,6 +13,7 @@ open System
 open Bank.Infrastructure
 open Bank.UserSession.Middleware
 open Bank.UserSession.Routes
+open Bank.Org.Routes
 open Bank.Account.Routes
 open Bank.Account.Domain
 open Bank.Transfer.Routes
@@ -157,6 +158,7 @@ app.MapAkkaHealthCheckRoutes(
 )
 |> ignore
 
+startOrgRoutes app
 startUserSessionRoutes app
 startTransferRoutes app
 startAccountRoutes app

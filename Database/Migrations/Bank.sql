@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS command_approval_rule;
 DROP TABLE IF EXISTS org_feature_flag;
 DROP TABLE IF EXISTS account;
 DROP TABLE IF EXISTS employee_event;
+DROP TABLE IF EXISTS organization_event;
 DROP TABLE IF EXISTS employee;
 DROP TABLE IF EXISTS organization;
 DROP TABLE IF EXISTS category;
@@ -37,6 +38,7 @@ DROP TYPE IF EXISTS money_flow CASCADE;
 DROP TYPE IF EXISTS monthly_time_series_filter_by CASCADE;
 DROP TYPE IF EXISTS time_frame CASCADE;
 DROP TYPE IF EXISTS employee_status;
+DROP TYPE IF EXISTS organization_status;
 DROP TYPE IF EXISTS employee_role;
 DROP TYPE IF EXISTS account_depository;
 DROP TYPE IF EXISTS account_status;
@@ -123,11 +125,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE TYPE organization_status AS ENUM (
+  'PendingOnboardingTasksFulfilled',
+  'Active'
+);
 
 --- ORGANIZATION ---
 CREATE TABLE organization (
    org_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-   org_name VARCHAR(100) UNIQUE NOT NULL
+   org_name VARCHAR(100) UNIQUE NOT NULL,
+   status organization_status NOT NULL,
+   status_detail JSONB NOT NULL
 );
 
 SELECT add_created_at_column('organization');
@@ -355,6 +363,30 @@ debit card for the employee.  So the onboarding task "CreateCard" is essentially
 config info provided at employee creation time such as the AccountId to link the card to,
 purchase limits, and name which will be enough to initiate the card creation if the employee
 confirms the email invitation.';
+
+
+--- ORG EVENTS ---
+CREATE TABLE organization_event (
+   name VARCHAR(50) NOT NULL,
+   timestamp TIMESTAMPTZ NOT NULL,
+   event_id UUID PRIMARY KEY,
+   correlation_id UUID NOT NULL,
+   initiated_by_id UUID NOT NULL REFERENCES employee(employee_id),
+   event JSONB NOT NULL,
+   org_id UUID NOT NULL REFERENCES organization
+);
+
+SELECT add_created_at_column('organization_event');
+SELECT prevent_update('organization_event');
+
+CREATE INDEX organization_event_org_id_idx ON organization_event(org_id);
+CREATE INDEX organization_event_initiated_by_id_idx ON organization_event(initiated_by_id);
+
+COMMENT ON TABLE organization_event IS
+'Read model representation of Akka event sourced organization events.';
+COMMENT ON COLUMN organization_event.event IS
+'Representation of the organization_event in its Akka event sourcing form.';
+
 
 --- EMPLOYEE EVENTS ---
 CREATE TABLE employee_event (
@@ -1200,7 +1232,9 @@ $$ LANGUAGE plpgsql;
  * Create a "system" user to represent transactions which do not originate
  * from a human user.  Used in BillingCycleCommand, MaintenanceFeeCommand, etc.
 **/
-INSERT INTO organization (org_name) VALUES ('system');
+INSERT INTO organization (org_name, status, status_detail)
+VALUES ('system', 'Active', '"Active"'::jsonb);
+
 INSERT INTO employee (
    employee_id,
    email,

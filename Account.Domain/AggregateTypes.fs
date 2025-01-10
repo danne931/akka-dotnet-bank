@@ -366,15 +366,6 @@ type AccountProfile = {
    Metrics: AccountMetrics
 }
 
-type OrgWithAccountProfiles = {
-   Org: Org
-   AccountProfiles: Map<AccountId, AccountProfile>
-   Balance: decimal
-} with
-
-   member x.Accounts: Map<AccountId, Account> =
-      x.AccountProfiles |> Map.map (fun _ profile -> profile.Account)
-
 type AccountMessage =
    | GetAccount
    | StateChange of AccountCommand

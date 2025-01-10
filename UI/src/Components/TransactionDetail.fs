@@ -6,6 +6,7 @@ open Feliz.Router
 open Elmish
 open System
 
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
@@ -225,7 +226,7 @@ let update (merchantDispatch: MerchantProvider.Dispatch) msg state =
       Alerts.toastCommand err
    | SaveMerchantNickname(merchant, Started) ->
       let updateMerchant = async {
-         let! res = TransactionService.updateMerchant merchant
+         let! res = OrgService.updateMerchant merchant
          return SaveMerchantNickname(merchant, Finished res)
       }
 

@@ -17,7 +17,7 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
          {Table.payment}.*,
          payeeOrg.{OrganizationSqlMapper.OrgFields.name} as payee_org_name,
          payerOrg.{OrganizationSqlMapper.OrgFields.name} as payer_org_name,
-         {PaymentFields.Platform.status},
+         {Table.platformPayment}.{PaymentFields.Platform.status},
          {PaymentFields.Platform.payerOrgId},
          {PaymentFields.Platform.payByAccount}
       FROM {Table.payment} 

@@ -9,6 +9,7 @@ open Fable.FontAwesome
 open Lib.SharedTypes
 open UIDomain
 open UIDomain.Account
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Lib.NetworkQuery

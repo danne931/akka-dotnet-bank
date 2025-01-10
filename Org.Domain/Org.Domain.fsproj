@@ -5,11 +5,11 @@
 
   <ItemGroup>
     <Compile Include="CoreTypes.fs" />
-    <Compile Include="MaintenanceFee.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />
     <Compile Include="AggregateTypes.fs" />
-    <Compile Include="Account.fs" />
+    <Compile Include="AnalyticsTypes.fs" /> 
+    <Compile Include="Org.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,6 +18,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Lib.SharedClientServer/Lib.SharedClientServer.fsproj" /> 
-    <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
   </ItemGroup>
 </Project>

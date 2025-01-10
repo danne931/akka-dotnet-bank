@@ -63,6 +63,13 @@ module ClusterMetadata =
       messageExtractor: IMessageExtractor
    }
 
+   let orgShardRegion = {
+      name = "org"
+      messageExtractor =
+         // TODO: Create separate config const for org number of shards
+         messageExtractor Env.config.AccountCluster.NumberOfShards
+   }
+
    let accountShardRegion = {
       name = "account"
       messageExtractor =
@@ -72,11 +79,13 @@ module ClusterMetadata =
    let employeeShardRegion = {
       name = "employee"
       messageExtractor =
+         // TODO: Create separate config const for employee number of shards
          messageExtractor Env.config.AccountCluster.NumberOfShards
    }
 
    let roles = {|
       web = "web-role"
+      org = "org-role"
       account = "account-role"
       signalR = "signal-r-role"
       scheduling = "scheduling-role"
@@ -84,7 +93,9 @@ module ClusterMetadata =
    |}
 
 module ActorMetadata =
-   type AccountReadModelSyncMarker() = class end
+   type OrgMarker() = class end
+
+   type OrgReadModelSyncMarker() = class end
 
    type CircuitBreakerMarker() = class end
 
@@ -113,6 +124,8 @@ module ActorMetadata =
 
    type AccountMarker() = class end
 
+   type AccountReadModelSyncMarker() = class end
+
    type SchedulingMarker() = class end
 
    type EmployeeMarker() = class end
@@ -138,6 +151,13 @@ module ActorMetadata =
 
       member x.Path(entityId: string) =
          ActorPath.Parse $"akka://bank/user/{x.RouteBuilder entityId}"
+
+   let org = { Name = "org"; Route = "org" }
+
+   let orgReadModelSync = {
+      Name = "org-read-model-sync"
+      Route = "org-read-model-sync"
+   }
 
    let account = { Name = "account"; Route = "account" }
 
