@@ -258,6 +258,9 @@ let EmployeeDashboardComponent
          [| box browserQuery.ChangeDetection |]
       )
 
+   let orgCtx = React.useContext OrgProvider.context
+   let orgDispatchCtx = React.useContext OrgProvider.dispatchContext
+
    let selectedEmployeeId = Routes.EmployeeUrl.employeeIdMaybe url
 
    let close _ = actionNav None
@@ -405,16 +408,21 @@ let EmployeeDashboardComponent
                            (Msg.EmployeeCommandProcessing >> dispatch >> close)
                      | EmployeeActionView.ViewEmployee id ->
                         classyNode Html.div [ "employee-detail" ] [
-                           if Deferred.resolved state.Employees then
+                           match state.Employees, orgCtx with
+                           | Deferred.Resolved _,
+                             Deferred.Resolved(Ok(Some org)) ->
                               match selectedEmployee id state with
                               | None -> Html.small "Uh oh. Employee not found."
                               | Some employee ->
                                  EmployeeDetailComponent
                                     session
                                     employee
+                                    org.Org
                                     (Msg.EmployeeCommandProcessing >> dispatch)
-                           else
-                              Html.progress []
+                                    (_.PendingState
+                                     >> OrgProvider.Msg.OrgUpdated
+                                     >> orgDispatchCtx)
+                           | _ -> Html.progress []
                         ]
                   ]
                   |> ScreenOverlay.Portal

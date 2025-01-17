@@ -289,9 +289,3 @@ module CardQuery =
 
    let accountIdsFromQueryString =
       listFromQueryString (Guid.parseOptional >> Option.map AccountId)
-
-type EmployeeDailyAccrual = {
-   PaymentsPaid: decimal
-   InternalTransferBetweenOrgs: decimal
-   DomesticTransfer: decimal
-}

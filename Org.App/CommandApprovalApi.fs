@@ -6,7 +6,7 @@ open System.Threading.Tasks
 
 open Lib.Postgres
 open Lib.SharedTypes
-open Bank.Employee.Domain
+open Bank.Org.Domain
 
 open CommandApprovalRuleSqlMapper
 
@@ -73,93 +73,6 @@ let approvalRuleExistsForCommandType
          "commandType", Writer.approvableCommandType commandType
       ])
       Reader.ruleId
-
-let commandRequiresApproval
-   (command: ApprovableCommand)
-   (accrual: EmployeeDailyAccrual)
-   : Task<Result<CommandApprovalRuleId option, Err>>
-   =
-   taskResult {
-      let query =
-         $"""
-         SELECT
-            {Fields.ruleId},
-            {Fields.criteriaDetail},
-            {CommandApprovalProgressSqlMapper.Fields.status}
-         FROM {table}
-         LEFT JOIN {CommandApprovalProgressSqlMapper.table} using({Fields.ruleId})
-         WHERE
-            {table}.{Fields.orgId} = @orgId
-            AND {table}.{Fields.approvableCommandType} = @commandType::{TypeCast.approvableCommand}
-         """
-
-      let! res =
-         pgQuerySingle<
-            CommandApprovalRuleId *
-            CommandApprovalRule.Criteria *
-            CommandApprovalProgress.Status option
-          >
-            query
-            (Some [
-               "orgId", Writer.orgId command.OrgId
-               "commandType", Writer.approvableCommandTypeFromCommand command
-            ])
-            (fun reader ->
-               Reader.ruleId reader,
-               Reader.criteriaDetail reader,
-               CommandApprovalProgressSqlMapper.Fields.status
-               |> reader.stringOrNone
-               |> Option.bind CommandApprovalProgress.Status.fromString)
-
-      return
-         match res with
-         | None -> None
-         | Some(_, _, Some status) when
-            status = CommandApprovalProgress.Status.Approved
-            ->
-            None
-         | Some(ruleId, criteria, _) ->
-            match criteria with
-            | CommandApprovalRule.Criteria.PerCommand ->
-               match command with
-               | ApprovableCommand.InviteEmployee _ -> Some ruleId
-               | ApprovableCommand.UpdateEmployeeRole _ -> Some ruleId
-               | ApprovableCommand.FulfillPlatformPayment _ -> None // should not be reached
-               | ApprovableCommand.InternalTransferBetweenOrgs _ -> None // should not be reached
-               | ApprovableCommand.DomesticTransfer _ -> None // should not be reached
-            | CommandApprovalRule.Criteria.AmountPerCommand range ->
-               match range.LowerBound, range.UpperBound with
-               | None, None -> None // This case should not be reached
-               | Some low, None ->
-                  if command.Amount >= low then Some ruleId else None
-               | None, Some high ->
-                  if command.Amount <= high then Some ruleId else None
-               | Some low, Some high ->
-                  if command.Amount >= low && command.Amount <= high then
-                     Some ruleId
-                  else
-                     None
-            | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
-               match command with
-               | ApprovableCommand.InviteEmployee _ -> None // Should not be reached
-               | ApprovableCommand.UpdateEmployeeRole _ -> None // Should not be reached
-               | ApprovableCommand.FulfillPlatformPayment cmd ->
-                  let overLimit =
-                     cmd.Data.RequestedPayment.BaseInfo.Amount
-                     + accrual.PaymentsPaid > limit
-
-                  if overLimit then Some ruleId else None
-               | ApprovableCommand.InternalTransferBetweenOrgs cmd ->
-                  let overLimit =
-                     cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit
-
-                  if overLimit then Some ruleId else None
-               | ApprovableCommand.DomesticTransfer cmd ->
-                  let overLimit =
-                     cmd.Data.Amount + accrual.DomesticTransfer > limit
-
-                  if overLimit then Some ruleId else None
-   }
 
 open CommandApprovalProgressSqlMapper
 

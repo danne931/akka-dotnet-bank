@@ -5,11 +5,13 @@ open Fable.Form.Simple
 open System
 open Validus
 
+open Bank.Org.Domain
 open Bank.Employee.Domain
 open Lib.SharedTypes
 open Lib.Validators
-open UIDomain.Employee
+open UIDomain.Org
 open Fable.Form.Simple.Pico
+open Bank.Org.Forms
 
 open FormContainer
 
@@ -257,16 +259,15 @@ let private amountBasedCriteriaForm (criteriaType: AmountBasedCriteriaType) =
       |> Form.append fieldDailyLimit
 
 let ruleCreateForm
+   (org: Org)
    (employees: Map<EmployeeId, Employee>)
    (session: UserSession)
    : Form.Form<Values, Msg<_>, IReactProperty>
    =
-   let employee = Map.find session.EmployeeId employees
-
    Form.succeed (fun (cmdType, criteria, approvers) ->
       let cmd =
          CommandApprovalRule.ConfigureApprovalRuleCommand.create
-            (session.EmployeeId, session.OrgId)
+            session.OrgId
             (InitiatedById session.EmployeeId)
             {
                RuleId = Guid.NewGuid() |> CommandApprovalRuleId
@@ -275,9 +276,9 @@ let ruleCreateForm
                Criteria = criteria
                Approvers = approvers
             }
-         |> EmployeeCommand.ConfigureApprovalRule
+         |> OrgCommand.ConfigureApprovalRule
 
-      Msg.Submit(employee, cmd, Started))
+      Msg.Submit(org, cmd, Started))
    |> Form.append (
       fieldApprovableCommandType
       |> Form.andThen (fun cmdType ->
@@ -299,20 +300,19 @@ let ruleCreateForm
    )
 
 let ruleEditForm
+   (org: Org)
    (employees: Map<EmployeeId, Employee>)
    (session: UserSession)
    (rule: CommandApprovalRule.T)
    : Form.Form<Values, Msg<_>, IReactProperty>
    =
-   let employee = Map.find session.EmployeeId employees
-
    Form.succeed
       (fun
            (criteria: CommandApprovalRule.Criteria,
             approvers: CommandApprovalRule.Approver list) ->
          let cmd =
             CommandApprovalRule.ConfigureApprovalRuleCommand.create
-               (session.EmployeeId, rule.OrgId)
+               org.OrgId
                (InitiatedById session.EmployeeId)
                {
                   RuleId = rule.RuleId
@@ -321,9 +321,9 @@ let ruleEditForm
                   Criteria = criteria
                   Approvers = approvers
                }
-            |> EmployeeCommand.ConfigureApprovalRule
+            |> OrgCommand.ConfigureApprovalRule
 
-         Msg.Submit(employee, cmd, Started))
+         Msg.Submit(org, cmd, Started))
    |> Form.append (
       match rule.CommandType with
       | ApprovableCommandType.InviteEmployee
@@ -351,8 +351,9 @@ let customFormSubmit onCancel =
 [<ReactComponent>]
 let CommandApprovalRuleEditFormComponent
    (onCancel: unit -> unit)
-   (onSubmit: EmployeeCommandReceipt -> unit)
+   (onSubmit: OrgCommandReceipt -> unit)
    (session: UserSession)
+   (org: Org)
    (employees: Map<EmployeeId, Employee>)
    (rule: CommandApprovalRule.T)
    =
@@ -389,9 +390,9 @@ let CommandApprovalRuleEditFormComponent
         }
       | CommandApprovalRule.Criteria.PerCommand -> initValues
 
-   EmployeeFormContainer
+   OrgFormContainer
       initValues
-      (ruleEditForm employees session rule)
+      (ruleEditForm org employees session rule)
       onSubmit
       (Some(customFormSubmit onCancel))
 
@@ -399,8 +400,9 @@ let CommandApprovalRuleEditFormComponent
 [<ReactComponent>]
 let CommandApprovalRuleCreateFormComponent
    (onCancel: unit -> unit)
-   (onSubmit: EmployeeCommandReceipt -> unit)
+   (onSubmit: OrgCommandReceipt -> unit)
    (session: UserSession)
+   (org: Org)
    (employees: Map<EmployeeId, Employee>)
    =
    let initValues = {
@@ -412,8 +414,8 @@ let CommandApprovalRuleCreateFormComponent
       RangeUpperBound = ""
    }
 
-   EmployeeFormContainer
+   OrgFormContainer
       initValues
-      (ruleCreateForm employees session)
+      (ruleCreateForm org employees session)
       onSubmit
       (Some(customFormSubmit onCancel))

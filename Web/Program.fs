@@ -83,6 +83,11 @@ builder.Services.AddAkka(
             fun system -> BankSerializer(system)
          )
          .WithDistributedPubSub(ClusterMetadata.roles.signalR)
+         .WithShardRegionProxy<ActorMetadata.OrgMarker>(
+            ClusterMetadata.orgShardRegion.name,
+            ClusterMetadata.roles.org,
+            ClusterMetadata.orgShardRegion.messageExtractor
+         )
          .WithShardRegionProxy<ActorMetadata.AccountMarker>(
             ClusterMetadata.accountShardRegion.name,
             ClusterMetadata.roles.account,

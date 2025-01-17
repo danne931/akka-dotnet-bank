@@ -7,6 +7,7 @@
     <Compile Include="CoreTypes.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />
+    <Compile Include="CommandApproval.fs" /> 
     <Compile Include="AggregateTypes.fs" />
     <Compile Include="AnalyticsTypes.fs" /> 
     <Compile Include="Org.fs" />
@@ -19,5 +20,6 @@
   <ItemGroup>
     <ProjectReference Include="../Lib.SharedClientServer/Lib.SharedClientServer.fsproj" /> 
     <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" /> 
   </ItemGroup>
 </Project>

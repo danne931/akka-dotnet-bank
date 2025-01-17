@@ -64,20 +64,6 @@ let employeeEventUIFriendly (txn: EmployeeHistory) : EmployeeHistoryUIFriendly =
             $"Purchase declined for {txn.EmployeeName} at {e.Data.Info.Origin} with card {e.Data.Info.CardNumberLast4}"
          Amount = Money.format e.Data.Info.Amount
      }
-   | EmployeeEvent.DomesticTransferRequested e -> {
-      props with
-         Name = "Domestic Transfer Requested"
-         Info =
-            $"Domestic transfer requested by {e.Data.Info.Sender.Name} to {e.Data.Info.Recipient.Name}"
-         Amount = Money.format e.Data.Info.Amount
-     }
-   | EmployeeEvent.DomesticTransferConfirmed e -> {
-      props with
-         Name = "Domestic Transfer Confirmed"
-         Info =
-            $"Domestic transfer confirmed between {e.Data.Info.Sender.Name} & {e.Data.Info.Recipient.Name}"
-         Amount = Money.format e.Data.Info.Amount
-     }
    | EmployeeEvent.CreatedEmployee e -> {
       props with
          Name =
@@ -156,36 +142,11 @@ let employeeEventUIFriendly (txn: EmployeeHistory) : EmployeeHistoryUIFriendly =
          Name = "Invitation Token Refreshed"
          Info = "Invitation token refreshed"
      }
-   | EmployeeEvent.CommandApprovalRuleConfigured e -> {
-      props with
-         Name = "Approval Rule Configured"
-         Info =
-            $"Approval rule ({e.Data.CommandType}) configured with {e.Data.Approvers.Length} approvers."
-     }
-   | EmployeeEvent.CommandApprovalRequested e -> {
-      props with
-         Name = $"{e.Data.Command.Display} Approval Requested"
-         Info =
-            $"{e.Data.Command.Display} approval requested for {txn.EmployeeName}"
-     }
-   | EmployeeEvent.CommandApprovalAcquired e -> {
-      props with
-         Name = $"{e.Data.CommandType.Display} Approval Acquired"
-         Info =
-            $"{e.Data.CommandType.Display} approval acquired for {txn.EmployeeName}"
-     }
-   | EmployeeEvent.CommandApprovalDeclined e -> {
-      props with
-         Name = $"{e.Data.CommandType.Display} Approval Declined"
-         Info =
-            $"{e.Data.CommandType.Display} approval declined for {txn.EmployeeName}"
-     }
    | EmployeeEvent.AccessApproved _ -> {
       props with
          Name = "Employee Access Approved"
          Info = $"Employee access approved for {txn.EmployeeName}"
      }
-
 
 type SelectedEmployee = {
    Id: EmployeeId

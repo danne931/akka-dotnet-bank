@@ -246,10 +246,15 @@ type Envelope = {
    InitiatedById: InitiatedById
 }
 
+[<RequireQualifiedAccess>]
 type OrgStateTransitionError =
    | OrgNotReadyToStartOnboarding
    | OrgNotReadyToActivate
    | OrgNotActive
+   | ApprovalRuleNotFound
+   | ApprovalProgressWorklowNotActive
+   | ApproverUnrecognized of EmployeeId * name: string
+   | ApproverAlreadyApprovedCommand of EmployeeId * name: string
 
 type AccountStateTransitionError =
    | AccountNotReadyToActivate
@@ -325,8 +330,20 @@ type Err =
       | OrgStateTransitionError e ->
          match e with
          | OrgStateTransitionError.OrgNotActive -> "Org Not Active"
+         | OrgStateTransitionError.OrgNotReadyToStartOnboarding ->
+            "Org Not Ready To Start Onboarding"
          | OrgStateTransitionError.OrgNotReadyToActivate ->
             "Org Not Ready to Activate"
+         | OrgStateTransitionError.ApprovalRuleNotFound ->
+            "Approval Rule Not Found"
+         | OrgStateTransitionError.ApproverUnrecognized(employeeId, name) ->
+            $"Unrecognized approver approved/declined command {name}-{employeeId}"
+         | OrgStateTransitionError.ApprovalProgressWorklowNotActive ->
+            "Approval Progress Workflow Not Active"
+         | OrgStateTransitionError.ApproverAlreadyApprovedCommand(employeeId,
+                                                                  name) ->
+            $"Approver already approved command {name}-{employeeId}"
+
       | AccountStateTransitionError e ->
          match e with
          | AccountStateTransitionError.AccountNotActive -> "Account Not Active"

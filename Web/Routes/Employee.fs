@@ -6,10 +6,11 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
 open Akka.Actor
 open Akkling
+open FsToolkit.ErrorHandling
 
 open Bank.Employee.Domain
 open Bank.Employee.Api
-open Bank.CommandApproval.Api
+open Bank.Org.Domain
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
@@ -96,7 +97,22 @@ let startEmployeeRoutes (app: WebApplication) =
       .MapPost(
          EmployeePath.UpdateRole,
          Func<ActorSystem, UpdateRoleCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (EmployeeCommand.UpdateRole cmd)
+            taskResult {
+               let validation =
+                  cmd
+                  |> UpdateRoleCommand.toEvent
+                  |> Result.map EmployeeEnvelope.get
+
+               let! res = validation |> Result.mapError Err.ValidationError
+
+               let msg =
+                  cmd
+                  |> ApprovableCommand.UpdateEmployeeRole
+                  |> OrgMessage.ApprovableEmployeeRequest
+
+               (OrgActor.get sys cmd.OrgId) <! msg
+               return res
+            }
             |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.UpdateRole)
@@ -169,85 +185,4 @@ let startEmployeeRoutes (app: WebApplication) =
             })
       )
       .RBAC(Permissions.ResendInviteNotification)
-   |> ignore
-
-   app.MapGet(
-      EmployeePath.GetCommandApprovalRuleByCommandType,
-      Func<Guid, string, Task<IResult>>(fun orgId commandType ->
-         match ApprovableCommandType.fromString commandType with
-         | None ->
-            Task.FromResult(Results.BadRequest "Invalid ApprovableCommandType")
-         | Some commandType ->
-            approvalRuleExistsForCommandType (OrgId orgId) commandType
-            |> RouteUtil.unwrapTaskResult)
-   )
-   |> ignore
-
-   app.MapGet(
-      EmployeePath.GetCommandApprovalProgressWithRule,
-      Func<Guid, Task<IResult>>(fun progressId ->
-         getCommandApprovalProgressWithRule (
-            CommandApprovalProgressId(CorrelationId progressId)
-         )
-         |> RouteUtil.unwrapTaskResultOption)
-   )
-   |> ignore
-
-   app.MapGet(
-      EmployeePath.GetCommandApprovals,
-      Func<Guid, Task<IResult>>(fun orgId ->
-         getCommandApprovals (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
-   )
-   |> ignore
-
-   app.MapGet(
-      EmployeePath.GetCommandApprovalRules,
-      Func<Guid, Task<IResult>>(fun orgId ->
-         getApprovalRules (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
-   )
-   |> ignore
-
-   app
-      .MapPost(
-         EmployeePath.ConfigureCommandApprovalRule,
-         Func<
-            ActorSystem,
-            CommandApprovalRule.ConfigureApprovalRuleCommand,
-            Task<IResult>
-          >
-            (fun sys cmd ->
-               processCommand sys (EmployeeCommand.ConfigureApprovalRule cmd)
-               |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.ConfigureCommandApprovalRule)
-   |> ignore
-
-   app
-      .MapPost(
-         EmployeePath.AcquireCommandApproval,
-         Func<
-            ActorSystem,
-            CommandApprovalProgress.AcquireCommandApproval,
-            Task<IResult>
-          >
-            (fun sys cmd ->
-               processCommand sys (EmployeeCommand.AcquireCommandApproval cmd)
-               |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.ManageCommandApprovalProgress)
-   |> ignore
-
-   app
-      .MapPost(
-         EmployeePath.DeclineCommandApproval,
-         Func<
-            ActorSystem,
-            CommandApprovalProgress.DeclineCommandApproval,
-            Task<IResult>
-          >
-            (fun sys cmd ->
-               processCommand sys (EmployeeCommand.DeclineCommandApproval cmd)
-               |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.ManageCommandApprovalProgress)
    |> ignore

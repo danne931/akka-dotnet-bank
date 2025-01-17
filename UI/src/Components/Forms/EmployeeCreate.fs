@@ -4,6 +4,7 @@ open Feliz
 open Fable.Form.Simple
 
 open Fable.Form.Simple.Pico
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Lib.Validators
@@ -180,7 +181,7 @@ let EmployeeCreateFormComponent
    React.useEffectOnce (fun () ->
       async {
          let! approvalRequired =
-            EmployeeService.orgRequiresCommandApproval
+            OrgService.orgRequiresCommandApproval
                session.OrgId
                ApprovableCommandType.InviteEmployee
 

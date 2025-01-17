@@ -23,6 +23,15 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
       match command with
       | CreateOrg cmd ->
          CreateOrgCommand.toEvent cmd |> Result.map OrgEnvelope.get
+      | ConfigureApprovalRule cmd ->
+         CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
+         |> Result.map OrgEnvelope.get
+      | AcquireCommandApproval cmd ->
+         CommandApprovalProgress.AcquireCommandApproval.toEvent cmd
+         |> Result.map OrgEnvelope.get
+      | DeclineCommandApproval cmd ->
+         CommandApprovalProgress.DeclineCommandApproval.toEvent cmd
+         |> Result.map OrgEnvelope.get
       | cmd ->
          ValidationErrors.create "" [
             $"Command processing not implemented for {cmd}"

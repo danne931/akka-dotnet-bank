@@ -1,17 +1,11 @@
-namespace Bank.Employee.Domain
+namespace Bank.Org.Domain
 
 open System
-open System.Threading.Tasks
 open Validus
 
 open Lib.SharedTypes
+open Bank.Employee.Domain
 open Bank.Transfer.Domain
-
-type ApprovableCommandEnvelope = {
-   EntityId: EntityId
-   InitiatedBy: InitiatedById
-   OrgId: OrgId
-}
 
 [<RequireQualifiedAccess>]
 type ApprovableCommandType =
@@ -61,7 +55,7 @@ type ApprovableCommand =
    | UpdateEmployeeRole of UpdateRoleCommand
    | FulfillPlatformPayment of FulfillPlatformPaymentCommand
    | InternalTransferBetweenOrgs of InternalTransferBetweenOrgsCommand
-   | DomesticTransfer of RequestDomesticTransferCommand
+   | DomesticTransfer of DomesticTransferCommand
 
    static member envelope(cmd: ApprovableCommand) : CommandEnvelope =
       match cmd with
@@ -72,8 +66,6 @@ type ApprovableCommand =
       | DomesticTransfer o -> Command.envelope o
 
    member x.InitiatedBy = ApprovableCommand.envelope x |> _.InitiatedById
-
-   member x.EntityId = ApprovableCommand.envelope x |> _.EntityId
 
    member x.OrgId = ApprovableCommand.envelope x |> _.OrgId
 
@@ -99,11 +91,6 @@ type ApprovableCommand =
    member x.Display = x.CommandType.Display
 
 module CommandApprovalRule =
-   type RequiresApprovalForCommand =
-      ApprovableCommand
-         -> EmployeeDailyAccrual
-         -> Task<Result<CommandApprovalRuleId option, Err>>
-
    type AmountPerCommandRange = {
       LowerBound: decimal option
       UpperBound: decimal option
@@ -148,17 +135,21 @@ module CommandApprovalRule =
       Approvers: Approver list
    }
 
+   let isValidApprover (approver: Approver) (rule: T) =
+      rule.Approvers
+      |> List.exists (fun a -> a.EmployeeId = approver.EmployeeId)
+
    type ConfigureApprovalRuleCommand = Command<T>
 
    module ConfigureApprovalRuleCommand =
       let create
-         (employeeId: EmployeeId, orgId: OrgId)
+         (orgId: OrgId)
          (initiatedBy: InitiatedById)
          (data: T)
          : ConfigureApprovalRuleCommand
          =
          Command.create
-            (EmployeeId.toEntityId employeeId)
+            (OrgId.toEntityId orgId)
             orgId
             (CorrelationId.create ())
             initiatedBy
@@ -206,7 +197,7 @@ module CommandApprovalProgress =
          | Some status -> status
 
    type T = {
-      CommandId: CommandApprovalProgressId
+      ProgressId: CommandApprovalProgressId
       RuleId: CommandApprovalRuleId
       OrgId: OrgId
       Status: Status
@@ -215,34 +206,48 @@ module CommandApprovalProgress =
       CommandToInitiateOnApproval: ApprovableCommand
    }
 
+   let isNewApproval (approver: CommandApprovalRule.Approver) (progress: T) =
+      progress.ApprovedBy
+      |> List.exists (fun a -> a.EmployeeId = approver.EmployeeId)
+      |> not
+
    type CommandApprovalRequested = {
       RuleId: CommandApprovalRuleId
       Command: ApprovableCommand
    }
 
    type CommandApprovalAcquired = {
-      ApprovedBy: InitiatedById
-      CommandId: CommandApprovalProgressId
-      CommandType: ApprovableCommandType
+      RuleId: CommandApprovalRuleId
+      ApprovedBy: CommandApprovalRule.Approver
+      ProgressId: CommandApprovalProgressId
+      Command: ApprovableCommand
+   }
+
+   type CommandApprovalProcessCompleted = {
+      RuleId: CommandApprovalRuleId
+      ApprovedBy: CommandApprovalRule.Approver
+      ProgressId: CommandApprovalProgressId
+      Command: ApprovableCommand
    }
 
    type CommandApprovalDeclined = {
-      DeclinedBy: InitiatedById
-      CommandId: CommandApprovalProgressId
-      CommandType: ApprovableCommandType
+      RuleId: CommandApprovalRuleId
+      DeclinedBy: CommandApprovalRule.Approver
+      Command: ApprovableCommand
+      ProgressId: CommandApprovalProgressId
    }
 
    type RequestCommandApproval = Command<CommandApprovalRequested>
 
    module RequestCommandApproval =
       let create
-         (employeeId: EmployeeId, orgId: OrgId)
+         (orgId: OrgId)
          (initiatedBy: InitiatedById)
          (correlationId: CorrelationId)
          (data: CommandApprovalRequested)
          =
          Command.create
-            (EmployeeId.toEntityId employeeId)
+            (OrgId.toEntityId orgId)
             orgId
             correlationId
             initiatedBy
@@ -257,39 +262,61 @@ module CommandApprovalProgress =
    type AcquireCommandApproval = Command<CommandApprovalAcquired>
 
    module AcquireCommandApproval =
-      let create
-         (employeeId: EmployeeId, orgId: OrgId)
-         (data: CommandApprovalAcquired)
-         =
-         let (CommandApprovalProgressId correlationId) = data.CommandId
+      let create (orgId: OrgId) (data: CommandApprovalAcquired) =
+         let (CommandApprovalProgressId correlationId) = data.ProgressId
 
          Command.create
-            (EmployeeId.toEntityId employeeId)
+            (OrgId.toEntityId orgId)
             orgId
             correlationId
-            data.ApprovedBy
+            (InitiatedById data.ApprovedBy.EmployeeId)
             data
 
       let toEvent
          (cmd: AcquireCommandApproval)
          : ValidationResult<BankEvent<CommandApprovalAcquired>>
          =
-         Ok <| BankEvent.create<CommandApprovalAcquired> cmd
+         BankEvent.create<CommandApprovalAcquired> cmd |> Ok
+
+   type CompleteCommandApprovalProcess =
+      Command<CommandApprovalProcessCompleted>
+
+   module CompleteCommandApprovalProcess =
+      let create
+         (cmd: AcquireCommandApproval)
+         : Command<CommandApprovalProcessCompleted>
+         =
+         let (CommandApprovalProgressId correlationId) = cmd.Data.ProgressId
+
+         Command.create
+            (OrgId.toEntityId cmd.OrgId)
+            cmd.OrgId
+            correlationId
+            (InitiatedById cmd.Data.ApprovedBy.EmployeeId)
+            {
+               RuleId = cmd.Data.RuleId
+               ApprovedBy = cmd.Data.ApprovedBy
+               ProgressId = cmd.Data.ProgressId
+               Command = cmd.Data.Command
+            }
+
+      let toEvent
+         (cmd: CompleteCommandApprovalProcess)
+         : ValidationResult<BankEvent<CommandApprovalProcessCompleted>>
+         =
+         BankEvent.create<CommandApprovalProcessCompleted> cmd |> Ok
 
    type DeclineCommandApproval = Command<CommandApprovalDeclined>
 
    module DeclineCommandApproval =
-      let create
-         (employeeId: EmployeeId, orgId: OrgId)
-         (data: CommandApprovalDeclined)
-         =
-         let (CommandApprovalProgressId correlationId) = data.CommandId
+      let create (orgId: OrgId) (data: CommandApprovalDeclined) =
+         let (CommandApprovalProgressId correlationId) = data.ProgressId
 
          Command.create
-            (EmployeeId.toEntityId employeeId)
+            (OrgId.toEntityId orgId)
             orgId
             correlationId
-            data.DeclinedBy
+            (InitiatedById data.DeclinedBy.EmployeeId)
             data
 
       let toEvent

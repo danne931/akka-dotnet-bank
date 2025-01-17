@@ -1,7 +1,7 @@
 module CommandApprovalRuleSqlMapper
 
 open Lib.SharedTypes
-open Bank.Employee.Domain
+open Bank.Org.Domain
 open OrganizationSqlMapper
 open CommandApprovalRule
 

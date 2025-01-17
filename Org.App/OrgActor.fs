@@ -1,7 +1,6 @@
 [<RequireQualifiedAccess>]
 module OrgActor
 
-open System
 open Akka.Actor
 open Akka.Persistence
 open Akka.Persistence.Extras
@@ -13,18 +12,61 @@ open Lib.SharedTypes
 open Lib.Types
 open ActorUtil
 open Bank.Org.Domain
+open Bank.Account.Domain
+open Bank.Transfer.Domain
+open Bank.Employee.Domain
 
 let handleValidationError mailbox (err: Err) (cmd: OrgCommand) =
    logWarning
       mailbox
       $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
 
-let actorProps
-   (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
-   //   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   //(getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   //(schedulingRef: IActorRef<SchedulingActor.Message>)
+// Sends the ApprovableCommand to the appropriate Account or Employee actor
+// when the approval process is complete or no approval required.
+let private sendApprovedCommand
+   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (cmd: ApprovableCommand)
    =
+   match cmd with
+   | ApprovableCommand.InviteEmployee cmd ->
+      let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
+
+      let cmd = EmployeeCommand.ApproveAccess cmd
+      employeeRef <! EmployeeMessage.StateChange cmd
+   | ApprovableCommand.UpdateEmployeeRole cmd ->
+      let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
+
+      let cmd = EmployeeCommand.UpdateRole cmd
+      employeeRef <! EmployeeMessage.StateChange cmd
+   | ApprovableCommand.FulfillPlatformPayment cmd ->
+      let accountRef = getAccountRef (AccountId.fromEntityId cmd.EntityId)
+
+      let cmd = AccountCommand.FulfillPlatformPayment cmd
+      accountRef <! AccountMessage.StateChange cmd
+   | ApprovableCommand.DomesticTransfer cmd ->
+      let accountId = cmd.Data.Sender.AccountId
+
+      let cmd =
+         DomesticTransferCommand.create
+            (accountId, cmd.OrgId)
+            cmd.CorrelationId
+            cmd.InitiatedBy
+            cmd.Data
+         |> AccountCommand.DomesticTransfer
+
+      getAccountRef accountId <! AccountMessage.StateChange cmd
+   | ApprovableCommand.InternalTransferBetweenOrgs cmd ->
+      let accountRef = getAccountRef cmd.Data.Sender.AccountId
+      let cmd = AccountCommand.InternalTransferBetweenOrgs cmd
+      accountRef <! AccountMessage.StateChange cmd
+
+let actorProps
+   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   =
+   let sendApprovedCommand = sendApprovedCommand getEmployeeRef getAccountRef
+
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
 
@@ -40,7 +82,6 @@ let actorProps
          | Persisted mailbox e ->
             let (OrgMessage.Event evt) = unbox e
             let state = Org.applyEvent state evt
-            let org = state.Info
 
             match evt with
             | OrgCreated e ->
@@ -56,6 +97,27 @@ let actorProps
                   |> OrgCommand.FinalizeOrgOnboarding
 
                mailbox.Parent() <! OrgMessage.StateChange cmd
+            | CommandApprovalProcessCompleted e ->
+               sendApprovedCommand e.Data.Command
+            | CommandApprovalDeclined e ->
+               match e.Data.Command with
+               | ApprovableCommand.InviteEmployee cmd ->
+                  let employeeId = EmployeeId.fromEntityId cmd.EntityId
+
+                  let msg =
+                     CancelInvitationCommand.create
+                        (employeeId, e.OrgId)
+                        e.InitiatedById
+                        {
+                           Reason =
+                              Some
+                                 $"Employee invite declined by {e.Data.DeclinedBy.Name}"
+                        }
+                     |> EmployeeCommand.CancelInvitation
+                     |> EmployeeMessage.StateChange
+
+                  (getEmployeeRef employeeId) <! msg
+               | _ -> ()
             | _ -> ()
 
             return! loop <| Some state
@@ -85,6 +147,22 @@ let actorProps
             match msg with
             | OrgMessage.GetOrg ->
                mailbox.Sender() <! (stateOpt |> Option.map _.Info)
+            | ApprovableEmployeeRequest cmd ->
+               // If the command requires approval then initiate the command
+               // approval workflow.  Otherwise, forward the command to the
+               // appropriate account or employee actor for processing.
+               match Org.commandRequiresApproval cmd state with
+               | Some ruleId ->
+                  let cmd =
+                     CommandApprovalProgress.RequestCommandApproval.create
+                        org.OrgId
+                        cmd.InitiatedBy
+                        cmd.CorrelationId
+                        { RuleId = ruleId; Command = cmd }
+                     |> OrgCommand.RequestCommandApproval
+
+                  mailbox.Parent() <! OrgMessage.StateChange cmd
+               | None -> sendApprovedCommand cmd
          // Event replay on actor start
          | :? OrgEvent as e when mailbox.IsRecovering() ->
             return! loop <| Some(Org.applyEvent state e)
@@ -123,9 +201,10 @@ let initProps
    (system: ActorSystem)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
+   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    =
-
-   let childProps = actorProps EmailActor.get
+   let childProps = actorProps getEmployeeRef getAccountRef
 
    persistenceSupervisor
       supervisorOpts

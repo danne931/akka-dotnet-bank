@@ -5,7 +5,6 @@ open System
 
 open Lib.SharedTypes
 open Lib.Validators
-open Bank.Transfer.Domain
 
 type CreateAccountOwnerInput = {
    Email: string
@@ -279,69 +278,6 @@ module DeclineDebitCommand =
       : ValidationResult<BankEvent<DebitDeclined>>
       =
       BankEvent.create<DebitDeclined> cmd |> Ok
-
-type RequestDomesticTransferCommand = Command<DomesticTransferInput>
-
-module RequestDomesticTransferCommand =
-   let create
-      (employeeId: EmployeeId, orgId: OrgId)
-      (data: DomesticTransferInput)
-      =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         (CorrelationId.create ())
-         (InitiatedById employeeId)
-         data
-
-   let toEvent
-      (cmd: RequestDomesticTransferCommand)
-      : ValidationResult<BankEvent<DomesticTransferRequested>>
-      =
-      BankEvent.create2<DomesticTransferInput, DomesticTransferRequested> cmd {
-         Info = cmd.Data
-      }
-      |> Ok
-
-type ConfirmDomesticTransferCommand = Command<DomesticTransferConfirmed>
-
-module ConfirmDomesticTransferCommand =
-   let create
-      (employeeId: EmployeeId, orgId: OrgId)
-      (data: DomesticTransferConfirmed)
-      =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         (data.Info.TransferId |> TransferId.get |> CorrelationId)
-         (InitiatedById employeeId)
-         data
-
-   let toEvent
-      (cmd: ConfirmDomesticTransferCommand)
-      : ValidationResult<BankEvent<DomesticTransferConfirmed>>
-      =
-      BankEvent.create<DomesticTransferConfirmed> cmd |> Ok
-
-type DeclineDomesticTransferCommand = Command<DomesticTransferDeclined>
-
-module DeclineDomesticTransferCommand =
-   let create
-      (employeeId: EmployeeId, orgId: OrgId)
-      (data: DomesticTransferDeclined)
-      =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         (data.Info.TransferId |> TransferId.get |> CorrelationId)
-         (InitiatedById employeeId)
-         data
-
-   let toEvent
-      (cmd: DeclineDomesticTransferCommand)
-      : ValidationResult<BankEvent<DomesticTransferDeclined>>
-      =
-      BankEvent.create<DomesticTransferDeclined> cmd |> Ok
 
 type LimitDailyDebitsCommand = Command<DailyDebitLimitUpdated>
 

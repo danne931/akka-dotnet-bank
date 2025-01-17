@@ -71,12 +71,6 @@ let private postJson (command: EmployeeCommand) =
          Serialization.serialize cmd, EmployeePath.CancelEmployeeInvitation
       | EmployeeCommand.RestoreAccess cmd ->
          Serialization.serialize cmd, EmployeePath.RestoreAccess
-      | EmployeeCommand.ConfigureApprovalRule cmd ->
-         Serialization.serialize cmd, EmployeePath.ConfigureCommandApprovalRule
-      | EmployeeCommand.AcquireCommandApproval cmd ->
-         Serialization.serialize cmd, EmployeePath.AcquireCommandApproval
-      | EmployeeCommand.DeclineCommandApproval cmd ->
-         Serialization.serialize cmd, EmployeePath.DeclineCommandApproval
       | other -> notImplemented other
 
    Http.postJson url serialized
@@ -126,89 +120,6 @@ let getEmployees (orgId: OrgId) (query: EmployeeQuery) : Async<EmployeesMaybe> =
 
 let searchEmployees (orgId: OrgId) (query: string) : Async<EmployeesMaybe> =
    getEmployeesWithPath (EmployeePath.search orgId query)
-
-let orgRequiresCommandApproval
-   (orgId: OrgId)
-   (commandType: ApprovableCommandType)
-   : Async<Result<CommandApprovalRuleId option, Err>>
-   =
-   async {
-      let path =
-         EmployeePath.getCommandApprovalRuleByCommandType
-            orgId
-            (string commandType)
-
-      let! (code, responseText) = Http.get path
-
-      if code <> 200 then
-         return Error <| Err.InvalidStatusCodeError(serviceName, code)
-      else
-         return
-            responseText
-            |> Serialization.deserialize<CommandApprovalRuleId option>
-   }
-
-let getCommandApprovalRules
-   (orgId: OrgId)
-   : Async<Result<CommandApprovalRule.T list option, Err>>
-   =
-   async {
-      let path = EmployeePath.getCommandApprovalRules orgId
-
-      let! (code, responseText) = Http.get path
-
-      if code = 404 then
-         return Ok None
-      elif code <> 200 then
-         return Error <| Err.InvalidStatusCodeError(serviceName, code)
-      else
-         printfn "RESPONSE %A" responseText
-
-         return
-            responseText
-            |> Serialization.deserialize<CommandApprovalRule.T list>
-            |> Result.map Some
-   }
-
-let getCommandApprovalProgressWithRule
-   (progressId: CommandApprovalProgressId)
-   : Async<Result<CommandApprovalProgressWithRule option, Err>>
-   =
-   async {
-      let path = EmployeePath.getCommandApprovalProgressWithRule progressId
-
-      let! (code, responseText) = Http.get path
-
-      if code = 404 then
-         return Ok None
-      elif code <> 200 then
-         return Error <| Err.InvalidStatusCodeError(serviceName, code)
-      else
-         return
-            responseText
-            |> Serialization.deserialize<CommandApprovalProgressWithRule>
-            |> Result.map Some
-   }
-
-let getCommandApprovals
-   (orgId: OrgId)
-   : Async<Result<CommandApprovalProgressWithRule list option, Err>>
-   =
-   async {
-      let path = EmployeePath.getCommandApprovals orgId
-
-      let! (code, responseText) = Http.get path
-
-      if code = 404 then
-         return Ok None
-      elif code <> 200 then
-         return Error <| Err.InvalidStatusCodeError(serviceName, code)
-      else
-         return
-            responseText
-            |> Serialization.deserialize<CommandApprovalProgressWithRule list>
-            |> Result.map Some
-   }
 
 let submitCommand
    (employee: Employee)

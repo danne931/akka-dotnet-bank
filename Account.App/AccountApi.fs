@@ -48,14 +48,9 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
       | ScheduleInternalTransferBetweenOrgs cmd ->
          ScheduleInternalTransferBetweenOrgsCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | InternalTransferBetweenOrgs cmd ->
-         InternalTransferBetweenOrgsCommand.toEvent cmd
-         |> Result.map AccountEnvelope.get
       | ScheduleDomesticTransfer cmd ->
          ScheduleDomesticTransferCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | DomesticTransfer cmd ->
-         DomesticTransferCommand.toEvent cmd |> Result.map AccountEnvelope.get
       | RegisterDomesticTransferRecipient cmd ->
          RegisterDomesticTransferRecipientCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
@@ -75,9 +70,6 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
       | DeclinePlatformPayment cmd ->
          DeclinePlatformPaymentCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | FulfillPlatformPayment cmd ->
-         FulfillPlatformPaymentCommand.toEvent cmd
-         |> Result.map AccountEnvelope.get
       | ConfigureAutoTransferRule cmd ->
          ConfigureAutoTransferRuleCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
@@ -91,8 +83,10 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
          ]
 
    let! res = validation |> Result.mapError Err.ValidationError
+
    let ref = AccountActor.get system (AccountId.fromEntityId res.EntityId)
    ref <! AccountMessage.StateChange command
+
    return res
 }
 
