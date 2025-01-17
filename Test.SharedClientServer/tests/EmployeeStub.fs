@@ -44,7 +44,7 @@ let command =
       createEmployee = {
          CreateEmployeeCommand.create initiatedById {
             OrgId = orgId
-            OrgRequiresEmployeeInviteApproval = false
+            OrgRequiresEmployeeInviteApproval = None
             Role = Role.Admin
             FirstName = "Dan"
             LastName = "Eis"
@@ -61,11 +61,11 @@ let command =
          }
       refreshInviteToken =
          RefreshInvitationTokenCommand.create compositeId initiatedById {
-            OrgRequiresEmployeeInviteApproval = false
             Reason = None
          }
       updateRoleWithSupplementaryCardInfo =
          UpdateRoleCommand.create compositeId initiatedById {
+            Name = "Dan Eis"
             PriorRole = Role.Admin
             Role = Role.CardOnly
             CardInfo =
