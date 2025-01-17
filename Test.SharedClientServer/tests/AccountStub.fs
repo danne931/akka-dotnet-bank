@@ -115,18 +115,12 @@ let command = {|
       }
    domesticTransfer =
       fun amount ->
-         let transferCmd =
-            DomesticTransferCommand.create compositeId initiatedById {
-               Sender = domesticSender
-               Recipient = domesticRecipient
-               Amount = amount
-               Memo = None
-               ScheduledDateSeedOverride = None
-            }
-
-         {
-            transferCmd with
-               CorrelationId = correlationId
+         DomesticTransferCommand.create compositeId correlationId initiatedById {
+            Sender = domesticSender
+            Recipient = domesticRecipient
+            Amount = amount
+            Memo = None
+            ScheduledDateSeedOverride = None
          }
    internalTransfer =
       fun amount ->

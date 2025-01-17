@@ -18,6 +18,17 @@ let akkaTest
 
    testCase testDescription <| fun () -> akkaTester <| testBody
 
+let getOrgEntityRef (actorRef: IActorRef<_>) (orgId: OrgId) =
+   let shardRegionName = "mock-org-shard"
+
+   let fac = {
+      TypeName = shardRegionName
+      ShardRegion = untyped actorRef
+   }
+
+   let (OrgId id) = orgId
+   fac.RefFor shardRegionName <| string id
+
 let getAccountEntityRef (actorRef: IActorRef<_>) (accountId: AccountId) =
    let shardRegionName = "mock-account-shard"
 

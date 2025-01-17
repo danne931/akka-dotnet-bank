@@ -9,8 +9,10 @@ open Akka.Persistence.Extras
 
 open Util
 open ActorUtil
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Lib.SharedTypes
 
 module Stub = EmployeeStub
 
@@ -26,6 +28,26 @@ let config =
 // intended to be persisted
 let envelope msg =
    ConfirmableMessageEnvelope(Int64.MinValue, "", msg)
+
+let initMockOrgActor (tck: TestKit.Tck) =
+   let handler (ctx: Actor<_>) (msg: obj) =
+      match msg with
+      | :? ShardEnvelope as envelope ->
+         match envelope.Message with
+         | :? OrgMessage as msg ->
+            match msg with
+            | OrgMessage.StateChange(OrgCommand.RequestCommandApproval cmd) ->
+               cmd
+               |> OrgCommand.RequestCommandApproval
+               |> OrgMessage.StateChange
+               |> tck.TestActor.Tell
+
+               ignored ()
+            | msg -> unhandled msg
+         | msg -> unhandled msg
+      | msg -> unhandled msg
+
+   spawn tck "org-mock" <| props (actorOf2 handler)
 
 let initMockAccountActor (tck: TestKit.Tck) =
    let handler (ctx: Actor<_>) (msg: obj) =
@@ -71,6 +93,8 @@ let mockPersistenceSupervisorProps
 let init (tck: TestKit.Tck) =
    let emailProbe = tck.CreateTestProbe()
 
+   let getOrgRef = getOrgEntityRef (initMockOrgActor tck)
+
    let getAccountRef = getAccountEntityRef (initMockAccountActor tck)
 
    let getEmailActor (_: ActorSystem) =
@@ -79,7 +103,7 @@ let init (tck: TestKit.Tck) =
    let prop =
       mockPersistenceSupervisorProps (fun ctx ->
          spawn ctx ActorMetadata.employee.Name
-         <| EmployeeActor.actorProps getAccountRef getEmailActor)
+         <| EmployeeActor.actorProps getOrgRef getAccountRef getEmailActor)
 
    let employeeActor = spawn tck ActorMetadata.employee.Name prop
 
@@ -141,6 +165,51 @@ let tests =
                false
                $"Expected EmployeeInvite EmailMessage. Received {msg}"
 
+      akkaTest
+         "Create employee should request command approval from org actor
+      when org requires approval for employee invites"
+      <| Some config
+      <| fun tck ->
+         let o = init tck
+
+         let ruleId = Guid.NewGuid() |> CommandApprovalRuleId
+
+         let cmd = {
+            Stub.command.createEmployee with
+               Data.OrgRequiresEmployeeInviteApproval = Some ruleId
+         }
+
+         o.employeeActor
+         <! EmployeeMessage.StateChange(EmployeeCommand.CreateEmployee cmd)
+
+         o.employeeActor <! EmployeeMessage.GetEmployee
+
+         let state = tck.ExpectMsg<Option<Employee>>()
+         let employee = Expect.wantSome state ""
+
+         let expectedState =
+            EmployeeStatus.PendingInviteApproval {
+               RuleId = ruleId
+               ProgressId = CommandApprovalProgressId cmd.CorrelationId
+            }
+
+         Expect.equal
+            employee.Status
+            expectedState
+            "Expecting employee state to be PendingInviteApproval"
+
+         let msg = tck.ExpectMsg<OrgMessage>()
+
+         match msg with
+         | OrgMessage.StateChange(OrgCommand.RequestCommandApproval cmd) ->
+            Expect.equal
+               cmd.Data.Command.CommandType
+               ApprovableCommandType.InviteEmployee
+               "Request command approval for employee invite received by org actor"
+         | _ ->
+            Expect.isTrue
+               false
+               "Expected RequestCommandApproval for employee invite sent to org actor"
 
       akkaTest
          "Creating an employee with card details should create a card
