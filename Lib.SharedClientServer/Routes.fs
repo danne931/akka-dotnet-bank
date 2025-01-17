@@ -17,6 +17,37 @@ module OrgPath =
    let Merchants = Base + "/merchants/{orgId}"
    let merchants (orgId: OrgId) = $"{Base}/merchants/{orgId}"
 
+   let ConfigureCommandApprovalRule = Base + "/configure-command-approval-rule"
+   let GetCommandApprovalRules = Get + "/command-approval-rule"
+
+   let getCommandApprovalRules (orgId: OrgId) =
+      get orgId + "/command-approval-rule"
+
+   let GetCommandApprovalRuleByCommandType =
+      Get + "/command-approval-rule/{commandType}"
+
+   let getCommandApprovalRuleByCommandType
+      (orgId: OrgId)
+      (commandType: string)
+      =
+      get orgId + $"/command-approval-rule/{commandType}"
+
+   let AcquireCommandApproval = Base + "/acquire-command-approval"
+
+   let DeclineCommandApproval = Base + "/decline-command-approval"
+
+   let GetCommandApprovalProgressWithRule =
+      Base + "/command-approval-progress/{progressId}"
+
+   let getCommandApprovalProgressWithRule
+      (progressId: CommandApprovalProgressId)
+      =
+      Base + $"/command-approval-progress/{progressId}"
+
+   let GetCommandApprovals = Base + "/command-approvals/{orgId}"
+
+   let getCommandApprovals (orgId: OrgId) = Base + $"/command-approvals/{orgId}"
+
 module AccountPath =
    let Base = $"{API}/accounts"
    let account (id: AccountId) = $"{Base}/{id}"
@@ -101,37 +132,6 @@ module EmployeePath =
    let RestoreAccess = Base + "/restore-access"
    let History = Get + "/history"
    let history (orgId: OrgId) = get orgId + "/history"
-
-   let ConfigureCommandApprovalRule = Base + "/configure-command-approval-rule"
-   let GetCommandApprovalRules = Get + "/command-approval-rule"
-
-   let getCommandApprovalRules (orgId: OrgId) =
-      get orgId + "/command-approval-rule"
-
-   let GetCommandApprovalRuleByCommandType =
-      Get + "/command-approval-rule/{commandType}"
-
-   let getCommandApprovalRuleByCommandType
-      (orgId: OrgId)
-      (commandType: string)
-      =
-      get orgId + $"/command-approval-rule/{commandType}"
-
-   let AcquireCommandApproval = Base + "/acquire-command-approval"
-
-   let DeclineCommandApproval = Base + "/decline-command-approval"
-
-   let GetCommandApprovalProgressWithRule =
-      Base + "/command-approval-progress/{progressId}"
-
-   let getCommandApprovalProgressWithRule
-      (progressId: CommandApprovalProgressId)
-      =
-      Base + $"/command-approval-progress/{progressId}"
-
-   let GetCommandApprovals = Base + "/command-approvals/{orgId}"
-
-   let getCommandApprovals (orgId: OrgId) = Base + $"/command-approvals/{orgId}"
 
 module CardPath =
    let Base = $"{API}/cards"

@@ -5,10 +5,14 @@ open Feliz.Router
 
 open Bank.Employee.Domain
 
+[<ReactComponent>]
 let ApprovalDashboardComponent
    (url: Routes.ApprovalsUrl)
    (session: UserSession)
    =
+   let orgCtx = React.useContext OrgProvider.context
+   let orgDispatch = React.useContext OrgProvider.dispatchContext
+
    classyNode Html.div [ "approval-dashboard" ] [
       classyNode Html.main [ "container-fluid" ] [
          classyNode Html.nav [ "link-menu" ] [
@@ -42,10 +46,21 @@ let ApprovalDashboardComponent
 
          match url with
          | Routes.ApprovalsUrl.Approvals ->
-            ApprovalProgress.ApprovalProgressComponent session
+            match orgCtx with
+            | Deferred.Resolved(Ok(Some org)) ->
+               ApprovalProgress.ApprovalProgressComponent
+                  session
+                  org.Org
+                  (_.PendingState >> OrgProvider.Msg.OrgUpdated >> orgDispatch)
+            | _ -> Html.progress []
          | Routes.ApprovalsUrl.ApprovalRuleManagement ->
-            ApprovalRuleManagement.ApprovalRuleManagementDashboardComponent
-               session
+            match orgCtx with
+            | Deferred.Resolved(Ok(Some org)) ->
+               ApprovalRuleManagement.ApprovalRuleManagementDashboardComponent
+                  session
+                  org.Org
+                  (_.PendingState >> OrgProvider.Msg.OrgUpdated >> orgDispatch)
+            | _ -> Html.progress []
          | Routes.ApprovalsUrl.NotFound -> Html.p "Uh oh! Unknown URL."
       ]
    ]

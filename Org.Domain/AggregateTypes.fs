@@ -7,11 +7,24 @@ type OrgCommand =
    | CreateOrg of CreateOrgCommand
    | FinalizeOrgOnboarding of FinalizeOrgOnboardingCommand
    | ConfigureFeatureFlag of ConfigureFeatureFlagCommand
+   | ConfigureApprovalRule of CommandApprovalRule.ConfigureApprovalRuleCommand
+   | RequestCommandApproval of CommandApprovalProgress.RequestCommandApproval
+   | AcquireCommandApproval of CommandApprovalProgress.AcquireCommandApproval
+   | DeclineCommandApproval of CommandApprovalProgress.DeclineCommandApproval
 
 type OrgEvent =
    | OrgCreated of BankEvent<OrgCreated>
    | OrgOnboardingFinished of BankEvent<OrgOnboardingFinished>
    | FeatureFlagConfigured of BankEvent<FeatureFlagConfigured>
+   | CommandApprovalRuleConfigured of BankEvent<CommandApprovalRule.T>
+   | CommandApprovalRequested of
+      BankEvent<CommandApprovalProgress.CommandApprovalRequested>
+   | CommandApprovalAcquired of
+      BankEvent<CommandApprovalProgress.CommandApprovalAcquired>
+   | CommandApprovalProcessCompleted of
+      BankEvent<CommandApprovalProgress.CommandApprovalProcessCompleted>
+   | CommandApprovalDeclined of
+      BankEvent<CommandApprovalProgress.CommandApprovalDeclined>
 
 type OpenEventEnvelope = OrgEvent * Envelope
 
@@ -32,6 +45,16 @@ module OrgEnvelope =
       | :? BankEvent<OrgCreated> as evt -> OrgCreated evt
       | :? BankEvent<OrgOnboardingFinished> as evt -> OrgOnboardingFinished evt
       | :? BankEvent<FeatureFlagConfigured> as evt -> FeatureFlagConfigured evt
+      | :? BankEvent<CommandApprovalRule.T> as evt ->
+         CommandApprovalRuleConfigured evt
+      | :? BankEvent<CommandApprovalProgress.CommandApprovalRequested> as evt ->
+         CommandApprovalRequested evt
+      | :? BankEvent<CommandApprovalProgress.CommandApprovalAcquired> as evt ->
+         CommandApprovalAcquired evt
+      | :? BankEvent<CommandApprovalProgress.CommandApprovalProcessCompleted> as evt ->
+         CommandApprovalProcessCompleted evt
+      | :? BankEvent<CommandApprovalProgress.CommandApprovalDeclined> as evt ->
+         CommandApprovalDeclined evt
       | _ -> failwith "Missing definition for OrgEvent message"
 
    let unwrap (o: OrgEvent) : OpenEventEnvelope =
@@ -39,12 +62,20 @@ module OrgEnvelope =
       | OrgCreated evt -> wrap evt, get evt
       | OrgOnboardingFinished evt -> wrap evt, get evt
       | FeatureFlagConfigured evt -> wrap evt, get evt
+      | CommandApprovalRuleConfigured evt -> wrap evt, get evt
+      | CommandApprovalRequested evt -> wrap evt, get evt
+      | CommandApprovalAcquired evt -> wrap evt, get evt
+      | CommandApprovalProcessCompleted evt -> wrap evt, get evt
+      | CommandApprovalDeclined evt -> wrap evt, get evt
 
 type Org = {
    OrgId: OrgId
    Name: string
    Status: OrgStatus
    FeatureFlags: FeatureFlagOrgSettings
+   CommandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule.T>
+   CommandApprovalProgress:
+      Map<CommandApprovalProgressId, CommandApprovalProgress.T>
 }
 
 type OrgWithEvents = { Info: Org; Events: OrgEvent list }
@@ -60,5 +91,6 @@ type OrgWithAccountProfiles = {
 
 type OrgMessage =
    | GetOrg
+   | ApprovableEmployeeRequest of ApprovableCommand
    | StateChange of OrgCommand
    | Event of OrgEvent

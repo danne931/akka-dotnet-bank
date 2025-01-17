@@ -16,6 +16,14 @@ open OrganizationEventSqlMapper
 type SqlParamsDerivedFromOrgEvents = {
    OrgEvent: (string * SqlValue) list list
    FeatureFlags: (string * SqlValue) list list
+   CommandApprovalRuleConfigured: (string * SqlValue) list list
+   CommandApprovalRuleConfiguredWithAmountDailyLimit:
+      (string * SqlValue) list list
+   CommandApprovalRuleConfiguredWithAmountPerCommand:
+      (string * SqlValue) list list
+   CommandApprovalRequested: (string * SqlValue) list list
+   CommandApprovalAcquired: (string * SqlValue) list list
+   CommandApprovalDeclined: (string * SqlValue) list list
 }
 
 let sqlParamReducer
@@ -63,6 +71,165 @@ let sqlParamReducer
          acc with
             FeatureFlags = qParams :: acc.FeatureFlags
       }
+   | OrgEvent.CommandApprovalRuleConfigured e ->
+      let qParams = [
+         "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId e.Data.RuleId
+
+         "orgId", CommandApprovalRuleSqlMapper.Writer.orgId e.Data.OrgId
+
+         "approvableCommandType",
+         CommandApprovalRuleSqlMapper.Writer.approvableCommandType
+            e.Data.CommandType
+
+         "criteria",
+         CommandApprovalRuleSqlMapper.Writer.criteria e.Data.Criteria
+
+         "criteriaDetail",
+         CommandApprovalRuleSqlMapper.Writer.criteriaDetail e.Data.Criteria
+
+         "approvers",
+         CommandApprovalRuleSqlMapper.Writer.permittedApprovers e.Data.Approvers
+      ]
+
+      let dailyLimitQParams =
+         match e.Data.Criteria with
+         | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
+            Some [
+               "ruleId",
+               CommandApprovalRuleSqlMapper.Writer.ruleId e.Data.RuleId
+               "orgId", CommandApprovalRuleSqlMapper.Writer.orgId e.Data.OrgId
+               "dailyLimit",
+               CommandApprovalRuleSqlMapper.Writer.dailyLimit limit
+            ]
+         | _ -> None
+
+      let amountPerCommandQParams =
+         match e.Data.Criteria with
+         | CommandApprovalRule.Criteria.AmountPerCommand range ->
+            Some [
+               "ruleId",
+               CommandApprovalRuleSqlMapper.Writer.ruleId e.Data.RuleId
+               "orgId", CommandApprovalRuleSqlMapper.Writer.orgId e.Data.OrgId
+               "lowerBound",
+               CommandApprovalRuleSqlMapper.Writer.amountPerCommandLowerBound
+                  range.LowerBound
+               "upperBound",
+               CommandApprovalRuleSqlMapper.Writer.amountPerCommandLowerBound
+                  range.UpperBound
+            ]
+         | _ -> None
+
+      {
+         acc with
+            CommandApprovalRuleConfigured =
+               qParams :: acc.CommandApprovalRuleConfigured
+            CommandApprovalRuleConfiguredWithAmountDailyLimit =
+               dailyLimitQParams
+               |> Option.fold
+                     (fun acc qParams -> qParams :: acc)
+                     acc.CommandApprovalRuleConfiguredWithAmountDailyLimit
+            CommandApprovalRuleConfiguredWithAmountPerCommand =
+               amountPerCommandQParams
+               |> Option.fold
+                     (fun acc qParams -> qParams :: acc)
+                     acc.CommandApprovalRuleConfiguredWithAmountPerCommand
+      }
+   | OrgEvent.CommandApprovalRequested e ->
+      let qParams = [
+         "commandId",
+         CommandApprovalProgressId e.CorrelationId
+         |> CommandApprovalProgressSqlMapper.Writer.commandId
+
+         "ruleId", CommandApprovalProgressSqlMapper.Writer.ruleId e.Data.RuleId
+
+         "orgId", CommandApprovalProgressSqlMapper.Writer.orgId e.OrgId
+
+         "requestedById",
+         e.InitiatedById |> CommandApprovalProgressSqlMapper.Writer.requestedBy
+
+         "status",
+         CommandApprovalProgressSqlMapper.Writer.status
+            CommandApprovalProgress.Status.Pending
+
+         "approvedBy", CommandApprovalProgressSqlMapper.Writer.approvedBy []
+
+         "approvableCommandType",
+         CommandApprovalRuleSqlMapper.Writer.approvableCommandType
+            e.Data.Command.CommandType
+
+         "command",
+         CommandApprovalProgressSqlMapper.Writer.commandToInitiateOnApproval
+            e.Data.Command
+      ]
+
+      {
+         acc with
+            CommandApprovalRequested = qParams :: acc.CommandApprovalRequested
+      }
+   | OrgEvent.CommandApprovalAcquired e ->
+      let qParams = [
+         "commandId",
+         CommandApprovalProgressId e.CorrelationId
+         |> CommandApprovalProgressSqlMapper.Writer.commandId
+
+         "approvedBy",
+         e.Data.ApprovedBy.EmployeeId |> EmployeeId.get |> Sql.uuid
+
+         "expectedCurrentStatus",
+         CommandApprovalProgress.Status.Pending
+         |> CommandApprovalProgressSqlMapper.Writer.status
+      ]
+
+      {
+         acc with
+            CommandApprovalAcquired = qParams :: acc.CommandApprovalAcquired
+      }
+   | OrgEvent.CommandApprovalProcessCompleted e ->
+      let qParams = [
+         "commandId",
+         CommandApprovalProgressId e.CorrelationId
+         |> CommandApprovalProgressSqlMapper.Writer.commandId
+
+         "approvedBy",
+         e.Data.ApprovedBy.EmployeeId |> EmployeeId.get |> Sql.uuid
+
+         "expectedCurrentStatus",
+         CommandApprovalProgress.Status.Pending
+         |> CommandApprovalProgressSqlMapper.Writer.status
+
+         "updatedStatus",
+         CommandApprovalProgress.Status.Approved
+         |> CommandApprovalProgressSqlMapper.Writer.status
+      ]
+
+      {
+         acc with
+            CommandApprovalAcquired = qParams :: acc.CommandApprovalAcquired
+      }
+   | OrgEvent.CommandApprovalDeclined e ->
+      let qParams = [
+         "commandId",
+         CommandApprovalProgressId e.CorrelationId
+         |> CommandApprovalProgressSqlMapper.Writer.commandId
+
+         "expectedCurrentStatus",
+         CommandApprovalProgressSqlMapper.Writer.status
+            CommandApprovalProgress.Status.Pending
+
+         "updatedStatus",
+         CommandApprovalProgressSqlMapper.Writer.status
+            CommandApprovalProgress.Status.Declined
+
+         "declinedBy",
+         e.Data.DeclinedBy.EmployeeId
+         |> Some
+         |> CommandApprovalProgressSqlMapper.Writer.declinedBy
+      ]
+
+      {
+         acc with
+            CommandApprovalDeclined = qParams :: acc.CommandApprovalDeclined
+      }
    | _ -> acc
 
 let sqlParamsFromOrg (org: Org) : (string * SqlValue) list = [
@@ -78,7 +245,16 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
    let sqlParams =
       orgEvents
       |> List.sortByDescending (OrgEnvelope.unwrap >> snd >> _.Timestamp)
-      |> List.fold sqlParamReducer { OrgEvent = []; FeatureFlags = [] }
+      |> List.fold sqlParamReducer {
+         OrgEvent = []
+         FeatureFlags = []
+         CommandApprovalRuleConfigured = []
+         CommandApprovalRuleConfiguredWithAmountDailyLimit = []
+         CommandApprovalRuleConfiguredWithAmountPerCommand = []
+         CommandApprovalRequested = []
+         CommandApprovalAcquired = []
+         CommandApprovalDeclined = []
+      }
 
    let query = [
       $"""
@@ -132,6 +308,126 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
             {OrgFields.socialTransferDiscoveryAccountId} = @socialTransferDiscovery;
          """,
          sqlParams.FeatureFlags
+
+      let commandId = CommandApprovalProgressSqlMapper.Fields.commandId
+      let status = CommandApprovalProgressSqlMapper.Fields.status
+      let statusTypecast = CommandApprovalProgressSqlMapper.TypeCast.status
+
+      let commandTypecast =
+         CommandApprovalRuleSqlMapper.TypeCast.approvableCommand
+
+      let approvedBy = CommandApprovalProgressSqlMapper.Fields.approvedBy
+
+      if not sqlParams.CommandApprovalRuleConfigured.IsEmpty then
+         let criteriaTypecast =
+            CommandApprovalRuleSqlMapper.TypeCast.approvalCriteria
+
+         $"""
+         INSERT into {CommandApprovalRuleSqlMapper.table}
+            ({CommandApprovalRuleSqlMapper.Fields.ruleId},
+             {CommandApprovalRuleSqlMapper.Fields.orgId},
+             {CommandApprovalRuleSqlMapper.Fields.approvableCommandType},
+             {CommandApprovalRuleSqlMapper.Fields.criteria},
+             {CommandApprovalRuleSqlMapper.Fields.criteriaDetail},
+             {CommandApprovalRuleSqlMapper.Fields.permittedApprovers})
+         VALUES
+            (@ruleId,
+             @orgId,
+             @approvableCommandType::{commandTypecast},
+             @criteria::{criteriaTypecast},
+             @criteriaDetail,
+             @approvers)
+         ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
+         DO UPDATE SET
+            {CommandApprovalRuleSqlMapper.Fields.criteria} = @criteria::{criteriaTypecast},
+            {CommandApprovalRuleSqlMapper.Fields.criteriaDetail} = @criteriaDetail,
+            {CommandApprovalRuleSqlMapper.Fields.permittedApprovers} = @approvers;
+         """,
+         sqlParams.CommandApprovalRuleConfigured
+
+      if
+         not sqlParams.CommandApprovalRuleConfiguredWithAmountDailyLimit.IsEmpty
+      then
+         $"""
+         INSERT into {CommandApprovalRuleSqlMapper.dailyLimitTable}
+            ({CommandApprovalRuleSqlMapper.Fields.ruleId},
+             {CommandApprovalRuleSqlMapper.Fields.orgId},
+             {CommandApprovalRuleSqlMapper.Fields.dailyLimit})
+         VALUES (@ruleId, @orgId, @dailyLimit)
+         ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
+         DO UPDATE SET {CommandApprovalRuleSqlMapper.Fields.dailyLimit} = @dailyLimit;
+         """,
+         sqlParams.CommandApprovalRuleConfiguredWithAmountDailyLimit
+
+      if
+         not sqlParams.CommandApprovalRuleConfiguredWithAmountPerCommand.IsEmpty
+      then
+         $"""
+         INSERT into {CommandApprovalRuleSqlMapper.amountPerCommandTable}
+            ({CommandApprovalRuleSqlMapper.Fields.ruleId},
+             {CommandApprovalRuleSqlMapper.Fields.orgId},
+             {CommandApprovalRuleSqlMapper.Fields.amountPerCommandLowerBound},
+             {CommandApprovalRuleSqlMapper.Fields.amountPerCommandUpperBound})
+         VALUES (@ruleId, @orgId, @lowerBound, @upperBound)
+         ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
+         DO UPDATE SET
+            {CommandApprovalRuleSqlMapper.Fields.amountPerCommandLowerBound} = @lowerBound,
+            {CommandApprovalRuleSqlMapper.Fields.amountPerCommandUpperBound} = @upperBound;
+         """,
+         sqlParams.CommandApprovalRuleConfiguredWithAmountPerCommand
+
+      if not sqlParams.CommandApprovalRequested.IsEmpty then
+         let commandTypecast =
+            CommandApprovalProgressSqlMapper.TypeCast.approvableCommandType
+
+         $"""
+         INSERT into {CommandApprovalProgressSqlMapper.table}
+            ({CommandApprovalProgressSqlMapper.Fields.commandId},
+             {CommandApprovalProgressSqlMapper.Fields.ruleId},
+             {CommandApprovalProgressSqlMapper.Fields.orgId},
+             {CommandApprovalProgressSqlMapper.Fields.requestedBy},
+             {CommandApprovalProgressSqlMapper.Fields.status},
+             {CommandApprovalProgressSqlMapper.Fields.approvedBy},
+             {CommandApprovalProgressSqlMapper.Fields.approvableCommandType},
+             {CommandApprovalProgressSqlMapper.Fields.commandToInitiateOnApproval})
+         VALUES
+            (@commandId,
+             @ruleId,
+             @orgId,
+             @requestedById,
+             @status::{CommandApprovalProgressSqlMapper.TypeCast.status},
+             @approvedBy,
+             @approvableCommandType::{commandTypecast},
+             @command)
+         ON CONFLICT ({CommandApprovalProgressSqlMapper.Fields.commandId})
+         DO NOTHING;
+         """,
+         sqlParams.CommandApprovalRequested
+
+      if not sqlParams.CommandApprovalAcquired.IsEmpty then
+         $"""
+         UPDATE {CommandApprovalProgressSqlMapper.table}
+         SET
+            {approvedBy} = {approvedBy} || @approvedBy
+            {status} = COALESCE(@updatedStatus, {status})
+         WHERE
+            {commandId} = @commandId
+            AND {status} = @expectedCurrentStatus::{statusTypecast}
+            AND NOT {approvedBy} @> ARRAY[@approvedBy::uuid]
+         """,
+         sqlParams.CommandApprovalAcquired
+
+      if not sqlParams.CommandApprovalDeclined.IsEmpty then
+         $"""
+         UPDATE {CommandApprovalProgressSqlMapper.table}
+         SET
+            {status} = @updatedStatus::{statusTypecast},
+            {CommandApprovalProgressSqlMapper.Fields.declinedBy} = @declinedBy
+         WHERE
+            {commandId} = @commandId
+            AND {status} = @expectedCurrentStatus::{statusTypecast};
+         """,
+         sqlParams.CommandApprovalDeclined
    ]
 
    pgTransaction query

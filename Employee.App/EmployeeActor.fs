@@ -14,7 +14,7 @@ open Lib.Types
 open ActorUtil
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Bank.Transfer.Domain
+open Bank.Org.Domain
 
 let handleValidationError
    mailbox
@@ -86,9 +86,9 @@ let supplementaryCardInfoToCreateCardCommand
    |> EmployeeCommand.CreateCard
 
 let actorProps
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
-   (requiresApprovalForCommand: CommandApprovalRule.RequiresApprovalForCommand)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -123,16 +123,17 @@ let actorProps
             | EmployeeEvent.CreatedEmployee e ->
                match employee.Status with
                | EmployeeStatus.PendingInviteApproval approval ->
+                  let orgId = employee.OrgId
+
                   let cmd =
                      CommandApprovalProgress.RequestCommandApproval.create
-                        employee.CompositeId
+                        orgId
                         e.InitiatedById
                         e.CorrelationId
                         {
                            RuleId = approval.RuleId
                            Command =
-                              ApprovableCommand.InviteEmployee
-                              <| ApproveAccessCommand.create
+                              ApproveAccessCommand.create
                                  employee.CompositeId
                                  e.InitiatedById
                                  e.CorrelationId
@@ -140,10 +141,11 @@ let actorProps
                                     Name = employee.Name
                                     Reference = None
                                  }
+                              |> ApprovableCommand.InviteEmployee
                         }
-                     |> EmployeeCommand.RequestCommandApproval
+                     |> OrgCommand.RequestCommandApproval
 
-                  mailbox.Parent() <! EmployeeMessage.StateChange cmd
+                  getOrgRef orgId <! OrgMessage.StateChange cmd
                | EmployeeStatus.PendingInviteConfirmation token ->
                   getEmailActor mailbox.System
                   <! EmailActor.EmailMessage.EmployeeInvite {
@@ -225,20 +227,6 @@ let actorProps
                   )
 
                getEmailActor mailbox.System <! msg
-            | EmployeeEvent.DomesticTransferRequested e ->
-               let accountId = e.Data.Info.Sender.AccountId
-
-               let cmd =
-                  DomesticTransferCommand.create
-                     (accountId, e.OrgId)
-                     e.CorrelationId
-                     e.InitiatedById
-                     e.Data.Info
-
-               getAccountRef accountId
-               <! AccountMessage.StateChange(
-                  AccountCommand.DomesticTransfer cmd
-               )
             | _ -> ()
 
             return! loop <| Some state
@@ -247,7 +235,7 @@ let actorProps
             match envelope.Message with
             | :? EmployeeMessage as msg ->
                match msg with
-               | StateChange cmd ->
+               | EmployeeMessage.StateChange cmd ->
                   let validation = Employee.stateTransition state cmd
 
                   match validation with
@@ -269,58 +257,9 @@ let actorProps
                return unhandled ()
          | :? EmployeeMessage as msg ->
             match msg with
-            | GetEmployee -> mailbox.Sender() <! (stateOpt |> Option.map _.Info)
-            | ApprovableStateChange cmd ->
-               let! approvalRequiredRes =
-                  requiresApprovalForCommand
-                     cmd
-                     (Employee.dailyAccrual state.Events)
-
-               match approvalRequiredRes with
-               | Error e ->
-                  logError $"Error from requiresApprovalForCommand - {e}"
-                  return unhandled ()
-               | Ok(Some ruleId) ->
-                  let cmd =
-                     CommandApprovalProgress.RequestCommandApproval.create
-                        employee.CompositeId
-                        cmd.InitiatedBy
-                        cmd.CorrelationId
-                        { RuleId = ruleId; Command = cmd }
-                     |> EmployeeCommand.RequestCommandApproval
-
-                  mailbox.Parent() <! EmployeeMessage.StateChange cmd
-               | Ok None ->
-                  match cmd with
-                  | ApprovableCommand.InviteEmployee cmd ->
-                     let cmd = EmployeeCommand.ApproveAccess cmd
-                     mailbox.Parent() <! EmployeeMessage.StateChange cmd
-                  | ApprovableCommand.UpdateEmployeeRole cmd ->
-                     let cmd = EmployeeCommand.UpdateRole cmd
-                     mailbox.Parent() <! EmployeeMessage.StateChange cmd
-                  | ApprovableCommand.FulfillPlatformPayment cmd ->
-                     let accountRef =
-                        getAccountRef (AccountId.fromEntityId cmd.EntityId)
-
-                     let cmd = AccountCommand.FulfillPlatformPayment cmd
-                     accountRef <! AccountMessage.StateChange cmd
-                  | ApprovableCommand.DomesticTransfer cmd ->
-                     let accountId = cmd.Data.Sender.AccountId
-
-                     let cmd =
-                        DomesticTransferCommand.create
-                           (accountId, cmd.OrgId)
-                           cmd.CorrelationId
-                           cmd.InitiatedBy
-                           cmd.Data
-                        |> AccountCommand.DomesticTransfer
-
-                     getAccountRef accountId <! AccountMessage.StateChange cmd
-                  | ApprovableCommand.InternalTransferBetweenOrgs cmd ->
-                     let accountRef = getAccountRef cmd.Data.Sender.AccountId
-                     let cmd = AccountCommand.InternalTransferBetweenOrgs cmd
-                     accountRef <! AccountMessage.StateChange cmd
-            | Delete ->
+            | EmployeeMessage.GetEmployee ->
+               mailbox.Sender() <! (stateOpt |> Option.map _.Info)
+            | EmployeeMessage.Delete ->
                let newState = {
                   state with
                      Info.Status = EmployeeStatus.ReadyForDelete
@@ -374,10 +313,10 @@ let initProps
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (requiresApprovalForCommand: CommandApprovalRule.RequiresApprovalForCommand)
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    =
    persistenceSupervisor
       supervisorOpts
       isPersistableMessage
-      (actorProps getAccountRef EmailActor.get requiresApprovalForCommand)
+      (actorProps getOrgRef getAccountRef EmailActor.get)
       persistenceId

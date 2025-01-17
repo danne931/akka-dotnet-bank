@@ -3,7 +3,6 @@ namespace Bank.Employee.Domain
 open System
 
 open Lib.SharedTypes
-open Bank.Transfer.Domain
 
 type CreatedAccountOwner = {
    Email: Email
@@ -43,15 +42,6 @@ type DebitApproved = { Info: DebitInfo }
 type DebitDeclined = {
    Info: DebitInfo
    Reason: PurchaseDeclinedReason
-}
-
-type DomesticTransferRequested = { Info: DomesticTransferInput }
-
-type DomesticTransferConfirmed = { Info: BaseDomesticTransferInfo }
-
-type DomesticTransferDeclined = {
-   Info: BaseDomesticTransferInfo
-   Reason: InternalTransferDeclinedReason
 }
 
 type DailyDebitLimitUpdated = {

@@ -6,7 +6,9 @@ open Elmish
 open Elmish.SweetAlert
 
 open Bank.Employee.Domain
+open Bank.Org.Domain
 open UIDomain.Employee
+open UIDomain.Org
 open Dropdown
 open Bank.Employee.Forms.EmployeeRoleForm
 open Lib.SharedTypes
@@ -40,14 +42,14 @@ type Msg =
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
    | ApproveAccess of
       UserSession *
-      Employee *
-      CommandApprovalProgressId *
-      AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
+      Org *
+      CommandApprovalProgressWithRule *
+      AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | DisapproveAccess of
       UserSession *
-      Employee *
-      CommandApprovalProgressId *
-      AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
+      Org *
+      CommandApprovalProgressWithRule *
+      AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | DismissInviteCancellation
 
 let init (employee: Employee) =
@@ -68,12 +70,16 @@ let closeRoleSelect state = {
       PendingRole = None
 }
 
-let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
+let update
+   (onEmployeeUpdate: EmployeeCommandReceipt -> unit)
+   (onOrgUpdate: OrgCommandReceipt -> unit)
+   msg
+   state
+   =
    match msg with
    | GetEmployeePendingInviteApproval(progressId, Started) ->
       let get = async {
-         let! res =
-            EmployeeService.getCommandApprovalProgressWithRule progressId
+         let! res = OrgService.getCommandApprovalProgressWithRule progressId
 
          return Msg.GetEmployeePendingInviteApproval(progressId, Finished res)
       }
@@ -99,7 +105,7 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
    | CancelRoleEdit -> closeRoleSelect state, Cmd.none
    | SetPendingRole role -> { state with PendingRole = role }, Cmd.none
    | ConfirmRole receipt ->
-      notifyParentOnUpdate receipt
+      onEmployeeUpdate receipt
       closeRoleSelect state, Cmd.none
    | ResendInviteNotification(employee, Started) ->
       let send = async {
@@ -143,7 +149,7 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
 
       state, Cmd.fromAsync cancel
    | ConfirmInviteCancellation(_, employee, Finished(Ok receipt)) ->
-      notifyParentOnUpdate receipt
+      onEmployeeUpdate receipt
       state, Alerts.toastSuccessCommand $"Cancelling invite for {employee.Name}"
    | ConfirmInviteCancellation(_, employee, Finished(Error err)) ->
       Log.error (string err)
@@ -152,65 +158,54 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
       Alerts.toastCommand
       <| Err.NetworkError(exn $"Issue cancelling invite for {employee.Name}")
    | DismissInviteCancellation -> state, Cmd.none
-   | ApproveAccess(session, employee, cmdApprovalProgressId, Started) ->
+   | ApproveAccess(session, org, progress, Started) ->
       let approve = async {
          let cmd =
-            CommandApprovalProgress.AcquireCommandApproval.create
-               employee.CompositeId
-               {
-                  ApprovedBy = InitiatedById session.EmployeeId
-                  CommandId = cmdApprovalProgressId
-                  CommandType = ApprovableCommandType.InviteEmployee
+            CommandApprovalProgress.AcquireCommandApproval.create session.OrgId {
+               RuleId = progress.RuleId
+               ApprovedBy = {
+                  EmployeeId = session.EmployeeId
+                  Name = session.Name
                }
-            |> EmployeeCommand.AcquireCommandApproval
+               Command = progress.Command
+               ProgressId = progress.CommandProgressId
+            }
+            |> OrgCommand.AcquireCommandApproval
 
-         let! res = EmployeeService.submitCommand employee cmd
+         let! res = OrgService.submitCommand org cmd
 
-         return
-            Msg.ApproveAccess(
-               session,
-               employee,
-               cmdApprovalProgressId,
-               Finished res
-            )
+         return Msg.ApproveAccess(session, org, progress, Finished res)
       }
 
       state, Cmd.fromAsync approve
-   | ApproveAccess(_, employee, _, Finished(Ok receipt)) ->
-      notifyParentOnUpdate receipt
-
-      state,
-      Alerts.toastSuccessCommand $"Access approval acquired for {employee.Name}"
+   | ApproveAccess(_, _, _, Finished(Ok receipt)) ->
+      onOrgUpdate receipt
+      state, Alerts.toastSuccessCommand "Access approval acquired."
    | ApproveAccess(_, _, _, Finished(Error err)) ->
       state, Alerts.toastCommand err
-   | DisapproveAccess(session, employee, cmdApprovalProgressId, Started) ->
+   | DisapproveAccess(session, org, progress, Started) ->
       let approve = async {
          let cmd =
-            CommandApprovalProgress.DeclineCommandApproval.create
-               employee.CompositeId
-               {
-                  DeclinedBy = InitiatedById session.EmployeeId
-                  CommandId = cmdApprovalProgressId
-                  CommandType = ApprovableCommandType.InviteEmployee
+            CommandApprovalProgress.DeclineCommandApproval.create org.OrgId {
+               RuleId = progress.RuleId
+               DeclinedBy = {
+                  EmployeeId = session.EmployeeId
+                  Name = session.Name
                }
-            |> EmployeeCommand.DeclineCommandApproval
+               Command = progress.Command
+               ProgressId = progress.CommandProgressId
+            }
+            |> OrgCommand.DeclineCommandApproval
 
-         let! res = EmployeeService.submitCommand employee cmd
+         let! res = OrgService.submitCommand org cmd
 
-         return
-            Msg.DisapproveAccess(
-               session,
-               employee,
-               cmdApprovalProgressId,
-               Finished res
-            )
+         return Msg.DisapproveAccess(session, org, progress, Finished res)
       }
 
       state, Cmd.fromAsync approve
-   | DisapproveAccess(_, employee, _, Finished(Ok receipt)) ->
-      notifyParentOnUpdate receipt
-
-      state, Alerts.toastSuccessCommand $"Access denied for {employee.Name}"
+   | DisapproveAccess(_, _, _, Finished(Ok receipt)) ->
+      onOrgUpdate receipt
+      state, Alerts.toastSuccessCommand "Access denied."
    | DisapproveAccess(_, _, _, Finished(Error err)) ->
       state, Alerts.toastCommand err
    | RestoreAccess(session, employee, Started) ->
@@ -231,7 +226,7 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
 
       state, Cmd.fromAsync send
    | RestoreAccess(_, employee, Finished(Ok receipt)) ->
-      notifyParentOnUpdate receipt
+      onEmployeeUpdate receipt
       state, Alerts.toastSuccessCommand $"Access restored for {employee.Name}"
    | RestoreAccess(_, _, Finished(Error err)) -> state, Alerts.toastCommand err
 
@@ -239,10 +234,12 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
 let EmployeeDetailComponent
    (session: UserSession)
    (employee: Employee)
-   (notifyParentOnUpdate: EmployeeCommandReceipt -> unit)
+   (org: Org)
+   (onEmployeeUpdate: EmployeeCommandReceipt -> unit)
+   (onOrgUpdate: OrgCommandReceipt -> unit)
    =
    let state, dispatch =
-      React.useElmish (init employee, update notifyParentOnUpdate, [||])
+      React.useElmish (init employee, update onEmployeeUpdate onOrgUpdate, [||])
 
    let dropdownMenuOptions =
       match employee.Status with
@@ -267,12 +264,7 @@ let EmployeeDetailComponent
                   OnClick =
                      fun _ ->
                         dispatch
-                        <| Msg.ApproveAccess(
-                           session,
-                           employee,
-                           progress.CommandProgressId,
-                           Started
-                        )
+                        <| Msg.ApproveAccess(session, org, progress, Started)
                   IsSelected = false
                }
 
@@ -281,12 +273,7 @@ let EmployeeDetailComponent
                   OnClick =
                      fun _ ->
                         dispatch
-                        <| Msg.DisapproveAccess(
-                           session,
-                           employee,
-                           progress.CommandProgressId,
-                           Started
-                        )
+                        <| Msg.DisapproveAccess(session, org, progress, Started)
                   IsSelected = false
                }
             ]

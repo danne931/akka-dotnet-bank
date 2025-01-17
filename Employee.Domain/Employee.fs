@@ -31,28 +31,6 @@ let private purchaseAccrued
 let dailyPurchaseAccrued = purchaseAccrued DateTime.isToday
 let monthlyPurchaseAccrued = purchaseAccrued DateTime.isThisMonth
 
-let dailyAccrual (events: EmployeeEvent list) : EmployeeDailyAccrual =
-   List.fold
-      (fun acc evt ->
-         match evt with
-         | DomesticTransferConfirmed e ->
-            let info = e.Data.Info
-
-            if DateTime.isToday info.ScheduledDate then
-               {
-                  acc with
-                     DomesticTransfer = acc.DomesticTransfer + info.Amount
-               }
-            else
-               acc
-         | _ -> acc)
-      {
-         PaymentsPaid = 0m
-         InternalTransferBetweenOrgs = 0m
-         DomesticTransfer = 0m
-      }
-      events
-
 let applyEvent
    (state: EmployeeWithEvents)
    (evt: EmployeeEvent)
@@ -134,8 +112,6 @@ let applyEvent
          em with
             PendingPurchases = em.PendingPurchases |> Map.remove e.CorrelationId
         }
-      | DomesticTransferRequested _ -> em
-      | DomesticTransferConfirmed _ -> em
       | DailyDebitLimitUpdated e -> {
          em with
             Cards =
@@ -211,16 +187,6 @@ let applyEvent
          em with
             Status = EmployeeStatus.Active
         }
-      | CommandApprovalRuleConfigured _ -> em
-      | CommandApprovalRequested _ -> em
-      | CommandApprovalAcquired _ -> em
-      | CommandApprovalDeclined e ->
-         match e.Data.CommandType with
-         | ApprovableCommandType.InviteEmployee -> {
-            em with
-               Status = EmployeeStatus.Closed
-           }
-         | _ -> em
 
    {
       Info = updatedEmployee
@@ -351,34 +317,6 @@ module private StateTransition =
       else
          map DebitDeclined state (DeclineDebitCommand.toEvent cmd)
 
-   let requestDomesticTransfer
-      (state: EmployeeWithEvents)
-      (cmd: RequestDomesticTransferCommand)
-      =
-      let em = state.Info
-
-      if em.Status <> EmployeeStatus.Active then
-         transitionErr EmployeeNotActive
-      else
-         map
-            DomesticTransferRequested
-            state
-            (RequestDomesticTransferCommand.toEvent cmd)
-
-   let confirmDomesticTransfer
-      (state: EmployeeWithEvents)
-      (cmd: ConfirmDomesticTransferCommand)
-      =
-      let em = state.Info
-
-      if em.Status <> EmployeeStatus.Active then
-         transitionErr EmployeeNotActive
-      else
-         map
-            DomesticTransferConfirmed
-            state
-            (ConfirmDomesticTransferCommand.toEvent cmd)
-
    let updateRole (state: EmployeeWithEvents) (cmd: UpdateRoleCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotActive
@@ -414,6 +352,7 @@ module private StateTransition =
       let em = state.Info
 
       match em.Status with
+      | EmployeeStatus.PendingInviteApproval _
       | EmployeeStatus.PendingInviteConfirmation _ ->
          map InvitationCancelled state (CancelInvitationCommand.toEvent cmd)
       | _ ->
@@ -451,96 +390,6 @@ module private StateTransition =
       else
          map AccessRestored state (RestoreAccessCommand.toEvent cmd)
 
-   let configureCommandApprovalRule
-      (state: EmployeeWithEvents)
-      (cmd: CommandApprovalRule.ConfigureApprovalRuleCommand)
-      =
-      if state.Info.Status <> EmployeeStatus.Active then
-         transitionErr EmployeeNotActive
-      else
-         map
-            CommandApprovalRuleConfigured
-            state
-            (CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd)
-
-   let requestCommandApproval
-      (state: EmployeeWithEvents)
-      (cmd: CommandApprovalProgress.RequestCommandApproval)
-      =
-      let em = state.Info
-
-      let applyApprovalRequest () =
-         map
-            CommandApprovalRequested
-            state
-            (CommandApprovalProgress.RequestCommandApproval.toEvent cmd)
-
-      match cmd.Data.Command with
-      | ApprovableCommand.InviteEmployee _ ->
-         match em.Status with
-         | EmployeeStatus.PendingInviteApproval _ -> applyApprovalRequest ()
-         | _ ->
-            transitionErr
-            <| EmployeeStatusDisallowsInviteProgression(string em.Status)
-      | _ ->
-         if em.Status <> EmployeeStatus.Active then
-            transitionErr EmployeeNotActive
-         else
-            map
-               CommandApprovalRequested
-               state
-               (CommandApprovalProgress.RequestCommandApproval.toEvent cmd)
-
-   let acquireCommandApproval
-      (state: EmployeeWithEvents)
-      (cmd: CommandApprovalProgress.AcquireCommandApproval)
-      =
-      let em = state.Info
-
-      let applyApprovalAcquired () =
-         map
-            CommandApprovalAcquired
-            state
-            (CommandApprovalProgress.AcquireCommandApproval.toEvent cmd)
-
-      match cmd.Data.CommandType with
-      | ApprovableCommandType.InviteEmployee ->
-         match em.Status with
-         | EmployeeStatus.PendingInviteApproval _ -> applyApprovalAcquired ()
-         | _ ->
-            transitionErr
-            <| EmployeeStatusDisallowsInviteProgression(string em.Status)
-      | _ ->
-         if state.Info.Status <> EmployeeStatus.Active then
-            transitionErr EmployeeNotActive
-         else
-            applyApprovalAcquired ()
-
-   let declineCommandApproval
-      (state: EmployeeWithEvents)
-      (cmd: CommandApprovalProgress.DeclineCommandApproval)
-      =
-      let em = state.Info
-
-      let applyApprovalDeclined () =
-         map
-            CommandApprovalDeclined
-            state
-            (CommandApprovalProgress.DeclineCommandApproval.toEvent cmd)
-
-      match cmd.Data.CommandType with
-      | ApprovableCommandType.InviteEmployee ->
-         match em.Status with
-         | EmployeeStatus.PendingInviteApproval _ -> applyApprovalDeclined ()
-         | _ ->
-            transitionErr
-            <| EmployeeStatusDisallowsInviteProgression(string em.Status)
-      | _ ->
-         if em.Status <> EmployeeStatus.Active then
-            transitionErr EmployeeNotActive
-         else
-            applyApprovalDeclined ()
-
 let stateTransition (state: EmployeeWithEvents) (command: EmployeeCommand) =
    match command with
    | CreateAccountOwner cmd -> StateTransition.createAccountOwner state cmd
@@ -549,10 +398,6 @@ let stateTransition (state: EmployeeWithEvents) (command: EmployeeCommand) =
    | DebitRequest cmd -> StateTransition.debitRequest state cmd
    | ApproveDebit cmd -> StateTransition.approveDebit state cmd
    | DeclineDebit cmd -> StateTransition.declineDebit state cmd
-   | RequestDomesticTransfer cmd ->
-      StateTransition.requestDomesticTransfer state cmd
-   | ConfirmDomesticTransfer cmd ->
-      StateTransition.confirmDomesticTransfer state cmd
    | LimitDailyDebits cmd -> StateTransition.limitDailyDebits state cmd
    | LimitMonthlyDebits cmd -> StateTransition.limitMonthlyDebits state cmd
    | LockCard cmd -> StateTransition.lockCard state cmd
@@ -566,14 +411,6 @@ let stateTransition (state: EmployeeWithEvents) (command: EmployeeCommand) =
       StateTransition.confirmEmployeeInvitation state cmd
    | ApproveAccess cmd -> StateTransition.approveAccess state cmd
    | RestoreAccess cmd -> StateTransition.restoreAccess state cmd
-   | ConfigureApprovalRule cmd ->
-      StateTransition.configureCommandApprovalRule state cmd
-   | RequestCommandApproval cmd ->
-      StateTransition.requestCommandApproval state cmd
-   | AcquireCommandApproval cmd ->
-      StateTransition.acquireCommandApproval state cmd
-   | DeclineCommandApproval cmd ->
-      StateTransition.declineCommandApproval state cmd
 
 let empty: Employee = {
    EmployeeId = EmployeeId System.Guid.Empty

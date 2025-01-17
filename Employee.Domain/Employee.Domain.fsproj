@@ -7,7 +7,6 @@
     <Compile Include="CoreTypes.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />
-    <Compile Include="CommandApproval.fs" /> 
     <Compile Include="AggregateTypes.fs" />
     <Compile Include="Employee.fs" />
   </ItemGroup>

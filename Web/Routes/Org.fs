@@ -4,9 +4,11 @@ open System
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
+open Akka.Actor
 
 open Bank.Org.Domain
 open Bank.Org.Api
+open Bank.CommandApproval.Api
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
@@ -48,4 +50,85 @@ let startOrgRoutes (app: WebApplication) =
             upsertMerchant merchant |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageMerchants)
+   |> ignore
+
+   app.MapGet(
+      OrgPath.GetCommandApprovalRuleByCommandType,
+      Func<Guid, string, Task<IResult>>(fun orgId commandType ->
+         match ApprovableCommandType.fromString commandType with
+         | None ->
+            Task.FromResult(Results.BadRequest "Invalid ApprovableCommandType")
+         | Some commandType ->
+            approvalRuleExistsForCommandType (OrgId orgId) commandType
+            |> RouteUtil.unwrapTaskResult)
+   )
+   |> ignore
+
+   app.MapGet(
+      OrgPath.GetCommandApprovalProgressWithRule,
+      Func<Guid, Task<IResult>>(fun progressId ->
+         getCommandApprovalProgressWithRule (
+            CommandApprovalProgressId(CorrelationId progressId)
+         )
+         |> RouteUtil.unwrapTaskResultOption)
+   )
+   |> ignore
+
+   app.MapGet(
+      OrgPath.GetCommandApprovals,
+      Func<Guid, Task<IResult>>(fun orgId ->
+         getCommandApprovals (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
+   )
+   |> ignore
+
+   app.MapGet(
+      OrgPath.GetCommandApprovalRules,
+      Func<Guid, Task<IResult>>(fun orgId ->
+         getApprovalRules (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)
+   )
+   |> ignore
+
+   app
+      .MapPost(
+         OrgPath.ConfigureCommandApprovalRule,
+         Func<
+            ActorSystem,
+            CommandApprovalRule.ConfigureApprovalRuleCommand,
+            Task<IResult>
+          >
+            (fun sys cmd ->
+               processCommand sys (OrgCommand.ConfigureApprovalRule cmd)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ConfigureCommandApprovalRule)
+   |> ignore
+
+   app
+      .MapPost(
+         OrgPath.AcquireCommandApproval,
+         Func<
+            ActorSystem,
+            CommandApprovalProgress.AcquireCommandApproval,
+            Task<IResult>
+          >
+            (fun sys cmd ->
+               processCommand sys (OrgCommand.AcquireCommandApproval cmd)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ManageCommandApprovalProgress)
+   |> ignore
+
+   app
+      .MapPost(
+         OrgPath.DeclineCommandApproval,
+         Func<
+            ActorSystem,
+            CommandApprovalProgress.DeclineCommandApproval,
+            Task<IResult>
+          >
+            (fun sys cmd ->
+               processCommand sys (OrgCommand.DeclineCommandApproval cmd)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ManageCommandApprovalProgress)
    |> ignore

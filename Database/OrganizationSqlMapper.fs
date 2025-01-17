@@ -37,6 +37,8 @@ module OrgSqlReader =
          SocialTransferDiscoveryPrimaryAccountId =
             socialTransferDiscoveryAccountId read
       }
+      CommandApprovalRules = Map.empty
+      CommandApprovalProgress = Map.empty
    }
 
 module OrgSqlWriter =

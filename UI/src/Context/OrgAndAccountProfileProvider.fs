@@ -11,7 +11,7 @@ open Bank.Employee.Domain
 
 type State = Deferred<Result<OrgWithAccountProfiles option, Err>>
 
-let updateProfiles
+let updateState
    (state: State)
    (transform: OrgWithAccountProfiles -> OrgWithAccountProfiles)
    : State
@@ -24,6 +24,8 @@ type Msg =
       AsyncOperationStatus<Result<OrgWithAccountProfiles option, Err>>
    | AccountCreated of Account
    | AccountUpdated of AccountEventPersistedConfirmation
+   | OrgUpdated of Org
+   | CommandApprovalRulesLoaded of CommandApprovalRule.T list
 
 let private initState = Deferred.Idle
 
@@ -41,6 +43,13 @@ let update msg state =
    | Load(_, Finished(Ok res)) -> res |> Ok |> Deferred.Resolved, Cmd.none
    | Load(_, Finished(Error err)) ->
       Log.error $"Issue loading org + account profiles. {err}"
+      state, Cmd.none
+   | OrgUpdated org ->
+      let state =
+         (Deferred.map << Result.map << Option.map)
+            (fun state -> { state with Org = org })
+            state
+
       state, Cmd.none
    | AccountUpdated conf ->
       let accountId = conf.Account.AccountId
@@ -109,7 +118,7 @@ let update msg state =
             })
          |> Option.defaultValue state
 
-      let state = updateProfiles state transform
+      let state = updateState state transform
 
       let internalTransferTransform state =
          let recipientBalanceUpdate recipientId transferAmount =
@@ -155,7 +164,7 @@ let update msg state =
             Balance = state.Balance
          }
 
-      let state = updateProfiles state internalTransferTransform
+      let state = updateState state internalTransferTransform
 
       state, Cmd.none
    | AccountCreated account ->
@@ -171,12 +180,26 @@ let update msg state =
          }
       }
 
-      updateProfiles state (fun state -> {
+      updateState state (fun state -> {
          state with
             AccountProfiles =
                state.AccountProfiles |> Map.add account.AccountId profile
       }),
       Cmd.none
+   | CommandApprovalRulesLoaded rules ->
+      let state =
+         updateState state (fun o ->
+            let org = {
+               o.Org with
+                  CommandApprovalRules =
+                     rules
+                     |> List.map (fun rule -> rule.RuleId, rule)
+                     |> Map.ofList
+            }
+
+            { o with Org = org })
+
+      state, Cmd.none
 
 let context =
    React.createContext<State> (name = "OrgContext", defaultValue = initState)

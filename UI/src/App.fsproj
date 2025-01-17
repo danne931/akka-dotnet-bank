@@ -12,7 +12,8 @@
     <Compile Include="Lib/ElmishExtensions.fs" />
     <Compile Include="Lib/FelizExtensions.fs" />
     <Compile Include="Lib/Util.fs" />
-    <Compile Include="Lib/Domain.fs" /> 
+    <Compile Include="Lib/Domain.fs" />
+    <Compile Include="Lib/OrgDomain.fs" />
     <Compile Include="Lib/EmployeeDomain.fs" />
     <Compile Include="Lib/AccountDomain.fs" />
     <Compile Include="Lib/CardDomain.fs" />
@@ -46,6 +47,7 @@
     <Compile Include="Components/EmployeePermissions.fs" />
     <Compile Include="Components/OrgSocialTransferDiscovery.fs" />
     <Compile Include="Components/Forms/Util.fs" />
+    <Compile Include="Components/Forms/OrgFormContainer.fs" />
     <Compile Include="Components/Forms/EmployeeFormContainer.fs" />
     <Compile Include="Components/Forms/AccountFormContainer.fs" />
     <Compile Include="Components/Forms/AccountProfile.fs" />

@@ -82,6 +82,8 @@ builder.Services.AddAkka(
                      //       account env var here.
                      Env.config.AccountActorSupervisor
                      persistenceId
+                     (AccountActor.get system)
+                     (EmployeeActor.get system)
 
                props),
             ClusterMetadata.orgShardRegion.messageExtractor,
@@ -111,12 +113,12 @@ builder.Services.AddAkka(
 
                let props =
                   EmployeeActor.initProps
-                  // TODO: Create employee-specific Environment file & replace
-                  //       account env var here.
-                  <| Env.config.AccountActorSupervisor
-                  <| persistenceId
-                  <| AccountActor.get system
-                  <| Bank.CommandApproval.Api.commandRequiresApproval
+                     // TODO: Create employee-specific Environment file & replace
+                     //       account env var here.
+                     Env.config.AccountActorSupervisor
+                     persistenceId
+                     (AccountActor.get system)
+                     (OrgActor.get system)
 
                props),
             ClusterMetadata.employeeShardRegion.messageExtractor,

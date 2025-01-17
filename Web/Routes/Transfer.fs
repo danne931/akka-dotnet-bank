@@ -6,16 +6,17 @@ open Microsoft.FSharp.Core
 open System
 open System.Threading.Tasks
 open Akka.Actor
+open Akkling
+open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
 open Bank.Transfer.Api
 open Bank.Transfer.Domain
 open Bank.Account.Api
+open Bank.Org.Domain
 open Bank.Account.Domain
 open RoutePaths
 open Bank.UserSession.Middleware
-
-open Bank.Employee.Domain
 
 let startTransferRoutes (app: WebApplication) =
    app
@@ -65,9 +66,22 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.InternalBetweenOrgs,
          Func<ActorSystem, InternalTransferBetweenOrgsCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand
-                  sys
-                  (AccountCommand.InternalTransferBetweenOrgs cmd)
+               taskResult {
+                  let validation =
+                     cmd
+                     |> InternalTransferBetweenOrgsCommand.toEvent
+                     |> Result.map AccountEnvelope.get
+
+                  let! res = validation |> Result.mapError Err.ValidationError
+
+                  let msg =
+                     cmd
+                     |> ApprovableCommand.InternalTransferBetweenOrgs
+                     |> OrgMessage.ApprovableEmployeeRequest
+
+                  (OrgActor.get sys cmd.OrgId) <! msg
+                  return res
+               }
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.SubmitTransfer)
@@ -95,14 +109,22 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.Domestic,
          Func<ActorSystem, DomesticTransferCommand, Task<IResult>>
             (fun sys cmd ->
-               let cmd =
-                  RequestDomesticTransferCommand.create
-                     (InitiatedById.toEmployeeId cmd.InitiatedBy, cmd.OrgId)
-                     cmd.Data
+               taskResult {
+                  let validation =
+                     cmd
+                     |> DomesticTransferCommand.toEvent
+                     |> Result.map AccountEnvelope.get
 
-               Bank.Employee.Api.processCommand
-                  sys
-                  (EmployeeCommand.RequestDomesticTransfer cmd)
+                  let! res = validation |> Result.mapError Err.ValidationError
+
+                  let msg =
+                     cmd
+                     |> ApprovableCommand.DomesticTransfer
+                     |> OrgMessage.ApprovableEmployeeRequest
+
+                  (OrgActor.get sys cmd.OrgId) <! msg
+                  return res
+               }
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.SubmitTransfer)
@@ -177,7 +199,22 @@ let startTransferRoutes (app: WebApplication) =
          PaymentPath.FulfillPayment,
          Func<ActorSystem, FulfillPlatformPaymentCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (AccountCommand.FulfillPlatformPayment cmd)
+               taskResult {
+                  let validation =
+                     cmd
+                     |> FulfillPlatformPaymentCommand.toEvent
+                     |> Result.map AccountEnvelope.get
+
+                  let! res = validation |> Result.mapError Err.ValidationError
+
+                  let msg =
+                     cmd
+                     |> ApprovableCommand.FulfillPlatformPayment
+                     |> OrgMessage.ApprovableEmployeeRequest
+
+                  (OrgActor.get sys cmd.OrgId) <! msg
+                  return res
+               }
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)

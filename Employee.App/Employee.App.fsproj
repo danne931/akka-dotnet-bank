@@ -7,7 +7,6 @@
     <Compile Include="EmployeeActor.fs" />
     <Compile Include="EmployeeReadModelSyncActor.fs" />
     <Compile Include="EmployeeApi.fs" />
-    <Compile Include="CommandApprovalApi.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -51,8 +51,6 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
          LockCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | UnlockCard cmd ->
          UnlockCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | UpdateRole cmd ->
-         UpdateRoleCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EditCardNickname cmd ->
          EditCardNicknameCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | CancelInvitation cmd ->
@@ -64,18 +62,6 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
          ConfirmInvitationCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | RestoreAccess cmd ->
          RestoreAccessCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | ConfigureApprovalRule cmd ->
-         CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
-         |> Result.map EmployeeEnvelope.get
-      | AcquireCommandApproval cmd ->
-         CommandApprovalProgress.AcquireCommandApproval.toEvent cmd
-         |> Result.map EmployeeEnvelope.get
-      | DeclineCommandApproval cmd ->
-         CommandApprovalProgress.DeclineCommandApproval.toEvent cmd
-         |> Result.map EmployeeEnvelope.get
-      | RequestDomesticTransfer cmd ->
-         RequestDomesticTransferCommand.toEvent cmd
-         |> Result.map EmployeeEnvelope.get
       | cmd ->
          Error
          <| ValidationErrors.create "" [
@@ -87,23 +73,8 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
    let actorRef =
       EmployeeActor.get system (EmployeeId.fromEntityId res.EntityId)
 
-   let msg =
-      match command with
-      | UpdateRole cmd ->
-         EmployeeMessage.ApprovableStateChange(
-            ApprovableCommand.UpdateEmployeeRole cmd
-         )
-      | RequestDomesticTransfer cmd ->
-         EmployeeMessage.ApprovableStateChange(
-            ApprovableCommand.DomesticTransfer cmd
-         )
-      (*
-      | Payment
-      | InternalTransferBetweenOrgs
-      *)
-      | cmd -> EmployeeMessage.StateChange cmd
+   actorRef <! EmployeeMessage.StateChange command
 
-   actorRef <! msg
    return res
 }
 

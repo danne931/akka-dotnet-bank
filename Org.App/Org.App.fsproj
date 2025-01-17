@@ -8,6 +8,7 @@
     <Compile Include="OrgActor.fs" />
     <Compile Include="AnalyticsApi.fs" />
     <Compile Include="OrgApi.fs" />
+    <Compile Include="CommandApprovalApi.fs" />
   </ItemGroup>
 
   <ItemGroup>

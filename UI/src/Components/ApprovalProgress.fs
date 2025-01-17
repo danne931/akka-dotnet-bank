@@ -7,31 +7,33 @@ open Feliz.UseElmish
 open Elmish.SweetAlert
 
 open Bank.Employee.Domain
-open UIDomain.Employee
+open Bank.Org.Domain
+open UIDomain.Org
 open Lib.SharedTypes
 open Lib.Time
 
 type State = {
-   Approvals: Deferred<Result<CommandApprovalProgressWithRule list option, Err>>
+   Approvals: Deferred<CommandApprovalProgressWithRuleMaybe>
 }
 
 type Msg =
    | GetCommandApprovals of
       OrgId *
-      AsyncOperationStatus<
-         Result<CommandApprovalProgressWithRule list option, Err>
-       >
+      AsyncOperationStatus<CommandApprovalProgressWithRuleMaybe>
    | ShowCommandDeclineConfirmation of
+      Org *
       UserSession *
       CommandApprovalProgressWithRule
    | AcquireCommandApproval of
+      Org *
       UserSession *
       CommandApprovalProgressWithRule *
-      AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
+      AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | DeclineCommand of
+      Org *
       UserSession *
       CommandApprovalProgressWithRule *
-      AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
+      AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | DismissConfirmation
 
 let init orgId () =
@@ -42,7 +44,7 @@ let update msg state =
    match msg with
    | GetCommandApprovals(orgId, Started) ->
       let getApprovals = async {
-         let! approvals = EmployeeService.getCommandApprovals orgId
+         let! approvals = OrgService.getCommandApprovals orgId
          return Msg.GetCommandApprovals(orgId, Finished approvals)
       }
 
@@ -63,13 +65,13 @@ let update msg state =
             Approvals = Deferred.Resolved(Error err)
       },
       Cmd.none
-   | ShowCommandDeclineConfirmation(session, approvalProgress) ->
+   | ShowCommandDeclineConfirmation(org, session, approvalProgress) ->
       let confirm =
          ConfirmAlert(
             "",
             function
             | ConfirmAlertResult.Confirmed ->
-               Msg.DeclineCommand(session, approvalProgress, Started)
+               Msg.DeclineCommand(org, session, approvalProgress, Started)
             | ConfirmAlertResult.Dismissed _ -> Msg.DismissConfirmation
          )
             .Title(
@@ -79,142 +81,104 @@ let update msg state =
             .ShowCloseButton(true)
 
       state, SweetAlert.Run confirm
-   | AcquireCommandApproval(session, approval, Started) ->
+   | AcquireCommandApproval(org, session, approval, Started) ->
       let acquireApproval = async {
-         let! employeeRes =
-            EmployeeService.getEmployee
-               approval.Command.OrgId
-               (EmployeeId.fromEntityId approval.Command.EntityId)
+         let cmd =
+            CommandApprovalProgress.AcquireCommandApproval.create org.OrgId {
+               RuleId = approval.RuleId
+               Command = approval.Command
+               ProgressId = approval.CommandProgressId
+               ApprovedBy = {
+                  Name = session.Name
+                  EmployeeId = session.EmployeeId
+               }
+            }
+            |> OrgCommand.AcquireCommandApproval
 
-         match employeeRes with
-         | Error err ->
-            return
-               Msg.AcquireCommandApproval(
-                  session,
-                  approval,
-                  Finished(Error err)
-               )
-         | Ok None ->
-            return
-               Msg.AcquireCommandApproval(
-                  session,
-                  approval,
-                  Finished(
-                     Error(Err.UnexpectedError "Missing dependency: Employee")
-                  )
-               )
-         | Ok(Some employee) ->
-            let cmd =
-               CommandApprovalProgress.AcquireCommandApproval.create
-                  employee.CompositeId
-                  {
-                     CommandId = approval.CommandProgressId
-                     CommandType = approval.Command.CommandType
-                     ApprovedBy = InitiatedById session.EmployeeId
-                  }
-               |> EmployeeCommand.AcquireCommandApproval
-
-            let! res = EmployeeService.submitCommand employee cmd
-            return Msg.AcquireCommandApproval(session, approval, Finished res)
+         let! res = OrgService.submitCommand org cmd
+         return Msg.AcquireCommandApproval(org, session, approval, Finished res)
       }
 
       state, Cmd.fromAsync acquireApproval
-   | AcquireCommandApproval(session, approval, Finished(Ok _)) ->
+   | AcquireCommandApproval(_, session, approval, Finished(Ok _)) ->
       {
          state with
             Approvals =
                match state.Approvals with
                | Deferred.Resolved(Ok(Some approvals)) ->
                   approvals
-                  |> List.map (fun a ->
-                     if a.CommandProgressId = approval.CommandProgressId then
-                        let approver: CommandApprovalRule.Approver = {
-                           Name = session.Name
-                           EmployeeId = session.EmployeeId
-                        }
+                  |> Map.change
+                        approval.CommandProgressId
+                        (Option.map (fun a ->
+                           let approver: CommandApprovalRule.Approver = {
+                              Name = session.Name
+                              EmployeeId = session.EmployeeId
+                           }
 
-                        {
-                           a with
-                              ApprovedBy =
-                                 match a.ApprovedBy with
-                                 | None -> Some [ approver ]
-                                 | Some approvers ->
-                                    Some(approver :: approvers)
-                        }
-                     else
-                        a)
+                           {
+                              a with
+                                 ApprovedBy =
+                                    match a.ApprovedBy with
+                                    | None -> Some [ approver ]
+                                    | Some approvers ->
+                                       Some(approver :: approvers)
+                           }))
                   |> Some
                   |> Ok
                   |> Deferred.Resolved
                | _ -> state.Approvals
       },
       Cmd.none
-   | AcquireCommandApproval(_, _, Finished(Error err)) ->
+   | AcquireCommandApproval(_, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
-   | DeclineCommand(session, approval, Started) ->
+   | DeclineCommand(org, session, approval, Started) ->
       let decline = async {
-         let! employeeRes =
-            EmployeeService.getEmployee
-               approval.Command.OrgId
-               (EmployeeId.fromEntityId approval.Command.EntityId)
+         let cmd =
+            CommandApprovalProgress.DeclineCommandApproval.create org.OrgId {
+               RuleId = approval.RuleId
+               DeclinedBy = {
+                  EmployeeId = session.EmployeeId
+                  Name = session.Name
+               }
+               ProgressId = approval.CommandProgressId
+               Command = approval.Command
+            }
+            |> OrgCommand.DeclineCommandApproval
 
-         match employeeRes with
-         | Error err ->
-            return Msg.DeclineCommand(session, approval, Finished(Error err))
-         | Ok None ->
-            return
-               Msg.DeclineCommand(
-                  session,
-                  approval,
-                  Finished(
-                     Error(Err.UnexpectedError "Missing dependency: Employee")
-                  )
-               )
-         | Ok(Some employee) ->
-            let cmd =
-               CommandApprovalProgress.DeclineCommandApproval.create
-                  employee.CompositeId
-                  {
-                     DeclinedBy = InitiatedById session.EmployeeId
-                     CommandId = approval.CommandProgressId
-                     CommandType = approval.Command.CommandType
-                  }
-               |> EmployeeCommand.DeclineCommandApproval
-
-            let! res = EmployeeService.submitCommand employee cmd
-            return Msg.DeclineCommand(session, approval, Finished res)
+         let! res = OrgService.submitCommand org cmd
+         return Msg.DeclineCommand(org, session, approval, Finished res)
       }
 
       state, Cmd.fromAsync decline
-   | DeclineCommand(session, approval, Finished(Ok _)) ->
+   | DeclineCommand(_, session, approval, Finished(Ok _)) ->
       {
          state with
             Approvals =
                match state.Approvals with
                | Deferred.Resolved(Ok(Some approvals)) ->
                   approvals
-                  |> List.map (fun a ->
-                     if a.CommandProgressId = approval.CommandProgressId then
-                        let declinedBy: CommandApprovalRule.Approver = {
-                           Name = session.FirstName + " " + session.LastName
-                           EmployeeId = session.EmployeeId
-                        }
+                  |> Map.change
+                        approval.CommandProgressId
+                        (Option.map (fun a ->
+                           let declinedBy: CommandApprovalRule.Approver = {
+                              Name = session.Name
+                              EmployeeId = session.EmployeeId
+                           }
 
-                        {
-                           a with
-                              Status = CommandApprovalProgress.Status.Declined
-                              DeclinedBy = Some declinedBy
-                        }
-                     else
-                        a)
+                           {
+                              a with
+                                 Status =
+                                    CommandApprovalProgress.Status.Declined
+                                 DeclinedBy = Some declinedBy
+                           }))
                   |> Some
                   |> Ok
                   |> Deferred.Resolved
                | _ -> state.Approvals
       },
       Cmd.none
-   | DeclineCommand(_, _, Finished(Error err)) ->
+   | DeclineCommand(_, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
    | DismissConfirmation -> state, Cmd.none
@@ -226,14 +190,18 @@ let approversMsg (approvers: CommandApprovalRule.Approver list) =
    |> _.TrimEnd(',')
 
 [<ReactComponent>]
-let ApprovalProgressComponent (session: UserSession) =
+let ApprovalProgressComponent
+   (session: UserSession)
+   (org: Org)
+   (onOrgUpdate: OrgCommandReceipt -> unit)
+   =
    let state, dispatch =
       React.useElmish (init session.OrgId, update, [| box session.OrgId |])
 
    match state.Approvals with
    | Deferred.Resolved(Ok(Some approvals)) ->
       React.fragment [
-         for o in approvals do
+         for o in approvals.Values do
             let approvedByCnt =
                o.ApprovedBy |> Option.map _.Length |> Option.defaultValue 0
 
@@ -271,6 +239,7 @@ let ApprovalProgressComponent (session: UserSession) =
                            if mayApproveOrDeny then
                               dispatch
                               <| Msg.AcquireCommandApproval(
+                                 org,
                                  session,
                                  o,
                                  Started
@@ -294,7 +263,11 @@ let ApprovalProgressComponent (session: UserSession) =
 
                            if mayApproveOrDeny then
                               dispatch
-                              <| Msg.ShowCommandDeclineConfirmation(session, o))
+                              <| Msg.ShowCommandDeclineConfirmation(
+                                 org,
+                                 session,
+                                 o
+                              ))
 
                         attr.custom ("data-tooltip", "Decline")
                         attr.custom ("data-placement", "bottom")

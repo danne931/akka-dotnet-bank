@@ -26,10 +26,9 @@ let startAccountRoutes (app: WebApplication) =
    app
       .MapPost(
          AccountPath.Base,
-         Func<ActorSystem, CreateAccountCommand, Task<IResult>>
-            (fun system cmd ->
-               processCommand system (AccountCommand.CreateAccount cmd)
-               |> RouteUtil.unwrapTaskResult)
+         Func<ActorSystem, CreateAccountCommand, Task<IResult>>(fun sys cmd ->
+            processCommand sys (AccountCommand.CreateAccount cmd)
+            |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.CreateAccount)
    |> ignore

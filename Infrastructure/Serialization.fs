@@ -283,6 +283,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "OrgOption" -> typeof<Org option>
          | "OrgEvent" -> typeof<OrgEvent>
          | "OrgMessage" -> typeof<OrgMessage>
+         | "OrgShardEnvelope" -> typeof<OrgShardEnvelope>
          | "EmployeeWithEvents" -> typeof<EmployeeWithEvents>
          | "EmployeeOption" -> typeof<Employee option>
          | "EmployeeEvent" -> typeof<EmployeeEvent>
