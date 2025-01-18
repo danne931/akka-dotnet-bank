@@ -96,6 +96,30 @@ module CommandApprovalRule =
       UpperBound: decimal option
    }
 
+   module AmountPerCommandRange =
+      let hasOverlap
+         (existingRange: AmountPerCommandRange)
+         (range: AmountPerCommandRange)
+         =
+         match
+            existingRange.LowerBound,
+            existingRange.UpperBound,
+            range.LowerBound,
+            range.UpperBound
+         with
+         | None, None, _, _ -> true
+         | _, _, None, None -> true
+         | Some eLow, Some eHigh, Some low, Some high ->
+            not (high < eLow || low > eHigh)
+         | Some eLow, Some _, None, Some high -> high >= eLow
+         | Some _, Some eHigh, Some low, None -> low <= eHigh
+         | None, Some eHigh, Some low, Some _ -> low <= eHigh
+         | None, Some _, None, Some _ -> true
+         | None, Some eHigh, Some low, None -> low <= eHigh
+         | Some eLow, None, Some _, Some high -> high >= eLow
+         | Some eLow, None, None, Some high -> high >= eLow
+         | Some _, None, Some _, None -> true
+
    [<RequireQualifiedAccess>]
    type Criteria =
       | AmountDailyLimit of limit: decimal
@@ -138,6 +162,70 @@ module CommandApprovalRule =
    let isValidApprover (approver: Approver) (rule: T) =
       rule.Approvers
       |> List.exists (fun a -> a.EmployeeId = approver.EmployeeId)
+
+   let newRuleCommandTypeConflictsWithExistingRule
+      (existingRules: T seq)
+      (rule: T)
+      =
+      let existingRuleOfGivenType =
+         existingRules
+         |> Seq.tryPick (fun existing ->
+            if existing.CommandType = rule.CommandType then
+               Some existing
+            else
+               None)
+
+      match existingRuleOfGivenType with
+      | None -> true
+      | Some existingRule ->
+         if existingRule.RuleId = rule.RuleId then
+            true
+         else
+            let commandCriteriaForbidsMoreThanOneRule =
+               match existingRule.Criteria, rule.Criteria with
+               | Criteria.AmountDailyLimit _, Criteria.AmountDailyLimit _
+               | Criteria.PerCommand, Criteria.PerCommand -> true
+               | Criteria.AmountPerCommand _, Criteria.AmountPerCommand _ ->
+                  false
+               | _ -> false
+
+            not commandCriteriaForbidsMoreThanOneRule
+
+   let newRuleCriteriaConflictsWithExistingRule
+      (existingRules: T seq)
+      (rule: T)
+      =
+      // Keep rules with AmountPerCommand criteria, ignoring an existing rule
+      // if we are editing it's configuration.
+      let keepAmountPerCommandRules (existing: T) =
+         existing.CommandType = rule.CommandType
+         && existing.RuleId <> rule.RuleId
+         && match existing.Criteria with
+            | Criteria.AmountPerCommand _ -> true
+            | _ -> false
+
+      match rule.Criteria with
+      | Criteria.PerCommand -> false
+      | Criteria.AmountPerCommand range ->
+         existingRules
+         |> Seq.filter keepAmountPerCommandRules
+         |> Seq.exists (fun existing ->
+            match existing.Criteria with
+            | Criteria.AmountPerCommand existingRange ->
+               AmountPerCommandRange.hasOverlap existingRange range
+            | _ -> false)
+      | Criteria.AmountDailyLimit limit ->
+         existingRules
+         |> Seq.filter keepAmountPerCommandRules
+         |> Seq.exists (fun existing ->
+            match existing.Criteria with
+            | Criteria.AmountPerCommand range ->
+               match range.LowerBound, range.UpperBound with
+               | None, None -> true
+               | Some _, Some high -> limit <= high
+               | None, Some high -> limit <= high
+               | Some low, None -> limit <= low
+            | _ -> false)
 
    type ConfigureApprovalRuleCommand = Command<T>
 
