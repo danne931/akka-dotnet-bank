@@ -286,8 +286,27 @@ module private StateTransition =
       (state: OrgWithEvents)
       (cmd: CommandApprovalRule.ConfigureApprovalRuleCommand)
       =
-      if state.Info.Status <> OrgStatus.Active then
+      let org = state.Info
+      let existingRules = org.CommandApprovalRules.Values
+
+      if org.Status <> OrgStatus.Active then
          transitionErr OrgStateTransitionError.OrgNotActive
+      elif
+         CommandApprovalRule.newRuleCommandTypeConflictsWithExistingRule
+            existingRules
+            cmd.Data
+         |> not
+      then
+         cmd.Data.CommandType.Display
+         |> OrgStateTransitionError.ApprovalRuleMultipleOfType
+         |> transitionErr
+      elif
+         CommandApprovalRule.newRuleCriteriaConflictsWithExistingRule
+            existingRules
+            cmd.Data
+      then
+         transitionErr
+            OrgStateTransitionError.ApprovalRuleHasConflictingCriteria
       else
          map
             CommandApprovalRuleConfigured

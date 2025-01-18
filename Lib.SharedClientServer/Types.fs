@@ -252,6 +252,8 @@ type OrgStateTransitionError =
    | OrgNotReadyToActivate
    | OrgNotActive
    | ApprovalRuleNotFound
+   | ApprovalRuleHasConflictingCriteria
+   | ApprovalRuleMultipleOfType of commandType: string
    | ApprovalProgressWorklowNotActive
    | ApproverUnrecognized of EmployeeId * name: string
    | ApproverAlreadyApprovedCommand of EmployeeId * name: string
@@ -336,6 +338,10 @@ type Err =
             "Org Not Ready to Activate"
          | OrgStateTransitionError.ApprovalRuleNotFound ->
             "Approval Rule Not Found"
+         | OrgStateTransitionError.ApprovalRuleHasConflictingCriteria ->
+            "Approval Rule Contains Criteria Conflicting With Another Rule"
+         | OrgStateTransitionError.ApprovalRuleMultipleOfType cmdType ->
+            $"Configuring multiple rules are not allowed for command type {cmdType}"
          | OrgStateTransitionError.ApproverUnrecognized(employeeId, name) ->
             $"Unrecognized approver approved/declined command {name}-{employeeId}"
          | OrgStateTransitionError.ApprovalProgressWorklowNotActive ->

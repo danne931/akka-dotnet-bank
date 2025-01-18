@@ -9,6 +9,7 @@ let testsToRun =
       AccountDomainTests.tests
       EmployeeDomainTests.tests
       AutomaticBalanceManagementTests.tests
+      CommandApprovalTests.tests
    ]
 
 (*
