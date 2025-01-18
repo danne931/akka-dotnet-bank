@@ -11,6 +11,8 @@ type OrgCommand =
    | RequestCommandApproval of CommandApprovalProgress.RequestCommandApproval
    | AcquireCommandApproval of CommandApprovalProgress.AcquireCommandApproval
    | DeclineCommandApproval of CommandApprovalProgress.DeclineCommandApproval
+   | TerminateCommandApproval of
+      CommandApprovalProgress.TerminateCommandApproval
 
 type OrgEvent =
    | OrgCreated of BankEvent<OrgCreated>
@@ -25,6 +27,8 @@ type OrgEvent =
       BankEvent<CommandApprovalProgress.CommandApprovalProcessCompleted>
    | CommandApprovalDeclined of
       BankEvent<CommandApprovalProgress.CommandApprovalDeclined>
+   | CommandApprovalTerminated of
+      BankEvent<CommandApprovalProgress.CommandApprovalTerminated>
 
 type OpenEventEnvelope = OrgEvent * Envelope
 
@@ -55,6 +59,8 @@ module OrgEnvelope =
          CommandApprovalProcessCompleted evt
       | :? BankEvent<CommandApprovalProgress.CommandApprovalDeclined> as evt ->
          CommandApprovalDeclined evt
+      | :? BankEvent<CommandApprovalProgress.CommandApprovalTerminated> as evt ->
+         CommandApprovalTerminated evt
       | _ -> failwith "Missing definition for OrgEvent message"
 
    let unwrap (o: OrgEvent) : OpenEventEnvelope =
@@ -67,6 +73,7 @@ module OrgEnvelope =
       | CommandApprovalAcquired evt -> wrap evt, get evt
       | CommandApprovalProcessCompleted evt -> wrap evt, get evt
       | CommandApprovalDeclined evt -> wrap evt, get evt
+      | CommandApprovalTerminated evt -> wrap evt, get evt
 
 type Org = {
    OrgId: OrgId

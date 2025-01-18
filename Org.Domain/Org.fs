@@ -7,7 +7,19 @@ open Bank.Org.Domain
 open Lib.SharedTypes
 open Lib.Time
 
-let private canUpdateApprovalProgress
+let private hasActiveProgressWorkflow
+   (org: Org)
+   (progressId: CommandApprovalProgressId)
+   =
+   match Map.tryFind progressId org.CommandApprovalProgress with
+   | None -> Error OrgStateTransitionError.ApprovalProgressWorklowNotActive
+   | Some progress ->
+      if progress.Status <> CommandApprovalProgress.Status.Pending then
+         Error OrgStateTransitionError.ApprovalProgressWorklowNotActive
+      else
+         Ok progress
+
+let private canApproveOrDeclineApprovalProcess
    (org: Org)
    (ruleId: CommandApprovalRuleId)
    (progressId: CommandApprovalProgressId)
@@ -23,14 +35,8 @@ let private canUpdateApprovalProgress
          )
          |> Error
       else
-         match Map.tryFind progressId org.CommandApprovalProgress with
-         | None ->
-            Error OrgStateTransitionError.ApprovalProgressWorklowNotActive
-         | Some progress ->
-            if progress.Status <> CommandApprovalProgress.Status.Pending then
-               Error OrgStateTransitionError.ApprovalProgressWorklowNotActive
-            else
-               Ok(rule, progress)
+         hasActiveProgressWorkflow org progressId
+         |> Result.map (fun progress -> rule, progress)
 
 let dailyAccrual (events: OrgEvent list) : DailyAccrual =
    List.fold
@@ -230,6 +236,11 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
             CommandApprovalProgress =
                Map.remove e.Data.ProgressId org.CommandApprovalProgress
         }
+      | CommandApprovalTerminated e -> {
+         org with
+            CommandApprovalProgress =
+               Map.remove e.Data.ProgressId org.CommandApprovalProgress
+        }
 
    {
       state with
@@ -338,7 +349,11 @@ module private StateTransition =
          let approver = data.ApprovedBy
 
          let res =
-            canUpdateApprovalProgress org data.RuleId data.ProgressId approver
+            canApproveOrDeclineApprovalProcess
+               org
+               data.RuleId
+               data.ProgressId
+               approver
 
          match res with
          | Error err -> transitionErr err
@@ -377,7 +392,7 @@ module private StateTransition =
          transitionErr OrgStateTransitionError.OrgNotActive
       else
          let res =
-            canUpdateApprovalProgress
+            canApproveOrDeclineApprovalProcess
                org
                data.RuleId
                data.ProgressId
@@ -390,6 +405,26 @@ module private StateTransition =
                CommandApprovalDeclined
                state
                (CommandApprovalProgress.DeclineCommandApproval.toEvent cmd)
+
+   let terminateCommandApproval
+      (state: OrgWithEvents)
+      (cmd: CommandApprovalProgress.TerminateCommandApproval)
+      =
+      let org = state.Info
+      let data = cmd.Data
+
+      if org.Status <> OrgStatus.Active then
+         transitionErr OrgStateTransitionError.OrgNotActive
+      else
+         let res = hasActiveProgressWorkflow org data.ProgressId
+
+         match res with
+         | Error err -> transitionErr err
+         | Ok _ ->
+            map
+               CommandApprovalTerminated
+               state
+               (CommandApprovalProgress.TerminateCommandApproval.toEvent cmd)
 
 let stateTransition (state: OrgWithEvents) (command: OrgCommand) =
    match command with
@@ -404,6 +439,8 @@ let stateTransition (state: OrgWithEvents) (command: OrgCommand) =
       StateTransition.acquireCommandApproval state cmd
    | DeclineCommandApproval cmd ->
       StateTransition.declineCommandApproval state cmd
+   | TerminateCommandApproval cmd ->
+      StateTransition.terminateCommandApproval state cmd
 
 let empty: Org = {
    OrgId = OrgId System.Guid.Empty

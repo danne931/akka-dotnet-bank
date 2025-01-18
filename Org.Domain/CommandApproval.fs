@@ -260,29 +260,14 @@ module CommandApprovalProgress =
       | Pending
       | Approved
       | Declined
+      | Terminated
 
       override x.ToString() =
          match x with
          | Pending -> "Pending"
          | Approved -> "Approved"
          | Declined -> "Declined"
-
-      static member fromString(status: string) : Status option =
-         if String.IsNullOrWhiteSpace status then
-            None
-         else
-            match status with
-            | "Pending" -> Some Pending
-            | "Approved" -> Some Approved
-            | "Declined" -> Some Declined
-            | _ -> None
-
-      static member fromStringUnsafe(status: string) : Status =
-         match Status.fromString status with
-         | None ->
-            failwith
-               "Error attempting to cast string to CommandApprovalProgress.Status"
-         | Some status -> status
+         | Terminated -> "Terminated"
 
    type T = {
       ProgressId: CommandApprovalProgressId
@@ -323,6 +308,18 @@ module CommandApprovalProgress =
       DeclinedBy: CommandApprovalRule.Approver
       Command: ApprovableCommand
       ProgressId: CommandApprovalProgressId
+   }
+
+   [<RequireQualifiedAccess>]
+   type CommandApprovalTerminationReason =
+      | AssociatedRuleDeleted
+      | AssociatedRuleApproverDeleted
+
+   type CommandApprovalTerminated = {
+      RuleId: CommandApprovalRuleId
+      ProgressId: CommandApprovalProgressId
+      Command: ApprovableCommand
+      Reason: CommandApprovalTerminationReason
    }
 
    type RequestCommandApproval = Command<CommandApprovalRequested>
@@ -412,6 +409,25 @@ module CommandApprovalProgress =
          : ValidationResult<BankEvent<CommandApprovalDeclined>>
          =
          Ok <| BankEvent.create<CommandApprovalDeclined> cmd
+
+   type TerminateCommandApproval = Command<CommandApprovalTerminated>
+
+   module TerminateCommandApproval =
+      let create (orgId: OrgId) (data: CommandApprovalTerminated) =
+         let (CommandApprovalProgressId correlationId) = data.ProgressId
+
+         Command.create
+            (OrgId.toEntityId orgId)
+            orgId
+            correlationId
+            (InitiatedById Constants.SYSTEM_USER_ID)
+            data
+
+      let toEvent
+         (cmd: TerminateCommandApproval)
+         : ValidationResult<BankEvent<CommandApprovalTerminated>>
+         =
+         BankEvent.create<CommandApprovalTerminated> cmd |> Ok
 
 type CommandApprovalProgressWithRule = {
    RuleId: CommandApprovalRuleId

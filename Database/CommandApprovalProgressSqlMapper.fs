@@ -17,6 +17,7 @@ module Fields =
    let orgId = OrganizationSqlMapper.OrgFields.orgId
    let requestedBy = "requested_by_id"
    let status = "status"
+   let statusDetail = "status_detail"
    let approvedBy = "approved_by"
    let declinedBy = "declined_by"
 
@@ -40,10 +41,10 @@ module Reader =
    let requestedBy (read: RowReader) =
       Fields.requestedBy |> read.uuid |> EmployeeId |> InitiatedById
 
-   let status (read: RowReader) : CommandApprovalProgress.Status =
-      Fields.status
-      |> read.string
-      |> CommandApprovalProgress.Status.fromStringUnsafe
+   let statusDetail (read: RowReader) : CommandApprovalProgress.Status =
+      Fields.statusDetail
+      |> read.text
+      |> Serialization.deserializeUnsafe<CommandApprovalProgress.Status>
 
    let approvedBy (read: RowReader) : EmployeeId list =
       Fields.approvedBy |> read.uuidArray |> Array.toList |> List.map EmployeeId
@@ -67,6 +68,9 @@ module Writer =
 
    let status (cmd: CommandApprovalProgress.Status) =
       cmd |> string |> Sql.string
+
+   let statusDetail (cmd: CommandApprovalProgress.Status) =
+      cmd |> Serialization.serialize |> Sql.jsonb
 
    let approvedBy (ids: EmployeeId list) =
       ids |> List.map EmployeeId.get |> Array.ofList |> Sql.uuidArray

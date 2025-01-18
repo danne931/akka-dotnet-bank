@@ -61,6 +61,29 @@ let private sendApprovedCommand
       let cmd = AccountCommand.InternalTransferBetweenOrgs cmd
       accountRef <! AccountMessage.StateChange cmd
 
+let private terminateProgressAssociatedWithRule
+   (mailbox: IActorRef<OrgMessage>)
+   (org: Org)
+   (rule: CommandApprovalRule.T)
+   (reason: CommandApprovalProgress.CommandApprovalTerminationReason)
+   =
+   let progressPertainingToRule =
+      org.CommandApprovalProgress.Values
+      |> Seq.filter (fun p ->
+         p.RuleId = rule.RuleId && p.ApprovedBy.Length = rule.Approvers.Length)
+
+   for progress in progressPertainingToRule do
+      let cmd =
+         CommandApprovalProgress.TerminateCommandApproval.create progress.OrgId {
+            RuleId = progress.RuleId
+            ProgressId = progress.ProgressId
+            Command = progress.CommandToInitiateOnApproval
+            Reason = reason
+         }
+         |> OrgCommand.TerminateCommandApproval
+
+      mailbox <! OrgMessage.StateChange cmd
+
 let actorProps
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
@@ -81,6 +104,7 @@ let actorProps
          match box msg with
          | Persisted mailbox e ->
             let (OrgMessage.Event evt) = unbox e
+            let previousState = state
             let state = Org.applyEvent state evt
 
             match evt with
@@ -97,8 +121,28 @@ let actorProps
                   |> OrgCommand.FinalizeOrgOnboarding
 
                mailbox.Parent() <! OrgMessage.StateChange cmd
+            | CommandApprovalRuleConfigured e ->
+               let newRuleConfig = e.Data
+               let approversCnt = newRuleConfig.Approvers.Length
+
+               let previousApproversCnt =
+                  previousState.Info.CommandApprovalRules
+                  |> Map.tryFind newRuleConfig.RuleId
+                  |> Option.map _.Approvers.Length
+                  |> Option.defaultValue approversCnt
+
+               // If an approver was removed from the rule config then we should
+               // see if there are any approval processes which can be
+               // terminated to have their commands initiated immediately.
+               if approversCnt < previousApproversCnt then
+                  terminateProgressAssociatedWithRule
+                     (mailbox.Parent())
+                     state.Info
+                     newRuleConfig
+                     CommandApprovalProgress.CommandApprovalTerminationReason.AssociatedRuleApproverDeleted
             | CommandApprovalProcessCompleted e ->
                sendApprovedCommand e.Data.Command
+            | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
             | CommandApprovalDeclined e ->
                match e.Data.Command with
                | ApprovableCommand.InviteEmployee cmd ->
