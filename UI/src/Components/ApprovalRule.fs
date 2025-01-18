@@ -262,15 +262,16 @@ let ApprovalRuleManagementDashboardComponent
                match r.Criteria with
                | CommandApprovalRule.Criteria.AmountPerCommand range ->
                   match range.LowerBound, range.UpperBound with
-                  | None, Some _ -> 0
-                  | Some _, Some _ -> 1
-                  | Some _, None -> 2
+                  | None, Some high -> 0, None, Some high
+                  | Some low, Some high -> 1, Some low, Some high
+                  | Some low, None -> 2, Some low, None
                   // NOTE: Case should not occur.
                   // Consider making a type which enforces either
                   // lower or upper being Some.
-                  | None, None -> 3
-               | CommandApprovalRule.Criteria.AmountDailyLimit _ -> 4
-               | CommandApprovalRule.Criteria.PerCommand -> 5)
+                  | None, None -> 3, None, None
+               | CommandApprovalRule.Criteria.AmountDailyLimit _ ->
+                  4, None, None
+               | CommandApprovalRule.Criteria.PerCommand -> 5, None, None)
             |> Seq.sortBy (fun r ->
                match r.CommandType with
                | ApprovableCommandType.FulfillPlatformPayment -> 0
