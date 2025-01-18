@@ -8,6 +8,7 @@ type OrgCommand =
    | FinalizeOrgOnboarding of FinalizeOrgOnboardingCommand
    | ConfigureFeatureFlag of ConfigureFeatureFlagCommand
    | ConfigureApprovalRule of CommandApprovalRule.ConfigureApprovalRuleCommand
+   | DeleteApprovalRule of CommandApprovalRule.DeleteApprovalRuleCommand
    | RequestCommandApproval of CommandApprovalProgress.RequestCommandApproval
    | AcquireCommandApproval of CommandApprovalProgress.AcquireCommandApproval
    | DeclineCommandApproval of CommandApprovalProgress.DeclineCommandApproval
@@ -19,6 +20,8 @@ type OrgEvent =
    | OrgOnboardingFinished of BankEvent<OrgOnboardingFinished>
    | FeatureFlagConfigured of BankEvent<FeatureFlagConfigured>
    | CommandApprovalRuleConfigured of BankEvent<CommandApprovalRule.T>
+   | CommandApprovalRuleDeleted of
+      BankEvent<CommandApprovalRule.ApprovalRuleDeleted>
    | CommandApprovalRequested of
       BankEvent<CommandApprovalProgress.CommandApprovalRequested>
    | CommandApprovalAcquired of
@@ -51,6 +54,8 @@ module OrgEnvelope =
       | :? BankEvent<FeatureFlagConfigured> as evt -> FeatureFlagConfigured evt
       | :? BankEvent<CommandApprovalRule.T> as evt ->
          CommandApprovalRuleConfigured evt
+      | :? BankEvent<CommandApprovalRule.ApprovalRuleDeleted> as evt ->
+         CommandApprovalRuleDeleted evt
       | :? BankEvent<CommandApprovalProgress.CommandApprovalRequested> as evt ->
          CommandApprovalRequested evt
       | :? BankEvent<CommandApprovalProgress.CommandApprovalAcquired> as evt ->
@@ -69,6 +74,7 @@ module OrgEnvelope =
       | OrgOnboardingFinished evt -> wrap evt, get evt
       | FeatureFlagConfigured evt -> wrap evt, get evt
       | CommandApprovalRuleConfigured evt -> wrap evt, get evt
+      | CommandApprovalRuleDeleted evt -> wrap evt, get evt
       | CommandApprovalRequested evt -> wrap evt, get evt
       | CommandApprovalAcquired evt -> wrap evt, get evt
       | CommandApprovalProcessCompleted evt -> wrap evt, get evt

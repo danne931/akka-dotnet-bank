@@ -31,7 +31,9 @@ let getApprovalRules (orgId: OrgId) =
       FROM {table}
       JOIN LATERAL unnest({Fields.permittedApprovers}) AS permitted_approver_id ON TRUE
       JOIN {EmployeeSqlMapper.table} e ON e.{EmployeeSqlMapper.EmployeeFields.employeeId} = permitted_approver_id
-      WHERE {table}.{Fields.orgId} = @orgId
+      WHERE
+         {table}.{Fields.orgId} = @orgId
+         AND {table}.{Fields.deletedAt} IS NULL
       GROUP BY {Fields.ruleId}
       """
 
@@ -62,8 +64,9 @@ let approvalRuleExistsForCommandType
       $"""
       SELECT {Fields.ruleId} FROM {table}
       WHERE
-         {table}.{Fields.orgId} = @orgId
+         {Fields.orgId} = @orgId
          AND {Fields.approvableCommandType} = @commandType::{TypeCast.approvableCommand}
+         AND {Fields.deletedAt} IS NULL
       """
 
    pgQuerySingle<CommandApprovalRuleId>

@@ -125,6 +125,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION add_soft_delete_column(table_name text)
+RETURNS void AS $$
+BEGIN
+   EXECUTE format(
+      'ALTER TABLE %I ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;',
+      table_name
+   );
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TYPE organization_status AS ENUM (
   'PendingOnboardingTasksFulfilled',
   'Active'
@@ -779,6 +789,9 @@ CREATE TABLE command_approval_rule(
 
 SELECT add_created_at_column('command_approval_rule');
 SELECT add_updated_at_column_and_trigger('command_approval_rule');
+SELECT add_soft_delete_column('command_approval_rule');
+
+CREATE INDEX command_approval_rule_org_id_idx ON command_approval_rule(org_id) WHERE deleted_at IS NULL;
 
 --- APPROVAL RULES to apply when a daily limit is exceeded ---
 CREATE TABLE command_approval_rule_amount_daily_limit(

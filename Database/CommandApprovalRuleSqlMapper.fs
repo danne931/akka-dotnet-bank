@@ -20,6 +20,7 @@ module Fields =
    let criteria = "criteria"
    let criteriaDetail = "criteria_detail"
    let permittedApprovers = "permitted_approvers"
+   let deletedAt = "deleted_at"
 
    let dailyLimit = "daily_limit"
    let amountPerCommandLowerBound = "lower_bound"
