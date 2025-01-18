@@ -84,6 +84,7 @@ let private commandApprovalProgressWithRuleQuery (whereClause: string option) =
       ruleT.{Fields.criteriaDetail},
       progressT.{Fields.commandToInitiateOnApproval},
       progressT.{Fields.status},
+      progressT.{Fields.statusDetail},
       progressT.{Fields.updatedAt},
       progressT.{Fields.declinedBy},
       progressT.{Fields.requestedBy},
@@ -130,7 +131,7 @@ let private commandApprovalProgressWithRuleReader reader = {
    CommandProgressId = Reader.commandId reader
    Command =
       CommandApprovalProgressSqlMapper.Reader.commandToInitiateOnApproval reader
-   Status = CommandApprovalProgressSqlMapper.Reader.status reader
+   Status = CommandApprovalProgressSqlMapper.Reader.statusDetail reader
    Criteria = Reader.criteriaDetail reader
 
    PermittedApprovers =

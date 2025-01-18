@@ -768,8 +768,6 @@ CREATE TYPE command_approval_criteria AS ENUM (
    'PerCommand'
 );
 
-CREATE TYPE command_approval_status AS ENUM ('Pending', 'Approved', 'Declined');
-
 CREATE TABLE command_approval_rule(
    rule_id UUID PRIMARY KEY,
    org_id UUID REFERENCES organization,
@@ -806,12 +804,15 @@ SELECT add_created_at_column('command_approval_rule_amount_per_command');
 SELECT add_updated_at_column_and_trigger('command_approval_rule_amount_per_command');
 
 --- COMMAND APPROVAL PROGRESS ---
+CREATE TYPE command_approval_status AS ENUM ('Pending', 'Approved', 'Declined', 'Terminated');
+
 CREATE TABLE command_approval_progress(
    command_id UUID PRIMARY KEY,
    rule_id UUID REFERENCES command_approval_rule,
    org_id UUID REFERENCES organization,
    requested_by_id UUID REFERENCES employee(employee_id),
    status command_approval_status NOT NULL,
+   status_detail JSONB NOT NULL,
    approved_by UUID[],
    declined_by UUID REFERENCES employee(employee_id),
    command_type approvable_command NOT NULL,
