@@ -151,38 +151,46 @@ let EditApprovalRuleComponent
                rule
          | _ -> Html.progress []
       | None ->
-         DropdownComponent(
-            {|
-               Direction = DropdownDirection.RTL
-               ShowCaret = false
-               Button = None
-               Items = [
-                  {
-                     Text = "Edit"
-                     OnClick =
-                        fun _ ->
-                           setRuleToEdit (Some rule)
-                           fetchAdminsIfNecessary state dispatch session.OrgId
-                     IsSelected = ruleToEdit.IsSome
-                  }
-               ]
-            |}
-         )
+         classyNode Html.div [ "grid"; "nav-container" ] [
+            Html.small [
+               attr.classes [ "rule-command-type" ]
+               attr.text rule.CommandType.Display
+            ]
+
+            DropdownComponent(
+               {|
+                  Direction = DropdownDirection.RTL
+                  ShowCaret = false
+                  Button = None
+                  Items = [
+                     {
+                        Text = "Edit"
+                        OnClick =
+                           fun _ ->
+                              setRuleToEdit (Some rule)
+
+                              fetchAdminsIfNecessary
+                                 state
+                                 dispatch
+                                 session.OrgId
+                        IsSelected = ruleToEdit.IsSome
+                     }
+                  ]
+               |}
+            )
+         ]
 
          match rule.Criteria with
          | CommandApprovalRule.Criteria.PerCommand ->
-            Html.small
-               $"For every {rule.CommandType.Display} command require
-               approval from:"
+            Html.small "For every command require approval from:"
          | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
             Html.small
-               $"If daily accrued amount of {rule.CommandType.Display} plus the
-               transaction amount is >="
+               "If transaction amount plus the daily accrued amount is >="
 
             renderMoney limit
             Html.small "require approval from:"
          | CommandApprovalRule.Criteria.AmountPerCommand range ->
-            Html.small $"If {rule.CommandType.Display} amount "
+            Html.small $"If amount "
 
             match range.LowerBound, range.UpperBound with
             | Some low, Some high ->
