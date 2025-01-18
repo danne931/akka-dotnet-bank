@@ -227,6 +227,30 @@ module CommandApprovalRule =
                | Some low, None -> limit <= low
             | _ -> false)
 
+   type ApprovalRuleDeleted = {
+      RuleId: CommandApprovalRuleId
+      OrgId: OrgId
+      CommandType: ApprovableCommandType
+      DeletedBy: Approver
+   }
+
+   type DeleteApprovalRuleCommand = Command<ApprovalRuleDeleted>
+
+   module DeleteApprovalRuleCommand =
+      let create (data: ApprovalRuleDeleted) : DeleteApprovalRuleCommand =
+         Command.create
+            (OrgId.toEntityId data.OrgId)
+            data.OrgId
+            (CorrelationId.create ())
+            (InitiatedById data.DeletedBy.EmployeeId)
+            data
+
+      let toEvent
+         (cmd: DeleteApprovalRuleCommand)
+         : ValidationResult<BankEvent<ApprovalRuleDeleted>>
+         =
+         BankEvent.create<ApprovalRuleDeleted> cmd |> Ok
+
    type ConfigureApprovalRuleCommand = Command<T>
 
    module ConfigureApprovalRuleCommand =

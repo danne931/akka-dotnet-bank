@@ -198,6 +198,11 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
                      Approvers = e.Data.Approvers
                   }
         }
+      | CommandApprovalRuleDeleted e -> {
+         org with
+            CommandApprovalRules =
+               org.CommandApprovalRules |> Map.remove e.Data.RuleId
+        }
       | CommandApprovalRequested e -> {
          org with
             CommandApprovalProgress =
@@ -324,6 +329,24 @@ module private StateTransition =
             state
             (CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd)
 
+   let deleteCommandApprovalRule
+      (state: OrgWithEvents)
+      (cmd: CommandApprovalRule.DeleteApprovalRuleCommand)
+      =
+      let org = state.Info
+      let data = cmd.Data
+
+      if org.Status <> OrgStatus.Active then
+         transitionErr OrgStateTransitionError.OrgNotActive
+      else
+         match org.CommandApprovalRules.TryFind data.RuleId with
+         | None -> transitionErr OrgStateTransitionError.ApprovalRuleNotFound
+         | Some _ ->
+            map
+               CommandApprovalRuleDeleted
+               state
+               (CommandApprovalRule.DeleteApprovalRuleCommand.toEvent cmd)
+
    let requestCommandApproval
       (state: OrgWithEvents)
       (cmd: CommandApprovalProgress.RequestCommandApproval)
@@ -433,6 +456,8 @@ let stateTransition (state: OrgWithEvents) (command: OrgCommand) =
    | ConfigureFeatureFlag cmd -> StateTransition.configureFeatureFlag state cmd
    | ConfigureApprovalRule cmd ->
       StateTransition.configureCommandApprovalRule state cmd
+   | DeleteApprovalRule cmd ->
+      StateTransition.deleteCommandApprovalRule state cmd
    | RequestCommandApproval cmd ->
       StateTransition.requestCommandApproval state cmd
    | AcquireCommandApproval cmd ->

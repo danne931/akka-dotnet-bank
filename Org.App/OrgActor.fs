@@ -63,15 +63,9 @@ let private sendApprovedCommand
 
 let private terminateProgressAssociatedWithRule
    (mailbox: IActorRef<OrgMessage>)
-   (org: Org)
-   (rule: CommandApprovalRule.T)
+   (progressPertainingToRule: CommandApprovalProgress.T seq)
    (reason: CommandApprovalProgress.CommandApprovalTerminationReason)
    =
-   let progressPertainingToRule =
-      org.CommandApprovalProgress.Values
-      |> Seq.filter (fun p ->
-         p.RuleId = rule.RuleId && p.ApprovedBy.Length = rule.Approvers.Length)
-
    for progress in progressPertainingToRule do
       let cmd =
          CommandApprovalProgress.TerminateCommandApproval.create progress.OrgId {
@@ -135,11 +129,25 @@ let actorProps
                // see if there are any approval processes which can be
                // terminated to have their commands initiated immediately.
                if approversCnt < previousApproversCnt then
+                  let progressPertainingToRule =
+                     state.Info.CommandApprovalProgress.Values
+                     |> Seq.filter (fun p ->
+                        p.RuleId = newRuleConfig.RuleId
+                        && p.ApprovedBy.Length = newRuleConfig.Approvers.Length)
+
                   terminateProgressAssociatedWithRule
                      (mailbox.Parent())
-                     state.Info
-                     newRuleConfig
+                     progressPertainingToRule
                      CommandApprovalProgress.CommandApprovalTerminationReason.AssociatedRuleApproverDeleted
+            | CommandApprovalRuleDeleted e ->
+               let progressPertainingToRule =
+                  state.Info.CommandApprovalProgress.Values
+                  |> Seq.filter (fun p -> p.RuleId = e.Data.RuleId)
+
+               terminateProgressAssociatedWithRule
+                  (mailbox.Parent())
+                  progressPertainingToRule
+                  CommandApprovalProgress.CommandApprovalTerminationReason.AssociatedRuleDeleted
             | CommandApprovalProcessCompleted e ->
                sendApprovedCommand e.Data.Command
             | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
