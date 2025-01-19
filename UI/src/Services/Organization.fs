@@ -21,6 +21,8 @@ let private postJson (command: OrgCommand) =
       match command with
       | OrgCommand.ConfigureApprovalRule cmd ->
          Serialization.serialize cmd, OrgPath.ConfigureCommandApprovalRule
+      | OrgCommand.DeleteApprovalRule cmd ->
+         Serialization.serialize cmd, OrgPath.DeleteCommandApprovalRule
       | OrgCommand.AcquireCommandApproval cmd ->
          Serialization.serialize cmd, OrgPath.AcquireCommandApproval
       | OrgCommand.DeclineCommandApproval cmd ->

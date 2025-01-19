@@ -323,6 +323,9 @@ let ApprovalProgressComponent
                      | Some approvers -> Html.p (approversMsg approvers)
                      | None -> Html.p "None"
                   ]
+               | CommandApprovalProgress.Status.Terminated ->
+                  Html.small
+                     $"Approval terminated early on {DateTime.format o.LastUpdate}"
             ]
       ]
    | Deferred.Resolved(Ok None) -> Html.p "No commands require approval."

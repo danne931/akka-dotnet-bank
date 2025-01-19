@@ -26,6 +26,9 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
       | ConfigureApprovalRule cmd ->
          CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
          |> Result.map OrgEnvelope.get
+      | DeleteApprovalRule cmd ->
+         CommandApprovalRule.DeleteApprovalRuleCommand.toEvent cmd
+         |> Result.map OrgEnvelope.get
       | AcquireCommandApproval cmd ->
          CommandApprovalProgress.AcquireCommandApproval.toEvent cmd
          |> Result.map OrgEnvelope.get

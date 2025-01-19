@@ -1,5 +1,7 @@
 module CommandApprovalRuleSqlMapper
 
+open System
+
 open Lib.SharedTypes
 open Bank.Org.Domain
 open OrganizationSqlMapper
@@ -92,3 +94,5 @@ module Writer =
    let dailyLimit = Sql.decimal
    let amountPerCommandLowerBound = Sql.decimalOrNone
    let amountPerCommandUpperBound = Sql.decimalOrNone
+
+   let deletedAt (date: DateTime option) = Sql.timestamptzOrNone date

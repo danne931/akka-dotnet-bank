@@ -17,6 +17,7 @@ type SqlParamsDerivedFromOrgEvents = {
    OrgEvent: (string * SqlValue) list list
    FeatureFlags: (string * SqlValue) list list
    CommandApprovalRuleConfigured: (string * SqlValue) list list
+   CommandApprovalRuleDeleted: (string * SqlValue) list list
    CommandApprovalRuleConfiguredWithAmountDailyLimit:
       (string * SqlValue) list list
    CommandApprovalRuleConfiguredWithAmountPerCommand:
@@ -134,6 +135,19 @@ let sqlParamReducer
                |> Option.fold
                      (fun acc qParams -> qParams :: acc)
                      acc.CommandApprovalRuleConfiguredWithAmountPerCommand
+      }
+   | OrgEvent.CommandApprovalRuleDeleted e ->
+      let qParams = [
+         "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId e.Data.RuleId
+
+         "deletedAt",
+         CommandApprovalRuleSqlMapper.Writer.deletedAt (Some e.Timestamp)
+      ]
+
+      {
+         acc with
+            CommandApprovalRuleDeleted =
+               qParams :: acc.CommandApprovalRuleDeleted
       }
    | OrgEvent.CommandApprovalRequested e ->
       let status = CommandApprovalProgress.Status.Pending
@@ -260,7 +274,7 @@ let sqlParamReducer
 
       {
          acc with
-            CommandApprovalDeclined = qParams :: acc.CommandApprovalDeclined
+            CommandApprovalTerminated = qParams :: acc.CommandApprovalTerminated
       }
    | _ -> acc
 
@@ -281,6 +295,7 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
          OrgEvent = []
          FeatureFlags = []
          CommandApprovalRuleConfigured = []
+         CommandApprovalRuleDeleted = []
          CommandApprovalRuleConfiguredWithAmountDailyLimit = []
          CommandApprovalRuleConfiguredWithAmountPerCommand = []
          CommandApprovalRequested = []
@@ -378,6 +393,14 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
             {CommandApprovalRuleSqlMapper.Fields.permittedApprovers} = @approvers;
          """,
          sqlParams.CommandApprovalRuleConfigured
+
+      if not sqlParams.CommandApprovalRuleDeleted.IsEmpty then
+         $"""
+         UPDATE {CommandApprovalRuleSqlMapper.table}
+         SET {CommandApprovalRuleSqlMapper.Fields.deletedAt} = @deletedAt
+         WHERE {CommandApprovalRuleSqlMapper.Fields.ruleId} = @ruleId;
+         """,
+         sqlParams.CommandApprovalRuleDeleted
 
       if
          not sqlParams.CommandApprovalRuleConfiguredWithAmountDailyLimit.IsEmpty
