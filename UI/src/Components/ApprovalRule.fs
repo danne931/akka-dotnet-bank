@@ -3,6 +3,7 @@ module ApprovalRuleManagement
 open Feliz
 open Elmish
 open Feliz.UseElmish
+open Elmish.SweetAlert
 
 open Bank.Employee.Domain
 open Bank.Org.Domain
@@ -29,6 +30,13 @@ type Msg =
       OrgId *
       AsyncOperationStatus<Result<Employee list option, Err>>
    | ToggleCreateRuleOpen
+   | ShowDeleteRuleConfirmation of UserSession * Org * CommandApprovalRule.T
+   | DismissDeleteRuleConfirmation
+   | ConfirmDeleteRule of
+      UserSession *
+      Org *
+      CommandApprovalRule.T *
+      AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
 
 let init (orgId: OrgId) () =
    {
@@ -102,6 +110,64 @@ let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
             IsCreateRuleOpen = not state.IsCreateRuleOpen
       },
       Cmd.none
+   | ShowDeleteRuleConfirmation(session, org, rule) ->
+      let associatedApprovalCnt =
+         org.CommandApprovalProgress
+         |> Map.filter (fun _ p ->
+            p.CommandToInitiateOnApproval.CommandType = rule.CommandType)
+         |> Map.count
+
+      let confirm =
+         ConfirmAlert(
+            (if associatedApprovalCnt > 0 then
+                $"There is currently {associatedApprovalCnt} {rule.CommandType.Display}
+               commands pending approval which will initiate immediately."
+             else
+                ""),
+            function
+            | ConfirmAlertResult.Confirmed ->
+               Msg.ConfirmDeleteRule(session, org, rule, Started)
+            | ConfirmAlertResult.Dismissed _ ->
+               Msg.DismissDeleteRuleConfirmation
+         )
+            .Title("Are you sure you want to delete this rule?")
+            .Type(AlertType.Question)
+            .ShowCloseButton(true)
+
+      state, SweetAlert.Run confirm
+   | DismissDeleteRuleConfirmation -> state, Cmd.none
+   | ConfirmDeleteRule(session, org, rule, Started) ->
+      let delete = async {
+         let cmd =
+            CommandApprovalRule.DeleteApprovalRuleCommand.create {
+               RuleId = rule.RuleId
+               OrgId = rule.OrgId
+               CommandType = rule.CommandType
+               DeletedBy = {
+                  EmployeeId = session.EmployeeId
+                  Name = session.Name
+               }
+            }
+            |> OrgCommand.DeleteApprovalRule
+
+         let! res = OrgService.submitCommand org cmd
+         return ConfirmDeleteRule(session, org, rule, Finished res)
+      }
+
+      state, Cmd.fromAsync delete
+   | ConfirmDeleteRule(_, _, rule, Finished(Ok receipt)) ->
+      orgDispatch (OrgProvider.Msg.OrgUpdated receipt.PendingState)
+
+      state,
+      Alerts.toastSuccessCommand $"Deleted {rule.CommandType.Display} rule."
+   | ConfirmDeleteRule(_, _, rule, Finished(Error err)) ->
+      Log.error (string err)
+
+      state,
+      Alerts.toastCommand
+      <| Err.NetworkError(
+         exn $"Issue deleting rule for {rule.CommandType.Display}"
+      )
 
 let fetchAdminsIfNecessary (state: State) dispatch orgId =
    match state.Admins with
@@ -174,6 +240,19 @@ let EditApprovalRuleComponent
                                  dispatch
                                  session.OrgId
                         IsSelected = ruleToEdit.IsSome
+                     }
+                     {
+                        Text = "Delete"
+                        OnClick =
+                           fun _ ->
+                              dispatch (
+                                 Msg.ShowDeleteRuleConfirmation(
+                                    session,
+                                    org,
+                                    rule
+                                 )
+                              )
+                        IsSelected = false
                      }
                   ]
                |}

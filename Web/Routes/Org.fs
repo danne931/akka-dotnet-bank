@@ -100,7 +100,23 @@ let startOrgRoutes (app: WebApplication) =
                processCommand sys (OrgCommand.ConfigureApprovalRule cmd)
                |> RouteUtil.unwrapTaskResult)
       )
-      .RBAC(Permissions.ConfigureCommandApprovalRule)
+      .RBAC(Permissions.ManageCommandApprovalRule)
+   |> ignore
+
+   app
+      .MapPost(
+         OrgPath.DeleteCommandApprovalRule,
+
+         Func<
+            ActorSystem,
+            CommandApprovalRule.DeleteApprovalRuleCommand,
+            Task<IResult>
+          >
+            (fun sys cmd ->
+               processCommand sys (OrgCommand.DeleteApprovalRule cmd)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ManageCommandApprovalRule)
    |> ignore
 
    app

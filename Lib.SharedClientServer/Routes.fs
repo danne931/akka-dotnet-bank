@@ -18,6 +18,7 @@ module OrgPath =
    let merchants (orgId: OrgId) = $"{Base}/merchants/{orgId}"
 
    let ConfigureCommandApprovalRule = Base + "/configure-command-approval-rule"
+   let DeleteCommandApprovalRule = Base + "/delete-command-approval-rule"
    let GetCommandApprovalRules = Get + "/command-approval-rule"
 
    let getCommandApprovalRules (orgId: OrgId) =

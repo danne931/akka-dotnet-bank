@@ -21,7 +21,7 @@ let UpdateRole = Access [ admin ]
 let DebitRequest = Access [ admin; card ]
 let ManageEmployeeAccess = Access [ admin ]
 let ResendInviteNotification = Access [ admin; scholar ]
-let ConfigureCommandApprovalRule = Access [ admin; scholar ]
+let ManageCommandApprovalRule = Access [ admin ]
 let ManageCommandApprovalProgress = Access [ admin ]
 
 // Card
