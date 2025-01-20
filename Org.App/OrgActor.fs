@@ -163,7 +163,7 @@ let actorProps
                         {
                            Reason =
                               Some
-                                 $"Employee invite declined by {e.Data.DeclinedBy.Name}"
+                                 $"Employee invite declined by {e.Data.DeclinedBy.EmployeeName}"
                         }
                      |> EmployeeCommand.CancelInvitation
                      |> EmployeeMessage.StateChange
@@ -199,7 +199,7 @@ let actorProps
             match msg with
             | OrgMessage.GetOrg ->
                mailbox.Sender() <! (stateOpt |> Option.map _.Info)
-            | ApprovableEmployeeRequest cmd ->
+            | ApprovableRequest cmd ->
                // If the command requires approval then initiate the command
                // approval workflow.  Otherwise, forward the command to the
                // appropriate account or employee actor for processing.

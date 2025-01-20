@@ -206,13 +206,17 @@ let approverItemForm
 
 let approverListForm
    (employees: Map<EmployeeId, Employee>)
-   : Form.Form<Values, CommandApprovalRule.Approver list, IReactProperty>
+   : Form.Form<Values, EmployeeReference list, IReactProperty>
    =
    Form.succeed (
       List.map (fun (emId: string) ->
          let emId = EmployeeId(Guid.Parse emId)
          let em = Map.find emId employees
-         { EmployeeId = emId; Name = em.Name }: CommandApprovalRule.Approver)
+
+         {
+            EmployeeId = emId
+            EmployeeName = em.Name
+         })
    )
    |> Form.append (
       Form.meta (fun values ->
@@ -309,7 +313,7 @@ let ruleEditForm
    Form.succeed
       (fun
            (criteria: CommandApprovalRule.Criteria,
-            approvers: CommandApprovalRule.Approver list) ->
+            approvers: EmployeeReference list) ->
          let cmd =
             CommandApprovalRule.ConfigureApprovalRuleCommand.create
                org.OrgId
@@ -363,7 +367,7 @@ let CommandApprovalRuleEditFormComponent
          rule.Approvers
          |> List.map (fun a -> {
             EmployeeId = string a.EmployeeId
-            Name = a.Name
+            Name = a.EmployeeName
          })
       AmountBasedCriteriaType = ""
       DailyLimit = ""

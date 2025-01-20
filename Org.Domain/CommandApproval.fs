@@ -149,17 +149,15 @@ module CommandApprovalRule =
             |> Result.map (fun _ -> criteria)
          | Criteria.PerCommand -> Ok criteria
 
-   type Approver = { Name: string; EmployeeId: EmployeeId }
-
    type T = {
       RuleId: CommandApprovalRuleId
       OrgId: OrgId
       CommandType: ApprovableCommandType
       Criteria: Criteria
-      Approvers: Approver list
+      Approvers: EmployeeReference list
    }
 
-   let isValidApprover (approver: Approver) (rule: T) =
+   let isValidApprover (approver: EmployeeReference) (rule: T) =
       rule.Approvers
       |> List.exists (fun a -> a.EmployeeId = approver.EmployeeId)
 
@@ -231,7 +229,7 @@ module CommandApprovalRule =
       RuleId: CommandApprovalRuleId
       OrgId: OrgId
       CommandType: ApprovableCommandType
-      DeletedBy: Approver
+      DeletedBy: EmployeeReference
    }
 
    type DeleteApprovalRuleCommand = Command<ApprovalRuleDeleted>
@@ -277,36 +275,53 @@ module CommandApprovalRule =
          }
 
 module CommandApprovalProgress =
-   type Requester = { Name: string; Id: InitiatedById }
+   [<RequireQualifiedAccess>]
+   type CommandApprovalTerminationReason =
+      | AssociatedRuleDeleted
+      | AssociatedRuleApproverDeleted
 
    [<RequireQualifiedAccess>]
    type Status =
       | Pending
       | Approved
       | Declined
-      | Terminated
+      | Terminated of CommandApprovalTerminationReason
 
       override x.ToString() =
          match x with
          | Pending -> "Pending"
          | Approved -> "Approved"
          | Declined -> "Declined"
-         | Terminated -> "Terminated"
+         | Terminated _ -> "Terminated"
 
    type T = {
       ProgressId: CommandApprovalProgressId
       RuleId: CommandApprovalRuleId
       OrgId: OrgId
       Status: Status
-      ApprovedBy: CommandApprovalRule.Approver list
-      DeclinedBy: CommandApprovalRule.Approver option
+      RequestedBy: EmployeeReference
+      ApprovedBy: EmployeeReference list
+      DeclinedBy: EmployeeReference option
       CommandToInitiateOnApproval: ApprovableCommand
+      CreatedAt: DateTime
+      LastUpdate: DateTime
    }
 
-   let isNewApproval (approver: CommandApprovalRule.Approver) (progress: T) =
+   let isNewApproval (approver: EmployeeReference) (progress: T) =
       progress.ApprovedBy
       |> List.exists (fun a -> a.EmployeeId = approver.EmployeeId)
       |> not
+
+   /// Employee may approve or deny the command if they are a PermittedApprover
+   /// for a given command type & they haven't already approved the command.
+   let mayApproveOrDeny
+      (rule: CommandApprovalRule.T)
+      (progress: T)
+      (eId: EmployeeId)
+      =
+      progress.Status = Status.Pending
+      && rule.Approvers |> List.exists (fun o -> o.EmployeeId = eId)
+      && progress.ApprovedBy |> List.exists (fun o -> o.EmployeeId = eId) |> not
 
    type CommandApprovalRequested = {
       RuleId: CommandApprovalRuleId
@@ -315,29 +330,24 @@ module CommandApprovalProgress =
 
    type CommandApprovalAcquired = {
       RuleId: CommandApprovalRuleId
-      ApprovedBy: CommandApprovalRule.Approver
+      ApprovedBy: EmployeeReference
       ProgressId: CommandApprovalProgressId
       Command: ApprovableCommand
    }
 
    type CommandApprovalProcessCompleted = {
       RuleId: CommandApprovalRuleId
-      ApprovedBy: CommandApprovalRule.Approver
+      ApprovedBy: EmployeeReference
       ProgressId: CommandApprovalProgressId
       Command: ApprovableCommand
    }
 
    type CommandApprovalDeclined = {
       RuleId: CommandApprovalRuleId
-      DeclinedBy: CommandApprovalRule.Approver
+      DeclinedBy: EmployeeReference
       Command: ApprovableCommand
       ProgressId: CommandApprovalProgressId
    }
-
-   [<RequireQualifiedAccess>]
-   type CommandApprovalTerminationReason =
-      | AssociatedRuleDeleted
-      | AssociatedRuleApproverDeleted
 
    type CommandApprovalTerminated = {
       RuleId: CommandApprovalRuleId
@@ -452,30 +462,3 @@ module CommandApprovalProgress =
          : ValidationResult<BankEvent<CommandApprovalTerminated>>
          =
          BankEvent.create<CommandApprovalTerminated> cmd |> Ok
-
-type CommandApprovalProgressWithRule = {
-   RuleId: CommandApprovalRuleId
-   CommandProgressId: CommandApprovalProgressId
-   Command: ApprovableCommand
-   Criteria: CommandApprovalRule.Criteria
-   PermittedApprovers: CommandApprovalRule.Approver list
-   ApprovedBy: CommandApprovalRule.Approver list option
-   DeclinedBy: CommandApprovalRule.Approver option
-   RequestedBy: CommandApprovalProgress.Requester
-   Status: CommandApprovalProgress.Status
-   LastUpdate: DateTime
-}
-
-module CommandApprovalProgressWithRule =
-   /// Employee may approve or deny the command if they are a PermittedApprover
-   /// for a given command type & they haven't already approved the command.
-   let mayApproveOrDeny
-      (progress: CommandApprovalProgressWithRule)
-      (eId: EmployeeId)
-      =
-      progress.Status = CommandApprovalProgress.Status.Pending
-      && progress.PermittedApprovers
-         |> List.exists (fun o -> o.EmployeeId = eId)
-      && (progress.ApprovedBy
-          |> Option.map (List.exists (fun o -> o.EmployeeId <> eId))
-          |> Option.defaultValue true)

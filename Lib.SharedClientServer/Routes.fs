@@ -24,26 +24,9 @@ module OrgPath =
    let getCommandApprovalRules (orgId: OrgId) =
       get orgId + "/command-approval-rule"
 
-   let GetCommandApprovalRuleByCommandType =
-      Get + "/command-approval-rule/{commandType}"
-
-   let getCommandApprovalRuleByCommandType
-      (orgId: OrgId)
-      (commandType: string)
-      =
-      get orgId + $"/command-approval-rule/{commandType}"
-
    let AcquireCommandApproval = Base + "/acquire-command-approval"
 
    let DeclineCommandApproval = Base + "/decline-command-approval"
-
-   let GetCommandApprovalProgressWithRule =
-      Base + "/command-approval-progress/{progressId}"
-
-   let getCommandApprovalProgressWithRule
-      (progressId: CommandApprovalProgressId)
-      =
-      Base + $"/command-approval-progress/{progressId}"
 
    let GetCommandApprovals = Base + "/command-approvals/{orgId}"
 

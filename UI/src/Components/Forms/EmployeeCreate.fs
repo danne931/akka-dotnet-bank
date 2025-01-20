@@ -172,22 +172,7 @@ let EmployeeCreateFormComponent
    =
    let orgCtx = React.useContext OrgProvider.context
 
-   let employeeInviteRequiresApproval, setApproval =
-      React.useState<Deferred<Result<CommandApprovalRuleId option, Err>>>
-         Deferred.Idle
-
    let pendingRole, setRole = React.useState Role.CardOnly
-
-   React.useEffectOnce (fun () ->
-      async {
-         let! approvalRequired =
-            OrgService.orgRequiresCommandApproval
-               session.OrgId
-               ApprovableCommandType.InviteEmployee
-
-         setApproval (Deferred.Resolved approvalRequired)
-      }
-      |> Async.StartImmediate)
 
    let formProps: Values = {
       FirstName = ""
@@ -202,17 +187,24 @@ let EmployeeCreateFormComponent
    classyNode Html.div [ "grid" ] [
       EmployeePermissions.render pendingRole
 
-      match orgCtx, employeeInviteRequiresApproval with
-      | Deferred.Resolved(Ok(Some org)),
-        Deferred.Resolved(Ok employeeInviteRuleIdOpt) ->
+      match orgCtx with
+      | Deferred.Resolved(Ok(Some org)) ->
+         let employeeInviteRequiresApproval =
+            org.Org.CommandApprovalRules
+            |> Map.tryPick (fun ruleId rule ->
+               if rule.CommandType = ApprovableCommandType.InviteEmployee then
+                  Some ruleId
+               else
+                  None)
+
          let submitText =
-            match employeeInviteRuleIdOpt with
+            match employeeInviteRequiresApproval with
             | Some _ -> "Request Employee Invite Approval"
             | None -> "Invite Employee"
 
          EmployeeFormContainer
             formProps
-            (form session org.Accounts employeeInviteRuleIdOpt setRole)
+            (form session org.Accounts employeeInviteRequiresApproval setRole)
             onSubmit
             (Some <| Form.View.Action.SubmitOnly submitText)
       | _ -> Html.progress []

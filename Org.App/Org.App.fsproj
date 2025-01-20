@@ -7,8 +7,8 @@
     <Compile Include="OrgReadModelSyncActor.fs" />
     <Compile Include="OrgActor.fs" />
     <Compile Include="AnalyticsApi.fs" />
-    <Compile Include="OrgApi.fs" />
     <Compile Include="CommandApprovalApi.fs" />
+    <Compile Include="OrgApi.fs" />
   </ItemGroup>
 
   <ItemGroup>

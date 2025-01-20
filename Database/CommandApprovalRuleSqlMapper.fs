@@ -85,7 +85,7 @@ module Writer =
    let criteriaDetail (criteria: Criteria) =
       criteria |> Serialization.serialize |> Sql.jsonb
 
-   let permittedApprovers (ids: Approver list) =
+   let permittedApprovers (ids: Bank.Employee.Domain.EmployeeReference list) =
       ids
       |> List.map (_.EmployeeId >> EmployeeId.get)
       |> Array.ofList

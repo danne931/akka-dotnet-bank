@@ -6,6 +6,11 @@ open Validus
 open Lib.SharedTypes
 open Lib.NetworkQuery
 
+type EmployeeReference = {
+   EmployeeName: string
+   EmployeeId: EmployeeId
+}
+
 [<RequireQualifiedAccess>]
 type CardType =
    | Credit
