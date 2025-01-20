@@ -104,6 +104,6 @@ type OrgWithAccountProfiles = {
 
 type OrgMessage =
    | GetOrg
-   | ApprovableEmployeeRequest of ApprovableCommand
+   | ApprovableRequest of ApprovableCommand
    | StateChange of OrgCommand
    | Event of OrgEvent

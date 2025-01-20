@@ -16,14 +16,9 @@ open Lib.SharedTypes
 type State = {
    PendingRole: Role option
    IsEditingRole: bool
-   EmployeeInviteApprovalProgress:
-      Deferred<Result<CommandApprovalProgressWithRule option, Err>>
 }
 
 type Msg =
-   | GetEmployeePendingInviteApproval of
-      CommandApprovalProgressId *
-      AsyncOperationStatus<Result<CommandApprovalProgressWithRule option, Err>>
    | OpenRoleEdit
    | CancelRoleEdit
    | SetPendingRole of Role option
@@ -43,26 +38,21 @@ type Msg =
    | ApproveAccess of
       UserSession *
       Org *
-      CommandApprovalProgressWithRule *
+      CommandApprovalProgress.T *
       AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | DisapproveAccess of
       UserSession *
       Org *
-      CommandApprovalProgressWithRule *
+      CommandApprovalProgress.T *
       AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | DismissInviteCancellation
 
-let init (employee: Employee) =
+let init () =
    {
       PendingRole = None
       IsEditingRole = false
-      EmployeeInviteApprovalProgress = Deferred.Idle
    },
-   match employee.Status with
-   | EmployeeStatus.PendingInviteApproval approval ->
-      Cmd.ofMsg
-      <| GetEmployeePendingInviteApproval(approval.ProgressId, Started)
-   | _ -> Cmd.none
+   Cmd.none
 
 let closeRoleSelect state = {
    state with
@@ -77,30 +67,6 @@ let update
    state
    =
    match msg with
-   | GetEmployeePendingInviteApproval(progressId, Started) ->
-      let get = async {
-         let! res = OrgService.getCommandApprovalProgressWithRule progressId
-
-         return Msg.GetEmployeePendingInviteApproval(progressId, Finished res)
-      }
-
-      {
-         state with
-            EmployeeInviteApprovalProgress = Deferred.InProgress
-      },
-      Cmd.fromAsync get
-   | GetEmployeePendingInviteApproval(_, Finished(Ok res)) ->
-      {
-         state with
-            EmployeeInviteApprovalProgress = Deferred.Resolved(Ok res)
-      },
-      Cmd.none
-   | GetEmployeePendingInviteApproval(_, Finished(Error err)) ->
-      {
-         state with
-            EmployeeInviteApprovalProgress = Deferred.Resolved(Error err)
-      },
-      Alerts.toastCommand err
    | OpenRoleEdit -> { state with IsEditingRole = true }, Cmd.none
    | CancelRoleEdit -> closeRoleSelect state, Cmd.none
    | SetPendingRole role -> { state with PendingRole = role }, Cmd.none
@@ -165,10 +131,10 @@ let update
                RuleId = progress.RuleId
                ApprovedBy = {
                   EmployeeId = session.EmployeeId
-                  Name = session.Name
+                  EmployeeName = session.Name
                }
-               Command = progress.Command
-               ProgressId = progress.CommandProgressId
+               Command = progress.CommandToInitiateOnApproval
+               ProgressId = progress.ProgressId
             }
             |> OrgCommand.AcquireCommandApproval
 
@@ -190,10 +156,10 @@ let update
                RuleId = progress.RuleId
                DeclinedBy = {
                   EmployeeId = session.EmployeeId
-                  Name = session.Name
+                  EmployeeName = session.Name
                }
-               Command = progress.Command
-               ProgressId = progress.CommandProgressId
+               Command = progress.CommandToInitiateOnApproval
+               ProgressId = progress.ProgressId
             }
             |> OrgCommand.DeclineCommandApproval
 
@@ -239,7 +205,16 @@ let EmployeeDetailComponent
    (onOrgUpdate: OrgCommandReceipt -> unit)
    =
    let state, dispatch =
-      React.useElmish (init employee, update onEmployeeUpdate onOrgUpdate, [||])
+      React.useElmish (init, update onEmployeeUpdate onOrgUpdate, [||])
+
+   let employeeInviteProgressOpt =
+      match employee.Status with
+      | EmployeeStatus.PendingInviteApproval inviteInfo ->
+         Option.map2
+            (fun rule progress -> rule, progress)
+            (org.CommandApprovalRules.TryFind inviteInfo.RuleId)
+            (org.CommandApprovalProgress.TryFind inviteInfo.ProgressId)
+      | _ -> None
 
    let dropdownMenuOptions =
       match employee.Status with
@@ -252,32 +227,36 @@ let EmployeeDetailComponent
             }
          ]
       | EmployeeStatus.PendingInviteApproval _ ->
-         match state.EmployeeInviteApprovalProgress with
-         | Deferred.Resolved(Ok(Some progress)) when
-            CommandApprovalProgressWithRule.mayApproveOrDeny
-               progress
-               session.EmployeeId
-            ->
-            Some [
-               {
-                  Text = "Approve Invite"
-                  OnClick =
-                     fun _ ->
-                        dispatch
-                        <| Msg.ApproveAccess(session, org, progress, Started)
-                  IsSelected = false
-               }
+         employeeInviteProgressOpt
+         |> Option.bind (fun (rule, progress) ->
+            if
+               CommandApprovalProgress.mayApproveOrDeny
+                  rule
+                  progress
+                  session.EmployeeId
+            then
+               Some progress
+            else
+               None)
+         |> Option.map (fun progress -> [
+            {
+               Text = "Approve Invite"
+               OnClick =
+                  fun _ ->
+                     dispatch
+                     <| Msg.ApproveAccess(session, org, progress, Started)
+               IsSelected = false
+            }
 
-               {
-                  Text = "Disapprove Invite"
-                  OnClick =
-                     fun _ ->
-                        dispatch
-                        <| Msg.DisapproveAccess(session, org, progress, Started)
-                  IsSelected = false
-               }
-            ]
-         | _ -> None
+            {
+               Text = "Disapprove Invite"
+               OnClick =
+                  fun _ ->
+                     dispatch
+                     <| Msg.DisapproveAccess(session, org, progress, Started)
+               IsSelected = false
+            }
+         ])
       | EmployeeStatus.PendingInviteConfirmation _ ->
          Some [
             {
@@ -336,25 +315,17 @@ let EmployeeDetailComponent
 
          Html.div [ Html.small (string employee.Email) ]
 
-         match state.EmployeeInviteApprovalProgress with
-         | Deferred.Resolved(Ok(Some progress)) ->
-            let approvedByCnt =
-               progress.ApprovedBy
-               |> Option.map _.Length
-               |> Option.defaultValue 0
-
+         match employeeInviteProgressOpt with
+         | Some(rule, progress) ->
             let approvalRequiredFrom =
-               progress.ApprovedBy
-               |> Option.defaultValue []
-               |> fun approvedBy ->
-                  List.except approvedBy progress.PermittedApprovers
-                  |> List.fold
-                        (fun acc approver ->
-                           if acc = "" then
-                              approver.Name
-                           else
-                              $"{acc}, {approver.Name}")
-                        ""
+               List.except progress.ApprovedBy rule.Approvers
+               |> List.fold
+                     (fun acc approver ->
+                        if acc = "" then
+                           approver.EmployeeName
+                        else
+                           $"{acc}, {approver.EmployeeName}")
+                     ""
 
             let approvalRequiredFrom =
                if approvalRequiredFrom <> "" then
@@ -364,7 +335,7 @@ let EmployeeDetailComponent
 
             Html.blockquote
                $"""
-               {approvedByCnt} out of {progress.PermittedApprovers.Length} approvals obtained.
+               {progress.ApprovedBy.Length} out of {rule.Approvers.Length} approvals obtained.
                {approvalRequiredFrom}
                """
          | _ -> ()

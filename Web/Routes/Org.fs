@@ -53,28 +53,6 @@ let startOrgRoutes (app: WebApplication) =
    |> ignore
 
    app.MapGet(
-      OrgPath.GetCommandApprovalRuleByCommandType,
-      Func<Guid, string, Task<IResult>>(fun orgId commandType ->
-         match ApprovableCommandType.fromString commandType with
-         | None ->
-            Task.FromResult(Results.BadRequest "Invalid ApprovableCommandType")
-         | Some commandType ->
-            approvalRuleExistsForCommandType (OrgId orgId) commandType
-            |> RouteUtil.unwrapTaskResult)
-   )
-   |> ignore
-
-   app.MapGet(
-      OrgPath.GetCommandApprovalProgressWithRule,
-      Func<Guid, Task<IResult>>(fun progressId ->
-         getCommandApprovalProgressWithRule (
-            CommandApprovalProgressId(CorrelationId progressId)
-         )
-         |> RouteUtil.unwrapTaskResultOption)
-   )
-   |> ignore
-
-   app.MapGet(
       OrgPath.GetCommandApprovals,
       Func<Guid, Task<IResult>>(fun orgId ->
          getCommandApprovals (OrgId orgId) |> RouteUtil.unwrapTaskResultOption)

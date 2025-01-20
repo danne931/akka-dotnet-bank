@@ -77,7 +77,7 @@ let startTransferRoutes (app: WebApplication) =
                   let msg =
                      cmd
                      |> ApprovableCommand.InternalTransferBetweenOrgs
-                     |> OrgMessage.ApprovableEmployeeRequest
+                     |> OrgMessage.ApprovableRequest
 
                   (OrgActor.get sys cmd.OrgId) <! msg
                   return res
@@ -120,7 +120,7 @@ let startTransferRoutes (app: WebApplication) =
                   let msg =
                      cmd
                      |> ApprovableCommand.DomesticTransfer
-                     |> OrgMessage.ApprovableEmployeeRequest
+                     |> OrgMessage.ApprovableRequest
 
                   (OrgActor.get sys cmd.OrgId) <! msg
                   return res
@@ -210,7 +210,7 @@ let startTransferRoutes (app: WebApplication) =
                   let msg =
                      cmd
                      |> ApprovableCommand.FulfillPlatformPayment
-                     |> OrgMessage.ApprovableEmployeeRequest
+                     |> OrgMessage.ApprovableRequest
 
                   (OrgActor.get sys cmd.OrgId) <! msg
                   return res

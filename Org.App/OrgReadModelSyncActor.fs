@@ -185,6 +185,8 @@ let sqlParamReducer
             CommandApprovalRequested = qParams :: acc.CommandApprovalRequested
       }
    | OrgEvent.CommandApprovalAcquired e ->
+      let status = CommandApprovalProgress.Status.Pending
+
       let qParams = [
          "commandId",
          CommandApprovalProgressId e.CorrelationId
@@ -194,8 +196,12 @@ let sqlParamReducer
          e.Data.ApprovedBy.EmployeeId |> EmployeeId.get |> Sql.uuid
 
          "expectedCurrentStatus",
-         CommandApprovalProgress.Status.Pending
-         |> CommandApprovalProgressSqlMapper.Writer.status
+         CommandApprovalProgressSqlMapper.Writer.status status
+
+         "status", CommandApprovalProgressSqlMapper.Writer.status status
+
+         "statusDetail",
+         CommandApprovalProgressSqlMapper.Writer.statusDetail status
       ]
 
       {
@@ -255,7 +261,8 @@ let sqlParamReducer
             CommandApprovalDeclined = qParams :: acc.CommandApprovalDeclined
       }
    | OrgEvent.CommandApprovalTerminated e ->
-      let updatedStatus = CommandApprovalProgress.Status.Terminated
+      let updatedStatus =
+         CommandApprovalProgress.Status.Terminated e.Data.Reason
 
       let qParams = [
          "commandId",
@@ -467,9 +474,9 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
          $"""
          UPDATE {CommandApprovalProgressSqlMapper.table}
          SET
-            {approvedBy} = {approvedBy} || @approvedBy
-            {status} = COALESCE(@status, {status})
-            {statusDetail} = COALESCE(@statusDetail, {statusDetail})
+            {approvedBy} = {approvedBy} || @approvedBy,
+            {status} = @status::{statusTypecast},
+            {statusDetail} = @statusDetail
          WHERE
             {commandId} = @commandId
             AND {status} = @expectedCurrentStatus::{statusTypecast}

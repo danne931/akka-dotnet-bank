@@ -47,26 +47,16 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
    return res
 }
 
-let getOrg (id: OrgId) : Result<Org option, Err> Task =
-   let query =
-      $"""
-      SELECT
-         o.{Fields.orgId},
-         o.{Fields.name},
-         o.{Fields.statusDetail},
-         features.{Fields.socialTransferDiscoveryAccountId}
-      FROM {table} o
-      LEFT JOIN {OrganizationSqlMapper.featureFlagsTable} features using({Fields.orgId})
-      WHERE {Fields.orgId} = @orgId
-      """
-
-   pgQuerySingle<Org> query (Some [ "orgId", Writer.orgId id ]) Reader.org
+type private OrgDBResult =
+   | AccountProfilesWithOrg of (Org * AccountProfile) list option
+   | CommandApprovalRules of CommandApprovalRule.T list option
+   | CommandApprovalProgress of CommandApprovalProgress.T list option
 
 let getOrgAndAccountProfiles
    (orgId: OrgId)
    : Task<Result<Option<OrgWithAccountProfiles>, Err>>
    =
-   taskResultOption {
+   taskResult {
       let dpaView = TransactionSqlMapper.TransactionViews.dailyPurchaseAccrued
       let mpaView = TransactionSqlMapper.TransactionViews.monthlyPurchaseAccrued
 
@@ -98,7 +88,7 @@ let getOrgAndAccountProfiles
          WHERE {Fields.orgId} = @orgId
          """
 
-      let! res =
+      let orgTask =
          pgQuery<Org * AccountProfile>
             query
             (Some [ "orgId", Writer.orgId orgId ])
@@ -121,14 +111,59 @@ let getOrgAndAccountProfiles
                         read.decimalOrNone "mpa" |> Option.defaultValue 0m
                   }
                })
+         |> TaskResult.map OrgDBResult.AccountProfilesWithOrg
 
-      return {
-         Org = fst (List.head res)
-         AccountProfiles =
-            [ for _, profile in res -> profile.Account.AccountId, profile ]
-            |> Map.ofList
-         Balance = res |> List.sumBy (snd >> _.Account.Balance)
-      }
+      let approvalRuleTask =
+         Bank.CommandApproval.Api.getApprovalRules orgId
+         |> TaskResult.map OrgDBResult.CommandApprovalRules
+
+      let approvalProgressTask =
+         Bank.CommandApproval.Api.getCommandApprovals orgId
+         |> TaskResult.map OrgDBResult.CommandApprovalProgress
+
+      let! res =
+         Task.WhenAll [| orgTask; approvalRuleTask; approvalProgressTask |]
+
+      let! res = res |> List.ofArray |> List.traverseResultM id
+
+      return
+         match res with
+         | [ OrgDBResult.AccountProfilesWithOrg(Some accountProfilesWithOrg)
+             OrgDBResult.CommandApprovalRules rulesOpt
+             OrgDBResult.CommandApprovalProgress progressOpt ] ->
+            let org = fst (List.head accountProfilesWithOrg)
+
+            let org =
+               match rulesOpt with
+               | None -> org
+               | Some rules -> {
+                  org with
+                     CommandApprovalRules =
+                        [ for rule in rules -> rule.RuleId, rule ] |> Map.ofList
+                 }
+
+            let org =
+               match progressOpt with
+               | None -> org
+               | Some progress -> {
+                  org with
+                     CommandApprovalProgress =
+                        [ for p in progress -> p.ProgressId, p ] |> Map.ofList
+                 }
+
+            Some {
+               Org = org
+               AccountProfiles =
+                  [
+                     for _, profile in accountProfilesWithOrg ->
+                        profile.Account.AccountId, profile
+                  ]
+                  |> Map.ofList
+               Balance =
+                  accountProfilesWithOrg
+                  |> List.sumBy (snd >> _.Account.Balance)
+            }
+         | _ -> None
    }
 
 let searchOrgTransferSocialDiscovery (fromOrgId: OrgId) (nameQuery: string) =

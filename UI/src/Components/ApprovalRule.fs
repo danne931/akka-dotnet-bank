@@ -14,18 +14,10 @@ open Bank.Employee.Forms.CommandApprovalRule
 
 type State = {
    Admins: Deferred<Result<Employee list option, Err>>
-   // Load rules on component init but do not store the rules here.
-   // The rules are propagated to the Org.CommandApprovalRules context
-   // which will enable reuse of the Org StateTransitions
-   // (see ../../../Org.Domain/Org.fs) during rule creation/editing.
-   Rules: Deferred<Result<unit, Err>>
    IsCreateRuleOpen: bool
 }
 
 type Msg =
-   | GetCommandApprovalRules of
-      OrgId *
-      AsyncOperationStatus<Result<CommandApprovalRule.T list option, Err>>
    | GetAdmins of
       OrgId *
       AsyncOperationStatus<Result<Employee list option, Err>>
@@ -38,44 +30,15 @@ type Msg =
       CommandApprovalRule.T *
       AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
 
-let init (orgId: OrgId) () =
+let init () =
    {
       Admins = Deferred.Idle
-      Rules = Deferred.Idle
       IsCreateRuleOpen = false
    },
-   Cmd.ofMsg (Msg.GetCommandApprovalRules(orgId, Started))
+   Cmd.none
 
 let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
    match msg with
-   | GetCommandApprovalRules(orgId, Started) ->
-      let getApprovals = async {
-         let! rules = OrgService.getCommandApprovalRules orgId
-         return Msg.GetCommandApprovalRules(orgId, Finished rules)
-      }
-
-      {
-         state with
-            Rules = Deferred.InProgress
-      },
-      Cmd.fromAsync getApprovals
-   | GetCommandApprovalRules(_, Finished(Ok res)) ->
-      match res with
-      | Some rules ->
-         orgDispatch (OrgProvider.Msg.CommandApprovalRulesLoaded rules)
-      | _ -> ()
-
-      {
-         state with
-            Rules = Deferred.Resolved(Ok())
-      },
-      Cmd.none
-   | GetCommandApprovalRules(_, Finished(Error err)) ->
-      {
-         state with
-            Rules = Deferred.Resolved(Error err)
-      },
-      Cmd.none
    | GetAdmins(orgId, Started) ->
       let getAdmins = async {
          let! admins =
@@ -145,7 +108,7 @@ let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
                CommandType = rule.CommandType
                DeletedBy = {
                   EmployeeId = session.EmployeeId
-                  Name = session.Name
+                  EmployeeName = session.Name
                }
             }
             |> OrgCommand.DeleteApprovalRule
@@ -180,9 +143,9 @@ let renderMoney (amount: decimal) =
       attr.text $" {Money.format amount} "
    ]
 
-let formatApprovers (approvers: CommandApprovalRule.Approver list) =
+let formatApprovers (approvers: EmployeeReference list) =
    approvers
-   |> List.fold (fun acc approver -> $"{acc}{approver.Name}, ") ""
+   |> List.fold (fun acc approver -> $"{acc}{approver.EmployeeName}, ") ""
    |> _.Remove(-2)
 
 [<ReactComponent>]
@@ -261,7 +224,7 @@ let EditApprovalRuleComponent
 
          match rule.Criteria with
          | CommandApprovalRule.Criteria.PerCommand ->
-            Html.small "For every command require approval from:"
+            Html.small "For every request require approval from:"
          | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
             Html.small
                "If transaction amount plus the daily accrued amount is >="
@@ -299,7 +262,7 @@ let renderCreateRule
    =
    classyNode Html.article [ "approval-rule" ] [
       if state.IsCreateRuleOpen then
-         Html.h6 $"Configure Command Approval Rule:"
+         Html.h6 $"Configure Approval Rule:"
 
          match state.Admins with
          | Deferred.Resolved(Ok(Some admins)) ->
@@ -336,13 +299,15 @@ let ApprovalRuleManagementDashboardComponent
    let orgDispatch = React.useContext OrgProvider.dispatchContext
 
    let state, dispatch =
-      React.useElmish (init orgId, update orgDispatch, [| box orgId |])
+      React.useElmish (init, update orgDispatch, [| box orgId |])
 
    let rules = org.CommandApprovalRules
 
    React.fragment [
-      match state.Rules, rules.IsEmpty with
-      | Deferred.Resolved(Ok()), false ->
+      if rules.IsEmpty then
+         Html.p "No approval rules configured."
+         renderCreateRule state dispatch session org onOrgUpdate
+      else
          let rules =
             rules.Values
             |> Seq.sortBy (fun r ->
@@ -379,8 +344,4 @@ let ApprovalRuleManagementDashboardComponent
             ]
 
          renderCreateRule state dispatch session org onOrgUpdate
-      | Deferred.Resolved(Ok()), true ->
-         Html.p "No command approval rules configured."
-         renderCreateRule state dispatch session org onOrgUpdate
-      | _ -> Html.progress []
    ]

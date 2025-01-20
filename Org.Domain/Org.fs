@@ -4,6 +4,7 @@ module Org
 open Validus
 
 open Bank.Org.Domain
+open Bank.Employee.Domain
 open Lib.SharedTypes
 open Lib.Time
 
@@ -23,7 +24,7 @@ let private canApproveOrDeclineApprovalProcess
    (org: Org)
    (ruleId: CommandApprovalRuleId)
    (progressId: CommandApprovalProgressId)
-   (approver: CommandApprovalRule.Approver)
+   (approver: EmployeeReference)
    =
    match Map.tryFind ruleId org.CommandApprovalRules with
    | None -> Error OrgStateTransitionError.ApprovalRuleNotFound
@@ -31,7 +32,7 @@ let private canApproveOrDeclineApprovalProcess
       if not (CommandApprovalRule.isValidApprover approver rule) then
          OrgStateTransitionError.ApproverUnrecognized(
             approver.EmployeeId,
-            approver.Name
+            approver.EmployeeName
          )
          |> Error
       else
@@ -214,9 +215,27 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
                   RuleId = e.Data.RuleId
                   OrgId = e.OrgId
                   Status = CommandApprovalProgress.Status.Pending
+                  RequestedBy = {
+                     // NOTE:
+                     // Currently not able to nicely reference the EmployeeName so
+                     // the snapshot will be saved with empty string for the name.
+                     // This is currently okay since the read models are saved
+                     // with just the EmployeeId anyway.  When it comes time to
+                     // fetch the approval progress read model for display in the browser,
+                     // the EmployeeId field of the command_approval_progress table
+                     // is used to join with the employee table and
+                     // select the name field on the employee record.
+                     // TODO: Consider replacing the InitiatedById property on
+                     // Command<T> & BankEvent<T> with an InitiatedBy type which
+                     // contains both the id and the name.
+                     EmployeeName = ""
+                     EmployeeId = InitiatedById.toEmployeeId e.InitiatedById
+                  }
                   ApprovedBy = []
                   DeclinedBy = None
                   CommandToInitiateOnApproval = e.Data.Command
+                  CreatedAt = e.Timestamp
+                  LastUpdate = e.Timestamp
                }
         }
       | CommandApprovalAcquired e -> {
@@ -229,6 +248,7 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
                         progress with
                            ApprovedBy =
                               e.Data.ApprovedBy :: progress.ApprovedBy
+                           LastUpdate = e.Timestamp
                      }))
         }
       | CommandApprovalProcessCompleted e -> {
@@ -386,7 +406,7 @@ module private StateTransition =
             then
                OrgStateTransitionError.ApproverAlreadyApprovedCommand(
                   approver.EmployeeId,
-                  approver.Name
+                  approver.EmployeeName
                )
                |> transitionErr
             else if

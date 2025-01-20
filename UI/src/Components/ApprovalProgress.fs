@@ -12,59 +12,32 @@ open UIDomain.Org
 open Lib.SharedTypes
 open Lib.Time
 
-type State = {
-   Approvals: Deferred<CommandApprovalProgressWithRuleMaybe>
-}
+// NOTE: This Feliz Elmish component does not manage state.
+//       The Feliz Elmish update handler is just being used for
+//       async side effects.
+type State = { Nothing: bool }
 
 type Msg =
-   | GetCommandApprovals of
-      OrgId *
-      AsyncOperationStatus<CommandApprovalProgressWithRuleMaybe>
    | ShowCommandDeclineConfirmation of
       Org *
       UserSession *
-      CommandApprovalProgressWithRule
+      CommandApprovalProgress.T
    | AcquireCommandApproval of
       Org *
       UserSession *
-      CommandApprovalProgressWithRule *
+      CommandApprovalProgress.T *
       AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | DeclineCommand of
       Org *
       UserSession *
-      CommandApprovalProgressWithRule *
+      CommandApprovalProgress.T *
       AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | DismissConfirmation
 
-let init orgId () =
-   { Approvals = Deferred.Idle },
-   Cmd.ofMsg (Msg.GetCommandApprovals(orgId, Started))
+let init () = { Nothing = true }, Cmd.none
 
-let update msg state =
+let update (onOrgUpdate: OrgCommandReceipt -> unit) msg state =
    match msg with
-   | GetCommandApprovals(orgId, Started) ->
-      let getApprovals = async {
-         let! approvals = OrgService.getCommandApprovals orgId
-         return Msg.GetCommandApprovals(orgId, Finished approvals)
-      }
-
-      {
-         state with
-            Approvals = Deferred.InProgress
-      },
-      Cmd.fromAsync getApprovals
-   | GetCommandApprovals(_, Finished(Ok res)) ->
-      {
-         state with
-            Approvals = Deferred.Resolved(Ok res)
-      },
-      Cmd.none
-   | GetCommandApprovals(_, Finished(Error err)) ->
-      {
-         state with
-            Approvals = Deferred.Resolved(Error err)
-      },
-      Cmd.none
    | ShowCommandDeclineConfirmation(org, session, approvalProgress) ->
       let confirm =
          ConfirmAlert(
@@ -75,7 +48,7 @@ let update msg state =
             | ConfirmAlertResult.Dismissed _ -> Msg.DismissConfirmation
          )
             .Title(
-               $"Are you sure you want to decline this {approvalProgress.Command.Display}?"
+               $"Are you sure you want to decline this {approvalProgress.CommandToInitiateOnApproval.Display}?"
             )
             .Type(AlertType.Question)
             .ShowCloseButton(true)
@@ -86,10 +59,10 @@ let update msg state =
          let cmd =
             CommandApprovalProgress.AcquireCommandApproval.create org.OrgId {
                RuleId = approval.RuleId
-               Command = approval.Command
-               ProgressId = approval.CommandProgressId
+               Command = approval.CommandToInitiateOnApproval
+               ProgressId = approval.ProgressId
                ApprovedBy = {
-                  Name = session.Name
+                  EmployeeName = session.Name
                   EmployeeId = session.EmployeeId
                }
             }
@@ -100,35 +73,9 @@ let update msg state =
       }
 
       state, Cmd.fromAsync acquireApproval
-   | AcquireCommandApproval(_, session, approval, Finished(Ok _)) ->
-      {
-         state with
-            Approvals =
-               match state.Approvals with
-               | Deferred.Resolved(Ok(Some approvals)) ->
-                  approvals
-                  |> Map.change
-                        approval.CommandProgressId
-                        (Option.map (fun a ->
-                           let approver: CommandApprovalRule.Approver = {
-                              Name = session.Name
-                              EmployeeId = session.EmployeeId
-                           }
-
-                           {
-                              a with
-                                 ApprovedBy =
-                                    match a.ApprovedBy with
-                                    | None -> Some [ approver ]
-                                    | Some approvers ->
-                                       Some(approver :: approvers)
-                           }))
-                  |> Some
-                  |> Ok
-                  |> Deferred.Resolved
-               | _ -> state.Approvals
-      },
-      Cmd.none
+   | AcquireCommandApproval(_, _, _, Finished(Ok receipt)) ->
+      onOrgUpdate receipt
+      state, Cmd.none
    | AcquireCommandApproval(_, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
@@ -139,10 +86,10 @@ let update msg state =
                RuleId = approval.RuleId
                DeclinedBy = {
                   EmployeeId = session.EmployeeId
-                  Name = session.Name
+                  EmployeeName = session.Name
                }
-               ProgressId = approval.CommandProgressId
-               Command = approval.Command
+               ProgressId = approval.ProgressId
+               Command = approval.CommandToInitiateOnApproval
             }
             |> OrgCommand.DeclineCommandApproval
 
@@ -151,41 +98,17 @@ let update msg state =
       }
 
       state, Cmd.fromAsync decline
-   | DeclineCommand(_, session, approval, Finished(Ok _)) ->
-      {
-         state with
-            Approvals =
-               match state.Approvals with
-               | Deferred.Resolved(Ok(Some approvals)) ->
-                  approvals
-                  |> Map.change
-                        approval.CommandProgressId
-                        (Option.map (fun a ->
-                           let declinedBy: CommandApprovalRule.Approver = {
-                              Name = session.Name
-                              EmployeeId = session.EmployeeId
-                           }
-
-                           {
-                              a with
-                                 Status =
-                                    CommandApprovalProgress.Status.Declined
-                                 DeclinedBy = Some declinedBy
-                           }))
-                  |> Some
-                  |> Ok
-                  |> Deferred.Resolved
-               | _ -> state.Approvals
-      },
-      Cmd.none
+   | DeclineCommand(_, _, _, Finished(Ok receipt)) ->
+      onOrgUpdate receipt
+      state, Cmd.none
    | DeclineCommand(_, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
    | DismissConfirmation -> state, Cmd.none
 
-let approversMsg (approvers: CommandApprovalRule.Approver list) =
+let approversMsg (approvers: EmployeeReference list) =
    approvers
-   |> List.fold (fun acc approver -> $"{acc}{approver.Name}, ") ""
+   |> List.fold (fun acc approver -> $"{acc}{approver.EmployeeName}, ") ""
    |> _.TrimEnd()
    |> _.TrimEnd(',')
 
@@ -195,34 +118,37 @@ let ApprovalProgressComponent
    (org: Org)
    (onOrgUpdate: OrgCommandReceipt -> unit)
    =
-   let state, dispatch =
-      React.useElmish (init session.OrgId, update, [| box session.OrgId |])
+   let _, dispatch =
+      React.useElmish (init, update onOrgUpdate, [| box session.OrgId |])
 
-   match state.Approvals with
-   | Deferred.Resolved(Ok(Some approvals)) ->
+   if org.CommandApprovalProgress.IsEmpty then
+      Html.p "No commands require approval."
+   else
+      let approvals =
+         org.CommandApprovalProgress.Values
+         |> Seq.choose (fun progress ->
+            org.CommandApprovalRules
+            |> Map.tryFind progress.RuleId
+            |> Option.map (fun rule -> rule, progress))
+
       React.fragment [
-         for o in approvals.Values do
-            let approvedByCnt =
-               o.ApprovedBy |> Option.map _.Length |> Option.defaultValue 0
-
+         for rule, progress in approvals do
             let approvalsRemaining =
-               o.ApprovedBy
-               |> Option.map (fun approvedBy ->
-                  List.except approvedBy o.PermittedApprovers)
-               |> Option.defaultValue o.PermittedApprovers
+               List.except progress.ApprovedBy rule.Approvers
 
             let mayApproveOrDeny =
-               CommandApprovalProgressWithRule.mayApproveOrDeny
-                  o
+               CommandApprovalProgress.mayApproveOrDeny
+                  rule
+                  progress
                   session.EmployeeId
 
             classyNode Html.article [ "command-pending-approval" ] [
                Html.header [
                   classyNode Html.div [ "grid" ] [
-                     Html.p o.Command.Display
+                     Html.p progress.CommandToInitiateOnApproval.Display
 
                      Html.small
-                        $"{approvedByCnt} of {o.PermittedApprovers.Length} approvals acquired"
+                        $"{progress.ApprovedBy.Length} of {rule.Approvers.Length} approvals acquired"
 
                      Html.a [
                         if not mayApproveOrDeny then
@@ -241,7 +167,7 @@ let ApprovalProgressComponent
                               <| Msg.AcquireCommandApproval(
                                  org,
                                  session,
-                                 o,
+                                 progress,
                                  Started
                               ))
 
@@ -266,7 +192,7 @@ let ApprovalProgressComponent
                               <| Msg.ShowCommandDeclineConfirmation(
                                  org,
                                  session,
-                                 o
+                                 progress
                               ))
 
                         attr.custom ("data-tooltip", "Decline")
@@ -276,38 +202,42 @@ let ApprovalProgressComponent
                ]
 
                Html.p (
-                  match o.Command with
+                  match progress.CommandToInitiateOnApproval with
                   | ApprovableCommand.DomesticTransfer c ->
-                     $"{Money.format c.Data.Amount} domestic transfer from {c.Data.Sender.Name} to {c.Data.Recipient.Name} requested by {o.RequestedBy.Name}."
+                     $"{Money.format c.Data.Amount} domestic transfer from
+                     {c.Data.Sender.Name} to {c.Data.Recipient.Name}"
                   | ApprovableCommand.InviteEmployee c ->
-                     $"Invite employee {c.Data.Name} requested by {o.RequestedBy.Name}"
+                     $"Invite employee {c.Data.Name}"
                   | ApprovableCommand.UpdateEmployeeRole c ->
-                     $"Update {c.Data.Name}'s role from {c.Data.PriorRole} to {c.Data.Role} requested by {o.RequestedBy.Name}."
+                     $"Update {c.Data.Name}'s role from {c.Data.PriorRole} to {c.Data.Role}"
                   | ApprovableCommand.FulfillPlatformPayment c ->
                      let pay = c.Data.RequestedPayment.BaseInfo
-                     $"{Money.format pay.Amount} payment requested to {pay.Payer.OrgName} by {o.RequestedBy.Name}"
+                     $"{Money.format pay.Amount} payment requested to {pay.Payer.OrgName}"
                   | ApprovableCommand.InternalTransferBetweenOrgs c ->
-                     $"{Money.format c.Data.Amount} transfer to {c.Data.Recipient.Name} requested by {o.RequestedBy.Name}."
+                     $"{Money.format c.Data.Amount} transfer to {c.Data.Recipient.Name}"
+
+                  + $" requested by {progress.RequestedBy.EmployeeName} on
+                  {DateTime.formatShort progress.CreatedAt}."
                )
 
-               match o.Status with
+               match progress.Status with
                | CommandApprovalProgress.Status.Approved ->
                   Html.small [
                      attr.classes [ "success" ]
                      attr.text
-                        $"Approval completed on {DateTime.format o.LastUpdate}"
+                        $"Approval completed on {DateTime.formatShort progress.LastUpdate}"
                   ]
                | CommandApprovalProgress.Status.Declined ->
                   let declinedBy =
-                     o.DeclinedBy
-                     |> Option.map _.Name
+                     progress.DeclinedBy
+                     |> Option.map _.EmployeeName
                      |> Option.defaultValue "Unknown"
 
                   classyNode Html.div [ "approval-count" ] [
                      Html.small [
                         attr.classes [ "debit" ]
                         attr.text
-                           $"Declined on {DateTime.format o.LastUpdate} by {declinedBy}"
+                           $"Declined on {DateTime.formatShort progress.LastUpdate} by {declinedBy}"
                      ]
                   ]
                | CommandApprovalProgress.Status.Pending ->
@@ -319,14 +249,13 @@ let ApprovalProgressComponent
                   classyNode Html.div [ "approval-count" ] [
                      Html.small "Approvals acquired:"
 
-                     match o.ApprovedBy with
-                     | Some approvers -> Html.p (approversMsg approvers)
-                     | None -> Html.p "None"
+                     match progress.ApprovedBy with
+                     | [] -> Html.p "None"
+                     | approvers -> Html.p (approversMsg approvers)
                   ]
-               | CommandApprovalProgress.Status.Terminated ->
+               | CommandApprovalProgress.Status.Terminated _ ->
                   Html.small
-                     $"Approval terminated early on {DateTime.format o.LastUpdate}"
+                     $"Approval terminated early on
+                  {DateTime.formatShort progress.LastUpdate}"
             ]
       ]
-   | Deferred.Resolved(Ok None) -> Html.p "No commands require approval."
-   | _ -> Html.progress []

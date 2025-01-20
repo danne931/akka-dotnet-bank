@@ -10,8 +10,5 @@ type OrgCommandReceipt = {
    Envelope: Envelope
 }
 
-type CommandApprovalProgressWithRuleMaybe =
-   Result<
-      Map<CommandApprovalProgressId, CommandApprovalProgressWithRule> option,
-      Err
-    >
+type CommandApprovalProgressMaybe =
+   Result<Map<CommandApprovalProgressId, CommandApprovalProgress.T> option, Err>

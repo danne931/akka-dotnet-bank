@@ -25,6 +25,7 @@ module Fields =
       CommandApprovalRuleSqlMapper.Fields.approvableCommandType
 
    let commandToInitiateOnApproval = "command_to_initiate_on_approval"
+   let createdAt = "created_at"
    let updatedAt = "updated_at"
 
 module Reader =
@@ -39,7 +40,7 @@ module Reader =
    let orgId = OrganizationSqlMapper.OrgSqlReader.orgId
 
    let requestedBy (read: RowReader) =
-      Fields.requestedBy |> read.uuid |> EmployeeId |> InitiatedById
+      Fields.requestedBy |> read.uuid |> EmployeeId
 
    let statusDetail (read: RowReader) : CommandApprovalProgress.Status =
       Fields.statusDetail
@@ -57,6 +58,7 @@ module Reader =
       |> read.text
       |> Serialization.deserializeUnsafe<ApprovableCommand>
 
+   let createdAt (read: RowReader) = read.dateTime Fields.createdAt
    let updatedAt (read: RowReader) = read.dateTime Fields.updatedAt
 
 module Writer =
