@@ -192,14 +192,21 @@ let EmployeeCreateFormComponent
          let employeeInviteRequiresApproval =
             org.Org.CommandApprovalRules
             |> Map.tryPick (fun ruleId rule ->
-               if rule.CommandType = ApprovableCommandType.InviteEmployee then
+               if
+                  rule.CommandType = ApprovableCommandType.InviteEmployee
+                  && not (
+                     CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
+                        (InitiatedById session.EmployeeId)
+                        rule
+                  )
+               then
                   Some ruleId
                else
                   None)
 
          let submitText =
             match employeeInviteRequiresApproval with
-            | Some _ -> "Request Employee Invite Approval"
+            | Some _ -> "Request Approval for Employee Invite"
             | None -> "Invite Employee"
 
          EmployeeFormContainer

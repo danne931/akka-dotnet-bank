@@ -121,16 +121,16 @@ let ApprovalProgressComponent
    let _, dispatch =
       React.useElmish (init, update onOrgUpdate, [| box session.OrgId |])
 
-   if org.CommandApprovalProgress.IsEmpty then
+   let approvals =
+      org.CommandApprovalProgress.Values
+      |> Seq.choose (fun progress ->
+         org.CommandApprovalRules
+         |> Map.tryFind progress.RuleId
+         |> Option.map (fun rule -> rule, progress))
+
+   if Seq.isEmpty approvals then
       Html.p "No commands require approval."
    else
-      let approvals =
-         org.CommandApprovalProgress.Values
-         |> Seq.choose (fun progress ->
-            org.CommandApprovalRules
-            |> Map.tryFind progress.RuleId
-            |> Option.map (fun rule -> rule, progress))
-
       React.fragment [
          for rule, progress in approvals do
             let approvalsRemaining =
