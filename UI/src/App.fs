@@ -82,7 +82,9 @@ let App () =
                classyNode Html.div [ "container-fluid"; "app-shell" ] [
                   classyNode Html.div [ "grid" ] [
                      classyNode Html.aside [ "menu" ] [
-                        SidebarMenu.render currentUrl |> UserSessionSuspense
+                        SidebarMenu.SidebarMenuComponent currentUrl
+                        |> UserSessionSuspense
+                        |> OrgProvider
                      ]
 
                      Html.section [ activePage ]
