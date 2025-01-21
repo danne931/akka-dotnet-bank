@@ -154,7 +154,10 @@ let getCommandApprovals
             progressT.{Fields.orgId} = @orgId
             AND (
                progressT.{Fields.status} = @pendingStatus::{TypeCast.status}
-               OR progressT.{Fields.updatedAt} > CURRENT_TIMESTAMP - interval '15 days'
+               OR (
+                  progressT.{Fields.updatedAt} > CURRENT_TIMESTAMP - interval '15 days'
+                  AND progressT.{Fields.status} != @terminatedStatus::{TypeCast.status}
+               )
             )
             """
       )
@@ -164,5 +167,6 @@ let getCommandApprovals
       (Some [
          "orgId", Writer.orgId orgId
          "pendingStatus", Writer.status CommandApprovalProgress.Status.Pending
+         "terminatedStatus", Sql.string "Terminated"
       ])
       commandApprovalProgressReader

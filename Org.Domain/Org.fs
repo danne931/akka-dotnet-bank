@@ -29,7 +29,7 @@ let private canApproveOrDeclineApprovalProcess
    match Map.tryFind ruleId org.CommandApprovalRules with
    | None -> Error OrgStateTransitionError.ApprovalRuleNotFound
    | Some rule ->
-      if not (CommandApprovalRule.isValidApprover approver rule) then
+      if not (CommandApprovalRule.isValidApprover approver.EmployeeId rule) then
          OrgStateTransitionError.ApproverUnrecognized(
             approver.EmployeeId,
             approver.EmployeeName
@@ -93,7 +93,13 @@ let commandRequiresApproval
    let rulesForCommand =
       org.CommandApprovalRules.Values
       |> Seq.toList
-      |> List.filter (fun rule -> rule.CommandType = command.CommandType)
+      |> List.filter (fun rule ->
+         rule.CommandType = command.CommandType
+         && not (
+            CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
+               command.InitiatedBy
+               rule
+         ))
 
    let requiresApproval (rule: CommandApprovalRule.T) =
       let criteria = rule.Criteria

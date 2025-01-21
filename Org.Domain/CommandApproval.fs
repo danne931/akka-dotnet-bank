@@ -157,9 +157,18 @@ module CommandApprovalRule =
       Approvers: EmployeeReference list
    }
 
-   let isValidApprover (approver: EmployeeReference) (rule: T) =
-      rule.Approvers
-      |> List.exists (fun a -> a.EmployeeId = approver.EmployeeId)
+   let isValidApprover (approver: EmployeeId) (rule: T) =
+      rule.Approvers |> List.exists (fun a -> a.EmployeeId = approver)
+
+   /// Approval not required if only 1 approver configured for the rule
+   /// & the person requesting the command is the configured approver.
+   let isRequesterTheOnlyConfiguredApprover
+      (initiatedBy: InitiatedById)
+      (rule: T)
+      =
+      match rule.Approvers with
+      | [ approver ] -> (InitiatedById approver.EmployeeId) = initiatedBy
+      | _ -> false
 
    let newRuleCommandTypeConflictsWithExistingRule
       (existingRules: T seq)

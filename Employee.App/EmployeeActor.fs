@@ -122,30 +122,21 @@ let actorProps
                }
             | EmployeeEvent.CreatedEmployee e ->
                match employee.Status with
-               | EmployeeStatus.PendingInviteApproval approval ->
+               | EmployeeStatus.PendingInviteApproval _ ->
                   let orgId = employee.OrgId
 
                   let cmd =
-                     CommandApprovalProgress.RequestCommandApproval.create
-                        orgId
+                     ApproveAccessCommand.create
+                        employee.CompositeId
                         e.InitiatedById
                         e.CorrelationId
                         {
-                           RuleId = approval.RuleId
-                           Command =
-                              ApproveAccessCommand.create
-                                 employee.CompositeId
-                                 e.InitiatedById
-                                 e.CorrelationId
-                                 {
-                                    Name = employee.Name
-                                    Reference = None
-                                 }
-                              |> ApprovableCommand.InviteEmployee
+                           Name = employee.Name
+                           Reference = None
                         }
-                     |> OrgCommand.RequestCommandApproval
+                     |> ApprovableCommand.InviteEmployee
 
-                  getOrgRef orgId <! OrgMessage.StateChange cmd
+                  getOrgRef orgId <! OrgMessage.ApprovableRequest cmd
                | EmployeeStatus.PendingInviteConfirmation token ->
                   getEmailActor mailbox.System
                   <! EmailActor.EmailMessage.EmployeeInvite {
