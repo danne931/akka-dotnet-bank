@@ -39,6 +39,14 @@ let private canApproveOrDeclineApprovalProcess
          hasActiveProgressWorkflow org progressId
          |> Result.map (fun progress -> rule, progress)
 
+let numberOfApprovalsUserCanApprove (org: Org) (employeeId: EmployeeId) : int =
+   org.CommandApprovalProgress.Values
+   |> Seq.filter (fun progress ->
+      org.CommandApprovalRules.TryFind progress.RuleId
+      |> Option.exists (fun rule ->
+         CommandApprovalProgress.mayApproveOrDeny rule progress employeeId))
+   |> Seq.length
+
 let dailyAccrual (events: OrgEvent list) : DailyAccrual =
    List.fold
       (fun acc evt ->

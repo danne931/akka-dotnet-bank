@@ -1,7 +1,9 @@
 module SidebarMenu
 
 open Feliz
+
 open Bank.Employee.Domain
+open Lib.SharedTypes
 
 type private MenuUrl =
    | Analytics
@@ -18,6 +20,7 @@ type private MenuItem = {
    SelectedUrl: Routes.IndexUrl
    Name: string
    Href: string
+   CallToActionIndicator: string option
 }
 
 let private renderListItem (item: MenuItem) =
@@ -36,13 +39,30 @@ let private renderListItem (item: MenuItem) =
       | _ -> ()
 
       attr.children [
-         Html.a [ attr.text item.Name; attr.href ("#" + item.Href) ]
+         Html.a [
+            attr.href ("#" + item.Href)
+            attr.children [
+               Html.p item.Name
+
+               match item.CallToActionIndicator with
+               | Some indicator ->
+                  Html.p [
+                     attr.text indicator
+                     attr.classes [ "call-to-action" ]
+                  ]
+               | None -> ()
+            ]
+         ]
       ]
    ]
 
-let render (currentUrl: Routes.IndexUrl) (session: UserSession) =
+[<ReactComponent>]
+let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
+   let orgCtx = React.useContext OrgProvider.context
+
    React.fragment [
       Html.ul [
+         attr.classes [ "sidebar-menu" ]
          attr.role "listbox"
          attr.children [
             renderListItem {
@@ -50,6 +70,7 @@ let render (currentUrl: Routes.IndexUrl) (session: UserSession) =
                SelectedUrl = currentUrl
                Name = "Analytics"
                Href = Routes.AnalyticsUrl.BasePath
+               CallToActionIndicator = None
             }
 
             renderListItem {
@@ -57,20 +78,40 @@ let render (currentUrl: Routes.IndexUrl) (session: UserSession) =
                SelectedUrl = currentUrl
                Name = "Accounts"
                Href = Routes.AccountUrl.BasePath
+               CallToActionIndicator = None
             }
 
-            renderListItem {
-               Url = Approvals
-               SelectedUrl = currentUrl
-               Name = "Approvals"
-               Href = Routes.ApprovalsUrl.BasePath
-            }
+            match session.Role with
+            | Role.Admin ->
+               let name = "Approvals"
+
+               renderListItem {
+                  Url = Approvals
+                  SelectedUrl = currentUrl
+                  Name = name
+                  Href = Routes.ApprovalsUrl.BasePath
+                  CallToActionIndicator =
+                     match orgCtx with
+                     | Deferred.Resolved(Ok(Some org)) ->
+                        let activeApprovalCnt =
+                           Org.numberOfApprovalsUserCanApprove
+                              org.Org
+                              session.EmployeeId
+
+                        if activeApprovalCnt > 0 then
+                           Some $"({activeApprovalCnt})"
+                        else
+                           None
+                     | _ -> None
+               }
+            | _ -> ()
 
             renderListItem {
                Url = Transaction
                SelectedUrl = currentUrl
                Name = "Transactions"
                Href = Routes.TransactionUrl.BasePath
+               CallToActionIndicator = None
             }
 
             renderListItem {
@@ -78,6 +119,7 @@ let render (currentUrl: Routes.IndexUrl) (session: UserSession) =
                SelectedUrl = currentUrl
                Name = "Payments"
                Href = Routes.PaymentUrl.BasePath
+               CallToActionIndicator = None
             }
 
             renderListItem {
@@ -85,6 +127,7 @@ let render (currentUrl: Routes.IndexUrl) (session: UserSession) =
                SelectedUrl = currentUrl
                Name = "Employee History"
                Href = Routes.EmployeeHistoryUrl.BasePath
+               CallToActionIndicator = None
             }
 
             renderListItem {
@@ -92,6 +135,7 @@ let render (currentUrl: Routes.IndexUrl) (session: UserSession) =
                SelectedUrl = currentUrl
                Name = "Employees"
                Href = Routes.EmployeeUrl.BasePath
+               CallToActionIndicator = None
             }
 
             renderListItem {
@@ -99,6 +143,7 @@ let render (currentUrl: Routes.IndexUrl) (session: UserSession) =
                SelectedUrl = currentUrl
                Name = "Cards"
                Href = Routes.CardUrl.BasePath
+               CallToActionIndicator = None
             }
          ]
       ]
