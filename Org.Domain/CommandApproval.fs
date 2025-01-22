@@ -308,6 +308,12 @@ module CommandApprovalProgress =
       | AssociatedRuleDeleted
       | AssociatedRuleApproverDeleted
 
+      member x.Display =
+         match x with
+         | AssociatedRuleDeleted -> "Deletion of Associated Rule"
+         | AssociatedRuleApproverDeleted ->
+            "Deletion of Associated Rule Approver"
+
    [<RequireQualifiedAccess>]
    type Status =
       | Pending
