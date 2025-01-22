@@ -88,17 +88,7 @@ let private commandApprovalProgressQuery (whereClause: string option) =
    LEFT JOIN {EmployeeSqlMapper.table} e2 ON e2.{EmployeeSqlMapper.EmployeeFields.employeeId} = {Fields.declinedBy}
    JOIN {EmployeeSqlMapper.table} e3 ON e3.{EmployeeSqlMapper.EmployeeFields.employeeId} = {Fields.requestedBy}
    WHERE {whereClause |> Option.defaultValue ""}
-   GROUP BY
-      {Fields.ruleId},
-      {Fields.commandId},
-      {Fields.commandToInitiateOnApproval}
-   ORDER BY
-      CASE progressT.{Fields.status}
-         WHEN '{string CommandApprovalProgress.Status.Pending}' THEN 1
-         WHEN '{string CommandApprovalProgress.Status.Declined}' THEN 2
-         WHEN '{string CommandApprovalProgress.Status.Approved}' THEN 3
-      END,
-      progressT.{Fields.updatedAt} DESC
+   GROUP BY {Fields.commandId}
    """
 
 let private commandApprovalProgressReader reader : CommandApprovalProgress.T = {
