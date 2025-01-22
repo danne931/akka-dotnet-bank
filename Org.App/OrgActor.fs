@@ -204,13 +204,20 @@ let actorProps
                // approval workflow.  Otherwise, forward the command to the
                // appropriate account or employee actor for processing.
                match Org.commandRequiresApproval cmd state with
-               | Some ruleId ->
+               | Some rule ->
                   let cmd =
                      CommandApprovalProgress.RequestCommandApproval.create
                         org.OrgId
                         cmd.InitiatedBy
                         cmd.CorrelationId
-                        { RuleId = ruleId; Command = cmd }
+                        {
+                           RuleId = rule.RuleId
+                           Command = cmd
+                           RequesterIsConfiguredAsAnApprover =
+                              CommandApprovalRule.isRequesterOneOfManyApprovers
+                                 cmd.InitiatedBy
+                                 rule
+                        }
                      |> OrgCommand.RequestCommandApproval
 
                   mailbox.Parent() <! OrgMessage.StateChange cmd
