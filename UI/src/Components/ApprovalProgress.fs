@@ -127,6 +127,13 @@ let ApprovalProgressComponent
          org.CommandApprovalRules
          |> Map.tryFind progress.RuleId
          |> Option.map (fun rule -> rule, progress))
+      |> Seq.sortBy (fun (_, progress) ->
+         match progress.Status with
+         | CommandApprovalProgress.Status.Pending -> 1
+         | CommandApprovalProgress.Status.Approved -> 2
+         | CommandApprovalProgress.Status.Declined -> 3
+         | CommandApprovalProgress.Status.Terminated _ -> 4)
+      |> Seq.sortByDescending (fun (_, progress) -> progress.CreatedAt)
 
    if Seq.isEmpty approvals then
       Html.p "No commands require approval."
