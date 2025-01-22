@@ -136,6 +136,14 @@ let getEmployees (orgId: OrgId) (query: EmployeeQuery) =
          agg
          query.Roles
 
+   let agg =
+      Option.fold
+         (fun (queryParams, where) status ->
+            [ "status", Writer.status status ] @ queryParams,
+            $"{where} AND {Fields.status} = @status::{EmployeeSqlMapper.EmployeeTypeCast.status}")
+         agg
+         query.Status
+
    let queryParams, where = agg
 
    let query =

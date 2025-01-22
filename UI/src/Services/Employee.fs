@@ -16,6 +16,7 @@ open RoutePaths
 let networkQueryFromBrowserQuery (query: EmployeeBrowserQuery) : EmployeeQuery = {
    EmployeeIds = query.SelectedEmployees |> Option.map (List.map _.Id)
    Roles = query.Roles
+   Status = None
 }
 
 let networkQueryFromHistoryBrowserQuery
@@ -112,6 +113,10 @@ let getEmployees (orgId: OrgId) (query: EmployeeQuery) : Async<EmployeesMaybe> =
          match query.EmployeeIds with
          | None -> ()
          | Some ids -> "employeeIds", listToQueryString ids
+
+         match query.Status with
+         | None -> ()
+         | Some status -> "status", string status
       ]
       |> Router.encodeQueryString
 
