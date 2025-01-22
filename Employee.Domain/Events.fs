@@ -86,6 +86,7 @@ type CardNicknamed = {
 type AccessApproved = {
    Name: string
    Reference: string option
+   InviteToken: InviteToken
 }
 
 type AccessRestored = {

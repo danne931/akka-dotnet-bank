@@ -182,7 +182,10 @@ let applyEvent
             Email = e.Data.Email
             AuthProviderUserId = Some e.Data.AuthProviderUserId
         }
-      | AccessApproved _
+      | AccessApproved e -> {
+         em with
+            Status = EmployeeStatus.PendingInviteConfirmation e.Data.InviteToken
+        }
       | AccessRestored _ -> {
          em with
             Status = EmployeeStatus.Active

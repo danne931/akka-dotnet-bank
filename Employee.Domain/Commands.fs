@@ -490,14 +490,19 @@ module RestoreAccessCommand =
       =
       Ok <| BankEvent.create<AccessRestored> cmd
 
-type ApproveAccessCommand = Command<AccessApproved>
+type ApproveAccessInput = {
+   Name: string
+   Reference: string option
+}
+
+type ApproveAccessCommand = Command<ApproveAccessInput>
 
 module ApproveAccessCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
       (initiatedBy: InitiatedById)
       (correlationId: CorrelationId)
-      (data: AccessApproved)
+      (data: ApproveAccessInput)
       =
       Command.create
          (EmployeeId.toEntityId employeeId)
@@ -510,4 +515,9 @@ module ApproveAccessCommand =
       (cmd: ApproveAccessCommand)
       : ValidationResult<BankEvent<AccessApproved>>
       =
-      Ok <| BankEvent.create<AccessApproved> cmd
+      BankEvent.create2<ApproveAccessInput, AccessApproved> cmd {
+         InviteToken = InviteToken.generate ()
+         Name = cmd.Data.Name
+         Reference = cmd.Data.Reference
+      }
+      |> Ok

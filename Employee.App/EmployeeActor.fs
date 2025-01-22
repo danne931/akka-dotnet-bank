@@ -146,6 +146,14 @@ let actorProps
                      Token = token
                   }
                | _ -> ()
+            | EmployeeEvent.AccessApproved e ->
+               getEmailActor mailbox.System
+               <! EmailActor.EmailMessage.EmployeeInvite {
+                  OrgId = employee.OrgId
+                  Name = employee.Name
+                  Email = employee.Email
+                  Token = e.Data.InviteToken
+               }
             | EmployeeEvent.InvitationTokenRefreshed e ->
                getEmailActor mailbox.System
                <! EmailActor.EmailMessage.EmployeeInvite {
