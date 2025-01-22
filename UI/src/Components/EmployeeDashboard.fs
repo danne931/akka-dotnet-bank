@@ -130,61 +130,6 @@ let selectedEmployee
       employees |> List.tryFind (fun e -> e.EmployeeId = selectedEmployeeId)
    | _ -> None
 
-let renderPendingTableRow
-   (employee: Employee)
-   (selectedEmployeeId: EmployeeId option)
-   =
-   Html.tr [
-      attr.key (string employee.EmployeeId)
-
-      match selectedEmployeeId with
-      | Some id when id = employee.EmployeeId -> attr.classes [ "selected" ]
-      | _ -> ()
-
-      attr.onClick (fun _ ->
-         employee.EmployeeId
-         |> EmployeeActionView.ViewEmployee
-         |> Some
-         |> actionNav)
-
-      attr.children [
-         Html.th [ attr.scope "row" ]
-
-         Html.td employee.Name
-
-         Html.td (string employee.Email)
-
-         Html.td employee.Status.Display
-      ]
-   ]
-
-let renderPendingTable
-   (employees: Employee list)
-   (selectedEmployeeId: EmployeeId option)
-   =
-   Html.table [
-      attr.classes [ "clickable-table" ]
-      attr.role "grid"
-      attr.children [
-         Html.thead [
-            Html.tr [
-               Html.th [ attr.scope "col" ]
-
-               Html.th [ attr.scope "col"; attr.text "Name" ]
-
-               Html.th [ attr.scope "col"; attr.text "Email" ]
-
-               Html.th [ attr.scope "col"; attr.text "Info" ]
-            ]
-         ]
-
-         Html.tbody [
-            for employee in employees ->
-               renderPendingTableRow employee selectedEmployeeId
-         ]
-      ]
-   ]
-
 let renderTableRow
    (employee: Employee)
    (selectedEmployeeId: EmployeeId option)
@@ -265,6 +210,29 @@ let EmployeeDashboardComponent
 
    let close _ = actionNav None
 
+   let employees =
+      state.Employees
+      |> (Deferred.map << Result.map << Option.map) (
+         List.sortBy (fun e ->
+            let roleSort =
+               match e.Role with
+               | Role.Admin -> 1
+               | Role.CardOnly -> 2
+               | Role.Scholar -> 3
+
+            let statusSort =
+               match e.Status with
+               | EmployeeStatus.PendingInviteApproval _ -> 1
+               | EmployeeStatus.PendingRestoreAccessApproval -> 2
+               | EmployeeStatus.PendingInviteConfirmation _ -> 3
+               | EmployeeStatus.Active -> 4
+               | EmployeeStatus.Closed -> 5
+               | EmployeeStatus.ReadyForDelete -> 6
+               | EmployeeStatus.InitialEmptyState -> 6
+
+            statusSort, roleSort)
+      )
+
    classyNode Html.div [ "employee-dashboard" ] [
       classyNode Html.main [ "container-fluid" ] [
          classyNode Html.div [ "grid" ] [
@@ -273,7 +241,7 @@ let EmployeeDashboardComponent
 
                Html.progress [
                   attr.custom ("data-transactions-loader", "")
-                  if Deferred.resolved state.Employees then
+                  if Deferred.resolved employees then
                      attr.value 100
                ]
 
@@ -361,29 +329,15 @@ let EmployeeDashboardComponent
                         ]
                   |}
 
-                  match state.Employees with
+                  match employees with
                   | Resolved(Error err) ->
                      Html.small "Uh oh. Error getting employees."
                   | Resolved(Ok None) -> Html.small "Uh oh. No employees."
                   | Resolved(Ok(Some employees)) ->
-                     let pendingApproval, remaining =
-                        employees |> List.partition _.PendingAccessApproval
-
-                     Html.h6 "Pending Approval"
-
-                     if pendingApproval.IsEmpty then
-                        Html.small "No pending requests."
-                     else
-                        renderPendingTable pendingApproval selectedEmployeeId
-
-                     Html.hr []
-
-                     Html.h6 "Approved"
-
-                     if remaining.IsEmpty then
+                     if employees.IsEmpty then
                         Html.small "Uh oh. No employees."
                      else
-                        renderTable remaining selectedEmployeeId
+                        renderTable employees selectedEmployeeId
                   | _ -> ()
                ]
             ]
@@ -408,7 +362,7 @@ let EmployeeDashboardComponent
                            (Msg.EmployeeCommandProcessing >> dispatch >> close)
                      | EmployeeActionView.ViewEmployee id ->
                         classyNode Html.div [ "employee-detail" ] [
-                           match state.Employees, orgCtx with
+                           match employees, orgCtx with
                            | Deferred.Resolved _,
                              Deferred.Resolved(Ok(Some org)) ->
                               match selectedEmployee id state with
