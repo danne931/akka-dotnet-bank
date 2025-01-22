@@ -157,18 +157,37 @@ module CommandApprovalRule =
       Approvers: EmployeeReference list
    }
 
-   let isValidApprover (approver: EmployeeId) (rule: T) =
-      rule.Approvers |> List.exists (fun a -> a.EmployeeId = approver)
+   let isValidApprover
+      (approver: InitiatedById)
+      (rule: T)
+      : EmployeeReference option
+      =
+      rule.Approvers
+      |> List.tryFind (fun a -> (InitiatedById a.EmployeeId) = approver)
+
+   let isRequesterOneOfManyApprovers
+      (requester: InitiatedById)
+      (rule: T)
+      : EmployeeReference option
+      =
+      match rule.Approvers.Length > 1, isValidApprover requester rule with
+      | true, Some approver -> Some approver
+      | _ -> None
 
    /// Approval not required if only 1 approver configured for the rule
    /// & the person requesting the command is the configured approver.
    let isRequesterTheOnlyConfiguredApprover
-      (initiatedBy: InitiatedById)
+      (requester: InitiatedById)
       (rule: T)
+      : EmployeeReference option
       =
       match rule.Approvers with
-      | [ approver ] -> (InitiatedById approver.EmployeeId) = initiatedBy
-      | _ -> false
+      | [ approver ] ->
+         if (InitiatedById approver.EmployeeId) = requester then
+            Some approver
+         else
+            None
+      | _ -> None
 
    let newRuleCommandTypeConflictsWithExistingRule
       (existingRules: T seq)
@@ -335,6 +354,8 @@ module CommandApprovalProgress =
    type CommandApprovalRequested = {
       RuleId: CommandApprovalRuleId
       Command: ApprovableCommand
+      // The requester is configured in the associated rule as an approver.
+      RequesterIsConfiguredAsAnApprover: EmployeeReference option
    }
 
    type CommandApprovalAcquired = {

@@ -29,13 +29,18 @@ let private canApproveOrDeclineApprovalProcess
    match Map.tryFind ruleId org.CommandApprovalRules with
    | None -> Error OrgStateTransitionError.ApprovalRuleNotFound
    | Some rule ->
-      if not (CommandApprovalRule.isValidApprover approver.EmployeeId rule) then
+      match
+         CommandApprovalRule.isValidApprover
+            (InitiatedById approver.EmployeeId)
+            rule
+      with
+      | None ->
          OrgStateTransitionError.ApproverUnrecognized(
             approver.EmployeeId,
             approver.EmployeeName
          )
          |> Error
-      else
+      | Some _ ->
          hasActiveProgressWorkflow org progressId
          |> Result.map (fun progress -> rule, progress)
 
@@ -85,7 +90,7 @@ let dailyAccrual (events: OrgEvent list) : DailyAccrual =
 let commandRequiresApproval
    (command: ApprovableCommand)
    (state: OrgWithEvents)
-   : CommandApprovalRuleId option
+   : CommandApprovalRule.T option
    =
    let accrual = dailyAccrual state.Events
    let org = state.Info
@@ -94,12 +99,12 @@ let commandRequiresApproval
       org.CommandApprovalRules.Values
       |> Seq.toList
       |> List.filter (fun rule ->
-         rule.CommandType = command.CommandType
-         && not (
+         let onlyApprover =
             CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
                command.InitiatedBy
                rule
-         ))
+
+         rule.CommandType = command.CommandType && onlyApprover.IsNone)
 
    let requiresApproval (rule: CommandApprovalRule.T) =
       let criteria = rule.Criteria
@@ -158,7 +163,7 @@ let commandRequiresApproval
 
    match rulesForCommand with
    | [] -> None
-   | [ rule ] -> requiresApproval rule |> Option.map _.RuleId
+   | [ rule ] -> requiresApproval rule
    | rules ->
       rules
       |> List.choose requiresApproval
@@ -169,7 +174,7 @@ let commandRequiresApproval
          | _ -> 1)
       |> function
          | [] -> None
-         | head :: rest -> Some head.RuleId
+         | head :: rest -> Some head
 
 let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
    let org = state.Info
@@ -245,7 +250,10 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
                      EmployeeName = ""
                      EmployeeId = InitiatedById.toEmployeeId e.InitiatedById
                   }
-                  ApprovedBy = []
+                  ApprovedBy =
+                     e.Data.RequesterIsConfiguredAsAnApprover
+                     |> Option.map (fun approver -> [ approver ])
+                     |> Option.defaultValue []
                   DeclinedBy = None
                   CommandToInitiateOnApproval = e.Data.Command
                   CreatedAt = e.Timestamp
@@ -385,7 +393,9 @@ module private StateTransition =
       (state: OrgWithEvents)
       (cmd: CommandApprovalProgress.RequestCommandApproval)
       =
-      if state.Info.Status <> OrgStatus.Active then
+      let org = state.Info
+
+      if org.Status <> OrgStatus.Active then
          transitionErr OrgStateTransitionError.OrgNotActive
       else
          map

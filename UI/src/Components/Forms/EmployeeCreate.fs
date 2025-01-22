@@ -192,13 +192,14 @@ let EmployeeCreateFormComponent
          let employeeInviteRequiresApproval =
             org.Org.CommandApprovalRules
             |> Map.tryPick (fun ruleId rule ->
+               let isSoleApprover =
+                  CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
+                     (InitiatedById session.EmployeeId)
+                     rule
+
                if
                   rule.CommandType = ApprovableCommandType.InviteEmployee
-                  && not (
-                     CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
-                        (InitiatedById session.EmployeeId)
-                        rule
-                  )
+                  && isSoleApprover.IsNone
                then
                   Some ruleId
                else

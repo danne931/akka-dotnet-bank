@@ -169,7 +169,12 @@ let sqlParamReducer
          "statusDetail",
          CommandApprovalProgressSqlMapper.Writer.statusDetail status
 
-         "approvedBy", CommandApprovalProgressSqlMapper.Writer.approvedBy []
+         "approvedBy",
+         CommandApprovalProgressSqlMapper.Writer.approvedBy (
+            match e.Data.RequesterIsConfiguredAsAnApprover with
+            | None -> []
+            | Some approver -> [ approver.EmployeeId ]
+         )
 
          "approvableCommandType",
          CommandApprovalRuleSqlMapper.Writer.approvableCommandType
