@@ -265,6 +265,7 @@ module EmployeeHistoryQuery =
 type EmployeeQuery = {
    EmployeeIds: (EmployeeId list) option
    Roles: (Role list) option
+   Status: EmployeeStatus option
 }
 
 module EmployeeQuery =

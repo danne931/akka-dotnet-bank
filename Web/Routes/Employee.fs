@@ -30,12 +30,24 @@ let startEmployeeRoutes (app: WebApplication) =
    app
       .MapGet(
          EmployeePath.Get,
-         Func<Guid, string, string, Task<IResult>>
-            (fun orgId ([<FromQuery>] employeeIds) ([<FromQuery>] roles) ->
+         Func<Guid, string, string, string, Task<IResult>>
+            (fun
+                 orgId
+                 ([<FromQuery>] employeeIds)
+                 ([<FromQuery>] roles)
+                 ([<FromQuery>] status) ->
                let query = {
                   EmployeeIds =
                      EmployeeQuery.employeeIdsFromQueryString employeeIds
                   Roles = EmployeeQuery.rolesFromQueryString roles
+                  Status =
+                     // Only supporting search by Active status for now.
+                     // Need to create an EmployeeStatusType type separate from
+                     // EmployeeStatus type to handle cases such as
+                     // EmployeeStatus.PendingInviteConfirmation of InviteToken
+                     match status with
+                     | "Active" -> Some EmployeeStatus.Active
+                     | _ -> None
                }
 
                getEmployees (OrgId orgId) query

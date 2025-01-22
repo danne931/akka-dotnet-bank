@@ -45,6 +45,7 @@ let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
             EmployeeService.getEmployees orgId {
                Roles = Some [ Role.Admin ]
                EmployeeIds = None
+               Status = Some EmployeeStatus.Active
             }
 
          return Msg.GetAdmins(orgId, Finished admins)
