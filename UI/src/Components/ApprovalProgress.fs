@@ -127,13 +127,13 @@ let ApprovalProgressComponent
          org.CommandApprovalRules
          |> Map.tryFind progress.RuleId
          |> Option.map (fun rule -> rule, progress))
+      |> Seq.sortByDescending (fun (_, progress) -> progress.CreatedAt)
       |> Seq.sortBy (fun (_, progress) ->
          match progress.Status with
          | CommandApprovalProgress.Status.Pending -> 1
          | CommandApprovalProgress.Status.Approved -> 2
          | CommandApprovalProgress.Status.Declined -> 3
          | CommandApprovalProgress.Status.Terminated _ -> 4)
-      |> Seq.sortByDescending (fun (_, progress) -> progress.CreatedAt)
 
    if Seq.isEmpty approvals then
       Html.p "No commands require approval."
@@ -154,8 +154,11 @@ let ApprovalProgressComponent
                   classyNode Html.div [ "grid" ] [
                      Html.p progress.CommandToInitiateOnApproval.Display
 
-                     Html.small
-                        $"{progress.ApprovedBy.Length} of {rule.Approvers.Length} approvals acquired"
+                     match progress.Status with
+                     | CommandApprovalProgress.Status.Pending ->
+                        Html.small
+                           $"{progress.ApprovedBy.Length} of {rule.Approvers.Length} approvals acquired"
+                     | _ -> Html.small ""
 
                      Html.a [
                         if not mayApproveOrDeny then
@@ -260,9 +263,9 @@ let ApprovalProgressComponent
                      | [] -> Html.p "None"
                      | approvers -> Html.p (approversMsg approvers)
                   ]
-               | CommandApprovalProgress.Status.Terminated _ ->
+               | CommandApprovalProgress.Status.Terminated reason ->
                   Html.small
-                     $"Approval terminated early on
-                  {DateTime.formatShort progress.LastUpdate}"
+                     $"Approval terminated early on {DateTime.formatShort progress.LastUpdate}
+                     due to {reason.Display}"
             ]
       ]

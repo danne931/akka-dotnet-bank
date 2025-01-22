@@ -144,10 +144,7 @@ let getCommandApprovals
             progressT.{Fields.orgId} = @orgId
             AND (
                progressT.{Fields.status} = @pendingStatus::{TypeCast.status}
-               OR (
-                  progressT.{Fields.updatedAt} > CURRENT_TIMESTAMP - interval '15 days'
-                  AND progressT.{Fields.status} != @terminatedStatus::{TypeCast.status}
-               )
+               OR progressT.{Fields.updatedAt} > CURRENT_TIMESTAMP - interval '5 days'
             )
             """
       )
