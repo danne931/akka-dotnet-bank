@@ -2,6 +2,7 @@
 module Org
 
 open Validus
+open System
 
 open Bank.Org.Domain
 open Bank.Employee.Domain
@@ -176,6 +177,39 @@ let commandRequiresApproval
          | [] -> None
          | head :: rest -> Some head
 
+// NOTE:
+// Being able to reference events directly during state transitions
+// is necessary for doing daily accrual computations for determining whether
+// a command approval rule is to be applied (See dailyAccrual usage).
+// No need to keep them around otherwise, especially as they are persisted
+// as events in the akka_event_journal as well as a read model
+// organization_event table.
+let private trimExcess (state: OrgWithEvents) : OrgWithEvents =
+   let dateWithinLookbackPeriod (date: DateTime) =
+      date.ToUniversalTime() > DateTime.UtcNow.AddDays(-2.)
+
+   {
+      Events =
+         state.Events
+         |> List.filter (fun e ->
+            let _, envelope = OrgEnvelope.unwrap e
+            dateWithinLookbackPeriod envelope.Timestamp)
+      Info = {
+         state.Info with
+            CommandApprovalProgress =
+               state.Info.CommandApprovalProgress
+               |> Map.filter (fun _ p ->
+                  match dateWithinLookbackPeriod p.LastUpdate, p.Status with
+                  | true, _ -> true
+                  | false, status ->
+                     match status with
+                     | CommandApprovalProgress.Status.Pending -> true
+                     | CommandApprovalProgress.Status.Approved -> false
+                     | CommandApprovalProgress.Status.Declined -> false
+                     | CommandApprovalProgress.Status.Terminated _ -> false)
+      }
+   }
+
 let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
    let org = state.Info
 
@@ -276,21 +310,47 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
       | CommandApprovalProcessCompleted e -> {
          org with
             CommandApprovalProgress =
-               Map.remove e.Data.ProgressId org.CommandApprovalProgress
+               org.CommandApprovalProgress
+               |> Map.change
+                     e.Data.ProgressId
+                     (Option.map (fun progress -> {
+                        progress with
+                           Status = CommandApprovalProgress.Status.Approved
+                           ApprovedBy =
+                              e.Data.ApprovedBy :: progress.ApprovedBy
+                           LastUpdate = e.Timestamp
+                     }))
         }
       | CommandApprovalDeclined e -> {
          org with
             CommandApprovalProgress =
-               Map.remove e.Data.ProgressId org.CommandApprovalProgress
+               org.CommandApprovalProgress
+               |> Map.change
+                     e.Data.ProgressId
+                     (Option.map (fun progress -> {
+                        progress with
+                           DeclinedBy = Some e.Data.DeclinedBy
+                           Status = CommandApprovalProgress.Status.Declined
+                           LastUpdate = e.Timestamp
+                     }))
         }
       | CommandApprovalTerminated e -> {
          org with
             CommandApprovalProgress =
-               Map.remove e.Data.ProgressId org.CommandApprovalProgress
+               org.CommandApprovalProgress
+               |> Map.change
+                     e.Data.ProgressId
+                     (Option.map (fun progress -> {
+                        progress with
+                           Status =
+                              CommandApprovalProgress.Status.Terminated
+                                 e.Data.Reason
+                           LastUpdate = e.Timestamp
+                     }))
         }
 
    {
-      state with
+      trimExcess state with
          Info = updatedOrg
          Events = evt :: state.Events
    }
