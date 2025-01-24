@@ -318,13 +318,13 @@ let EmployeeDetailComponent
          match employeeInviteProgressOpt with
          | Some(rule, progress) ->
             let approvalRequiredFrom =
-               List.except progress.ApprovedBy rule.Approvers
+               CommandApprovalProgress.remainingApprovalRequiredBy rule progress
                |> List.fold
                      (fun acc approver ->
                         if acc = "" then
-                           approver.EmployeeName
+                           approver.DisplayName
                         else
-                           $"{acc}, {approver.EmployeeName}")
+                           $"{acc}, {approver.DisplayName}")
                      ""
 
             let approvalRequiredFrom =

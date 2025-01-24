@@ -26,6 +26,11 @@ type Values = {
    RangeUpperBound: string
 }
 
+let private ANY_ADMIN_APPROVER = {
+   EmployeeId = string Constants.SYSTEM_USER_ID
+   Name = "Any Admin"
+}
+
 let fieldDailyLimit =
    Form.textField {
       Parser =
@@ -189,6 +194,10 @@ let approverItemForm
          optionIsApprover emId || optionIsUnselectedAdmin emId)
       |> Seq.toList
 
+   let options =
+      (string ANY_ADMIN_APPROVER.EmployeeId, string ANY_ADMIN_APPROVER.Name)
+      :: options
+
    let fieldApproverSelect =
       Form.selectField {
          Parser = Ok
@@ -206,17 +215,20 @@ let approverItemForm
 
 let approverListForm
    (employees: Map<EmployeeId, Employee>)
-   : Form.Form<Values, EmployeeReference list, IReactProperty>
+   : Form.Form<Values, CommandApprovalRule.Approver list, IReactProperty>
    =
    Form.succeed (
       List.map (fun (emId: string) ->
-         let emId = EmployeeId(Guid.Parse emId)
-         let em = Map.find emId employees
+         if emId = ANY_ADMIN_APPROVER.EmployeeId then
+            CommandApprovalRule.Approver.AnyAdmin
+         else
+            let emId = EmployeeId(Guid.Parse emId)
+            let em = Map.find emId employees
 
-         {
-            EmployeeId = emId
-            EmployeeName = em.Name
-         })
+            CommandApprovalRule.Approver.Admin {
+               EmployeeId = emId
+               EmployeeName = em.Name
+            })
    )
    |> Form.append (
       Form.meta (fun values ->
@@ -313,7 +325,7 @@ let ruleEditForm
    Form.succeed
       (fun
            (criteria: CommandApprovalRule.Criteria,
-            approvers: EmployeeReference list) ->
+            approvers: CommandApprovalRule.Approver list) ->
          let cmd =
             CommandApprovalRule.ConfigureApprovalRuleCommand.create
                org.OrgId
@@ -365,10 +377,12 @@ let CommandApprovalRuleEditFormComponent
       CommandType = string rule.CommandType
       Approvers =
          rule.Approvers
-         |> List.map (fun a -> {
-            EmployeeId = string a.EmployeeId
-            Name = a.EmployeeName
-         })
+         |> List.map (function
+            | CommandApprovalRule.Approver.AnyAdmin -> ANY_ADMIN_APPROVER
+            | CommandApprovalRule.Approver.Admin a -> {
+               EmployeeId = string a.EmployeeId
+               Name = a.EmployeeName
+              })
       AmountBasedCriteriaType = ""
       DailyLimit = ""
       RangeLowerBound = ""
