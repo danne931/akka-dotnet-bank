@@ -116,7 +116,7 @@ let actorProps
 
                mailbox.Parent() <! OrgMessage.StateChange cmd
             | CommandApprovalRuleConfigured e ->
-               let newRuleConfig = e.Data
+               let newRuleConfig = e.Data.Rule
                let approversCnt = newRuleConfig.Approvers.Length
 
                let previousApproversCnt =

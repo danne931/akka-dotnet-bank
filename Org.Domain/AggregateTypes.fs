@@ -19,7 +19,8 @@ type OrgEvent =
    | OrgCreated of BankEvent<OrgCreated>
    | OrgOnboardingFinished of BankEvent<OrgOnboardingFinished>
    | FeatureFlagConfigured of BankEvent<FeatureFlagConfigured>
-   | CommandApprovalRuleConfigured of BankEvent<CommandApprovalRule.T>
+   | CommandApprovalRuleConfigured of
+      BankEvent<CommandApprovalRule.ConfigureApprovalRule>
    | CommandApprovalRuleDeleted of
       BankEvent<CommandApprovalRule.ApprovalRuleDeleted>
    | CommandApprovalRequested of
@@ -52,7 +53,7 @@ module OrgEnvelope =
       | :? BankEvent<OrgCreated> as evt -> OrgCreated evt
       | :? BankEvent<OrgOnboardingFinished> as evt -> OrgOnboardingFinished evt
       | :? BankEvent<FeatureFlagConfigured> as evt -> FeatureFlagConfigured evt
-      | :? BankEvent<CommandApprovalRule.T> as evt ->
+      | :? BankEvent<CommandApprovalRule.ConfigureApprovalRule> as evt ->
          CommandApprovalRuleConfigured evt
       | :? BankEvent<CommandApprovalRule.ApprovalRuleDeleted> as evt ->
          CommandApprovalRuleDeleted evt
