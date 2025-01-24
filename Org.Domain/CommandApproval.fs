@@ -288,7 +288,8 @@ module CommandApprovalRule =
          =
          BankEvent.create<ApprovalRuleDeleted> cmd |> Ok
 
-   type ConfigureApprovalRuleCommand = Command<T>
+   type ConfigureApprovalRule = { Rule: T }
+   type ConfigureApprovalRuleCommand = Command<ConfigureApprovalRule>
 
    module ConfigureApprovalRuleCommand =
       let create
@@ -302,15 +303,15 @@ module CommandApprovalRule =
             orgId
             (CorrelationId.create ())
             initiatedBy
-            data
+            { Rule = data }
 
       let toEvent
          (cmd: ConfigureApprovalRuleCommand)
-         : ValidationResult<BankEvent<T>>
+         : ValidationResult<BankEvent<ConfigureApprovalRule>>
          =
          validate {
-            let! _ = Criteria.validate cmd.Data.Criteria
-            return BankEvent.create<T> cmd
+            let! _ = Criteria.validate cmd.Data.Rule.Criteria
+            return BankEvent.create<ConfigureApprovalRule> cmd
          }
 
 module CommandApprovalProgress =

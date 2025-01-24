@@ -74,44 +74,43 @@ let sqlParamReducer
             FeatureFlags = qParams :: acc.FeatureFlags
       }
    | OrgEvent.CommandApprovalRuleConfigured e ->
-      let qParams = [
-         "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId e.Data.RuleId
+      let rule = e.Data.Rule
 
-         "orgId", CommandApprovalRuleSqlMapper.Writer.orgId e.Data.OrgId
+      let qParams = [
+         "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId rule.RuleId
+
+         "orgId", CommandApprovalRuleSqlMapper.Writer.orgId rule.OrgId
 
          "approvableCommandType",
          CommandApprovalRuleSqlMapper.Writer.approvableCommandType
-            e.Data.CommandType
+            rule.CommandType
 
-         "criteria",
-         CommandApprovalRuleSqlMapper.Writer.criteria e.Data.Criteria
+         "criteria", CommandApprovalRuleSqlMapper.Writer.criteria rule.Criteria
 
          "criteriaDetail",
-         CommandApprovalRuleSqlMapper.Writer.criteriaDetail e.Data.Criteria
+         CommandApprovalRuleSqlMapper.Writer.criteriaDetail rule.Criteria
 
          "approvers",
-         CommandApprovalRuleSqlMapper.Writer.permittedApprovers e.Data.Approvers
+         CommandApprovalRuleSqlMapper.Writer.permittedApprovers rule.Approvers
       ]
 
       let dailyLimitQParams =
-         match e.Data.Criteria with
+         match rule.Criteria with
          | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
             Some [
-               "ruleId",
-               CommandApprovalRuleSqlMapper.Writer.ruleId e.Data.RuleId
-               "orgId", CommandApprovalRuleSqlMapper.Writer.orgId e.Data.OrgId
+               "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId rule.RuleId
+               "orgId", CommandApprovalRuleSqlMapper.Writer.orgId rule.OrgId
                "dailyLimit",
                CommandApprovalRuleSqlMapper.Writer.dailyLimit limit
             ]
          | _ -> None
 
       let amountPerCommandQParams =
-         match e.Data.Criteria with
+         match rule.Criteria with
          | CommandApprovalRule.Criteria.AmountPerCommand range ->
             Some [
-               "ruleId",
-               CommandApprovalRuleSqlMapper.Writer.ruleId e.Data.RuleId
-               "orgId", CommandApprovalRuleSqlMapper.Writer.orgId e.Data.OrgId
+               "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId rule.RuleId
+               "orgId", CommandApprovalRuleSqlMapper.Writer.orgId rule.OrgId
                "lowerBound",
                CommandApprovalRuleSqlMapper.Writer.amountPerCommandLowerBound
                   range.LowerBound

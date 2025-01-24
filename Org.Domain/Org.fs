@@ -230,28 +230,31 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
          org with
             FeatureFlags = e.Data.Config
         }
-      | CommandApprovalRuleConfigured e -> {
-         org with
-            CommandApprovalRules =
-               if Map.containsKey e.Data.RuleId org.CommandApprovalRules then
-                  org.CommandApprovalRules
-                  |> Map.change
-                        e.Data.RuleId
-                        (Option.map (fun rule -> {
-                           rule with
-                              Approvers = e.Data.Approvers
-                              Criteria = e.Data.Criteria
-                        }))
-               else
-                  org.CommandApprovalRules
-                  |> Map.add e.Data.RuleId {
-                     RuleId = e.Data.RuleId
-                     OrgId = e.Data.OrgId
-                     CommandType = e.Data.CommandType
-                     Criteria = e.Data.Criteria
-                     Approvers = e.Data.Approvers
-                  }
-        }
+      | CommandApprovalRuleConfigured e ->
+         let rule = e.Data.Rule
+
+         {
+            org with
+               CommandApprovalRules =
+                  if Map.containsKey rule.RuleId org.CommandApprovalRules then
+                     org.CommandApprovalRules
+                     |> Map.change
+                           rule.RuleId
+                           (Option.map (fun r -> {
+                              r with
+                                 Approvers = rule.Approvers
+                                 Criteria = rule.Criteria
+                           }))
+                  else
+                     org.CommandApprovalRules
+                     |> Map.add rule.RuleId {
+                        RuleId = rule.RuleId
+                        OrgId = rule.OrgId
+                        CommandType = rule.CommandType
+                        Criteria = rule.Criteria
+                        Approvers = rule.Approvers
+                     }
+         }
       | CommandApprovalRuleDeleted e -> {
          org with
             CommandApprovalRules =
@@ -392,22 +395,23 @@ module private StateTransition =
       =
       let org = state.Info
       let existingRules = org.CommandApprovalRules.Values
+      let rule = cmd.Data.Rule
 
       if org.Status <> OrgStatus.Active then
          transitionErr OrgStateTransitionError.OrgNotActive
       elif
          CommandApprovalRule.newRuleCommandTypeConflictsWithExistingRule
             existingRules
-            cmd.Data
+            rule
          |> not
       then
-         cmd.Data.CommandType.Display
+         rule.CommandType.Display
          |> OrgStateTransitionError.ApprovalRuleMultipleOfType
          |> transitionErr
       elif
          CommandApprovalRule.newRuleCriteriaConflictsWithExistingRule
             existingRules
-            cmd.Data
+            rule
       then
          transitionErr
             OrgStateTransitionError.ApprovalRuleHasConflictingCriteria
