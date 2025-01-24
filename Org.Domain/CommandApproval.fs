@@ -228,40 +228,54 @@ module CommandApprovalRule =
 
             not commandCriteriaForbidsMoreThanOneRule
 
+
+   let private rangeConflictsWithDailyLimit
+      (limit: decimal)
+      (range: AmountPerCommandRange)
+      =
+      match range.LowerBound, range.UpperBound with
+      | None, None -> true
+      | Some _, Some high -> limit <= high
+      | None, Some high -> limit <= high
+      | Some low, None -> limit <= low
+
+   /// Check whether amount based rule criteria conflicts.
+   /// This involves checking if AmountPerCommand rules conflict
+   /// with AmountDailyLimit rules or if AmountPerCommand
+   /// rules conflict with other AmountPerCommand rules.
    let newRuleCriteriaConflictsWithExistingRule
       (existingRules: T seq)
       (rule: T)
       =
-      // Keep rules with AmountPerCommand criteria, ignoring an existing rule
-      // if we are editing it's configuration.
-      let keepAmountPerCommandRules (existing: T) =
+      // Keep rules with AmountPerCommand or AmountDailyLimit criteria,
+      // ignoring an existing rule if we are editing it's configuration.
+      let keepAmountBasedCommandRules (existing: T) =
          existing.CommandType = rule.CommandType
          && existing.RuleId <> rule.RuleId
          && match existing.Criteria with
             | Criteria.AmountPerCommand _ -> true
+            | Criteria.AmountDailyLimit _ -> true
             | _ -> false
 
       match rule.Criteria with
       | Criteria.PerCommand -> false
       | Criteria.AmountPerCommand range ->
          existingRules
-         |> Seq.filter keepAmountPerCommandRules
+         |> Seq.filter keepAmountBasedCommandRules
          |> Seq.exists (fun existing ->
             match existing.Criteria with
             | Criteria.AmountPerCommand existingRange ->
                AmountPerCommandRange.hasOverlap existingRange range
+            | Criteria.AmountDailyLimit limit ->
+               rangeConflictsWithDailyLimit limit range
             | _ -> false)
       | Criteria.AmountDailyLimit limit ->
          existingRules
-         |> Seq.filter keepAmountPerCommandRules
+         |> Seq.filter keepAmountBasedCommandRules
          |> Seq.exists (fun existing ->
             match existing.Criteria with
             | Criteria.AmountPerCommand range ->
-               match range.LowerBound, range.UpperBound with
-               | None, None -> true
-               | Some _, Some high -> limit <= high
-               | None, Some high -> limit <= high
-               | Some low, None -> limit <= low
+               rangeConflictsWithDailyLimit limit range
             | _ -> false)
 
    type ApprovalRuleDeleted = {
