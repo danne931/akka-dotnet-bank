@@ -149,44 +149,55 @@ module CommandApprovalRule =
             |> Result.map (fun _ -> criteria)
          | Criteria.PerCommand -> Ok criteria
 
+   [<RequireQualifiedAccess>]
+   type Approver =
+      /// Any admin is considered a suitable approver.
+      | AnyAdmin
+      /// A particular admin is considered a suitable approver.
+      | Admin of EmployeeReference
+
+      member x.DisplayName =
+         match x with
+         | Approver.AnyAdmin -> "Any Admin"
+         | Approver.Admin a -> a.EmployeeName
+
    type T = {
       RuleId: CommandApprovalRuleId
       OrgId: OrgId
       CommandType: ApprovableCommandType
       Criteria: Criteria
-      Approvers: EmployeeReference list
+      Approvers: Approver list
    }
 
-   let isValidApprover
-      (approver: InitiatedById)
-      (rule: T)
-      : EmployeeReference option
-      =
+   let isValidApprover (approvedBy: InitiatedById) (rule: T) : Approver option =
       rule.Approvers
-      |> List.tryFind (fun a -> (InitiatedById a.EmployeeId) = approver)
+      |> List.tryFind (function
+         | Approver.AnyAdmin -> true
+         | Approver.Admin a -> (InitiatedById a.EmployeeId) = approvedBy)
 
    let isRequesterOneOfManyApprovers
       (requester: InitiatedById)
       (rule: T)
-      : EmployeeReference option
+      : bool
       =
-      match rule.Approvers.Length > 1, isValidApprover requester rule with
-      | true, Some approver -> Some approver
-      | _ -> None
+      rule.Approvers.Length > 1 && (isValidApprover requester rule).IsSome
 
    /// Approval not required if only 1 approver configured for the rule
    /// & the person requesting the command is the configured approver.
    let isRequesterTheOnlyConfiguredApprover
       (requester: InitiatedById)
       (rule: T)
-      : EmployeeReference option
+      : Approver option
       =
       match rule.Approvers with
       | [ approver ] ->
-         if (InitiatedById approver.EmployeeId) = requester then
-            Some approver
-         else
-            None
+         match approver with
+         | Approver.AnyAdmin -> Some approver
+         | Approver.Admin a ->
+            if (InitiatedById a.EmployeeId) = requester then
+               Some(Approver.Admin a)
+            else
+               None
       | _ -> None
 
    let newRuleCommandTypeConflictsWithExistingRule
@@ -341,7 +352,9 @@ module CommandApprovalProgress =
       LastUpdate: DateTime
    }
 
-   let isNewApproval (approver: EmployeeReference) (progress: T) =
+   /// Has the person approving the command already approved the
+   /// command or is this a new approval?
+   let isNewApproval (approver: EmployeeReference) (progress: T) : bool =
       progress.ApprovedBy
       |> List.exists (fun a -> a.EmployeeId = approver.EmployeeId)
       |> not
@@ -354,14 +367,49 @@ module CommandApprovalProgress =
       (eId: EmployeeId)
       =
       progress.Status = Status.Pending
-      && rule.Approvers |> List.exists (fun o -> o.EmployeeId = eId)
-      && progress.ApprovedBy |> List.exists (fun o -> o.EmployeeId = eId) |> not
+      && rule.Approvers
+         |> List.exists (function
+            | CommandApprovalRule.Approver.AnyAdmin -> true
+            | CommandApprovalRule.Approver.Admin a -> a.EmployeeId = eId)
+      && progress.ApprovedBy |> List.exists (fun a -> a.EmployeeId = eId) |> not
+
+   /// Returns configured CommandApprovalRule Approvers which have
+   /// not yet approved the command.
+   let remainingApprovalRequiredBy
+      (rule: CommandApprovalRule.T)
+      (progress: T)
+      : CommandApprovalRule.Approver list
+      =
+      List.fold
+         (fun approversRequired (approvedBy: EmployeeReference) ->
+            let adminFoundAtIndex =
+               approversRequired
+               |> List.tryFindIndex (function
+                  | CommandApprovalRule.Approver.Admin a ->
+                     a.EmployeeId = approvedBy.EmployeeId
+                  | CommandApprovalRule.Approver.AnyAdmin -> false)
+               // If approvedBy not found as one of the Approver.Admin items
+               // then check for the existence of an Approver.AnyAdmin option.
+               |> Option.orElse (
+                  approversRequired
+                  |> List.tryFindIndex (function
+                     | CommandApprovalRule.Approver.Admin _ -> false
+                     | CommandApprovalRule.Approver.AnyAdmin -> true)
+               )
+
+            // Remove the approversRequired item corresponding to approvedBy.
+            match adminFoundAtIndex with
+            | Some index -> List.removeAt index approversRequired
+            | None -> approversRequired)
+         rule.Approvers
+         progress.ApprovedBy
 
    type CommandApprovalRequested = {
       RuleId: CommandApprovalRuleId
       Command: ApprovableCommand
+      Requester: EmployeeReference
       // The requester is configured in the associated rule as an approver.
-      RequesterIsConfiguredAsAnApprover: EmployeeReference option
+      RequesterIsConfiguredAsAnApprover: bool
    }
 
    type CommandApprovalAcquired = {

@@ -144,9 +144,9 @@ let renderMoney (amount: decimal) =
       attr.text $" {Money.format amount} "
    ]
 
-let formatApprovers (approvers: EmployeeReference list) =
+let formatApprovers (approvers: CommandApprovalRule.Approver list) =
    approvers
-   |> List.fold (fun acc approver -> $"{acc}{approver.EmployeeName}, ") ""
+   |> List.fold (fun acc approver -> $"{acc}{approver.DisplayName}, ") ""
    |> _.Remove(-2)
 
 [<ReactComponent>]

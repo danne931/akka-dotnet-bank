@@ -268,26 +268,12 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
                   RuleId = e.Data.RuleId
                   OrgId = e.OrgId
                   Status = CommandApprovalProgress.Status.Pending
-                  RequestedBy = {
-                     // NOTE:
-                     // Currently not able to nicely reference the EmployeeName so
-                     // the snapshot will be saved with empty string for the name.
-                     // This is currently okay since the read models are saved
-                     // with just the EmployeeId anyway.  When it comes time to
-                     // fetch the approval progress read model for display in the browser,
-                     // the EmployeeId field of the command_approval_progress table
-                     // is used to join with the employee table and
-                     // select the name field on the employee record.
-                     // TODO: Consider replacing the InitiatedById property on
-                     // Command<T> & BankEvent<T> with an InitiatedBy type which
-                     // contains both the id and the name.
-                     EmployeeName = ""
-                     EmployeeId = InitiatedById.toEmployeeId e.InitiatedById
-                  }
+                  RequestedBy = e.Data.Requester
                   ApprovedBy =
-                     e.Data.RequesterIsConfiguredAsAnApprover
-                     |> Option.map (fun approver -> [ approver ])
-                     |> Option.defaultValue []
+                     if e.Data.RequesterIsConfiguredAsAnApprover then
+                        [ e.Data.Requester ]
+                     else
+                        []
                   DeclinedBy = None
                   CommandToInitiateOnApproval = e.Data.Command
                   CreatedAt = e.Timestamp

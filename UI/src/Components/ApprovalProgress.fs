@@ -106,9 +106,9 @@ let update (onOrgUpdate: OrgCommandReceipt -> unit) msg state =
       state, Alerts.toastCommand err
    | DismissConfirmation -> state, Cmd.none
 
-let approversMsg (approvers: EmployeeReference list) =
+let approversMsg (approvers: CommandApprovalRule.Approver list) =
    approvers
-   |> List.fold (fun acc approver -> $"{acc}{approver.EmployeeName}, ") ""
+   |> List.fold (fun acc approver -> $"{acc}{approver.DisplayName}, ") ""
    |> _.TrimEnd()
    |> _.TrimEnd(',')
 
@@ -141,13 +141,17 @@ let ApprovalProgressComponent
       React.fragment [
          for rule, progress in approvals do
             let approvalsRemaining =
-               List.except progress.ApprovedBy rule.Approvers
+               CommandApprovalProgress.remainingApprovalRequiredBy rule progress
 
             let mayApproveOrDeny =
                CommandApprovalProgress.mayApproveOrDeny
                   rule
                   progress
                   session.EmployeeId
+
+            let approvedBy =
+               progress.ApprovedBy
+               |> List.map CommandApprovalRule.Approver.Admin
 
             classyNode Html.article [ "command-pending-approval" ] [
                Html.header [
@@ -157,7 +161,7 @@ let ApprovalProgressComponent
                      match progress.Status with
                      | CommandApprovalProgress.Status.Pending ->
                         Html.small
-                           $"{progress.ApprovedBy.Length} of {rule.Approvers.Length} approvals acquired"
+                           $"{approvedBy.Length} of {rule.Approvers.Length} approvals acquired"
                      | _ -> Html.small ""
 
                      Html.a [
@@ -259,7 +263,7 @@ let ApprovalProgressComponent
                   classyNode Html.div [ "approval-count" ] [
                      Html.small "Approvals acquired:"
 
-                     match progress.ApprovedBy with
+                     match approvedBy with
                      | [] -> Html.p "None"
                      | approvers -> Html.p (approversMsg approvers)
                   ]

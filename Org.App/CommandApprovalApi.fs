@@ -11,7 +11,7 @@ open Bank.Employee.Domain
 
 open CommandApprovalRuleSqlMapper
 
-type private Approver = {
+type private ApproverDB = {
    Name: string
    EmployeeId: System.Guid
 }
@@ -27,7 +27,7 @@ let getApprovalRules
          {Fields.approvableCommandType},
          {Fields.criteriaDetail},
          jsonb_agg(
-            DISTINCT jsonb_build_object(
+            jsonb_build_object(
                'EmployeeId', e.{EmployeeSqlMapper.EmployeeFields.employeeId},
                'Name', e.{EmployeeSqlMapper.EmployeeFields.firstName} || ' ' || e.{EmployeeSqlMapper.EmployeeFields.lastName}
             )
@@ -52,11 +52,17 @@ let getApprovalRules
          Approvers =
             "permitted_approvers"
             |> reader.text
-            |> Serialization.deserializeUnsafe<Approver list>
-            |> List.map (fun o -> {
-               EmployeeName = o.Name
-               EmployeeId = EmployeeId o.EmployeeId
-            })
+            |> Serialization.deserializeUnsafe<ApproverDB list>
+            |> List.map (fun o ->
+               let eId = EmployeeId o.EmployeeId
+
+               if eId = Constants.SYSTEM_USER_ID then
+                  CommandApprovalRule.Approver.AnyAdmin
+               else
+                  CommandApprovalRule.Approver.Admin {
+                     EmployeeName = o.Name
+                     EmployeeId = eId
+                  })
       })
 
 open CommandApprovalProgressSqlMapper
@@ -102,7 +108,7 @@ let private commandApprovalProgressReader reader : CommandApprovalProgress.T = {
    ApprovedBy =
       "approved_by"
       |> reader.textOrNone
-      |> Option.map Serialization.deserializeUnsafe<Approver list>
+      |> Option.map Serialization.deserializeUnsafe<ApproverDB list>
       |> Option.map (
          List.map (fun o -> {
             EmployeeName = o.Name
