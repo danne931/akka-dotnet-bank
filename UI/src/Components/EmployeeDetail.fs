@@ -230,7 +230,7 @@ let EmployeeDetailComponent
          employeeInviteProgressOpt
          |> Option.bind (fun (rule, progress) ->
             if
-               CommandApprovalProgress.mayApproveOrDeny
+               CommandApprovalProgress.canManageProgress
                   rule
                   progress
                   session.EmployeeId

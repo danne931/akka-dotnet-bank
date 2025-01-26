@@ -2,6 +2,7 @@ module SidebarMenu
 
 open Feliz
 
+open Bank.Org.Domain
 open Bank.Employee.Domain
 open Lib.SharedTypes
 
@@ -93,13 +94,14 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                   CallToActionIndicator =
                      match orgCtx with
                      | Deferred.Resolved(Ok(Some org)) ->
-                        let activeApprovalCnt =
-                           Org.numberOfApprovalsUserCanApprove
-                              org.Org
+                        let activeApprovalsInProgressCnt =
+                           CommandApprovalProgress.numberOfApprovalsUserCanManage
+                              org.Org.CommandApprovalRules
+                              org.Org.CommandApprovalProgress
                               session.EmployeeId
 
-                        if activeApprovalCnt > 0 then
-                           Some $"({activeApprovalCnt})"
+                        if activeApprovalsInProgressCnt > 0 then
+                           Some $"({activeApprovalsInProgressCnt})"
                         else
                            None
                      | _ -> None
