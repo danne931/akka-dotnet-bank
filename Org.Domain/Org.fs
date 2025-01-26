@@ -21,7 +21,7 @@ let private hasActiveProgressWorkflow
       else
          Ok progress
 
-let private canApproveOrDeclineApprovalProcess
+let private canManageApprovalProgress
    (org: Org)
    (ruleId: CommandApprovalRuleId)
    (progressId: CommandApprovalProgressId)
@@ -30,28 +30,19 @@ let private canApproveOrDeclineApprovalProcess
    match Map.tryFind ruleId org.CommandApprovalRules with
    | None -> Error OrgStateTransitionError.ApprovalRuleNotFound
    | Some rule ->
-      match
+      if
          CommandApprovalRule.isValidApprover
             (InitiatedById approver.EmployeeId)
             rule
-      with
-      | None ->
+      then
+         hasActiveProgressWorkflow org progressId
+         |> Result.map (fun progress -> rule, progress)
+      else
          OrgStateTransitionError.ApproverUnrecognized(
             approver.EmployeeId,
             approver.EmployeeName
          )
          |> Error
-      | Some _ ->
-         hasActiveProgressWorkflow org progressId
-         |> Result.map (fun progress -> rule, progress)
-
-let numberOfApprovalsUserCanApprove (org: Org) (employeeId: EmployeeId) : int =
-   org.CommandApprovalProgress.Values
-   |> Seq.filter (fun progress ->
-      org.CommandApprovalRules.TryFind progress.RuleId
-      |> Option.exists (fun rule ->
-         CommandApprovalProgress.mayApproveOrDeny rule progress employeeId))
-   |> Seq.length
 
 let dailyAccrual (events: OrgEvent list) : DailyAccrual =
    List.fold
@@ -86,96 +77,12 @@ let dailyAccrual (events: OrgEvent list) : DailyAccrual =
       }
       events
 
-/// Detect if an incoming command requires additional approvals or
-/// initiation into the approval workflow before issuing the command.
-let commandRequiresApproval
-   (command: ApprovableCommand)
-   (state: OrgWithEvents)
-   : CommandApprovalRule.T option
-   =
-   let accrual = dailyAccrual state.Events
-   let org = state.Info
-
-   let rulesForCommand =
-      org.CommandApprovalRules.Values
-      |> Seq.toList
-      |> List.filter (fun rule ->
-         let onlyApprover =
-            CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
-               command.InitiatedBy
-               rule
-
-         rule.CommandType = command.CommandType && onlyApprover.IsNone)
-
-   let requiresApproval (rule: CommandApprovalRule.T) =
-      let criteria = rule.Criteria
-
-      let progress =
-         Map.tryFind
-            (CommandApprovalProgressId command.CorrelationId)
-            org.CommandApprovalProgress
-
-      match progress with
-      | Some progress when
-         progress.Status = CommandApprovalProgress.Status.Approved
-         ->
-         None
-      | _ ->
-         match criteria with
-         | CommandApprovalRule.Criteria.PerCommand ->
-            match command with
-            | ApprovableCommand.InviteEmployee _ -> Some rule
-            | ApprovableCommand.UpdateEmployeeRole _ -> Some rule
-            | ApprovableCommand.FulfillPlatformPayment _ -> None // should not be reached
-            | ApprovableCommand.InternalTransferBetweenOrgs _ -> None // should not be reached
-            | ApprovableCommand.DomesticTransfer _ -> None // should not be reached
-         | CommandApprovalRule.Criteria.AmountPerCommand range ->
-            match range.LowerBound, range.UpperBound with
-            | None, None -> None // This case should not be reached
-            | Some low, None ->
-               if command.Amount >= low then Some rule else None
-            | None, Some high ->
-               if command.Amount <= high then Some rule else None
-            | Some low, Some high ->
-               if command.Amount >= low && command.Amount <= high then
-                  Some rule
-               else
-                  None
-         | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
-            match command with
-            | ApprovableCommand.InviteEmployee _ -> None // Should not be reached
-            | ApprovableCommand.UpdateEmployeeRole _ -> None // Should not be reached
-            | ApprovableCommand.FulfillPlatformPayment cmd ->
-               let overLimit =
-                  cmd.Data.RequestedPayment.BaseInfo.Amount
-                  + accrual.PaymentsPaid > limit
-
-               if overLimit then Some rule else None
-            | ApprovableCommand.InternalTransferBetweenOrgs cmd ->
-               let overLimit =
-                  cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit
-
-               if overLimit then Some rule else None
-            | ApprovableCommand.DomesticTransfer cmd ->
-               let overLimit =
-                  cmd.Data.Amount + accrual.DomesticTransfer > limit
-
-               if overLimit then Some rule else None
-
-   match rulesForCommand with
-   | [] -> None
-   | [ rule ] -> requiresApproval rule
-   | rules ->
-      rules
-      |> List.choose requiresApproval
-      // Prioritize daily limit over range >=
-      |> List.sortBy (fun rule ->
-         match rule.Criteria with
-         | CommandApprovalRule.Criteria.AmountDailyLimit _ -> 0
-         | _ -> 1)
-      |> function
-         | [] -> None
-         | head :: rest -> Some head
+let commandRequiresApproval (cmd: ApprovableCommand) (state: OrgWithEvents) =
+   CommandApprovalProgress.commandRequiresApproval
+      cmd
+      state.Info.CommandApprovalRules
+      state.Info.CommandApprovalProgress
+      (dailyAccrual state.Events)
 
 // NOTE:
 // Being able to reference events directly during state transitions
@@ -403,7 +310,6 @@ module private StateTransition =
          CommandApprovalRule.newRuleCommandTypeConflictsWithExistingRule
             existingRules
             rule
-         |> not
       then
          rule.CommandType.Display
          |> OrgStateTransitionError.ApprovalRuleMultipleOfType
@@ -466,17 +372,16 @@ module private StateTransition =
          let approver = data.ApprovedBy
 
          let res =
-            canApproveOrDeclineApprovalProcess
-               org
-               data.RuleId
-               data.ProgressId
-               approver
+            canManageApprovalProgress org data.RuleId data.ProgressId approver
 
          match res with
          | Error err -> transitionErr err
          | Ok(rule, progress) ->
             if
-               not (CommandApprovalProgress.isNewApproval approver progress)
+               CommandApprovalProgress.isNewApproval
+                  approver.EmployeeId
+                  progress
+               |> not
             then
                OrgStateTransitionError.ApproverAlreadyApprovedCommand(
                   approver.EmployeeId,
@@ -509,7 +414,7 @@ module private StateTransition =
          transitionErr OrgStateTransitionError.OrgNotActive
       else
          let res =
-            canApproveOrDeclineApprovalProcess
+            canManageApprovalProgress
                org
                data.RuleId
                data.ProgressId

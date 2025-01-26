@@ -6,7 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="EmployeeStub.fs" /> 
+    <Compile Include="OrganizationStub.fs" />
+    <Compile Include="EmployeeStub.fs" />
     <Compile Include="AccountStub.fs" />
     <Compile Include="EmployeeDomain.fs" />
     <Compile Include="AccountDomain.fs" />

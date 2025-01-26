@@ -143,8 +143,8 @@ let ApprovalProgressComponent
             let approvalsRemaining =
                CommandApprovalProgress.remainingApprovalRequiredBy rule progress
 
-            let mayApproveOrDeny =
-               CommandApprovalProgress.mayApproveOrDeny
+            let canManageProgress =
+               CommandApprovalProgress.canManageProgress
                   rule
                   progress
                   session.EmployeeId
@@ -165,7 +165,7 @@ let ApprovalProgressComponent
                      | _ -> Html.small ""
 
                      Html.a [
-                        if not mayApproveOrDeny then
+                        if not canManageProgress then
                            attr.classes [ "secondary" ]
                            attr.ariaDisabled true
 
@@ -176,7 +176,7 @@ let ApprovalProgressComponent
                         attr.onClick (fun e ->
                            e.preventDefault ()
 
-                           if mayApproveOrDeny then
+                           if canManageProgress then
                               dispatch
                               <| Msg.AcquireCommandApproval(
                                  org,
@@ -190,7 +190,7 @@ let ApprovalProgressComponent
                      ]
 
                      Html.a [
-                        if not mayApproveOrDeny then
+                        if not canManageProgress then
                            attr.classes [ "secondary" ]
                            attr.ariaDisabled true
 
@@ -201,7 +201,7 @@ let ApprovalProgressComponent
                         attr.onClick (fun e ->
                            e.preventDefault ()
 
-                           if mayApproveOrDeny then
+                           if canManageProgress then
                               dispatch
                               <| Msg.ShowCommandDeclineConfirmation(
                                  org,

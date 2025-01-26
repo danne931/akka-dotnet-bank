@@ -169,36 +169,33 @@ module CommandApprovalRule =
       Approvers: Approver list
    }
 
-   let isValidApprover (approvedBy: InitiatedById) (rule: T) : Approver option =
-      rule.Approvers
-      |> List.tryFind (function
-         | Approver.AnyAdmin -> true
-         | Approver.Admin a -> (InitiatedById a.EmployeeId) = approvedBy)
+   let private isEmployeeAnApprover (id: InitiatedById) (approver: Approver) =
+      match approver with
+      | Approver.AnyAdmin -> true
+      | Approver.Admin a -> InitiatedById a.EmployeeId = id
+
+   /// Is the command approver configured as an approver in the
+   /// rule or is there an AnyAdmin approver configured for the rule
+   let isValidApprover (approvedBy: InitiatedById) (rule: T) : bool =
+      rule.Approvers |> List.exists (isEmployeeAnApprover approvedBy)
 
    let isRequesterOneOfManyApprovers
       (requester: InitiatedById)
       (rule: T)
       : bool
       =
-      rule.Approvers.Length > 1 && (isValidApprover requester rule).IsSome
+      rule.Approvers.Length > 1 && isValidApprover requester rule
 
    /// Approval not required if only 1 approver configured for the rule
    /// & the person requesting the command is the configured approver.
    let isRequesterTheOnlyConfiguredApprover
       (requester: InitiatedById)
       (rule: T)
-      : Approver option
+      : bool
       =
       match rule.Approvers with
-      | [ approver ] ->
-         match approver with
-         | Approver.AnyAdmin -> Some approver
-         | Approver.Admin a ->
-            if (InitiatedById a.EmployeeId) = requester then
-               Some(Approver.Admin a)
-            else
-               None
-      | _ -> None
+      | [ approver ] -> isEmployeeAnApprover requester approver
+      | _ -> false
 
    let newRuleCommandTypeConflictsWithExistingRule
       (existingRules: T seq)
@@ -213,21 +210,18 @@ module CommandApprovalRule =
                None)
 
       match existingRuleOfGivenType with
-      | None -> true
+      | None -> false
       | Some existingRule ->
+         // If we are editing an existing rule then this is not considered
+         // a conflict.
          if existingRule.RuleId = rule.RuleId then
-            true
+            false
          else
-            let commandCriteriaForbidsMoreThanOneRule =
-               match existingRule.Criteria, rule.Criteria with
-               | Criteria.AmountDailyLimit _, Criteria.AmountDailyLimit _
-               | Criteria.PerCommand, Criteria.PerCommand -> true
-               | Criteria.AmountPerCommand _, Criteria.AmountPerCommand _ ->
-                  false
-               | _ -> false
-
-            not commandCriteriaForbidsMoreThanOneRule
-
+            match existingRule.Criteria, rule.Criteria with
+            | Criteria.AmountDailyLimit _, Criteria.AmountDailyLimit _
+            | Criteria.PerCommand, Criteria.PerCommand -> true
+            | Criteria.AmountPerCommand _, Criteria.AmountPerCommand _ -> false
+            | _ -> false
 
    let private rangeConflictsWithDailyLimit
       (limit: decimal)
@@ -369,24 +363,22 @@ module CommandApprovalProgress =
 
    /// Has the person approving the command already approved the
    /// command or is this a new approval?
-   let isNewApproval (approver: EmployeeReference) (progress: T) : bool =
+   let isNewApproval (approvedBy: EmployeeId) (progress: T) : bool =
       progress.ApprovedBy
-      |> List.exists (fun a -> a.EmployeeId = approver.EmployeeId)
+      |> List.exists (fun a -> a.EmployeeId = approvedBy)
       |> not
 
-   /// Employee may approve or deny the command if they are a PermittedApprover
+   /// Employee can approve or deny the command if they are a PermittedApprover
    /// for a given command type & they haven't already approved the command.
-   let mayApproveOrDeny
+   let canManageProgress
       (rule: CommandApprovalRule.T)
       (progress: T)
       (eId: EmployeeId)
+      : bool
       =
       progress.Status = Status.Pending
-      && rule.Approvers
-         |> List.exists (function
-            | CommandApprovalRule.Approver.AnyAdmin -> true
-            | CommandApprovalRule.Approver.Admin a -> a.EmployeeId = eId)
-      && progress.ApprovedBy |> List.exists (fun a -> a.EmployeeId = eId) |> not
+      && CommandApprovalRule.isValidApprover (InitiatedById eId) rule
+      && isNewApproval eId progress
 
    /// Returns configured CommandApprovalRule Approvers which have
    /// not yet approved the command.
@@ -418,6 +410,115 @@ module CommandApprovalProgress =
             | None -> approversRequired)
          rule.Approvers
          progress.ApprovedBy
+
+   let requiresApprovalForPairOfRuleAndProgress
+      (command: ApprovableCommand)
+      (accrual: DailyAccrual)
+      (progress: T option)
+      (rule: CommandApprovalRule.T)
+      =
+      let criteria = rule.Criteria
+
+      match progress with
+      | Some progress when progress.Status <> Status.Pending -> None
+      | _ ->
+         match criteria with
+         | CommandApprovalRule.Criteria.PerCommand ->
+            match command with
+            | ApprovableCommand.InviteEmployee _ -> Some rule
+            | ApprovableCommand.UpdateEmployeeRole _ -> Some rule
+            | ApprovableCommand.FulfillPlatformPayment _ -> None // should not be reached
+            | ApprovableCommand.InternalTransferBetweenOrgs _ -> None // should not be reached
+            | ApprovableCommand.DomesticTransfer _ -> None // should not be reached
+         | CommandApprovalRule.Criteria.AmountPerCommand range ->
+            match range.LowerBound, range.UpperBound with
+            | None, None -> None // This case should not be reached
+            | Some low, None ->
+               if command.Amount >= low then Some rule else None
+            | None, Some high ->
+               if command.Amount <= high then Some rule else None
+            | Some low, Some high ->
+               if command.Amount >= low && command.Amount <= high then
+                  Some rule
+               else
+                  None
+         | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
+            match command with
+            | ApprovableCommand.InviteEmployee _ -> None // Should not be reached
+            | ApprovableCommand.UpdateEmployeeRole _ -> None // Should not be reached
+            | ApprovableCommand.FulfillPlatformPayment cmd ->
+               let overLimit =
+                  cmd.Data.RequestedPayment.BaseInfo.Amount
+                  + accrual.PaymentsPaid > limit
+
+               if overLimit then Some rule else None
+            | ApprovableCommand.InternalTransferBetweenOrgs cmd ->
+               let overLimit =
+                  cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit
+
+               if overLimit then Some rule else None
+            | ApprovableCommand.DomesticTransfer cmd ->
+               let overLimit =
+                  cmd.Data.Amount + accrual.DomesticTransfer > limit
+
+               if overLimit then Some rule else None
+
+   /// Detect if an incoming command requires additional approvals or
+   /// initiation into the approval workflow before issuing the command.
+   let commandRequiresApproval
+      (command: ApprovableCommand)
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+      (progress: Map<CommandApprovalProgressId, T>)
+      (accrual: DailyAccrual)
+      : CommandApprovalRule.T option
+      =
+      let rulesForCommand =
+         rules.Values
+         |> Seq.toList
+         |> List.filter (fun rule ->
+            let onlyApprover =
+               CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
+                  command.InitiatedBy
+                  rule
+
+            rule.CommandType = command.CommandType && not onlyApprover)
+
+      let requiresApproval =
+         requiresApprovalForPairOfRuleAndProgress
+            command
+            accrual
+            (Map.tryFind
+               (CommandApprovalProgressId command.CorrelationId)
+               progress)
+
+      match rulesForCommand with
+      | [] -> None
+      | [ rule ] -> requiresApproval rule
+      | rules ->
+         rules
+         |> List.choose requiresApproval
+         // Prioritize daily limit over range >= when a command
+         // meets the criteria of multiple rules.
+         |> List.sortBy (fun rule ->
+            match rule.Criteria with
+            | CommandApprovalRule.Criteria.AmountDailyLimit _ -> 0
+            | _ -> 1)
+         |> function
+            | [] -> None
+            | head :: rest -> Some head
+
+   let numberOfApprovalsUserCanManage
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+      (progress: Map<CommandApprovalProgressId, T>)
+      (employeeId: EmployeeId)
+      : int
+      =
+      progress.Values
+      |> Seq.filter (fun progress ->
+         rules.TryFind progress.RuleId
+         |> Option.exists (fun rule ->
+            canManageProgress rule progress employeeId))
+      |> Seq.length
 
    type CommandApprovalRequested = {
       RuleId: CommandApprovalRuleId

@@ -9,11 +9,12 @@ open Expecto
 #endif
 
 open Bank.Org.Domain
+open Bank.Employee.Domain
 open CommandApprovalRule
+open CommandApprovalProgress
 open Lib.SharedTypes
 
-module Stub =
-   let orgId = Guid.NewGuid() |> OrgId
+module Stub = OrganizationStub
 
 let tests =
    testList "Command Approval domain" [
@@ -359,7 +360,7 @@ let tests =
       test
          "Daily Limit expected to be greater than amount based rules configured for the same command type" {
          let existingRule = {
-            RuleId = Guid.NewGuid() |> CommandApprovalRuleId
+            RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = ApprovableCommandType.FulfillPlatformPayment
             Criteria =
@@ -371,7 +372,7 @@ let tests =
          }
 
          let newRule = {
-            RuleId = Guid.NewGuid() |> CommandApprovalRuleId
+            RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = ApprovableCommandType.FulfillPlatformPayment
             Criteria = Criteria.AmountDailyLimit 60m
@@ -478,7 +479,7 @@ let tests =
       test
          "AmountPerCommand based rules expected to have amounts lower than Daily Limit rules configured for the same command type" {
          let existingRule = {
-            RuleId = Guid.NewGuid() |> CommandApprovalRuleId
+            RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = ApprovableCommandType.FulfillPlatformPayment
             Criteria = Criteria.AmountDailyLimit 60m
@@ -486,7 +487,7 @@ let tests =
          }
 
          let newRule = {
-            RuleId = Guid.NewGuid() |> CommandApprovalRuleId
+            RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = ApprovableCommandType.FulfillPlatformPayment
             Criteria =
@@ -559,5 +560,842 @@ let tests =
          Expect.isTrue
             conflicts
             "Should conflict when lower bound (80) > existing rule's daily limit (60)"
+      }
+
+      test "isValidApprover should check the approver is configured in the rule" {
+         let approver: EmployeeReference = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let initiatedBy = InitiatedById approver.EmployeeId
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.InviteEmployee
+            Criteria = Criteria.PerCommand
+            Approvers = [
+               Approver.Admin approver
+
+               Approver.Admin {
+                  EmployeeName = "B"
+                  EmployeeId = Guid.NewGuid() |> EmployeeId
+               }
+            ]
+         }
+
+         Expect.isTrue
+            (isValidApprover initiatedBy rule)
+            "should be true when corresponding Admin configured in rule"
+
+         let rule = {
+            rule with
+               Approvers = [
+                  Approver.Admin {
+                     EmployeeName = "B"
+                     EmployeeId = Guid.NewGuid() |> EmployeeId
+                  }
+               ]
+         }
+
+         Expect.isFalse
+            (isValidApprover initiatedBy rule)
+            "should be false when approver not found in rule"
+
+         let rule = {
+            rule with
+               Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         Expect.isTrue
+            (isValidApprover initiatedBy rule)
+            "should be true when approver not found in rule but AnyAdmin configured"
+      }
+
+      test
+         "newRuleCommandTypeConflictsWithExistingRule should check for
+            duplicate rules by (ApprovableCommandType, Criteria.PerCommand)" {
+         let cmdTypes = [
+            ApprovableCommandType.InviteEmployee
+            ApprovableCommandType.UpdateEmployeeRole
+         ]
+
+         for cmdType in cmdTypes do
+            let ruleA = {
+               RuleId = Stub.ruleId ()
+               OrgId = Stub.orgId
+               CommandType = cmdType
+               Criteria = Criteria.PerCommand
+               Approvers = [ Approver.AnyAdmin ]
+            }
+
+            let ruleB = {
+               RuleId = Stub.ruleId ()
+               OrgId = Stub.orgId
+               CommandType = cmdType
+               Criteria = Criteria.PerCommand
+               Approvers = [
+                  Approver.Admin {
+                     EmployeeName = "A"
+                     EmployeeId = Guid.NewGuid() |> EmployeeId
+                  }
+               ]
+            }
+
+            Expect.isTrue
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
+               $"should have conflict if configure {cmdType} rule when
+                one already exists"
+
+            let ruleB = {
+               ruleB with
+                  CommandType =
+                     if cmdType = ApprovableCommandType.InviteEmployee then
+                        ApprovableCommandType.UpdateEmployeeRole
+                     else
+                        ApprovableCommandType.InviteEmployee
+            }
+
+            Expect.isFalse
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
+               "should not conflict if configure a rule of a command type other
+               than {cmdType}"
+
+            Expect.isFalse
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleA)
+               "should not conflict if editing existing rule"
+      }
+
+      test
+         "newRuleCommandTypeConflictsWithExistingRule should check for
+            duplicate rules by (ApprovableCommandType, Criteria.AmountDailyLimit)" {
+         let cmdTypes = [
+            ApprovableCommandType.InternalTransferBetweenOrgs
+            ApprovableCommandType.DomesticTransfer
+            ApprovableCommandType.FulfillPlatformPayment
+         ]
+
+         for cmdType in cmdTypes do
+            let ruleA = {
+               RuleId = Stub.ruleId ()
+               OrgId = Stub.orgId
+               CommandType = cmdType
+               Criteria = Criteria.AmountDailyLimit 15000m
+               Approvers = [ Approver.AnyAdmin ]
+            }
+
+            let ruleB = {
+               RuleId = Stub.ruleId ()
+               OrgId = Stub.orgId
+               CommandType = cmdType
+               Criteria = Criteria.AmountDailyLimit 25000m
+               Approvers = [
+                  Approver.Admin {
+                     EmployeeName = "A"
+                     EmployeeId = Guid.NewGuid() |> EmployeeId
+                  }
+               ]
+            }
+
+            Expect.isTrue
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
+               $"should have conflict if configure {cmdType} rule when
+                one already exists"
+
+            let ruleB = {
+               ruleB with
+                  CommandType =
+                     match cmdType with
+                     | ApprovableCommandType.InternalTransferBetweenOrgs ->
+                        ApprovableCommandType.DomesticTransfer
+                     | ApprovableCommandType.DomesticTransfer ->
+                        ApprovableCommandType.FulfillPlatformPayment
+                     | _ -> ApprovableCommandType.InternalTransferBetweenOrgs
+            }
+
+            Expect.isFalse
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
+               "should not conflict if configure a rule of a command type other
+               than {cmdType}"
+
+            Expect.isFalse
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleA)
+               "should not conflict if editing existing rule"
+      }
+
+      test
+         "newRuleCommandTypeConflictsWithExistingRule should disregard
+            duplicate rules by (ApprovableCommandType, Criteria.AmountPerCommand)" {
+         let cmdTypes = [
+            ApprovableCommandType.InternalTransferBetweenOrgs
+            ApprovableCommandType.DomesticTransfer
+            ApprovableCommandType.FulfillPlatformPayment
+         ]
+
+         for cmdType in cmdTypes do
+            let ruleA = {
+               RuleId = Stub.ruleId ()
+               OrgId = Stub.orgId
+               CommandType = cmdType
+               Criteria =
+                  Criteria.AmountPerCommand {
+                     LowerBound = Some 2000m
+                     UpperBound = Some 5000m
+                  }
+               Approvers = [ Approver.AnyAdmin ]
+            }
+
+            let ruleB = {
+               RuleId = Stub.ruleId ()
+               OrgId = Stub.orgId
+               CommandType = cmdType
+               Criteria =
+                  Criteria.AmountPerCommand {
+                     LowerBound = Some 6000m
+                     UpperBound = None
+                  }
+               Approvers = [
+                  Approver.Admin {
+                     EmployeeName = "A"
+                     EmployeeId = Guid.NewGuid() |> EmployeeId
+                  }
+               ]
+            }
+
+            Expect.isFalse
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
+               $"should not conflict if configure {cmdType} rule when
+                one already exists"
+
+            let ruleB = {
+               ruleB with
+                  CommandType =
+                     match cmdType with
+                     | ApprovableCommandType.InternalTransferBetweenOrgs ->
+                        ApprovableCommandType.DomesticTransfer
+                     | ApprovableCommandType.DomesticTransfer ->
+                        ApprovableCommandType.FulfillPlatformPayment
+                     | _ -> ApprovableCommandType.InternalTransferBetweenOrgs
+            }
+
+            Expect.isFalse
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
+               "should not conflict if configure a rule of a command type other
+               than {cmdType}"
+
+            Expect.isFalse
+               (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleA)
+               "should not conflict if editing existing rule"
+      }
+
+      test
+         "isRequesterOneOfManyApprovers should check the approver is one of
+          many approvers configured for the rule" {
+         let approver: EmployeeReference = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let initiatedBy = InitiatedById approver.EmployeeId
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.InviteEmployee
+            Criteria = Criteria.PerCommand
+            Approvers = [
+               Approver.Admin approver
+
+               Approver.Admin {
+                  EmployeeName = "B"
+                  EmployeeId = Guid.NewGuid() |> EmployeeId
+               }
+            ]
+         }
+
+         Expect.isTrue
+            (isRequesterOneOfManyApprovers initiatedBy rule)
+            "should be true when Admin one of many"
+
+         let rule = {
+            rule with
+               Approvers = [ Approver.Admin approver ]
+         }
+
+         Expect.isFalse
+            (isRequesterOneOfManyApprovers initiatedBy rule)
+            "should be false when approver only 1 configured"
+
+         let rule = {
+            rule with
+               Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         Expect.isTrue
+            (isRequesterOneOfManyApprovers initiatedBy rule)
+            "should be true when approver not found but rule config contains
+            AnyAdmin more than once"
+      }
+
+      test
+         "isRequesterTheOnlyConfiguredApprover should check the approver is the
+          only approver configured for the rule" {
+         let approver: EmployeeReference = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let initiatedBy = InitiatedById approver.EmployeeId
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.InviteEmployee
+            Criteria = Criteria.PerCommand
+            Approvers = [ Approver.Admin approver; Approver.AnyAdmin ]
+         }
+
+         Expect.isFalse
+            (isRequesterTheOnlyConfiguredApprover initiatedBy rule)
+            "should be false when Admin one of many"
+
+         let rule = {
+            rule with
+               Approvers = [ Approver.Admin approver ]
+         }
+
+         Expect.isTrue
+            (isRequesterTheOnlyConfiguredApprover initiatedBy rule)
+            "should be true when approver only 1 configured"
+
+         let rule = {
+            rule with
+               Approvers = [ Approver.AnyAdmin ]
+         }
+
+         Expect.isTrue
+            (isRequesterTheOnlyConfiguredApprover initiatedBy rule)
+            "should be true when approver not found but rule config contains
+            AnyAdmin"
+      }
+
+      test
+         "isNewApproval should check if the person approving the command already did" {
+         let approver: EmployeeReference = {
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+            EmployeeName = "A"
+         }
+
+         let progress = {
+            Stub.progress with
+               ApprovedBy = [ approver ]
+         }
+
+         Expect.isFalse
+            (isNewApproval approver.EmployeeId progress)
+            "should detect a duplicate approval"
+
+         let progress = { Stub.progress with ApprovedBy = [] }
+
+         Expect.isTrue
+            (isNewApproval approver.EmployeeId progress)
+            "should be a fresh approval"
+      }
+
+      test
+         "canManageProgress should check if an employee can approve or deny an
+          existing command approval progress" {
+         let approver: EmployeeReference = {
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+            EmployeeName = "A"
+         }
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.InviteEmployee
+            Criteria = Criteria.PerCommand
+            Approvers = [ Approver.Admin approver ]
+         }
+
+         let progress = {
+            Stub.progress with
+               RuleId = rule.RuleId
+               ApprovedBy = [ approver ]
+         }
+
+         Expect.isFalse
+            (canManageProgress rule progress approver.EmployeeId)
+            "should not be allowed to approve the rule since they already have"
+
+         let rule2 = {
+            rule with
+               Approvers = [ Approver.AnyAdmin ]
+         }
+
+         Expect.isFalse
+            (canManageProgress rule2 progress approver.EmployeeId)
+            "should not be allowed to approve the rule since already have2"
+
+         let progress = {
+            Stub.progress with
+               RuleId = rule.RuleId
+               ApprovedBy = []
+         }
+
+         Expect.isTrue
+            (canManageProgress rule progress approver.EmployeeId)
+            "should be allowed to approve the rule since they haven't already"
+
+         Expect.isFalse
+            (canManageProgress rule progress (Guid.NewGuid() |> EmployeeId))
+            "should not be allowed to approve the rule since they are not
+            configured as an approver"
+
+         let progress2 = {
+            progress with
+               Status = Status.Declined
+         }
+
+         Expect.isFalse
+            (canManageProgress rule progress2 approver.EmployeeId)
+            "should not be allowed to approve the rule since the progress status
+            is not Pending"
+      }
+
+      test
+         "remainingApprovalRequiredBy returns configured approvers who have
+          not yet approved a command " {
+         let approver: EmployeeReference = {
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+            EmployeeName = "A"
+         }
+
+         let approverB: EmployeeReference = {
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+            EmployeeName = "B"
+         }
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.InviteEmployee
+            Criteria = Criteria.PerCommand
+            Approvers = [ Approver.Admin approver; Approver.Admin approverB ]
+         }
+
+         let progress = {
+            Stub.progress with
+               RuleId = rule.RuleId
+               ApprovedBy = []
+         }
+
+         Expect.equal
+            (remainingApprovalRequiredBy rule progress)
+            rule.Approvers
+            "should be 2 equivalent to the 2 approvers configured for the rule"
+
+         let progress = {
+            Stub.progress with
+               RuleId = rule.RuleId
+               ApprovedBy = [ approverB ]
+         }
+
+         Expect.equal
+            (remainingApprovalRequiredBy rule progress)
+            [ Approver.Admin approver ]
+            "should be 1 equivalent to one of the 2 approvers configured for the rule"
+
+         let progress = {
+            Stub.progress with
+               RuleId = rule.RuleId
+               ApprovedBy = [ approverB; approver ]
+         }
+
+         Expect.hasLength
+            (remainingApprovalRequiredBy rule progress)
+            0
+            "should be zero approvals required when all configured approvers approved"
+
+         let rule = {
+            rule with
+               Approvers = [
+                  Approver.AnyAdmin
+                  Approver.Admin approver
+                  Approver.Admin approverB
+                  Approver.AnyAdmin
+               ]
+         }
+
+         Expect.equal
+            (remainingApprovalRequiredBy rule progress)
+            [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            "should have 2 approvals required (AnyAdmin)"
+      }
+
+      test "numberOfApprovalsUserCanManage" {
+         let approverA: EmployeeReference = {
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+            EmployeeName = "A"
+         }
+
+         let approverB: EmployeeReference = {
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+            EmployeeName = "B"
+         }
+
+         let rule1 = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.UpdateEmployeeRole
+            Criteria = Criteria.PerCommand
+            Approvers = [ Approver.Admin approverA ]
+         }
+
+         let rule2 = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.InviteEmployee
+            Criteria = Criteria.PerCommand
+            Approvers = [
+               Approver.AnyAdmin
+               Approver.AnyAdmin
+               Approver.AnyAdmin
+            ]
+         }
+
+         let progress1 = {
+            Stub.progress with
+               RuleId = rule1.RuleId
+               ApprovedBy = [ approverA ]
+         }
+
+         let progress2 = {
+            Stub.progress with
+               ProgressId = Stub.progressId ()
+               RuleId = rule1.RuleId
+               ApprovedBy = []
+         }
+
+         let progress3 = {
+            Stub.progress with
+               ProgressId = Stub.progressId ()
+               RuleId = rule2.RuleId
+               ApprovedBy = [ approverB ]
+         }
+
+         let progress4 = {
+            Stub.progress with
+               ProgressId = Stub.progressId ()
+               RuleId = rule2.RuleId
+               ApprovedBy = [ approverA ]
+         }
+
+         let progress5 = {
+            Stub.progress with
+               ProgressId = Stub.progressId ()
+               RuleId = rule2.RuleId
+               ApprovedBy = []
+         }
+
+         let progress =
+            Map [
+               progress1.ProgressId, progress1
+               progress2.ProgressId, progress2
+               progress3.ProgressId, progress3
+               progress4.ProgressId, progress4
+               progress5.ProgressId, progress5
+            ]
+
+         let rules = Map [ rule1.RuleId, rule1; rule2.RuleId, rule2 ]
+
+         Expect.equal
+            (numberOfApprovalsUserCanManage rules progress approverA.EmployeeId)
+            3
+            "5 potential approvals - 2 already approved by approverA = 3"
+
+         Expect.equal
+            (numberOfApprovalsUserCanManage rules progress approverB.EmployeeId)
+            2
+            "3 potential approvals - 1 already approved by approverB = 2"
+      }
+
+      test
+         "commandRequiresApproval detects if an incoming command requires
+            initiation in an approval workflow before issuing the command" {
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.UpdateEmployeeRole
+            Criteria = Criteria.PerCommand
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rule2 = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.InviteEmployee
+            Criteria = Criteria.PerCommand
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
+         let progress = Map.empty
+
+         let ruleRequiringCommandApproval =
+            Expect.wantSome
+               (commandRequiresApproval
+                  Stub.updateRoleCommand
+                  rules
+                  progress
+                  Stub.accrual)
+               "command should require approval for UpdateEmployeeRole rule"
+
+         Expect.equal ruleRequiringCommandApproval rule ""
+
+         let rule = {
+            rule with
+               Approvers = [ Approver.AnyAdmin ]
+         }
+
+         let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
+
+         Expect.isNone
+            (commandRequiresApproval
+               Stub.updateRoleCommand
+               rules
+               progress
+               Stub.accrual)
+            "command does not require approval if requester is only
+            configured approver"
+
+         let rules = Map [ rule2.RuleId, rule2 ]
+
+         Expect.isNone
+            (commandRequiresApproval
+               Stub.updateRoleCommand
+               rules
+               progress
+               Stub.accrual)
+            "command does not require approval if no rule pertaining to the
+            command type"
+      }
+
+      test
+         "commandRequiresApproval detects if an incoming command meets
+            AmountDailyLimit criteria" {
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.DomesticTransfer
+            Criteria = Criteria.AmountDailyLimit 10_000m
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rules = Map [ rule.RuleId, rule ]
+         let progress = Map.empty
+
+         let accrual = {
+            Stub.accrual with
+               DomesticTransfer = 5_000m
+         }
+
+         let cmd =
+            AccountStub.command.domesticTransfer 2_000m
+            |> ApprovableCommand.DomesticTransfer
+
+         Expect.isNone
+            (commandRequiresApproval cmd rules progress accrual)
+            "command does not require approval if txn amount + daily amount accrued under limit"
+
+         let cmd =
+            AccountStub.command.domesticTransfer 5_000m
+            |> ApprovableCommand.DomesticTransfer
+
+         Expect.isNone
+            (commandRequiresApproval cmd rules progress accrual)
+            "command does not require approval if txn amount + daily amount accrued = limit"
+
+         let cmd =
+            AccountStub.command.domesticTransfer 5_001m
+            |> ApprovableCommand.DomesticTransfer
+
+         Expect.isSome
+            (commandRequiresApproval cmd rules progress accrual)
+            "command requires approval if txn amount + daily amount accrued > limit"
+      }
+
+      test
+         "commandRequiresApproval detects if an incoming command meets
+            AmountPerCommand criteria" {
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.DomesticTransfer
+            Criteria =
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 3000m
+                  UpperBound = None
+               }
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rules = Map [ rule.RuleId, rule ]
+         let progress = Map.empty
+
+         let cmd =
+            AccountStub.command.domesticTransfer 2_000m
+            |> ApprovableCommand.DomesticTransfer
+
+         Expect.isNone
+            (commandRequiresApproval cmd rules progress Stub.accrual)
+            "command does not require approval if txn amount does not meet
+            AmountPerCommand criteria"
+
+         let cmd =
+            AccountStub.command.domesticTransfer 4_000m
+            |> ApprovableCommand.DomesticTransfer
+
+         Expect.isSome
+            (commandRequiresApproval cmd rules progress Stub.accrual)
+            "command requires approval if txn amount > LowerBound"
+      }
+
+      test
+         "commandRequiresApproval detects if an incoming command meets
+            multiple rule criteria, and returns the rule with
+            Criteria.AmountDailyLimit rather than
+            Criteria.AmountPerCommand { LowerBound = Some; UpperBound = None }
+            if both rules exist" {
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.DomesticTransfer
+            Criteria =
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 3000m
+                  UpperBound = None
+               }
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rule2 = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.DomesticTransfer
+            Criteria = Criteria.AmountDailyLimit 10_000m
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
+         let progress = Map.empty
+
+         let cmd =
+            AccountStub.command.domesticTransfer 11_000m
+            |> ApprovableCommand.DomesticTransfer
+
+         let ruleCorrespondingToRequiredApproval =
+            Expect.wantSome
+               (commandRequiresApproval cmd rules progress Stub.accrual)
+               "command requires approval, meeting criteria for 2 rules"
+
+         Expect.equal
+            ruleCorrespondingToRequiredApproval
+            rule2
+            "when multiple rules correspond to a command then favor the rule
+            with DailyLimit criteria"
+
+         // Reverse the order to ensure the rule being favored has nothing to do
+         // with ordering.
+         let rules = Map [ rule2.RuleId, rule2; rule.RuleId, rule ]
+
+         let ruleCorrespondingToRequiredApproval =
+            Expect.wantSome
+               (commandRequiresApproval cmd rules progress Stub.accrual)
+               "command requires approval, meeting criteria for 2 rules"
+
+         Expect.equal
+            ruleCorrespondingToRequiredApproval
+            rule2
+            "when multiple rules correspond to a command then favor the rule
+            with DailyLimit criteria"
+
+         let cmd =
+            AccountStub.command.domesticTransfer 4_000m
+            |> ApprovableCommand.DomesticTransfer
+
+         let ruleCorrespondingToRequiredApproval =
+            Expect.wantSome
+               (commandRequiresApproval cmd rules progress Stub.accrual)
+               "command requires approval, meeting criteria for 1 rules"
+
+         Expect.equal ruleCorrespondingToRequiredApproval rule ""
+      }
+
+      test
+         "commandRequiresApproval detects if an incoming command's associated
+            progress record is already completed" {
+         let cmd =
+            AccountStub.command.domesticTransfer 4_000m
+            |> ApprovableCommand.DomesticTransfer
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.DomesticTransfer
+            Criteria =
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 3000m
+                  UpperBound = None
+               }
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rules = Map [ rule.RuleId, rule ]
+
+         let p = {
+            Stub.progress with
+               ProgressId = CommandApprovalProgressId cmd.CorrelationId
+               RuleId = rule.RuleId
+               Status = Status.Pending
+               CommandToInitiateOnApproval = cmd
+               ApprovedBy = []
+         }
+
+         let progress = Map [ p.ProgressId, p ]
+
+         Expect.isSome
+            (commandRequiresApproval cmd rules progress Stub.accrual)
+            ""
+
+         let progress =
+            Map [ p.ProgressId, { p with Status = Status.Declined } ]
+
+         Expect.isNone
+            (commandRequiresApproval cmd rules progress Stub.accrual)
+            "no approval required if associated command progress is declined"
+
+         let progress =
+            Map [
+               p.ProgressId,
+               {
+                  p with
+                     Status =
+                        Status.Terminated
+                           CommandApprovalTerminationReason.AssociatedRuleApproverDeleted
+               }
+            ]
+
+         Expect.isNone
+            (commandRequiresApproval cmd rules progress Stub.accrual)
+            "no approval required if associated command progress is terminated"
+
+         let progress =
+            Map [ p.ProgressId, { p with Status = Status.Approved } ]
+
+         Expect.isNone
+            (commandRequiresApproval cmd rules progress Stub.accrual)
+            "no approval required if associated command progress is complete"
       }
    ]

@@ -199,7 +199,7 @@ let EmployeeCreateFormComponent
 
                if
                   rule.CommandType = ApprovableCommandType.InviteEmployee
-                  && isSoleApprover.IsNone
+                  && not isSoleApprover
                then
                   Some ruleId
                else
