@@ -138,14 +138,14 @@ module CommandApprovalRule =
          | None, None, _, _ -> true
          | _, _, None, None -> true
          | Some eLow, Some eHigh, Some low, Some high ->
-            not (high < eLow || low > eHigh)
-         | Some eLow, Some _, None, Some high -> high >= eLow
-         | Some _, Some eHigh, Some low, None -> low <= eHigh
-         | None, Some eHigh, Some low, Some _ -> low <= eHigh
+            not (high <= eLow || low >= eHigh)
+         | Some eLow, Some _, None, Some high -> high > eLow
+         | Some _, Some eHigh, Some low, None -> low < eHigh
+         | None, Some eHigh, Some low, Some _ -> low < eHigh
          | None, Some _, None, Some _ -> true
-         | None, Some eHigh, Some low, None -> low <= eHigh
-         | Some eLow, None, Some _, Some high -> high >= eLow
-         | Some eLow, None, None, Some high -> high >= eLow
+         | None, Some eHigh, Some low, None -> low < eHigh
+         | Some eLow, None, Some _, Some high -> high > eLow
+         | Some eLow, None, None, Some high -> high > eLow
          | Some _, None, Some _, None -> true
 
    [<RequireQualifiedAccess>]
@@ -176,6 +176,20 @@ module CommandApprovalRule =
             Lib.Validators.amountValidator "daily limit criteria" limit
             |> Result.map (fun _ -> criteria)
          | Criteria.PerCommand -> Ok criteria
+
+      static member sortOrder(criteria: Criteria) =
+         match criteria with
+         | Criteria.AmountPerCommand range ->
+            match range.LowerBound, range.UpperBound with
+            | None, Some high -> 0, None, Some high
+            | Some low, Some high -> 1, Some low, Some high
+            | Some low, None -> 2, Some low, None
+            // NOTE: Case should not occur.
+            // Consider making a type which enforces either
+            // lower or upper being Some.
+            | None, None -> 3, None, None
+         | Criteria.AmountDailyLimit _ -> 4, None, None
+         | Criteria.PerCommand -> 5, None, None
 
    [<RequireQualifiedAccess>]
    type Approver =
@@ -461,10 +475,9 @@ module CommandApprovalProgress =
          | CommandApprovalRule.Criteria.AmountPerCommand range ->
             match range.LowerBound, range.UpperBound with
             | None, None -> None // This case should not be reached
-            | Some low, None ->
-               if command.Amount >= low then Some rule else None
+            | Some low, None -> if command.Amount > low then Some rule else None
             | None, Some high ->
-               if command.Amount <= high then Some rule else None
+               if command.Amount < high then Some rule else None
             | Some low, Some high ->
                if command.Amount >= low && command.Amount <= high then
                   Some rule
@@ -525,12 +538,20 @@ module CommandApprovalProgress =
       | rules ->
          rules
          |> List.choose requiresApproval
-         // Prioritize daily limit over range >= when a command
-         // meets the criteria of multiple rules.
-         |> List.sortBy (fun rule ->
-            match rule.Criteria with
-            | CommandApprovalRule.Criteria.AmountDailyLimit _ -> 0
-            | _ -> 1)
+         // Prioritize daily limit over range (Some, None) when a command
+         // meets the criteria of multiple rules (AmountDailyLimit +
+         // AmountPerCommand).
+         // Prioritize multiple AmountPerCommandRange by their descending
+         // sort order as well.
+         //
+         // (ex: DailyLimit 15
+         //      { LowerBound = Some 7; UpperBound = None }
+         //      { LowerBound = Some 4; UpperBound = Some 7 }
+         //      { LowerBound = Some 2; UpperBound = Some 4 }
+         // )
+         |> List.sortByDescending (
+            _.Criteria >> CommandApprovalRule.Criteria.sortOrder
+         )
          |> function
             | [] -> None
             | head :: rest -> Some head
