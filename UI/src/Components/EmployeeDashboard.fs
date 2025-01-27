@@ -6,6 +6,7 @@ open Elmish
 open Feliz.Router
 open Fable.FontAwesome
 
+open Bank.Org.Domain
 open Bank.Employee.Domain
 open UIDomain.Employee
 open Lib.SharedTypes
@@ -189,6 +190,61 @@ let renderTable
       ]
    ]
 
+// NOTE:
+// Following the initial creation of an employee in the employee actor
+// there may be a message sent to org actor to create an approval request
+// for employee access.
+//
+// There is currently no SignalR integration for org related state transitions
+// that would update the in-browser state of the org in to include the
+// approval request on Org.CommandApprovalProgress.
+//
+// As such we will update the in-browser state of the org via the org
+// dispatch context so the command approval request is immediately available.
+let private notifyOrgOfEmployeeInviteApprovalRequest
+   (orgDispatch: OrgProvider.Msg -> unit)
+   (rule: CommandApprovalRule.T)
+   (org: Org)
+   (createEmployeeReceipt: EmployeeCommandReceipt)
+   =
+   let employee = createEmployeeReceipt.PendingState
+   let envelope = createEmployeeReceipt.Envelope
+
+   let cmd =
+      CommandApprovalProgress.RequestCommandApproval.create
+         employee.OrgId
+         envelope.InitiatedById
+         envelope.CorrelationId
+         {
+            RuleId = rule.RuleId
+            Command =
+               ApproveAccessCommand.create
+                  employee.CompositeId
+                  envelope.InitiatedById
+                  envelope.CorrelationId
+                  {
+                     Name = employee.Name
+                     Reference = None
+                  }
+               |> InviteEmployee
+               |> ApprovableCommand.PerCommand
+            Requester = {
+               EmployeeName = employee.Name
+               EmployeeId = InitiatedById.toEmployeeId envelope.InitiatedById
+            }
+            RequesterIsConfiguredAsAnApprover =
+               CommandApprovalRule.isRequesterOneOfManyApprovers
+                  envelope.InitiatedById
+                  rule
+         }
+      |> OrgCommand.RequestCommandApproval
+
+   let validation = Org.stateTransition { Info = org; Events = [] } cmd
+
+   match validation with
+   | Ok(_, newState) -> orgDispatch (OrgProvider.Msg.OrgUpdated newState.Info)
+   | _ -> ()
+
 [<ReactComponent>]
 let EmployeeDashboardComponent
    (url: Routes.EmployeeUrl)
@@ -357,9 +413,25 @@ let EmployeeDashboardComponent
 
                      match action with
                      | EmployeeActionView.Create ->
-                        EmployeeCreateFormComponent
-                           session
-                           (Msg.EmployeeCommandProcessing >> dispatch >> close)
+                        match orgCtx with
+                        | Deferred.Resolved(Ok(Some org)) ->
+                           EmployeeCreateFormComponent session (fun receipt ->
+                              dispatch (Msg.EmployeeCommandProcessing receipt)
+                              close ()
+
+                              match receipt.PendingCommand with
+                              | EmployeeCommand.CreateEmployee c ->
+                                 c.Data.OrgRequiresEmployeeInviteApproval
+                                 |> Option.bind
+                                       org.Org.CommandApprovalRules.TryFind
+                                 |> Option.iter (fun rule ->
+                                    notifyOrgOfEmployeeInviteApprovalRequest
+                                       orgDispatchCtx
+                                       rule
+                                       org.Org
+                                       receipt)
+                              | _ -> ())
+                        | _ -> Html.progress []
                      | EmployeeActionView.ViewEmployee id ->
                         classyNode Html.div [ "employee-detail" ] [
                            match employees, orgCtx with
