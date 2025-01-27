@@ -16,6 +16,9 @@ open Lib.SharedTypes
 
 module Stub = OrganizationStub
 
+let update = Org.stateTransition
+let initState = Stub.orgStateWithEvents
+
 let tests =
    testList "Command Approval domain" [
       test "AmountPerCommandRange detects overlap in Some, Some, Some, None" {
@@ -888,7 +891,7 @@ let tests =
          }
 
          let progress = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                ApprovedBy = [ approver ]
          }
 
@@ -896,7 +899,7 @@ let tests =
             (isNewApproval approver.EmployeeId progress)
             "should detect a duplicate approval"
 
-         let progress = { Stub.progress with ApprovedBy = [] }
+         let progress = { progress with ApprovedBy = [] }
 
          Expect.isTrue
             (isNewApproval approver.EmployeeId progress)
@@ -920,7 +923,7 @@ let tests =
          }
 
          let progress = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                RuleId = rule.RuleId
                ApprovedBy = [ approver ]
          }
@@ -939,7 +942,7 @@ let tests =
             "should not be allowed to approve the rule since already have2"
 
          let progress = {
-            Stub.progress with
+            progress with
                RuleId = rule.RuleId
                ApprovedBy = []
          }
@@ -986,7 +989,7 @@ let tests =
          }
 
          let progress = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                RuleId = rule.RuleId
                ApprovedBy = []
          }
@@ -997,8 +1000,7 @@ let tests =
             "should be 2 equivalent to the 2 approvers configured for the rule"
 
          let progress = {
-            Stub.progress with
-               RuleId = rule.RuleId
+            progress with
                ApprovedBy = [ approverB ]
          }
 
@@ -1008,8 +1010,7 @@ let tests =
             "should be 1 equivalent to one of the 2 approvers configured for the rule"
 
          let progress = {
-            Stub.progress with
-               RuleId = rule.RuleId
+            progress with
                ApprovedBy = [ approverB; approver ]
          }
 
@@ -1066,34 +1067,34 @@ let tests =
          }
 
          let progress1 = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                RuleId = rule1.RuleId
                ApprovedBy = [ approverA ]
          }
 
          let progress2 = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                ProgressId = Stub.progressId ()
                RuleId = rule1.RuleId
                ApprovedBy = []
          }
 
          let progress3 = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                ProgressId = Stub.progressId ()
                RuleId = rule2.RuleId
                ApprovedBy = [ approverB ]
          }
 
          let progress4 = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                ProgressId = Stub.progressId ()
                RuleId = rule2.RuleId
                ApprovedBy = [ approverA ]
          }
 
          let progress5 = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                ProgressId = Stub.progressId ()
                RuleId = rule2.RuleId
                ApprovedBy = []
@@ -1355,7 +1356,7 @@ let tests =
          let rules = Map [ rule.RuleId, rule ]
 
          let p = {
-            Stub.progress with
+            Stub.progress Stub.updateRoleCommand with
                ProgressId = CommandApprovalProgressId cmd.CorrelationId
                RuleId = rule.RuleId
                Status = Status.Pending
@@ -1397,5 +1398,477 @@ let tests =
          Expect.isNone
             (commandRequiresApproval cmd rules progress Stub.accrual)
             "no approval required if associated command progress is complete"
+      }
+
+      test
+         "Attempting to configure an additional approval rule of certain command types is not allowed" {
+         let approverA: EmployeeReference = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let approverB: EmployeeReference = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let commandTypes = [
+            ApprovableCommandType.InviteEmployee, Criteria.PerCommand
+            ApprovableCommandType.UpdateEmployeeRole, Criteria.PerCommand
+            ApprovableCommandType.DomesticTransfer,
+            Criteria.AmountDailyLimit 10m
+            ApprovableCommandType.FulfillPlatformPayment,
+            Criteria.AmountDailyLimit 10m
+            ApprovableCommandType.InternalTransferBetweenOrgs,
+            Criteria.AmountDailyLimit 10m
+         ]
+
+         for cmdType, criteria in commandTypes do
+            let rule = {
+               RuleId = Stub.ruleId ()
+               OrgId = Stub.orgId
+               CommandType = cmdType
+               Criteria = criteria
+               Approvers = [
+                  Approver.Admin approverA
+                  Approver.Admin approverB
+               ]
+            }
+
+            let cmd =
+               ConfigureApprovalRuleCommand.create
+                  Stub.orgId
+                  (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                  rule
+               |> OrgCommand.ConfigureApprovalRule
+
+            let res = update Stub.orgStateWithEvents cmd
+            let _, org = Expect.wantOk res ""
+
+            Expect.hasLength org.Info.CommandApprovalRules 1 ""
+
+            let cmd =
+               ConfigureApprovalRuleCommand.create
+                  Stub.orgId
+                  (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                  { rule with RuleId = Stub.ruleId () }
+               |> OrgCommand.ConfigureApprovalRule
+
+            let res = update org cmd
+            let err = Expect.wantError res ""
+
+            match err with
+            | Err.OrgStateTransitionError(OrgStateTransitionError.ApprovalRuleMultipleOfType _) ->
+               Expect.isTrue true ""
+            | _ ->
+               Expect.isTrue
+                  false
+                  $"{cmdType} command type not allowed to have more than 1 rule"
+      }
+
+      test
+         "Attempting to configure an additional approval rule with conflicting criteria is not allowed" {
+         let approverA: EmployeeReference = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let approverB: EmployeeReference = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let commandTypes = [
+            ApprovableCommandType.DomesticTransfer
+            ApprovableCommandType.InternalTransferBetweenOrgs
+            ApprovableCommandType.FulfillPlatformPayment
+         ]
+
+         let conflictingCriteria = [
+            [
+               Criteria.AmountDailyLimit 10m
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 15m
+                  UpperBound = None
+               }
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 15m
+               }
+
+               Criteria.AmountDailyLimit 10m
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = None
+               }
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 15m
+                  UpperBound = None
+               }
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = Some 20m
+               }
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 15m
+                  UpperBound = None
+               }
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 15m
+               }
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = Some 20m
+               }
+            ]
+         ]
+
+         for cmdType in commandTypes do
+            for [ criteriaOfFirst; criteriaOfSecond ] in conflictingCriteria do
+               let rule = {
+                  RuleId = Stub.ruleId ()
+                  OrgId = Stub.orgId
+                  CommandType = cmdType
+                  Criteria = criteriaOfFirst
+                  Approvers = [
+                     Approver.Admin approverA
+                     Approver.Admin approverB
+                  ]
+               }
+
+               let cmd =
+                  ConfigureApprovalRuleCommand.create
+                     Stub.orgId
+                     (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                     rule
+                  |> OrgCommand.ConfigureApprovalRule
+
+               let res = update Stub.orgStateWithEvents cmd
+               let _, org = Expect.wantOk res ""
+
+               Expect.hasLength org.Info.CommandApprovalRules 1 ""
+
+               let rule2 = {
+                  RuleId = Stub.ruleId ()
+                  OrgId = Stub.orgId
+                  CommandType = cmdType
+                  Criteria = criteriaOfSecond
+                  Approvers = [
+                     Approver.Admin approverA
+                     Approver.Admin approverB
+                  ]
+               }
+
+               let cmd =
+                  ConfigureApprovalRuleCommand.create
+                     Stub.orgId
+                     (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                     rule2
+                  |> OrgCommand.ConfigureApprovalRule
+
+               let res = update org cmd
+               let err = Expect.wantError res ""
+
+               match err with
+               | Err.OrgStateTransitionError OrgStateTransitionError.ApprovalRuleHasConflictingCriteria ->
+                  Expect.isTrue true ""
+               | _ ->
+                  Expect.isTrue
+                     false
+                     $"{criteriaOfFirst} should conflict with {criteriaOfSecond}"
+      }
+
+      test
+         "Attempting to configure an additional approval rule of certain CommandTypes without conflicting criteria is allowed" {
+         let approverA: EmployeeReference = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let approverB: EmployeeReference = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let commandTypes = [
+            ApprovableCommandType.DomesticTransfer
+            ApprovableCommandType.InternalTransferBetweenOrgs
+            ApprovableCommandType.FulfillPlatformPayment
+         ]
+
+         let conflictingCriteria = [
+            [
+               Criteria.AmountDailyLimit 10m
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 5m
+                  UpperBound = None
+               }
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 5m
+               }
+
+               Criteria.AmountDailyLimit 10m
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 14m
+               }
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 15m
+                  UpperBound = None
+               }
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = Some 20m
+               }
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 21m
+                  UpperBound = None
+               }
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 9m
+               }
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = Some 20m
+               }
+            ]
+         ]
+
+         for cmdType in commandTypes do
+            for [ criteriaOfFirst; criteriaOfSecond ] in conflictingCriteria do
+               let rule = {
+                  RuleId = Stub.ruleId ()
+                  OrgId = Stub.orgId
+                  CommandType = cmdType
+                  Criteria = criteriaOfFirst
+                  Approvers = [
+                     Approver.Admin approverA
+                     Approver.Admin approverB
+                  ]
+               }
+
+               let cmd =
+                  ConfigureApprovalRuleCommand.create
+                     Stub.orgId
+                     (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                     rule
+                  |> OrgCommand.ConfigureApprovalRule
+
+               let res = update Stub.orgStateWithEvents cmd
+               let _, org = Expect.wantOk res ""
+
+               Expect.hasLength org.Info.CommandApprovalRules 1 ""
+
+               let rule2 = {
+                  RuleId = Stub.ruleId ()
+                  OrgId = Stub.orgId
+                  CommandType = cmdType
+                  Criteria = criteriaOfSecond
+                  Approvers = [
+                     Approver.Admin approverA
+                     Approver.Admin approverB
+                  ]
+               }
+
+               let cmd =
+                  ConfigureApprovalRuleCommand.create
+                     Stub.orgId
+                     (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                     rule2
+                  |> OrgCommand.ConfigureApprovalRule
+
+               let res = update org cmd
+               let _, org = Expect.wantOk res ""
+
+               Expect.hasLength
+                  org.Info.CommandApprovalRules
+                  2
+                  $"{criteriaOfFirst} should not conflict with {criteriaOfSecond}"
+      }
+
+      test "AcquireCommandApproval" {
+         let approverA: EmployeeReference = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let approverB: EmployeeReference = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = ApprovableCommandType.UpdateEmployeeRole
+            Criteria = Criteria.PerCommand
+            Approvers = [ Approver.Admin approverA; Approver.Admin approverB ]
+         }
+
+         let initiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById
+
+         let cmd =
+            ConfigureApprovalRuleCommand.create Stub.orgId initiatedBy rule
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update Stub.orgStateWithEvents cmd
+         let _, org = Expect.wantOk res ""
+
+         let cmdData: CommandApprovalRequested = {
+            RuleId = Stub.ruleId ()
+            Requester = approverA
+            RequesterIsConfiguredAsAnApprover = true
+            Command = Stub.updateRoleCommand
+         }
+
+         let cmd =
+            RequestCommandApproval.create
+               Stub.orgId
+               initiatedBy
+               (Guid.NewGuid() |> CorrelationId)
+               cmdData
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmd
+         let err = Expect.wantError res ""
+
+         match err with
+         | Err.OrgStateTransitionError OrgStateTransitionError.ApprovalRuleNotFound ->
+            Expect.isTrue true ""
+         | _ ->
+            Expect.isTrue
+               false
+               "Request command approval for a command with no
+            associated rule should error"
+
+         let cmd =
+            RequestCommandApproval.create
+               Stub.orgId
+               initiatedBy
+               (Guid.NewGuid() |> CorrelationId)
+               { cmdData with RuleId = rule.RuleId }
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmd
+         let _, org = Expect.wantOk res ""
+
+         Expect.hasLength
+            org.Info.CommandApprovalProgress
+            1
+            "in progress command approval associated with org"
+
+         let progress = Seq.head org.Info.CommandApprovalProgress.Values
+
+         let cmd =
+            AcquireCommandApproval.create Stub.orgId {
+               RuleId = rule.RuleId
+               ApprovedBy = approverA
+               ProgressId = progress.ProgressId
+               Command = progress.CommandToInitiateOnApproval
+            }
+            |> OrgCommand.AcquireCommandApproval
+
+         let res = update org cmd
+         let err = Expect.wantError res ""
+
+         match err with
+         | Err.OrgStateTransitionError(OrgStateTransitionError.ApproverAlreadyApprovedCommand(a,
+                                                                                              _)) ->
+            Expect.equal
+               a
+               cmdData.Requester.EmployeeId
+               "ApproverA should have been included on progress.ApprovedBy since
+               it is one of the approvers configured the rule & the requester is
+               equivalent to ApproverA."
+         | _ ->
+            Expect.isTrue
+               false
+               "It is not allowed for the same approver to
+            approve an approval progress item multiple times"
+
+         let cmd =
+            AcquireCommandApproval.create Stub.orgId {
+               RuleId = rule.RuleId
+               // NOTE: change approver to one that hasn't already approved the
+               // command
+               ApprovedBy = approverB
+               ProgressId = progress.ProgressId
+               Command = progress.CommandToInitiateOnApproval
+            }
+            |> OrgCommand.AcquireCommandApproval
+
+         let res = update org cmd
+         let evt, org = Expect.wantOk res ""
+
+         match evt with
+         | OrgEvent.CommandApprovalProcessCompleted _ -> Expect.isTrue true ""
+         | _ ->
+            Expect.isTrue
+               false
+               "Recognize that the AcquireCommandApproval
+            command will lead to all approvals being acquired for the command so
+            go ahead & recognize it as an
+            OrgEvent.CommandApprovalProcessCompleted instead of OrgEvent.CommandApprovalAcquired"
+
+         let progress = Seq.head org.Info.CommandApprovalProgress.Values
+
+         Expect.equal
+            progress.Status
+            CommandApprovalProgress.Status.Approved
+            "Expect a completed status for the progress"
+
+         Expect.hasLength
+            progress.ApprovedBy
+            rule.Approvers.Length
+            "Progress ApprovedBy should be equivalent to Rule Approvers"
+
+         // Issue another AcquireCommandApproval to validate progress
+         // end-of-life
+         let res = update org cmd
+         let err = Expect.wantError res ""
+
+         match err with
+         | Err.OrgStateTransitionError OrgStateTransitionError.ApprovalProgressWorklowNotActive ->
+            Expect.isTrue true ""
+         | _ ->
+            Expect.isTrue
+               false
+               "Should not be able to acquire additional
+            approvals once progress item is no longer active"
       }
    ]

@@ -36,11 +36,12 @@ let initMockOrgActor (tck: TestKit.Tck) =
          match envelope.Message with
          | :? OrgMessage as msg ->
             match msg with
-            | OrgMessage.StateChange(OrgCommand.RequestCommandApproval cmd) ->
-               cmd
-               |> OrgCommand.RequestCommandApproval
-               |> OrgMessage.StateChange
-               |> tck.TestActor.Tell
+            | OrgMessage.ApprovableRequest cmd ->
+               OrgMessage.ApprovableRequest cmd |> tck.TestActor.Tell
+
+               ignored ()
+            | OrgMessage.StateChange cmd ->
+               cmd |> OrgMessage.StateChange |> tck.TestActor.Tell
 
                ignored ()
             | msg -> unhandled msg
@@ -167,7 +168,7 @@ let tests =
 
       akkaTest
          "Create employee should request command approval from org actor
-      when org requires approval for employee invites"
+          when org requires approval for employee invites"
       <| Some config
       <| fun tck ->
          let o = init tck
@@ -201,9 +202,9 @@ let tests =
          let msg = tck.ExpectMsg<OrgMessage>()
 
          match msg with
-         | OrgMessage.StateChange(OrgCommand.RequestCommandApproval cmd) ->
+         | OrgMessage.ApprovableRequest cmd ->
             Expect.equal
-               cmd.Data.Command.CommandType
+               cmd.CommandType
                ApprovableCommandType.InviteEmployee
                "Request command approval for employee invite received by org actor"
          | _ ->

@@ -25,7 +25,22 @@ let updateRoleCommand =
       }
    |> ApprovableCommand.UpdateEmployeeRole
 
-let progress: CommandApprovalProgress.T = {
+let inviteEmployeeCommand =
+   ApproveAccessCommand.create
+      (Guid.NewGuid() |> EmployeeId, orgId)
+      (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+      (Guid.NewGuid() |> CorrelationId)
+      { Name = "Dan E"; Reference = None }
+   |> ApprovableCommand.InviteEmployee
+
+let createOrgCommand =
+   CreateOrgCommand.create {
+      OrgId = orgId
+      Name = "new org"
+      InitiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById
+   }
+
+let progress (cmd: ApprovableCommand) : CommandApprovalProgress.T = {
    ProgressId = progressId ()
    RuleId = ruleId ()
    OrgId = orgId
@@ -38,11 +53,25 @@ let progress: CommandApprovalProgress.T = {
    DeclinedBy = None
    CreatedAt = DateTime.UtcNow
    LastUpdate = DateTime.UtcNow
-   CommandToInitiateOnApproval = updateRoleCommand
+   CommandToInitiateOnApproval = cmd
 }
 
 let accrual: DailyAccrual = {
    PaymentsPaid = 0m
    DomesticTransfer = 0m
    InternalTransferBetweenOrgs = 0m
+}
+
+let orgStateWithEvents: OrgWithEvents = {
+   Info = {
+      Name = "Sapphire Health"
+      OrgId = orgId
+      Status = OrgStatus.Active
+      FeatureFlags = {
+         SocialTransferDiscoveryPrimaryAccountId = None
+      }
+      CommandApprovalRules = Map.empty
+      CommandApprovalProgress = Map.empty
+   }
+   Events = []
 }

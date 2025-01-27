@@ -199,7 +199,13 @@ let actorProps
             match msg with
             | OrgMessage.GetOrg ->
                mailbox.Sender() <! (stateOpt |> Option.map _.Info)
-            | ApprovableRequest cmd ->
+            | ApprovableRequest _ when org.Status <> OrgStatus.Active ->
+               let errMsg =
+                  $"Attempt to initiate an approvable request for an inactive org {org.Name}-{org.OrgId}"
+
+               logError errMsg
+               return unhandled ()
+            | ApprovableRequest cmd when org.Status = OrgStatus.Active ->
                // If the command requires approval then initiate the command
                // approval workflow.  Otherwise, forward the command to the
                // appropriate account or employee actor for processing.
