@@ -197,10 +197,11 @@ let EmployeeCreateFormComponent
                      (InitiatedById session.EmployeeId)
                      rule
 
-               if
-                  rule.CommandType = ApprovableCommandType.InviteEmployee
-                  && not isSoleApprover
-               then
+               let inviteType =
+                  ApprovableCommandType.ApprovablePerCommand
+                     InviteEmployeeCommandType
+
+               if rule.CommandType = inviteType && not isSoleApprover then
                   Some ruleId
                else
                   None)

@@ -151,8 +151,10 @@ let setupApprovalRequest
 
    let cmd =
       match cmdType with
-      | ApprovableCommandType.UpdateEmployeeRole -> Stub.updateRoleCommand
-      | ApprovableCommandType.InviteEmployee -> Stub.inviteEmployeeCommand
+      | ApprovableCommandType.ApprovablePerCommand UpdateEmployeeRoleCommandType ->
+         Stub.updateRoleCommand
+      | ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType ->
+         Stub.inviteEmployeeCommand
       | _ -> failwith $"Unhandled command type in setupApprovalRequest"
 
    orgActor <! OrgMessage.ApprovableRequest cmd
@@ -258,7 +260,8 @@ let tests =
             setupApprovalRequest
                tck
                o.orgActor
-               ApprovableCommandType.UpdateEmployeeRole
+               (ApprovableCommandType.ApprovablePerCommand
+                  UpdateEmployeeRoleCommandType)
 
          let deleteRuleCmd =
             DeleteApprovalRuleCommand.create {
@@ -300,7 +303,8 @@ let tests =
             setupApprovalRequest
                tck
                o.orgActor
-               ApprovableCommandType.UpdateEmployeeRole
+               (ApprovableCommandType.ApprovablePerCommand
+                  UpdateEmployeeRoleCommandType)
 
          let cmd =
             {
@@ -335,7 +339,8 @@ let tests =
             setupApprovalRequest
                tck
                o.orgActor
-               ApprovableCommandType.UpdateEmployeeRole
+               (ApprovableCommandType.ApprovablePerCommand
+                  UpdateEmployeeRoleCommandType)
 
          // NOTE:
          // The rule is configured with 2 approvers (AnyAdmin; AnyAdmin).
@@ -380,7 +385,8 @@ let tests =
             setupApprovalRequest
                tck
                o.orgActor
-               ApprovableCommandType.InviteEmployee
+               (ApprovableCommandType.ApprovablePerCommand
+                  InviteEmployeeCommandType)
 
          let cmd =
             DeclineCommandApproval.create rule.OrgId {

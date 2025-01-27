@@ -365,7 +365,7 @@ let tests =
          let existingRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.FulfillPlatformPayment
+            CommandType = Stub.commandTypes.Payment
             Criteria =
                Criteria.AmountPerCommand {
                   LowerBound = None
@@ -377,7 +377,7 @@ let tests =
          let newRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.FulfillPlatformPayment
+            CommandType = Stub.commandTypes.Payment
             Criteria = Criteria.AmountDailyLimit 60m
             Approvers = [ Approver.AnyAdmin ]
          }
@@ -484,7 +484,7 @@ let tests =
          let existingRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.FulfillPlatformPayment
+            CommandType = Stub.commandTypes.Payment
             Criteria = Criteria.AmountDailyLimit 60m
             Approvers = [ Approver.AnyAdmin ]
          }
@@ -492,7 +492,7 @@ let tests =
          let newRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.FulfillPlatformPayment
+            CommandType = Stub.commandTypes.Payment
             Criteria =
                Criteria.AmountPerCommand {
                   LowerBound = None
@@ -576,7 +576,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.InviteEmployee
+            CommandType = Stub.commandTypes.InviteEmployee
             Criteria = Criteria.PerCommand
             Approvers = [
                Approver.Admin approver
@@ -620,8 +620,8 @@ let tests =
          "newRuleCommandTypeConflictsWithExistingRule should check for
             duplicate rules by (ApprovableCommandType, Criteria.PerCommand)" {
          let cmdTypes = [
-            ApprovableCommandType.InviteEmployee
-            ApprovableCommandType.UpdateEmployeeRole
+            Stub.commandTypes.InviteEmployee
+            Stub.commandTypes.UpdateEmployeeRole
          ]
 
          for cmdType in cmdTypes do
@@ -654,10 +654,10 @@ let tests =
             let ruleB = {
                ruleB with
                   CommandType =
-                     if cmdType = ApprovableCommandType.InviteEmployee then
-                        ApprovableCommandType.UpdateEmployeeRole
+                     if cmdType = Stub.commandTypes.InviteEmployee then
+                        Stub.commandTypes.UpdateEmployeeRole
                      else
-                        ApprovableCommandType.InviteEmployee
+                        Stub.commandTypes.InviteEmployee
             }
 
             Expect.isFalse
@@ -674,9 +674,9 @@ let tests =
          "newRuleCommandTypeConflictsWithExistingRule should check for
             duplicate rules by (ApprovableCommandType, Criteria.AmountDailyLimit)" {
          let cmdTypes = [
-            ApprovableCommandType.InternalTransferBetweenOrgs
-            ApprovableCommandType.DomesticTransfer
-            ApprovableCommandType.FulfillPlatformPayment
+            Stub.commandTypes.InternalTransfer
+            Stub.commandTypes.DomesticTransfer
+            Stub.commandTypes.Payment
          ]
 
          for cmdType in cmdTypes do
@@ -710,11 +710,11 @@ let tests =
                ruleB with
                   CommandType =
                      match cmdType with
-                     | ApprovableCommandType.InternalTransferBetweenOrgs ->
-                        ApprovableCommandType.DomesticTransfer
-                     | ApprovableCommandType.DomesticTransfer ->
-                        ApprovableCommandType.FulfillPlatformPayment
-                     | _ -> ApprovableCommandType.InternalTransferBetweenOrgs
+                     | ApprovableCommandType.ApprovableAmountBased InternalTransferBetweenOrgsCommandType ->
+                        Stub.commandTypes.DomesticTransfer
+                     | ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType ->
+                        Stub.commandTypes.Payment
+                     | _ -> Stub.commandTypes.InternalTransfer
             }
 
             Expect.isFalse
@@ -731,9 +731,9 @@ let tests =
          "newRuleCommandTypeConflictsWithExistingRule should disregard
             duplicate rules by (ApprovableCommandType, Criteria.AmountPerCommand)" {
          let cmdTypes = [
-            ApprovableCommandType.InternalTransferBetweenOrgs
-            ApprovableCommandType.DomesticTransfer
-            ApprovableCommandType.FulfillPlatformPayment
+            Stub.commandTypes.InternalTransfer
+            Stub.commandTypes.DomesticTransfer
+            Stub.commandTypes.Payment
          ]
 
          for cmdType in cmdTypes do
@@ -775,11 +775,11 @@ let tests =
                ruleB with
                   CommandType =
                      match cmdType with
-                     | ApprovableCommandType.InternalTransferBetweenOrgs ->
-                        ApprovableCommandType.DomesticTransfer
-                     | ApprovableCommandType.DomesticTransfer ->
-                        ApprovableCommandType.FulfillPlatformPayment
-                     | _ -> ApprovableCommandType.InternalTransferBetweenOrgs
+                     | ApprovableCommandType.ApprovableAmountBased InternalTransferBetweenOrgsCommandType ->
+                        Stub.commandTypes.DomesticTransfer
+                     | ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType ->
+                        Stub.commandTypes.Payment
+                     | _ -> Stub.commandTypes.InternalTransfer
             }
 
             Expect.isFalse
@@ -805,7 +805,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.InviteEmployee
+            CommandType = Stub.commandTypes.InviteEmployee
             Criteria = Criteria.PerCommand
             Approvers = [
                Approver.Admin approver
@@ -854,7 +854,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.InviteEmployee
+            CommandType = Stub.commandTypes.InviteEmployee
             Criteria = Criteria.PerCommand
             Approvers = [ Approver.Admin approver; Approver.AnyAdmin ]
          }
@@ -917,7 +917,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.InviteEmployee
+            CommandType = Stub.commandTypes.InviteEmployee
             Criteria = Criteria.PerCommand
             Approvers = [ Approver.Admin approver ]
          }
@@ -983,7 +983,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.InviteEmployee
+            CommandType = Stub.commandTypes.InviteEmployee
             Criteria = Criteria.PerCommand
             Approvers = [ Approver.Admin approver; Approver.Admin approverB ]
          }
@@ -1049,7 +1049,7 @@ let tests =
          let rule1 = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.UpdateEmployeeRole
+            CommandType = Stub.commandTypes.UpdateEmployeeRole
             Criteria = Criteria.PerCommand
             Approvers = [ Approver.Admin approverA ]
          }
@@ -1057,7 +1057,7 @@ let tests =
          let rule2 = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.InviteEmployee
+            CommandType = Stub.commandTypes.InviteEmployee
             Criteria = Criteria.PerCommand
             Approvers = [
                Approver.AnyAdmin
@@ -1128,7 +1128,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.UpdateEmployeeRole
+            CommandType = Stub.commandTypes.UpdateEmployeeRole
             Criteria = Criteria.PerCommand
             Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
          }
@@ -1136,7 +1136,7 @@ let tests =
          let rule2 = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.InviteEmployee
+            CommandType = Stub.commandTypes.InviteEmployee
             Criteria = Criteria.PerCommand
             Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
          }
@@ -1189,7 +1189,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.DomesticTransfer
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria = Criteria.AmountDailyLimit 10_000m
             Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
          }
@@ -1233,7 +1233,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.DomesticTransfer
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
                Criteria.AmountPerCommand {
                   LowerBound = Some 3000m
@@ -1272,7 +1272,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.DomesticTransfer
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
                Criteria.AmountPerCommand {
                   LowerBound = Some 3000m
@@ -1284,7 +1284,7 @@ let tests =
          let rule2 = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.DomesticTransfer
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria = Criteria.AmountDailyLimit 10_000m
             Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
          }
@@ -1344,7 +1344,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.DomesticTransfer
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
                Criteria.AmountPerCommand {
                   LowerBound = Some 3000m
@@ -1413,14 +1413,13 @@ let tests =
          }
 
          let commandTypes = [
-            ApprovableCommandType.InviteEmployee, Criteria.PerCommand
-            ApprovableCommandType.UpdateEmployeeRole, Criteria.PerCommand
-            ApprovableCommandType.DomesticTransfer,
-            Criteria.AmountDailyLimit 10m
-            ApprovableCommandType.FulfillPlatformPayment,
-            Criteria.AmountDailyLimit 10m
-            ApprovableCommandType.InternalTransferBetweenOrgs,
-            Criteria.AmountDailyLimit 10m
+            Stub.commandTypes.InviteEmployee, Criteria.PerCommand
+            Stub.commandTypes.UpdateEmployeeRole, Criteria.PerCommand
+            Stub.commandTypes.DomesticTransfer, Criteria.AmountDailyLimit 10m
+
+            Stub.commandTypes.Payment, Criteria.AmountDailyLimit 10m
+
+            Stub.commandTypes.InternalTransfer, Criteria.AmountDailyLimit 10m
          ]
 
          for cmdType, criteria in commandTypes do
@@ -1479,9 +1478,9 @@ let tests =
          }
 
          let commandTypes = [
-            ApprovableCommandType.DomesticTransfer
-            ApprovableCommandType.InternalTransferBetweenOrgs
-            ApprovableCommandType.FulfillPlatformPayment
+            Stub.commandTypes.DomesticTransfer
+            Stub.commandTypes.InternalTransfer
+            Stub.commandTypes.Payment
          ]
 
          let conflictingCriteria = [
@@ -1608,9 +1607,9 @@ let tests =
          }
 
          let commandTypes = [
-            ApprovableCommandType.DomesticTransfer
-            ApprovableCommandType.InternalTransferBetweenOrgs
-            ApprovableCommandType.FulfillPlatformPayment
+            Stub.commandTypes.DomesticTransfer
+            Stub.commandTypes.InternalTransfer
+            Stub.commandTypes.Payment
          ]
 
          let conflictingCriteria = [
@@ -1735,7 +1734,7 @@ let tests =
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = ApprovableCommandType.UpdateEmployeeRole
+            CommandType = Stub.commandTypes.UpdateEmployeeRole
             Criteria = Criteria.PerCommand
             Approvers = [ Approver.Admin approverA; Approver.Admin approverB ]
          }

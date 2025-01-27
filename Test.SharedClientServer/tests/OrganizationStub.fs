@@ -75,3 +75,18 @@ let orgStateWithEvents: OrgWithEvents = {
    }
    Events = []
 }
+
+let commandTypes = {|
+   InviteEmployee =
+      ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType
+   UpdateEmployeeRole =
+      ApprovableCommandType.ApprovablePerCommand UpdateEmployeeRoleCommandType
+   DomesticTransfer =
+      ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType
+   Payment =
+      ApprovableCommandType.ApprovableAmountBased
+         FulfillPlatformPaymentCommandType
+   InternalTransfer =
+      ApprovableCommandType.ApprovableAmountBased
+         InternalTransferBetweenOrgsCommandType
+|}
