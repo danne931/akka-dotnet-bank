@@ -354,10 +354,13 @@ module private StateTransition =
       if org.Status <> OrgStatus.Active then
          transitionErr OrgStateTransitionError.OrgNotActive
       else
-         map
-            CommandApprovalRequested
-            state
-            (CommandApprovalProgress.RequestCommandApproval.toEvent cmd)
+         match Map.tryFind cmd.Data.RuleId org.CommandApprovalRules with
+         | None -> transitionErr OrgStateTransitionError.ApprovalRuleNotFound
+         | Some _ ->
+            map
+               CommandApprovalRequested
+               state
+               (CommandApprovalProgress.RequestCommandApproval.toEvent cmd)
 
    let acquireCommandApproval
       (state: OrgWithEvents)
