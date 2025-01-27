@@ -7,40 +7,61 @@ open Lib.SharedTypes
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
 
+type ApprovablePerCommand =
+   | InviteEmployeeCommandType
+   | UpdateEmployeeRoleCommandType
+
+type ApprovableAmountBased =
+   | FulfillPlatformPaymentCommandType
+   | InternalTransferBetweenOrgsCommandType
+   | DomesticTransferCommandType
+
 [<RequireQualifiedAccess>]
 type ApprovableCommandType =
-   | InviteEmployee
-   | UpdateEmployeeRole
-   | FulfillPlatformPayment
-   | InternalTransferBetweenOrgs
-   | DomesticTransfer
+   | ApprovablePerCommand of ApprovablePerCommand
+   | ApprovableAmountBased of ApprovableAmountBased
 
    override x.ToString() =
       match x with
-      | InviteEmployee -> "InviteEmployee"
-      | UpdateEmployeeRole -> "UpdateEmployeeRole"
-      | FulfillPlatformPayment -> "SendPayment"
-      | InternalTransferBetweenOrgs -> "SendInternalTransferBetweenOrgs"
-      | DomesticTransfer -> "SendDomesticTransfer"
+      | ApprovablePerCommand x ->
+         match x with
+         | InviteEmployeeCommandType -> "InviteEmployee"
+         | UpdateEmployeeRoleCommandType -> "UpdateEmployeeRole"
+      | ApprovableAmountBased x ->
+         match x with
+         | FulfillPlatformPaymentCommandType -> "SendPayment"
+         | InternalTransferBetweenOrgsCommandType ->
+            "SendInternalTransferBetweenOrgs"
+         | DomesticTransferCommandType -> "SendDomesticTransfer"
 
    member x.Display =
       match x with
-      | InviteEmployee -> "Invite Employee"
-      | UpdateEmployeeRole -> "Update Employee Role"
-      | FulfillPlatformPayment -> "Fulfill Platform Payment"
-      | InternalTransferBetweenOrgs -> "Internal Transfer Between Orgs"
-      | DomesticTransfer -> "Domestic Transfer"
+      | ApprovablePerCommand x ->
+         match x with
+         | InviteEmployeeCommandType -> "Invite Employee"
+         | UpdateEmployeeRoleCommandType -> "Update Employee Role"
+      | ApprovableAmountBased x ->
+         match x with
+         | FulfillPlatformPaymentCommandType -> "Fulfill Platform Payment"
+         | InternalTransferBetweenOrgsCommandType ->
+            "Internal Transfer Between Orgs"
+         | DomesticTransferCommandType -> "Domestic Transfer"
 
    static member fromString(o: string) : ApprovableCommandType option =
       if String.IsNullOrWhiteSpace o then
          None
       else
          match o with
-         | "InviteEmployee" -> Some InviteEmployee
-         | "UpdateEmployeeRole" -> Some UpdateEmployeeRole
-         | "SendPayment" -> Some FulfillPlatformPayment
-         | "SendInternalTransferBetweenOrgs" -> Some InternalTransferBetweenOrgs
-         | "SendDomesticTransfer" -> Some DomesticTransfer
+         | "InviteEmployee" ->
+            Some(ApprovablePerCommand InviteEmployeeCommandType)
+         | "UpdateEmployeeRole" ->
+            Some(ApprovablePerCommand UpdateEmployeeRoleCommandType)
+         | "SendPayment" ->
+            Some(ApprovableAmountBased FulfillPlatformPaymentCommandType)
+         | "SendInternalTransferBetweenOrgs" ->
+            Some(ApprovableAmountBased InternalTransferBetweenOrgsCommandType)
+         | "SendDomesticTransfer" ->
+            Some(ApprovableAmountBased DomesticTransferCommandType)
          | _ -> None
 
    static member fromStringUnsafe(o: string) : ApprovableCommandType =
@@ -81,12 +102,19 @@ type ApprovableCommand =
 
    member x.CommandType =
       match x with
-      | InviteEmployee _ -> ApprovableCommandType.InviteEmployee
-      | UpdateEmployeeRole _ -> ApprovableCommandType.UpdateEmployeeRole
-      | FulfillPlatformPayment _ -> ApprovableCommandType.FulfillPlatformPayment
+      | InviteEmployee _ ->
+         ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType
+      | UpdateEmployeeRole _ ->
+         ApprovableCommandType.ApprovablePerCommand
+            UpdateEmployeeRoleCommandType
+      | FulfillPlatformPayment _ ->
+         ApprovableCommandType.ApprovableAmountBased
+            FulfillPlatformPaymentCommandType
       | InternalTransferBetweenOrgs _ ->
-         ApprovableCommandType.InternalTransferBetweenOrgs
-      | DomesticTransfer _ -> ApprovableCommandType.DomesticTransfer
+         ApprovableCommandType.ApprovableAmountBased
+            InternalTransferBetweenOrgsCommandType
+      | DomesticTransfer _ ->
+         ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType
 
    member x.Display = x.CommandType.Display
 

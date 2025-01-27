@@ -120,14 +120,25 @@ let fieldApprovableCommandType =
          Label = "Command Type:"
          Placeholder = ""
          Options =
-            let employeeInvite = ApprovableCommandType.InviteEmployee
-            let employeeRole = ApprovableCommandType.UpdateEmployeeRole
-            let platformPayment = ApprovableCommandType.FulfillPlatformPayment
+            let employeeInvite =
+               ApprovableCommandType.ApprovablePerCommand
+                  InviteEmployeeCommandType
+
+            let employeeRole =
+               ApprovableCommandType.ApprovablePerCommand
+                  UpdateEmployeeRoleCommandType
+
+            let platformPayment =
+               ApprovableCommandType.ApprovableAmountBased
+                  FulfillPlatformPaymentCommandType
 
             let internalTransferBetweenOrgs =
-               ApprovableCommandType.InternalTransferBetweenOrgs
+               ApprovableCommandType.ApprovableAmountBased
+                  InternalTransferBetweenOrgsCommandType
 
-            let domesticTransfer = ApprovableCommandType.DomesticTransfer
+            let domesticTransfer =
+               ApprovableCommandType.ApprovableAmountBased
+                  DomesticTransferCommandType
 
             [
                string employeeInvite, employeeInvite.Display
@@ -299,14 +310,11 @@ let ruleCreateForm
       fieldApprovableCommandType
       |> Form.andThen (fun cmdType ->
          match cmdType with
-         | ApprovableCommandType.InviteEmployee
-         | ApprovableCommandType.UpdateEmployeeRole ->
+         | ApprovableCommandType.ApprovablePerCommand _ ->
             Form.succeed (fun approvers ->
                cmdType, CommandApprovalRule.Criteria.PerCommand, approvers)
             |> Form.append (approverListForm employees)
-         | ApprovableCommandType.FulfillPlatformPayment
-         | ApprovableCommandType.DomesticTransfer
-         | ApprovableCommandType.InternalTransferBetweenOrgs ->
+         | ApprovableCommandType.ApprovableAmountBased _ ->
             fieldAmountBasedCriteria
             |> Form.andThen (fun criteriaType ->
                Form.succeed (fun criteria approvers ->
@@ -342,13 +350,10 @@ let ruleEditForm
          Msg.Submit(org, cmd, Started))
    |> Form.append (
       match rule.CommandType with
-      | ApprovableCommandType.InviteEmployee
-      | ApprovableCommandType.UpdateEmployeeRole ->
+      | ApprovableCommandType.ApprovablePerCommand _ ->
          Form.succeed (fun approvers -> rule.Criteria, approvers)
          |> Form.append (approverListForm employees)
-      | ApprovableCommandType.FulfillPlatformPayment
-      | ApprovableCommandType.DomesticTransfer
-      | ApprovableCommandType.InternalTransferBetweenOrgs ->
+      | ApprovableCommandType.ApprovableAmountBased _ ->
          let amountBasedCriteriaType =
             match rule.Criteria with
             | CommandApprovalRule.Criteria.AmountDailyLimit _ ->
@@ -424,7 +429,10 @@ let CommandApprovalRuleCreateFormComponent
    (employees: Map<EmployeeId, Employee>)
    =
    let initValues = {
-      CommandType = string ApprovableCommandType.InviteEmployee
+      CommandType =
+         InviteEmployeeCommandType
+         |> ApprovableCommandType.ApprovablePerCommand
+         |> string
       Approvers = [ { EmployeeId = ""; Name = "" } ]
       AmountBasedCriteriaType = string CommandApprovalRule.Criteria.PerCommand
       DailyLimit = ""

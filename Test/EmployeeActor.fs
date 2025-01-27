@@ -205,7 +205,8 @@ let tests =
          | OrgMessage.ApprovableRequest cmd ->
             Expect.equal
                cmd.CommandType
-               ApprovableCommandType.InviteEmployee
+               (ApprovableCommandType.ApprovablePerCommand
+                  InviteEmployeeCommandType)
                "Request command approval for employee invite received by org actor"
          | _ ->
             Expect.isTrue

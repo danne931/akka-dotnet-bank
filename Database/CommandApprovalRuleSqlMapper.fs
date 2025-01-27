@@ -65,20 +65,8 @@ module Writer =
 
    let approvableCommandType (t: ApprovableCommandType) = Sql.string (string t)
 
-   let approvableCommandTypeFromCommand =
-      (function
-      | ApprovableCommand.InviteEmployee _ ->
-         ApprovableCommandType.InviteEmployee
-      | ApprovableCommand.UpdateEmployeeRole _ ->
-         ApprovableCommandType.UpdateEmployeeRole
-      | ApprovableCommand.FulfillPlatformPayment _ ->
-         ApprovableCommandType.FulfillPlatformPayment
-      | ApprovableCommand.InternalTransferBetweenOrgs _ ->
-         ApprovableCommandType.InternalTransferBetweenOrgs
-      | ApprovableCommand.DomesticTransfer _ ->
-         ApprovableCommandType.DomesticTransfer)
-      >> string
-      >> Sql.string
+   let approvableCommandTypeFromCommand (c: ApprovableCommand) =
+      c.CommandType |> string |> Sql.string
 
    let criteria (criteria: Criteria) = criteria |> string |> Sql.string
 

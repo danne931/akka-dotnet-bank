@@ -327,11 +327,16 @@ let ApprovalRuleManagementDashboardComponent
                | CommandApprovalRule.Criteria.PerCommand -> 5, None, None)
             |> Seq.sortBy (fun r ->
                match r.CommandType with
-               | ApprovableCommandType.FulfillPlatformPayment -> 0
-               | ApprovableCommandType.DomesticTransfer -> 1
-               | ApprovableCommandType.InternalTransferBetweenOrgs -> 2
-               | ApprovableCommandType.InviteEmployee -> 3
-               | ApprovableCommandType.UpdateEmployeeRole -> 4)
+               | ApprovableCommandType.ApprovableAmountBased FulfillPlatformPaymentCommandType ->
+                  0
+               | ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType ->
+                  1
+               | ApprovableCommandType.ApprovableAmountBased InternalTransferBetweenOrgsCommandType ->
+                  2
+               | ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType ->
+                  3
+               | ApprovableCommandType.ApprovablePerCommand UpdateEmployeeRoleCommandType ->
+                  4)
 
          for rule in rules do
             classyNode Html.article [ "approval-rule" ] [
