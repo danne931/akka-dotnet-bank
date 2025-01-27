@@ -218,7 +218,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 100m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          let msg = OrgMessage.ApprovableRequest cmd
 

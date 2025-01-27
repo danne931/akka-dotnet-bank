@@ -21,18 +21,18 @@ let table = OrganizationSqlMapper.table
 let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
    let validation =
       match command with
-      | CreateOrg cmd ->
+      | OrgCommand.CreateOrg cmd ->
          CreateOrgCommand.toEvent cmd |> Result.map OrgEnvelope.get
-      | ConfigureApprovalRule cmd ->
+      | OrgCommand.ConfigureApprovalRule cmd ->
          CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
          |> Result.map OrgEnvelope.get
-      | DeleteApprovalRule cmd ->
+      | OrgCommand.DeleteApprovalRule cmd ->
          CommandApprovalRule.DeleteApprovalRuleCommand.toEvent cmd
          |> Result.map OrgEnvelope.get
-      | AcquireCommandApproval cmd ->
+      | OrgCommand.AcquireCommandApproval cmd ->
          CommandApprovalProgress.AcquireCommandApproval.toEvent cmd
          |> Result.map OrgEnvelope.get
-      | DeclineCommandApproval cmd ->
+      | OrgCommand.DeclineCommandApproval cmd ->
          CommandApprovalProgress.DeclineCommandApproval.toEvent cmd
          |> Result.map OrgEnvelope.get
       | cmd ->

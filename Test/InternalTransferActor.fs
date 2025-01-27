@@ -27,15 +27,15 @@ let initMockAccountActor (tck: TestKit.Tck) (accountOpt: Account option) =
             | AccountMessage.GetAccount ->
                ctx.Sender() <! accountOpt
                ignored ()
-            | AccountMessage.StateChange msg ->
-               match msg with
-               | DepositTransferWithinOrg cmd ->
+            | AccountMessage.StateChange cmd ->
+               match cmd with
+               | AccountCommand.DepositTransferWithinOrg cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
-               | RejectInternalTransfer cmd ->
+               | AccountCommand.RejectInternalTransfer cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
-               | ApproveInternalTransfer cmd ->
+               | AccountCommand.ApproveInternalTransfer cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
                | msg -> unhandled msg

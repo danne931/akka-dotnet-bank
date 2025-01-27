@@ -70,21 +70,31 @@ type ApprovableCommandType =
          failwith "Error attempting to cast string to ApprovableCommandType"
       | Some o -> o
 
-[<RequireQualifiedAccess>]
-type ApprovableCommand =
+type ApprovableCommandPerCommand =
    | InviteEmployee of ApproveAccessCommand
    | UpdateEmployeeRole of UpdateRoleCommand
+
+type ApprovableCommandAmountBased =
    | FulfillPlatformPayment of FulfillPlatformPaymentCommand
    | InternalTransferBetweenOrgs of InternalTransferBetweenOrgsCommand
    | DomesticTransfer of DomesticTransferCommand
 
+[<RequireQualifiedAccess>]
+type ApprovableCommand =
+   | PerCommand of ApprovableCommandPerCommand
+   | AmountBased of ApprovableCommandAmountBased
+
    static member envelope(cmd: ApprovableCommand) : CommandEnvelope =
       match cmd with
-      | InviteEmployee o -> Command.envelope o
-      | UpdateEmployeeRole o -> Command.envelope o
-      | FulfillPlatformPayment o -> Command.envelope o
-      | InternalTransferBetweenOrgs o -> Command.envelope o
-      | DomesticTransfer o -> Command.envelope o
+      | ApprovableCommand.PerCommand c ->
+         match c with
+         | InviteEmployee o -> Command.envelope o
+         | UpdateEmployeeRole o -> Command.envelope o
+      | ApprovableCommand.AmountBased c ->
+         match c with
+         | FulfillPlatformPayment o -> Command.envelope o
+         | InternalTransferBetweenOrgs o -> Command.envelope o
+         | DomesticTransfer o -> Command.envelope o
 
    member x.InitiatedBy = ApprovableCommand.envelope x |> _.InitiatedById
 
@@ -94,27 +104,33 @@ type ApprovableCommand =
 
    member x.Amount =
       match x with
-      | InviteEmployee _ -> 0m
-      | UpdateEmployeeRole _ -> 0m
-      | FulfillPlatformPayment o -> o.Data.RequestedPayment.BaseInfo.Amount
-      | InternalTransferBetweenOrgs o -> o.Data.Amount
-      | DomesticTransfer o -> o.Data.Amount
+      | ApprovableCommand.PerCommand _ -> 0m
+      | ApprovableCommand.AmountBased c ->
+         match c with
+         | FulfillPlatformPayment o -> o.Data.RequestedPayment.BaseInfo.Amount
+         | InternalTransferBetweenOrgs o -> o.Data.Amount
+         | DomesticTransfer o -> o.Data.Amount
 
    member x.CommandType =
       match x with
-      | InviteEmployee _ ->
-         ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType
-      | UpdateEmployeeRole _ ->
-         ApprovableCommandType.ApprovablePerCommand
-            UpdateEmployeeRoleCommandType
-      | FulfillPlatformPayment _ ->
-         ApprovableCommandType.ApprovableAmountBased
-            FulfillPlatformPaymentCommandType
-      | InternalTransferBetweenOrgs _ ->
-         ApprovableCommandType.ApprovableAmountBased
-            InternalTransferBetweenOrgsCommandType
-      | DomesticTransfer _ ->
-         ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType
+      | ApprovableCommand.PerCommand c ->
+         match c with
+         | InviteEmployee _ ->
+            ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType
+         | UpdateEmployeeRole _ ->
+            ApprovableCommandType.ApprovablePerCommand
+               UpdateEmployeeRoleCommandType
+      | ApprovableCommand.AmountBased c ->
+         match c with
+         | FulfillPlatformPayment _ ->
+            ApprovableCommandType.ApprovableAmountBased
+               FulfillPlatformPaymentCommandType
+         | InternalTransferBetweenOrgs _ ->
+            ApprovableCommandType.ApprovableAmountBased
+               InternalTransferBetweenOrgsCommandType
+         | DomesticTransfer _ ->
+            ApprovableCommandType.ApprovableAmountBased
+               DomesticTransferCommandType
 
    member x.Display = x.CommandType.Display
 
@@ -467,11 +483,8 @@ module CommandApprovalProgress =
          match criteria with
          | CommandApprovalRule.Criteria.PerCommand ->
             match command with
-            | ApprovableCommand.InviteEmployee _ -> Some rule
-            | ApprovableCommand.UpdateEmployeeRole _ -> Some rule
-            | ApprovableCommand.FulfillPlatformPayment _ -> None // should not be reached
-            | ApprovableCommand.InternalTransferBetweenOrgs _ -> None // should not be reached
-            | ApprovableCommand.DomesticTransfer _ -> None // should not be reached
+            | ApprovableCommand.PerCommand _ -> Some rule
+            | ApprovableCommand.AmountBased _ -> None
          | CommandApprovalRule.Criteria.AmountPerCommand range ->
             match range.LowerBound, range.UpperBound with
             | None, None -> None // This case should not be reached
@@ -485,24 +498,25 @@ module CommandApprovalProgress =
                   None
          | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
             match command with
-            | ApprovableCommand.InviteEmployee _ -> None // Should not be reached
-            | ApprovableCommand.UpdateEmployeeRole _ -> None // Should not be reached
-            | ApprovableCommand.FulfillPlatformPayment cmd ->
-               let overLimit =
-                  cmd.Data.RequestedPayment.BaseInfo.Amount
-                  + accrual.PaymentsPaid > limit
+            | ApprovableCommand.PerCommand _ -> None
+            | ApprovableCommand.AmountBased c ->
+               match c with
+               | FulfillPlatformPayment cmd ->
+                  let overLimit =
+                     cmd.Data.RequestedPayment.BaseInfo.Amount
+                     + accrual.PaymentsPaid > limit
 
-               if overLimit then Some rule else None
-            | ApprovableCommand.InternalTransferBetweenOrgs cmd ->
-               let overLimit =
-                  cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit
+                  if overLimit then Some rule else None
+               | InternalTransferBetweenOrgs cmd ->
+                  let overLimit =
+                     cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit
 
-               if overLimit then Some rule else None
-            | ApprovableCommand.DomesticTransfer cmd ->
-               let overLimit =
-                  cmd.Data.Amount + accrual.DomesticTransfer > limit
+                  if overLimit then Some rule else None
+               | DomesticTransfer cmd ->
+                  let overLimit =
+                     cmd.Data.Amount + accrual.DomesticTransfer > limit
 
-               if overLimit then Some rule else None
+                  if overLimit then Some rule else None
 
    /// Detect if an incoming command requires additional approvals or
    /// initiation into the approval workflow before issuing the command.

@@ -3,6 +3,7 @@ namespace Bank.Org.Domain
 open Lib.SharedTypes
 open Bank.Account.Domain
 
+[<RequireQualifiedAccess>]
 type OrgCommand =
    | CreateOrg of CreateOrgCommand
    | FinalizeOrgOnboarding of FinalizeOrgOnboardingCommand
@@ -103,6 +104,7 @@ type OrgWithAccountProfiles = {
    member x.Accounts: Map<AccountId, Account> =
       x.AccountProfiles |> Map.map (fun _ profile -> profile.Account)
 
+[<RequireQualifiedAccess>]
 type OrgMessage =
    | GetOrg
    | ApprovableRequest of ApprovableCommand

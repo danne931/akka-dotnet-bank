@@ -38,42 +38,42 @@ let getAccountsByIds (accountIds: AccountId list) =
 let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult {
    let validation =
       match command with
-      | CreateAccount cmd ->
+      | AccountCommand.CreateAccount cmd ->
          CreateAccountCommand.toEvent cmd |> Result.map AccountEnvelope.get
-      | DepositCash cmd ->
+      | AccountCommand.DepositCash cmd ->
          DepositCashCommand.toEvent cmd |> Result.map AccountEnvelope.get
-      | InternalTransfer cmd ->
+      | AccountCommand.InternalTransfer cmd ->
          InternalTransferWithinOrgCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | ScheduleInternalTransferBetweenOrgs cmd ->
+      | AccountCommand.ScheduleInternalTransferBetweenOrgs cmd ->
          ScheduleInternalTransferBetweenOrgsCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | ScheduleDomesticTransfer cmd ->
+      | AccountCommand.ScheduleDomesticTransfer cmd ->
          ScheduleDomesticTransferCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | RegisterDomesticTransferRecipient cmd ->
+      | AccountCommand.RegisterDomesticTransferRecipient cmd ->
          RegisterDomesticTransferRecipientCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | EditDomesticTransferRecipient cmd ->
+      | AccountCommand.EditDomesticTransferRecipient cmd ->
          EditDomesticTransferRecipientCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | NicknameRecipient cmd ->
+      | AccountCommand.NicknameRecipient cmd ->
          NicknameRecipientCommand.toEvent cmd |> Result.map AccountEnvelope.get
-      | CloseAccount cmd ->
+      | AccountCommand.CloseAccount cmd ->
          CloseAccountCommand.toEvent cmd |> Result.map AccountEnvelope.get
-      | RequestPlatformPayment cmd ->
+      | AccountCommand.RequestPlatformPayment cmd ->
          RequestPlatformPaymentCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | CancelPlatformPayment cmd ->
+      | AccountCommand.CancelPlatformPayment cmd ->
          CancelPlatformPaymentCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | DeclinePlatformPayment cmd ->
+      | AccountCommand.DeclinePlatformPayment cmd ->
          DeclinePlatformPaymentCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | ConfigureAutoTransferRule cmd ->
+      | AccountCommand.ConfigureAutoTransferRule cmd ->
          ConfigureAutoTransferRuleCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | DeleteAutoTransferRule cmd ->
+      | AccountCommand.DeleteAutoTransferRule cmd ->
          DeleteAutoTransferRuleCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
       | cmd ->

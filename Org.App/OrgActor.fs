@@ -29,37 +29,41 @@ let private sendApprovedCommand
    (cmd: ApprovableCommand)
    =
    match cmd with
-   | ApprovableCommand.InviteEmployee cmd ->
-      let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
+   | ApprovableCommand.PerCommand c ->
+      match c with
+      | InviteEmployee cmd ->
+         let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
 
-      let cmd = EmployeeCommand.ApproveAccess cmd
-      employeeRef <! EmployeeMessage.StateChange cmd
-   | ApprovableCommand.UpdateEmployeeRole cmd ->
-      let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
+         let cmd = EmployeeCommand.ApproveAccess cmd
+         employeeRef <! EmployeeMessage.StateChange cmd
+      | UpdateEmployeeRole cmd ->
+         let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
 
-      let cmd = EmployeeCommand.UpdateRole cmd
-      employeeRef <! EmployeeMessage.StateChange cmd
-   | ApprovableCommand.FulfillPlatformPayment cmd ->
-      let accountRef = getAccountRef (AccountId.fromEntityId cmd.EntityId)
+         let cmd = EmployeeCommand.UpdateRole cmd
+         employeeRef <! EmployeeMessage.StateChange cmd
+   | ApprovableCommand.AmountBased c ->
+      match c with
+      | FulfillPlatformPayment cmd ->
+         let accountRef = getAccountRef (AccountId.fromEntityId cmd.EntityId)
 
-      let cmd = AccountCommand.FulfillPlatformPayment cmd
-      accountRef <! AccountMessage.StateChange cmd
-   | ApprovableCommand.DomesticTransfer cmd ->
-      let accountId = cmd.Data.Sender.AccountId
+         let cmd = AccountCommand.FulfillPlatformPayment cmd
+         accountRef <! AccountMessage.StateChange cmd
+      | DomesticTransfer cmd ->
+         let accountId = cmd.Data.Sender.AccountId
 
-      let cmd =
-         DomesticTransferCommand.create
-            (accountId, cmd.OrgId)
-            cmd.CorrelationId
-            cmd.InitiatedBy
-            cmd.Data
-         |> AccountCommand.DomesticTransfer
+         let cmd =
+            DomesticTransferCommand.create
+               (accountId, cmd.OrgId)
+               cmd.CorrelationId
+               cmd.InitiatedBy
+               cmd.Data
+            |> AccountCommand.DomesticTransfer
 
-      getAccountRef accountId <! AccountMessage.StateChange cmd
-   | ApprovableCommand.InternalTransferBetweenOrgs cmd ->
-      let accountRef = getAccountRef cmd.Data.Sender.AccountId
-      let cmd = AccountCommand.InternalTransferBetweenOrgs cmd
-      accountRef <! AccountMessage.StateChange cmd
+         getAccountRef accountId <! AccountMessage.StateChange cmd
+      | InternalTransferBetweenOrgs cmd ->
+         let accountRef = getAccountRef cmd.Data.Sender.AccountId
+         let cmd = AccountCommand.InternalTransferBetweenOrgs cmd
+         accountRef <! AccountMessage.StateChange cmd
 
 let private terminateProgressAssociatedWithRule
    (mailbox: IActorRef<OrgMessage>)
@@ -153,7 +157,7 @@ let actorProps
             | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
             | CommandApprovalDeclined e ->
                match e.Data.Command with
-               | ApprovableCommand.InviteEmployee cmd ->
+               | ApprovableCommand.PerCommand(InviteEmployee cmd) ->
                   let employeeId = EmployeeId.fromEntityId cmd.EntityId
 
                   let msg =
@@ -199,13 +203,15 @@ let actorProps
             match msg with
             | OrgMessage.GetOrg ->
                mailbox.Sender() <! (stateOpt |> Option.map _.Info)
-            | ApprovableRequest _ when org.Status <> OrgStatus.Active ->
+            | OrgMessage.ApprovableRequest _ when org.Status <> OrgStatus.Active ->
                let errMsg =
                   $"Attempt to initiate an approvable request for an inactive org {org.Name}-{org.OrgId}"
 
                logError errMsg
                return unhandled ()
-            | ApprovableRequest cmd when org.Status = OrgStatus.Active ->
+            | OrgMessage.ApprovableRequest cmd when
+               org.Status = OrgStatus.Active
+               ->
                // If the command requires approval then initiate the command
                // approval workflow.  Otherwise, forward the command to the
                // appropriate account or employee actor for processing.

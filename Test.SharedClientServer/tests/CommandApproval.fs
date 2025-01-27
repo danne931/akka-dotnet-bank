@@ -1286,7 +1286,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 2_000m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          Expect.isNone
             (commandRequiresApproval cmd rules progress accrual)
@@ -1294,7 +1295,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 5_000m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          Expect.isNone
             (commandRequiresApproval cmd rules progress accrual)
@@ -1302,7 +1304,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 5_001m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          Expect.isSome
             (commandRequiresApproval cmd rules progress accrual)
@@ -1329,7 +1332,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 2_000m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          Expect.isNone
             (commandRequiresApproval cmd rules progress Stub.accrual)
@@ -1338,7 +1342,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 4_000m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          Expect.isSome
             (commandRequiresApproval cmd rules progress Stub.accrual)
@@ -1376,7 +1381,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 11_000m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          let ruleCorrespondingToRequiredApproval =
             Expect.wantSome
@@ -1406,7 +1412,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 4_000m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          let ruleCorrespondingToRequiredApproval =
             Expect.wantSome
@@ -1449,7 +1456,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 4m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          let ruleCorrespondingToRequiredApproval =
             Expect.wantSome
@@ -1479,7 +1487,8 @@ let tests =
 
          let cmd =
             AccountStub.command.domesticTransfer 6m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          let ruleCorrespondingToRequiredApproval =
             Expect.wantSome
@@ -1494,7 +1503,8 @@ let tests =
           progress record is already completed" {
          let cmd =
             AccountStub.command.domesticTransfer 4_000m
-            |> ApprovableCommand.DomesticTransfer
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
 
          let rule = {
             RuleId = Stub.ruleId ()

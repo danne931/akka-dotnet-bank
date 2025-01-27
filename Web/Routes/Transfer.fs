@@ -76,7 +76,8 @@ let startTransferRoutes (app: WebApplication) =
 
                   let msg =
                      cmd
-                     |> ApprovableCommand.InternalTransferBetweenOrgs
+                     |> InternalTransferBetweenOrgs
+                     |> ApprovableCommand.AmountBased
                      |> OrgMessage.ApprovableRequest
 
                   (OrgActor.get sys cmd.OrgId) <! msg
@@ -119,7 +120,8 @@ let startTransferRoutes (app: WebApplication) =
 
                   let msg =
                      cmd
-                     |> ApprovableCommand.DomesticTransfer
+                     |> DomesticTransfer
+                     |> ApprovableCommand.AmountBased
                      |> OrgMessage.ApprovableRequest
 
                   (OrgActor.get sys cmd.OrgId) <! msg
@@ -209,7 +211,8 @@ let startTransferRoutes (app: WebApplication) =
 
                   let msg =
                      cmd
-                     |> ApprovableCommand.FulfillPlatformPayment
+                     |> FulfillPlatformPayment
+                     |> ApprovableCommand.AmountBased
                      |> OrgMessage.ApprovableRequest
 
                   (OrgActor.get sys cmd.OrgId) <! msg

@@ -1039,63 +1039,71 @@ module private StateTransition =
 
 let stateTransition (state: AccountWithEvents) (command: AccountCommand) =
    match command with
-   | CreateAccount cmd -> StateTransition.create state cmd
-   | StartBillingCycle cmd -> StateTransition.startBillingcycle state cmd
-   | DepositCash cmd -> StateTransition.deposit state cmd
-   | Debit cmd -> StateTransition.debit state cmd
-   | MaintenanceFee cmd -> StateTransition.maintenanceFee state cmd
-   | SkipMaintenanceFee cmd -> StateTransition.skipMaintenanceFee state cmd
-   | InternalTransfer cmd -> StateTransition.internalTransfer state cmd
-   | ApproveInternalTransfer cmd ->
+   | AccountCommand.CreateAccount cmd -> StateTransition.create state cmd
+   | AccountCommand.StartBillingCycle cmd ->
+      StateTransition.startBillingcycle state cmd
+   | AccountCommand.DepositCash cmd -> StateTransition.deposit state cmd
+   | AccountCommand.Debit cmd -> StateTransition.debit state cmd
+   | AccountCommand.MaintenanceFee cmd ->
+      StateTransition.maintenanceFee state cmd
+   | AccountCommand.SkipMaintenanceFee cmd ->
+      StateTransition.skipMaintenanceFee state cmd
+   | AccountCommand.InternalTransfer cmd ->
+      StateTransition.internalTransfer state cmd
+   | AccountCommand.ApproveInternalTransfer cmd ->
       StateTransition.approveInternalTransfer state cmd
-   | RejectInternalTransfer cmd ->
+   | AccountCommand.RejectInternalTransfer cmd ->
       StateTransition.rejectInternalTransfer state cmd
-   | ScheduleInternalTransferBetweenOrgs cmd ->
+   | AccountCommand.ScheduleInternalTransferBetweenOrgs cmd ->
       StateTransition.scheduleInternalTransferBetweenOrgs state cmd
-   | InternalTransferBetweenOrgs cmd ->
+   | AccountCommand.InternalTransferBetweenOrgs cmd ->
       StateTransition.internalTransferBetweenOrgs state cmd
-   | ApproveInternalTransferBetweenOrgs cmd ->
+   | AccountCommand.ApproveInternalTransferBetweenOrgs cmd ->
       StateTransition.approveInternalTransferBetweenOrgs state cmd
-   | RejectInternalTransferBetweenOrgs cmd ->
+   | AccountCommand.RejectInternalTransferBetweenOrgs cmd ->
       StateTransition.rejectInternalTransferBetweenOrgs state cmd
-   | DepositTransferWithinOrg cmd ->
+   | AccountCommand.DepositTransferWithinOrg cmd ->
       StateTransition.depositTransferWithinOrg state cmd
-   | DepositTransferBetweenOrgs cmd ->
+   | AccountCommand.DepositTransferBetweenOrgs cmd ->
       StateTransition.depositTransferBetweenOrgs state cmd
-   | RegisterDomesticTransferRecipient cmd ->
+   | AccountCommand.RegisterDomesticTransferRecipient cmd ->
       StateTransition.registerDomesticTransferRecipient state cmd
-   | EditDomesticTransferRecipient cmd ->
+   | AccountCommand.EditDomesticTransferRecipient cmd ->
       StateTransition.editDomesticTransferRecipient state cmd
-   | ScheduleDomesticTransfer cmd ->
+   | AccountCommand.ScheduleDomesticTransfer cmd ->
       StateTransition.scheduleDomesticTransfer state cmd
-   | DomesticTransfer cmd -> StateTransition.domesticTransfer state cmd
-   | ApproveDomesticTransfer cmd ->
+   | AccountCommand.DomesticTransfer cmd ->
+      StateTransition.domesticTransfer state cmd
+   | AccountCommand.ApproveDomesticTransfer cmd ->
       StateTransition.approveDomesticTransfer state cmd
-   | RejectDomesticTransfer cmd ->
+   | AccountCommand.RejectDomesticTransfer cmd ->
       StateTransition.rejectDomesticTransfer state cmd
-   | UpdateDomesticTransferProgress cmd ->
+   | AccountCommand.UpdateDomesticTransferProgress cmd ->
       StateTransition.domesticTransferProgress state cmd
-   | NicknameRecipient cmd -> StateTransition.nicknameRecipient state cmd
-   | CloseAccount cmd -> StateTransition.closeAccount state cmd
-   | RequestPlatformPayment cmd ->
+   | AccountCommand.NicknameRecipient cmd ->
+      StateTransition.nicknameRecipient state cmd
+   | AccountCommand.CloseAccount cmd -> StateTransition.closeAccount state cmd
+   | AccountCommand.RequestPlatformPayment cmd ->
       StateTransition.platformPaymentRequested state cmd
-   | FulfillPlatformPayment cmd -> StateTransition.platformPaymentPaid state cmd
-   | DepositPlatformPayment cmd ->
+   | AccountCommand.FulfillPlatformPayment cmd ->
+      StateTransition.platformPaymentPaid state cmd
+   | AccountCommand.DepositPlatformPayment cmd ->
       StateTransition.platformPaymentDeposited state cmd
-   | CancelPlatformPayment cmd ->
+   | AccountCommand.CancelPlatformPayment cmd ->
       StateTransition.platformPaymentCancelled state cmd
-   | DeclinePlatformPayment cmd ->
+   | AccountCommand.DeclinePlatformPayment cmd ->
       StateTransition.platformPaymentDeclined state cmd
-   | ConfigureAutoTransferRule cmd ->
+   | AccountCommand.ConfigureAutoTransferRule cmd ->
       StateTransition.configureAutoTransferRule state cmd
-   | DeleteAutoTransferRule cmd ->
+   | AccountCommand.DeleteAutoTransferRule cmd ->
       StateTransition.deleteAutoTransferRule state cmd
-   | InternalAutoTransfer cmd -> StateTransition.internalAutoTransfer state cmd
-   | ApproveInternalAutoTransfer cmd ->
+   | AccountCommand.InternalAutoTransfer cmd ->
+      StateTransition.internalAutoTransfer state cmd
+   | AccountCommand.ApproveInternalAutoTransfer cmd ->
       StateTransition.approveInternalAutoTransfer state cmd
-   | RejectInternalAutoTransfer cmd ->
+   | AccountCommand.RejectInternalAutoTransfer cmd ->
       StateTransition.rejectInternalAutoTransfer state cmd
-   | DepositInternalAutoTransfer cmd ->
+   | AccountCommand.DepositInternalAutoTransfer cmd ->
       StateTransition.depositInternalAutoTransfer state cmd
 
 let empty: Account = {

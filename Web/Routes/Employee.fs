@@ -119,7 +119,8 @@ let startEmployeeRoutes (app: WebApplication) =
 
                let msg =
                   cmd
-                  |> ApprovableCommand.UpdateEmployeeRole
+                  |> UpdateEmployeeRole
+                  |> ApprovableCommand.PerCommand
                   |> OrgMessage.ApprovableRequest
 
                (OrgActor.get sys cmd.OrgId) <! msg

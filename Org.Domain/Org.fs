@@ -51,22 +51,25 @@ let dailyAccrual (events: OrgEvent list) : DailyAccrual =
          | CommandApprovalRequested e ->
             if DateTime.isToday e.Timestamp then
                match e.Data.Command with
-               | ApprovableCommand.FulfillPlatformPayment cmd -> {
-                  acc with
-                     PaymentsPaid =
-                        acc.PaymentsPaid
-                        + cmd.Data.RequestedPayment.BaseInfo.Amount
-                 }
-               | ApprovableCommand.DomesticTransfer cmd -> {
-                  acc with
-                     DomesticTransfer = acc.DomesticTransfer + cmd.Data.Amount
-                 }
-               | ApprovableCommand.InternalTransferBetweenOrgs cmd -> {
-                  acc with
-                     InternalTransferBetweenOrgs =
-                        acc.InternalTransferBetweenOrgs + cmd.Data.Amount
-                 }
-               | _ -> acc
+               | ApprovableCommand.PerCommand _ -> acc
+               | ApprovableCommand.AmountBased c ->
+                  match c with
+                  | FulfillPlatformPayment cmd -> {
+                     acc with
+                        PaymentsPaid =
+                           acc.PaymentsPaid
+                           + cmd.Data.RequestedPayment.BaseInfo.Amount
+                    }
+                  | DomesticTransfer cmd -> {
+                     acc with
+                        DomesticTransfer =
+                           acc.DomesticTransfer + cmd.Data.Amount
+                    }
+                  | InternalTransferBetweenOrgs cmd -> {
+                     acc with
+                        InternalTransferBetweenOrgs =
+                           acc.InternalTransferBetweenOrgs + cmd.Data.Amount
+                    }
             else
                acc
          | _ -> acc)
@@ -453,20 +456,22 @@ module private StateTransition =
 
 let stateTransition (state: OrgWithEvents) (command: OrgCommand) =
    match command with
-   | CreateOrg cmd -> StateTransition.create state cmd
-   | FinalizeOrgOnboarding cmd -> StateTransition.finalizeOnboarding state cmd
-   | ConfigureFeatureFlag cmd -> StateTransition.configureFeatureFlag state cmd
-   | ConfigureApprovalRule cmd ->
+   | OrgCommand.CreateOrg cmd -> StateTransition.create state cmd
+   | OrgCommand.FinalizeOrgOnboarding cmd ->
+      StateTransition.finalizeOnboarding state cmd
+   | OrgCommand.ConfigureFeatureFlag cmd ->
+      StateTransition.configureFeatureFlag state cmd
+   | OrgCommand.ConfigureApprovalRule cmd ->
       StateTransition.configureCommandApprovalRule state cmd
-   | DeleteApprovalRule cmd ->
+   | OrgCommand.DeleteApprovalRule cmd ->
       StateTransition.deleteCommandApprovalRule state cmd
-   | RequestCommandApproval cmd ->
+   | OrgCommand.RequestCommandApproval cmd ->
       StateTransition.requestCommandApproval state cmd
-   | AcquireCommandApproval cmd ->
+   | OrgCommand.AcquireCommandApproval cmd ->
       StateTransition.acquireCommandApproval state cmd
-   | DeclineCommandApproval cmd ->
+   | OrgCommand.DeclineCommandApproval cmd ->
       StateTransition.declineCommandApproval state cmd
-   | TerminateCommandApproval cmd ->
+   | OrgCommand.TerminateCommandApproval cmd ->
       StateTransition.terminateCommandApproval state cmd
 
 let empty: Org = {
