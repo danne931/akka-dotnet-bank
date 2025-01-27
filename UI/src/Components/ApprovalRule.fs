@@ -244,9 +244,9 @@ let EditApprovalRuleComponent
                   renderMoney high
                ]
             | Some low, None ->
-               React.fragment [ Html.small ">="; renderMoney low ]
+               React.fragment [ Html.small ">"; renderMoney low ]
             | None, Some high ->
-               React.fragment [ Html.small "<="; renderMoney high ]
+               React.fragment [ Html.small "<"; renderMoney high ]
             | None, None -> Html.none
 
             Html.small "require approval from:"
@@ -311,20 +311,7 @@ let ApprovalRuleManagementDashboardComponent
       else
          let rules =
             rules.Values
-            |> Seq.sortBy (fun r ->
-               match r.Criteria with
-               | CommandApprovalRule.Criteria.AmountPerCommand range ->
-                  match range.LowerBound, range.UpperBound with
-                  | None, Some high -> 0, None, Some high
-                  | Some low, Some high -> 1, Some low, Some high
-                  | Some low, None -> 2, Some low, None
-                  // NOTE: Case should not occur.
-                  // Consider making a type which enforces either
-                  // lower or upper being Some.
-                  | None, None -> 3, None, None
-               | CommandApprovalRule.Criteria.AmountDailyLimit _ ->
-                  4, None, None
-               | CommandApprovalRule.Criteria.PerCommand -> 5, None, None)
+            |> Seq.sortBy (_.Criteria >> CommandApprovalRule.Criteria.sortOrder)
             |> Seq.sortBy (fun r ->
                match r.CommandType with
                | ApprovableCommandType.ApprovableAmountBased FulfillPlatformPaymentCommandType ->
