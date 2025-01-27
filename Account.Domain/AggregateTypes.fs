@@ -7,6 +7,7 @@ open Bank.Transfer.Domain
 open MaintenanceFee
 open AutomaticTransfer
 
+[<RequireQualifiedAccess>]
 type AccountCommand =
    | CreateAccount of CreateAccountCommand
    | DepositCash of DepositCashCommand
@@ -366,6 +367,7 @@ type AccountProfile = {
    Metrics: AccountMetrics
 }
 
+[<RequireQualifiedAccess>]
 type AccountMessage =
    | GetAccount
    | StateChange of AccountCommand

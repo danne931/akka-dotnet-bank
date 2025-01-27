@@ -4,6 +4,7 @@ open System
 
 open Lib.SharedTypes
 
+[<RequireQualifiedAccess>]
 type EmployeeCommand =
    | CreateAccountOwner of CreateAccountOwnerCommand
    | CreateEmployee of CreateEmployeeCommand
@@ -100,6 +101,7 @@ module EmployeeEnvelope =
       | AccessRestored evt -> wrap evt, get evt
       | AccessApproved evt -> wrap evt, get evt
 
+[<RequireQualifiedAccess>]
 type EmployeeMessage =
    | GetEmployee
    | StateChange of EmployeeCommand

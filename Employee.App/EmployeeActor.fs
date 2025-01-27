@@ -134,7 +134,8 @@ let actorProps
                            Name = employee.Name
                            Reference = None
                         }
-                     |> ApprovableCommand.InviteEmployee
+                     |> InviteEmployee
+                     |> ApprovableCommand.PerCommand
 
                   getOrgRef orgId <! OrgMessage.ApprovableRequest cmd
                | EmployeeStatus.PendingInviteConfirmation token ->

@@ -36,31 +36,31 @@ let searchEmployees (orgId: OrgId) (searchQuery: string) =
 let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult {
    let validation =
       match command with
-      | CreateEmployee cmd ->
+      | EmployeeCommand.CreateEmployee cmd ->
          CreateEmployeeCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.CreateCard cmd ->
          CreateCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | DebitRequest cmd ->
+      | EmployeeCommand.DebitRequest cmd ->
          DebitRequestCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | LimitDailyDebits cmd ->
+      | EmployeeCommand.LimitDailyDebits cmd ->
          LimitDailyDebitsCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | LimitMonthlyDebits cmd ->
+      | EmployeeCommand.LimitMonthlyDebits cmd ->
          LimitMonthlyDebitsCommand.toEvent cmd
          |> Result.map EmployeeEnvelope.get
-      | LockCard cmd ->
+      | EmployeeCommand.LockCard cmd ->
          LockCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | UnlockCard cmd ->
+      | EmployeeCommand.UnlockCard cmd ->
          UnlockCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EditCardNickname cmd ->
+      | EmployeeCommand.EditCardNickname cmd ->
          EditCardNicknameCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | CancelInvitation cmd ->
+      | EmployeeCommand.CancelInvitation cmd ->
          CancelInvitationCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | RefreshInvitationToken cmd ->
+      | EmployeeCommand.RefreshInvitationToken cmd ->
          RefreshInvitationTokenCommand.toEvent cmd
          |> Result.map EmployeeEnvelope.get
-      | ConfirmInvitation cmd ->
+      | EmployeeCommand.ConfirmInvitation cmd ->
          ConfirmInvitationCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | RestoreAccess cmd ->
+      | EmployeeCommand.RestoreAccess cmd ->
          RestoreAccessCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | cmd ->
          Error

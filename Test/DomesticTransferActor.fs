@@ -23,15 +23,15 @@ let initMockAccountActor (tck: TestKit.Tck) =
          match envelope.Message with
          | :? AccountMessage as msg ->
             match msg with
-            | AccountMessage.StateChange msg ->
-               match msg with
-               | UpdateDomesticTransferProgress cmd ->
+            | AccountMessage.StateChange cmd ->
+               match cmd with
+               | AccountCommand.UpdateDomesticTransferProgress cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
-               | RejectDomesticTransfer cmd ->
+               | AccountCommand.RejectDomesticTransfer cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
-               | ApproveDomesticTransfer cmd ->
+               | AccountCommand.ApproveDomesticTransfer cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
                | msg -> unhandled msg

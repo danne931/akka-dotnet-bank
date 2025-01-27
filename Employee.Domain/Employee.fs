@@ -395,25 +395,32 @@ module private StateTransition =
 
 let stateTransition (state: EmployeeWithEvents) (command: EmployeeCommand) =
    match command with
-   | CreateAccountOwner cmd -> StateTransition.createAccountOwner state cmd
-   | CreateEmployee cmd -> StateTransition.create state cmd
-   | CreateCard cmd -> StateTransition.createCard state cmd
-   | DebitRequest cmd -> StateTransition.debitRequest state cmd
-   | ApproveDebit cmd -> StateTransition.approveDebit state cmd
-   | DeclineDebit cmd -> StateTransition.declineDebit state cmd
-   | LimitDailyDebits cmd -> StateTransition.limitDailyDebits state cmd
-   | LimitMonthlyDebits cmd -> StateTransition.limitMonthlyDebits state cmd
-   | LockCard cmd -> StateTransition.lockCard state cmd
-   | UnlockCard cmd -> StateTransition.unlockCard state cmd
-   | UpdateRole cmd -> StateTransition.updateRole state cmd
-   | EditCardNickname cmd -> StateTransition.nicknameCard state cmd
-   | CancelInvitation cmd -> StateTransition.cancelEmployeeInvitation state cmd
-   | RefreshInvitationToken cmd ->
+   | EmployeeCommand.CreateAccountOwner cmd ->
+      StateTransition.createAccountOwner state cmd
+   | EmployeeCommand.CreateEmployee cmd -> StateTransition.create state cmd
+   | EmployeeCommand.CreateCard cmd -> StateTransition.createCard state cmd
+   | EmployeeCommand.DebitRequest cmd -> StateTransition.debitRequest state cmd
+   | EmployeeCommand.ApproveDebit cmd -> StateTransition.approveDebit state cmd
+   | EmployeeCommand.DeclineDebit cmd -> StateTransition.declineDebit state cmd
+   | EmployeeCommand.LimitDailyDebits cmd ->
+      StateTransition.limitDailyDebits state cmd
+   | EmployeeCommand.LimitMonthlyDebits cmd ->
+      StateTransition.limitMonthlyDebits state cmd
+   | EmployeeCommand.LockCard cmd -> StateTransition.lockCard state cmd
+   | EmployeeCommand.UnlockCard cmd -> StateTransition.unlockCard state cmd
+   | EmployeeCommand.UpdateRole cmd -> StateTransition.updateRole state cmd
+   | EmployeeCommand.EditCardNickname cmd ->
+      StateTransition.nicknameCard state cmd
+   | EmployeeCommand.CancelInvitation cmd ->
+      StateTransition.cancelEmployeeInvitation state cmd
+   | EmployeeCommand.RefreshInvitationToken cmd ->
       StateTransition.refreshEmployeeInvitationToken state cmd
-   | ConfirmInvitation cmd ->
+   | EmployeeCommand.ConfirmInvitation cmd ->
       StateTransition.confirmEmployeeInvitation state cmd
-   | ApproveAccess cmd -> StateTransition.approveAccess state cmd
-   | RestoreAccess cmd -> StateTransition.restoreAccess state cmd
+   | EmployeeCommand.ApproveAccess cmd ->
+      StateTransition.approveAccess state cmd
+   | EmployeeCommand.RestoreAccess cmd ->
+      StateTransition.restoreAccess state cmd
 
 let empty: Employee = {
    EmployeeId = EmployeeId System.Guid.Empty

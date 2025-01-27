@@ -23,7 +23,8 @@ let updateRoleCommand =
          PriorRole = Role.Scholar
          CardInfo = None
       }
-   |> ApprovableCommand.UpdateEmployeeRole
+   |> UpdateEmployeeRole
+   |> ApprovableCommand.PerCommand
 
 let inviteEmployeeCommand =
    ApproveAccessCommand.create
@@ -31,7 +32,8 @@ let inviteEmployeeCommand =
       (Guid.NewGuid() |> EmployeeId |> InitiatedById)
       (Guid.NewGuid() |> CorrelationId)
       { Name = "Dan E"; Reference = None }
-   |> ApprovableCommand.InviteEmployee
+   |> InviteEmployee
+   |> ApprovableCommand.PerCommand
 
 let createOrgCommand =
    CreateOrgCommand.create {
