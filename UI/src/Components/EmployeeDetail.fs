@@ -22,7 +22,7 @@ type Msg =
    | OpenRoleEdit
    | CancelRoleEdit
    | SetPendingRole of Role option
-   | ConfirmRole of EmployeeCommandReceipt
+   | ConfirmRole of EmployeeCommandReceipt * Org
    | ResendInviteNotification of
       Employee *
       AsyncOperationStatus<Result<unit, Err>>
@@ -70,9 +70,20 @@ let update
    | OpenRoleEdit -> { state with IsEditingRole = true }, Cmd.none
    | CancelRoleEdit -> closeRoleSelect state, Cmd.none
    | SetPendingRole role -> { state with PendingRole = role }, Cmd.none
-   | ConfirmRole receipt ->
-      onEmployeeUpdate receipt
-      closeRoleSelect state, Cmd.none
+   | ConfirmRole(receipt, org) ->
+      let associatedApprovalRule =
+         org.CommandApprovalRules.Values
+         |> Seq.tryFind (fun r ->
+            r.CommandType = ApprovableCommandType.ApprovablePerCommand
+               UpdateEmployeeRoleCommandType)
+
+      match associatedApprovalRule with
+      | None ->
+         onEmployeeUpdate receipt
+         closeRoleSelect state, Cmd.none
+      | Some _ ->
+         closeRoleSelect state,
+         Alerts.toastSuccessCommand "Role update submitted for approval."
    | ResendInviteNotification(employee, Started) ->
       let send = async {
          let! res = EmployeeService.resendEmployeeInvitation employee
@@ -207,6 +218,9 @@ let EmployeeDetailComponent
    let state, dispatch =
       React.useElmish (init, update onEmployeeUpdate onOrgUpdate, [||])
 
+   let updatedRolePendingApproval =
+      employeeRolePendingApproval org.CommandApprovalProgress.Values employee
+
    let employeeInviteProgressOpt =
       match employee.Status with
       | EmployeeStatus.PendingInviteApproval inviteInfo ->
@@ -219,13 +233,16 @@ let EmployeeDetailComponent
    let dropdownMenuOptions =
       match employee.Status with
       | EmployeeStatus.Active ->
-         Some [
-            {
-               Text = "Edit Role"
-               OnClick = fun _ -> dispatch Msg.OpenRoleEdit
-               IsSelected = state.IsEditingRole
-            }
-         ]
+         match updatedRolePendingApproval with
+         | None ->
+            Some [
+               {
+                  Text = "Edit Role"
+                  OnClick = fun _ -> dispatch Msg.OpenRoleEdit
+                  IsSelected = state.IsEditingRole
+               }
+            ]
+         | Some _ -> None
       | EmployeeStatus.PendingInviteApproval _ ->
          employeeInviteProgressOpt
          |> Option.bind (fun (rule, progress) ->
@@ -295,7 +312,18 @@ let EmployeeDetailComponent
          Html.div [
             Html.p employee.Name
 
-            Html.p [ attr.role "employee-tag"; attr.text employee.Role.Display ]
+            Html.p [
+               attr.role "employee-tag"
+               match updatedRolePendingApproval with
+               | Some pendingRole ->
+                  attr.text $"{employee.Role.Display} -> {pendingRole.Display}"
+
+                  attr.custom (
+                     "data-tooltip",
+                     $"{pendingRole.Display} role pending approval."
+                  )
+               | None -> attr.text employee.Role.Display
+            ]
 
             Html.p [
                attr.role "employee-tag"
@@ -357,7 +385,7 @@ let EmployeeDetailComponent
          EmployeeRoleFormComponent
             (fun () -> Msg.CancelRoleEdit |> dispatch)
             (Some >> Msg.SetPendingRole >> dispatch)
-            (Msg.ConfirmRole >> dispatch)
+            (fun receipt -> Msg.ConfirmRole(receipt, org) |> dispatch)
             employee
 
       state.PendingRole

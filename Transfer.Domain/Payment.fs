@@ -158,14 +158,13 @@ module Payment =
       | Payment.Platform p -> p.BaseInfo.Expiration <= DateTime.UtcNow
       | Payment.ThirdParty p -> p.BaseInfo.Expiration <= DateTime.UtcNow
 
+   let isUnpaid (payment: Payment) =
+      match payment with
+      | Payment.Platform p -> p.Status = PlatformPaymentStatus.Unpaid
+      | Payment.ThirdParty p -> p.Status = ThirdPartyPaymentStatus.Unpaid
+
    let canManage (payment: Payment) =
-      (not (isExpired payment))
-      && match payment with
-         | Payment.Platform p when p.Status = PlatformPaymentStatus.Unpaid ->
-            true
-         | Payment.ThirdParty p when p.Status = ThirdPartyPaymentStatus.Unpaid ->
-            true
-         | _ -> false
+      (not (isExpired payment)) && isUnpaid payment
 
    let displayPriority (payment: Payment) =
       match payment with

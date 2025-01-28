@@ -63,11 +63,7 @@ let TransactionDashboardComponent
                orgCtx, accountOpt, Routes.IndexUrl.accountBrowserQuery().Action
             with
             | Deferred.Resolved(Ok(Some org)), Some account, Some action ->
-               AccountActions.AccountActionsComponent
-                  session
-                  account
-                  org.Accounts
-                  action
+               AccountActions.AccountActionsComponent session account org action
                |> ScreenOverlay.Portal
             | _, Some account, _ ->
                Html.aside [ AccountActionMenu.render account ]

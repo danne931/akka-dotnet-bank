@@ -28,13 +28,20 @@ small.invalid
   text-decoration: none
   cursor: pointer
 
+td
+  &[data-tooltip]:not(a, button, input)
+    border-bottom: var(--border-width) solid var(--table-border-color)
+tr:hover
+  td[data-tooltip]:not(a, button, input)
+    border-color: var(--primary)
+
 nav [data-tooltip], footer [data-tooltip]
   border-bottom: none
 
 nav
   &:nth-child(1)
-    padding-top: 0.6rem
-    padding-bottom: 0.6rem
+    padding-top: 0
+    padding-bottom: 0
 
   &:nth-child(2)
     background-color: var(--card-background-color)
@@ -454,7 +461,7 @@ p[role='employee-tag']
     p
       margin-bottom: 0
     .grid
-      grid-template-columns: 20% 60% 5% 5%
+      grid-template-columns: 25% 55% 5% 5%
     a
       text-align: center
     small

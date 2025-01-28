@@ -5,12 +5,15 @@ open Feliz
 open Feliz.UseElmish
 open Elmish
 open Elmish.SweetAlert
+open Feliz.Router
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
+open Bank.Org.Domain
 open Bank.Account.Forms.PaymentFulfillment
 open UIDomain.Account
+open UIDomain.Org
 open Lib.Time
 open Lib.SharedTypes
 
@@ -213,7 +216,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
 let PaymentDetailComponent
    (session: UserSession)
    (payment: Payment)
-   (accounts: Map<AccountId, Account>)
+   (org: OrgWithAccountProfiles)
    (notifyParentOnUpdate: AccountCommandReceipt -> unit)
    =
    let state, dispatch =
@@ -221,6 +224,15 @@ let PaymentDetailComponent
 
    let baseInfo = Payment.baseInfo payment
    let isPaymentOutgoing = session.OrgId = baseInfo.Payee.OrgId
+   let accounts = org.Accounts
+
+   let paymentPendingApproval =
+      paymentFulfillmentPendingApproval
+         org.Org.CommandApprovalProgress.Values
+         baseInfo
+
+   let canManagePayment =
+      Payment.canManage payment && paymentPendingApproval.IsNone
 
    classyNode Html.div [ "payment-detail" ] [
       Html.div [
@@ -228,7 +240,21 @@ let PaymentDetailComponent
             attr.style [ style.marginBottom 0 ]
             attr.text (Money.format baseInfo.Amount)
          ]
-         Html.div [ Html.small (Payment.statusDisplay payment) ]
+         Html.div [
+            Html.small [
+               if paymentPendingApproval.IsSome then
+                  attr.text (Payment.statusDisplay payment + " -> Paid")
+
+                  attr.custom (
+                     "data-tooltip",
+                     "Updates to Paid when all approvals acquired."
+                  )
+
+                  attr.custom ("data-placement", "right")
+               else
+                  attr.text (Payment.statusDisplay payment)
+            ]
+         ]
       ]
 
       Html.hr []
@@ -310,9 +336,13 @@ let PaymentDetailComponent
             payment
             (fun receipt ->
                dispatch Msg.TogglePaymentFulfillment
-               notifyParentOnUpdate receipt)
+
+               if paymentPendingApproval.IsNone then
+                  notifyParentOnUpdate receipt
+               else
+                  Router.navigate Routes.PaymentUrl.BasePath)
       else
-         match Payment.canManage payment, isPaymentOutgoing with
+         match canManagePayment, isPaymentOutgoing with
          | true, true ->
             Html.button [
                attr.classes [ "outline" ]
@@ -339,5 +369,13 @@ let PaymentDetailComponent
                   attr.onClick (fun _ -> dispatch Msg.TogglePaymentFulfillment)
                ]
             ]
+         | false, false ->
+            if Payment.isUnpaid payment && session.Role = Role.Admin then
+               Html.button [
+                  attr.classes [ "outline" ]
+                  attr.text "View Payment Approval Progress"
+                  attr.onClick (fun _ ->
+                     Router.navigate Routes.ApprovalsUrl.BasePath)
+               ]
          | _ -> ()
    ]

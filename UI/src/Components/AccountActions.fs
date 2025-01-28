@@ -11,6 +11,7 @@ open Bank.Account.Forms
 open Bank.Employee.Domain
 open Bank.Employee.Forms
 open Bank.Transfer.Domain
+open Bank.Org.Domain
 open Lib.SharedTypes
 open EmployeeSearch
 
@@ -143,7 +144,7 @@ let update
 let AccountActionsComponent
    (session: UserSession)
    (account: Account)
-   (accounts: Map<AccountId, Account>)
+   (org: OrgWithAccountProfiles)
    (view: AccountActionView)
    =
    let signalRDispatch =
@@ -254,8 +255,35 @@ let AccountActionsComponent
          TransferForm.TransferFormComponent
             session
             account
-            accounts
-            (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
+            org.Accounts
+            (fun receipt ->
+               let approvableCommandType =
+                  match receipt.PendingCommand with
+                  | AccountCommand.DomesticTransfer _ ->
+                     DomesticTransferCommandType
+                     |> ApprovableCommandType.ApprovableAmountBased
+                     |> Some
+                  | AccountCommand.InternalTransferBetweenOrgs _ ->
+                     InternalTransferBetweenOrgsCommandType
+                     |> ApprovableCommandType.ApprovableAmountBased
+                     |> Some
+                  | _ -> None
+
+               let associatedApprovalRule =
+                  approvableCommandType
+                  |> Option.map (fun cmdType ->
+                     org.Org.CommandApprovalRules.Values
+                     |> Seq.tryFind (fun r -> r.CommandType = cmdType))
+
+               // NOTE:
+               // If the command requires approval then we won't expect an
+               // AccountEvent for some time given the command won't be issued
+               // until it goes through the admin approval process.
+               // If this is the case, then for now just go ahead & close the
+               // form.
+               match associatedApprovalRule with
+               | Some _ -> Router.navigate (navigation account.AccountId None)
+               | None -> dispatch (Msg.NetworkAckCommand receipt.Envelope))
             qParamsOpt
       | AccountActionView.Debit ->
          EmployeeCardSelectSearchComponent {|

@@ -229,7 +229,7 @@ let ApprovalProgressComponent
                         {c.Data.Sender.Name} to {c.Data.Recipient.Name}"
                      | FulfillPlatformPayment c ->
                         let pay = c.Data.RequestedPayment.BaseInfo
-                        $"{Money.format pay.Amount} payment requested to {pay.Payer.OrgName}"
+                        $"{Money.format pay.Amount} payment fulfillment to {pay.Payee.OrgName}"
                      | InternalTransferBetweenOrgs c ->
                         $"{Money.format c.Data.Amount} transfer to {c.Data.Recipient.Name}"
 
