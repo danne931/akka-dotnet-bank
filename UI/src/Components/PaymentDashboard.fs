@@ -9,7 +9,9 @@ open Fable.FontAwesome
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
+open Bank.Org.Domain
 open UIDomain.Account
+open UIDomain.Org
 open Lib.Time
 open Lib.SharedTypes
 open PaymentDetail
@@ -158,11 +160,16 @@ let selectedPayment
    | _ -> None
 
 let renderIncomingTableRow
+   (progress: CommandApprovalProgress.T seq)
    (payment: PlatformPayment)
    (selectedId: PaymentId option)
    =
    let info = payment.BaseInfo
    let paymentId = info.Id
+   let statusDisplay = Payment.statusDisplay (Payment.Platform payment)
+
+   let paymentPendingApproval =
+      paymentFulfillmentPendingApproval progress payment.BaseInfo
 
    Html.tr [
       attr.key (string paymentId)
@@ -181,11 +188,22 @@ let renderIncomingTableRow
 
          Html.td (Money.format info.Amount)
 
-         Html.td (Payment.statusDisplay (Payment.Platform payment))
+         Html.td [
+            match paymentPendingApproval with
+            | None -> attr.text statusDisplay
+            | Some _ ->
+               attr.text (statusDisplay + " -> Paid")
+
+               attr.custom (
+                  "data-tooltip",
+                  "Updates to Paid when all approvals acquired."
+               )
+         ]
       ]
    ]
 
 let renderIncomingTable
+   (progress: CommandApprovalProgress.T seq)
    (payments: PlatformPayment list)
    (selectedId: PaymentId option)
    =
@@ -210,7 +228,8 @@ let renderIncomingTable
                payments
                |> List.sortBy (Payment.Platform >> Payment.displayPriority)
 
-            for payment in payments -> renderIncomingTableRow payment selectedId
+            for payment in payments ->
+               renderIncomingTableRow progress payment selectedId
          ]
       ]
    ]
@@ -218,7 +237,7 @@ let renderIncomingTable
 let renderTableRow
    (payment: Payment)
    (selectedId: PaymentId option)
-   (accountsOpt: Map<AccountId, Account> option)
+   (org: OrgWithAccountProfiles)
    =
    let paymentBaseInfo = Payment.baseInfo payment
    let paymentId = paymentBaseInfo.Id
@@ -244,8 +263,7 @@ let renderTableRow
 
          Html.td (Payment.statusDisplay payment)
 
-         accountsOpt
-         |> Option.bind (Map.tryFind paymentBaseInfo.Payee.AccountId)
+         org.Accounts.TryFind paymentBaseInfo.Payee.AccountId
          |> Option.map _.FullName
          |> Option.defaultValue ""
          |> Html.td
@@ -255,7 +273,7 @@ let renderTableRow
 let renderTable
    (payments: Payment list)
    (selectedId: PaymentId option)
-   (accountsOpt: Map<AccountId, Account> option)
+   (org: OrgWithAccountProfiles)
    =
    Html.table [
       attr.classes [ "clickable-table" ]
@@ -278,8 +296,7 @@ let renderTable
          Html.tbody [
             let payments = payments |> List.sortBy Payment.displayPriority
 
-            for payment in payments ->
-               renderTableRow payment selectedId accountsOpt
+            for payment in payments -> renderTableRow payment selectedId org
          ]
       ]
    ]
@@ -289,10 +306,6 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
    let state, dispatch = React.useElmish (init, update session.OrgId, [||])
    let orgCtx = React.useContext OrgProvider.context
 
-   let accountsOpt =
-      match orgCtx with
-      | Deferred.Resolved(Ok(Some org)) -> Some org.Accounts
-      | _ -> None
 
    let selectedPaymentId =
       match url with
@@ -325,17 +338,18 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
                ]
 
                classyNode Html.figure [ "control-panel-and-table-container" ] [
-                  match state.Payments with
-                  | Resolved(Error err) ->
+                  match orgCtx, state.Payments with
+                  | _, Resolved(Error _) ->
                      Html.small "Uh oh. Error getting payments."
-                  | Resolved(Ok None) -> Html.small "No payments."
-                  | Resolved(Ok(Some payments)) ->
+                  | _, Resolved(Ok None) -> Html.small "No payments."
+                  | Resolved(Ok(Some org)), Resolved(Ok(Some payments)) ->
                      Html.h6 "Incoming Requests"
 
                      if payments.IncomingRequests.IsEmpty then
                         Html.small "No incoming payment requests."
                      else
                         renderIncomingTable
+                           org.Org.CommandApprovalProgress.Values
                            payments.IncomingRequests
                            selectedPaymentId
 
@@ -347,7 +361,7 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
                         renderTable
                            payments.OutgoingRequests
                            selectedPaymentId
-                           accountsOpt
+                           org
                   | _ -> ()
                ]
             ]
@@ -375,19 +389,17 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
 
                   CloseButton.render close
 
-                  match state.Payments with
-                  | Deferred.InProgress -> Html.progress []
-                  | _ ->
-                     match
-                        accountsOpt, selectedPayment state.Payments payId
-                     with
-                     | Some accounts, Some payment ->
+                  match orgCtx, state.Payments with
+                  | Deferred.Resolved(Ok(Some org)), Deferred.Resolved _ ->
+                     match selectedPayment state.Payments payId with
+                     | Some payment ->
                         PaymentDetailComponent
                            session
                            payment
-                           accounts
+                           org
                            (Msg.PaymentCommandProcessing >> dispatch >> close)
                      | _ -> Html.p $"No payment found for {payId}"
+                  | _ -> Html.progress []
                ]
                |> ScreenOverlay.Portal
             | _ -> ()

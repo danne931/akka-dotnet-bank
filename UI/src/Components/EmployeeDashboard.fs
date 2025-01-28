@@ -9,6 +9,7 @@ open Fable.FontAwesome
 open Bank.Org.Domain
 open Bank.Employee.Domain
 open UIDomain.Employee
+open UIDomain.Org
 open Lib.SharedTypes
 open EmployeeDetail
 open Bank.Employee.Forms.EmployeeCreateForm
@@ -132,9 +133,13 @@ let selectedEmployee
    | _ -> None
 
 let renderTableRow
+   (org: Org)
    (employee: Employee)
    (selectedEmployeeId: EmployeeId option)
    =
+   let updatedRolePendingApproval =
+      employeeRolePendingApproval org.CommandApprovalProgress.Values employee
+
    Html.tr [
       attr.key (string employee.EmployeeId)
 
@@ -155,13 +160,24 @@ let renderTableRow
 
          Html.td (string employee.Email)
 
-         Html.td employee.Role.Display
+         Html.td [
+            match updatedRolePendingApproval with
+            | Some pendingRole ->
+               attr.text $"{employee.Role.Display} -> {pendingRole.Display}"
+
+               attr.custom (
+                  "data-tooltip",
+                  $"{pendingRole.Display} role pending approval."
+               )
+            | None -> attr.text employee.Role.Display
+         ]
 
          Html.td employee.Status.Display
       ]
    ]
 
 let renderTable
+   (org: Org)
    (employees: Employee list)
    (selectedEmployeeId: EmployeeId option)
    =
@@ -185,7 +201,7 @@ let renderTable
 
          Html.tbody [
             for employee in employees ->
-               renderTableRow employee selectedEmployeeId
+               renderTableRow org employee selectedEmployeeId
          ]
       ]
    ]
@@ -393,7 +409,10 @@ let EmployeeDashboardComponent
                      if employees.IsEmpty then
                         Html.small "Uh oh. No employees."
                      else
-                        renderTable employees selectedEmployeeId
+                        match orgCtx with
+                        | Deferred.Resolved(Ok(Some org)) ->
+                           renderTable org.Org employees selectedEmployeeId
+                        | _ -> Html.progress []
                   | _ -> ()
                ]
             ]
