@@ -488,11 +488,12 @@ module CommandApprovalProgress =
          | CommandApprovalRule.Criteria.AmountPerCommand range ->
             match range.LowerBound, range.UpperBound with
             | None, None -> None // This case should not be reached
-            | Some low, None -> if command.Amount > low then Some rule else None
+            | Some low, None ->
+               if command.Amount >= low then Some rule else None
             | None, Some high ->
                if command.Amount < high then Some rule else None
             | Some low, Some high ->
-               if command.Amount >= low && command.Amount <= high then
+               if command.Amount >= low && command.Amount < high then
                   Some rule
                else
                   None
@@ -518,14 +519,12 @@ module CommandApprovalProgress =
 
                   if overLimit then Some rule else None
 
-   /// Detect if an incoming command requires additional approvals or
-   /// initiation into the approval workflow before issuing the command.
-   let commandRequiresApproval
+   let associatedCommandApprovalRulesForCommand
       (command: ApprovableCommand)
       (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
       (progress: Map<CommandApprovalProgressId, T>)
       (accrual: DailyAccrual)
-      : CommandApprovalRule.T option
+      : CommandApprovalRule.T list
       =
       let rulesForCommand =
          rules.Values
@@ -546,29 +545,26 @@ module CommandApprovalProgress =
                (CommandApprovalProgressId command.CorrelationId)
                progress)
 
-      match rulesForCommand with
-      | [] -> None
-      | [ rule ] -> requiresApproval rule
-      | rules ->
-         rules
-         |> List.choose requiresApproval
-         // Prioritize daily limit over range (Some, None) when a command
-         // meets the criteria of multiple rules (AmountDailyLimit +
-         // AmountPerCommand).
-         // Prioritize multiple AmountPerCommandRange by their descending
-         // sort order as well.
-         //
-         // (ex: DailyLimit 15
-         //      { LowerBound = Some 7; UpperBound = None }
-         //      { LowerBound = Some 4; UpperBound = Some 7 }
-         //      { LowerBound = Some 2; UpperBound = Some 4 }
-         // )
-         |> List.sortByDescending (
-            _.Criteria >> CommandApprovalRule.Criteria.sortOrder
-         )
-         |> function
-            | [] -> None
-            | head :: rest -> Some head
+      rulesForCommand |> List.choose requiresApproval
+
+   /// Detect if an incoming command requires additional approvals or
+   /// initiation into the approval workflow before issuing the command.
+   let commandRequiresApproval
+      (command: ApprovableCommand)
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+      (progress: Map<CommandApprovalProgressId, T>)
+      (accrual: DailyAccrual)
+      : CommandApprovalRule.T option
+      =
+      associatedCommandApprovalRulesForCommand command rules progress accrual
+      // Prioritize daily limit over range (Some, None) when a command
+      // meets the criteria of multiple rules (AmountDailyLimit +
+      // AmountPerCommand).
+      |> List.sortBy (fun r ->
+         match r.Criteria with
+         | CommandApprovalRule.Criteria.AmountDailyLimit _ -> 0
+         | _ -> 1)
+      |> List.tryHead
 
    let numberOfApprovalsUserCanManage
       (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)

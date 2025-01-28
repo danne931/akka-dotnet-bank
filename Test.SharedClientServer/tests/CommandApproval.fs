@@ -65,7 +65,7 @@ let tests =
 
          Expect.isFalse
             overlap
-            "(5, infinity) is outside of range (2, 5) so should not overlap"
+            "(x >= 5) is outside of range (2 >= x < 5) so should not overlap"
       }
 
       test "AmountPerCommandRange detects overlap in Some, Some, None, Some" {
@@ -112,7 +112,7 @@ let tests =
 
          Expect.isFalse
             overlap
-            "(0, 2) is outside of range (2, 5) so should not overlap"
+            "(x < 2) is outside of range (2 >= x < 5) so should not overlap"
       }
 
       test "AmountPerCommandRange detects overlap in None, Some, Some, Some" {
@@ -160,7 +160,7 @@ let tests =
 
          Expect.isFalse
             overlap
-            "(5, 8) is outside of range (0, 5) so should not overlap"
+            "(5 >= x < 8) is outside of range (x < 5) so should not overlap"
       }
 
       test "AmountPerCommandRange detects overlap in None, Some, None, Some" {
@@ -231,7 +231,7 @@ let tests =
                   LowerBound = Some 5m
             }
 
-         Expect.isFalse overlap "(5, infinity) does not overlap with (0, 5)"
+         Expect.isFalse overlap "(x >= 5) does not overlap with (x < 5)"
       }
 
       test "AmountPerCommandRange detects overlap in Some, None, Some, Some" {
@@ -273,7 +273,7 @@ let tests =
                   UpperBound = Some 5m
                }
 
-         Expect.isFalse overlap "(3, 5) should not overlap with (5, infinity)"
+         Expect.isFalse overlap "(3 >= x < 5) should not overlap with (x >= 5)"
       }
 
       test "AmountPerCommandRange detects overlap in Some, None, None, Some" {
@@ -308,7 +308,7 @@ let tests =
                   UpperBound = Some 2m
             }
 
-         Expect.isFalse overlap "(0, 2) should not overlap with (2, infinity)"
+         Expect.isFalse overlap "(x < 2) should not overlap with (x >= 2)"
       }
 
       test "AmountPerCommandRange detects overlap in Some, None, Some, None" {
@@ -439,7 +439,9 @@ let tests =
                UpperBound = Some 20m
             }
 
-         Expect.isFalse overlap "(10, 20) should not overlap with (6, 10)"
+         Expect.isFalse
+            overlap
+            "(10 <= x < 20) should not overlap with (6 <= x < 10)"
       }
 
       test
@@ -744,7 +746,7 @@ let tests =
 
             Expect.isFalse
                (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
-               "should not conflict if configure a rule of a command type other
+               $"should not conflict if configure a rule of a command type other
                than {cmdType}"
 
             Expect.isFalse
@@ -754,7 +756,7 @@ let tests =
 
       test
          "newRuleCommandTypeConflictsWithExistingRule should check for
-            duplicate rules by (ApprovableCommandType, Criteria.AmountDailyLimit)" {
+          duplicate rules by (ApprovableCommandType, Criteria.AmountDailyLimit)" {
          let cmdTypes = [
             Stub.commandTypes.InternalTransfer
             Stub.commandTypes.DomesticTransfer
@@ -801,7 +803,7 @@ let tests =
 
             Expect.isFalse
                (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
-               "should not conflict if configure a rule of a command type other
+               $"should not conflict if configure a rule of a command type other
                than {cmdType}"
 
             Expect.isFalse
@@ -810,8 +812,8 @@ let tests =
       }
 
       test
-         "newRuleCommandTypeConflictsWithExistingRule should disregard
-            duplicate rules by (ApprovableCommandType, Criteria.AmountPerCommand)" {
+         "newRuleCommandTypeConflictsWithExistingRule should not conflict when
+          duplicate rules by (ApprovableCommandType, Criteria.AmountPerCommand)" {
          let cmdTypes = [
             Stub.commandTypes.InternalTransfer
             Stub.commandTypes.DomesticTransfer
@@ -866,7 +868,7 @@ let tests =
 
             Expect.isFalse
                (newRuleCommandTypeConflictsWithExistingRule [ ruleA ] ruleB)
-               "should not conflict if configure a rule of a command type other
+               $"should not conflict if configure a rule of a command type other
                than {cmdType}"
 
             Expect.isFalse
@@ -1267,7 +1269,7 @@ let tests =
 
       test
          "commandRequiresApproval detects if an incoming command meets
-            AmountDailyLimit criteria" {
+          AmountDailyLimit criteria" {
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
@@ -1348,6 +1350,15 @@ let tests =
          Expect.isSome
             (commandRequiresApproval cmd rules progress Stub.accrual)
             "command requires approval if txn amount > LowerBound"
+
+         let cmd =
+            AccountStub.command.domesticTransfer 3_000m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         Expect.isSome
+            (commandRequiresApproval cmd rules progress Stub.accrual)
+            "command requires approval if txn amount = LowerBound"
       }
 
       test
@@ -1418,15 +1429,15 @@ let tests =
          let ruleCorrespondingToRequiredApproval =
             Expect.wantSome
                (commandRequiresApproval cmd rules progress Stub.accrual)
-               "command requires approval, meeting criteria for 1 rules"
+               "command requires approval, meeting criteria for 1 rules
+                (amount is above lower bound threshold & below daily limit)"
 
          Expect.equal ruleCorrespondingToRequiredApproval rule ""
       }
 
       test
-         "commandRequiresApproval detects if an incoming command meets
-          multiple AmountPerCommand rule criteria, and returns the rule with
-          corresponding to the higher amount" {
+         "commandRequiresApproval chooses the appropriate rule among (Some, Some) & (Some, Some)
+          when the amount equals the lower bound of one rule & the upper bound of another" {
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
@@ -1459,31 +1470,25 @@ let tests =
             |> DomesticTransfer
             |> ApprovableCommand.AmountBased
 
-         let ruleCorrespondingToRequiredApproval =
-            Expect.wantSome
-               (commandRequiresApproval cmd rules progress Stub.accrual)
-               "command requires approval, meeting criteria for 2 rules"
-
-         Expect.equal
-            ruleCorrespondingToRequiredApproval
-            rule2
-            "when multiple rules correspond to a command then favor the rule
-            with DailyLimit criteria"
-
-         // Reverse the order to ensure the rule being favored has nothing to do
-         // with ordering.
-         let rules = Map [ rule2.RuleId, rule2; rule.RuleId, rule ]
+         Expect.hasLength
+            (associatedCommandApprovalRulesForCommand
+               cmd
+               rules
+               progress
+               Stub.accrual)
+            1
+            "When the lower bound of 1 rule meets the upper bound of another, only 1 will win"
 
          let ruleCorrespondingToRequiredApproval =
             Expect.wantSome
                (commandRequiresApproval cmd rules progress Stub.accrual)
-               "command requires approval, meeting criteria for 2 rules"
+               "command requires approval"
 
          Expect.equal
             ruleCorrespondingToRequiredApproval
             rule2
-            "when multiple rules correspond to a command then favor the rule
-            with DailyLimit criteria"
+            "when one rule has an upper bound = txn amount & another rule has
+             lower bound = txn amount then the latter is chosen"
 
          let cmd =
             AccountStub.command.domesticTransfer 6m
@@ -1493,7 +1498,143 @@ let tests =
          let ruleCorrespondingToRequiredApproval =
             Expect.wantSome
                (commandRequiresApproval cmd rules progress Stub.accrual)
-               "command requires approval, meeting criteria for 1 rules"
+               "command requires approval"
+
+         Expect.equal ruleCorrespondingToRequiredApproval rule2 ""
+      }
+
+      test
+         "commandRequiresApproval chooses the appropriate rule among (Some, None) & (None, Some)
+          when the amount equals the lower bound of one rule & the upper bound of another" {
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.DomesticTransfer
+            Criteria =
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 4m
+               }
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rule2 = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.DomesticTransfer
+            Criteria =
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 4m
+                  UpperBound = None
+               }
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
+         let progress = Map.empty
+
+         let cmd =
+            AccountStub.command.domesticTransfer 4m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         Expect.hasLength
+            (associatedCommandApprovalRulesForCommand
+               cmd
+               rules
+               progress
+               Stub.accrual)
+            1
+            "When the lower bound of 1 rule meets the upper bound of another, only 1 will win"
+
+         let ruleCorrespondingToRequiredApproval =
+            Expect.wantSome
+               (commandRequiresApproval cmd rules progress Stub.accrual)
+               "command requires approval"
+
+         Expect.equal
+            ruleCorrespondingToRequiredApproval
+            rule2
+            "when one rule has an upper bound = txn amount & another rule has
+             lower bound = txn amount then the latter is chosen"
+
+         let cmd =
+            AccountStub.command.domesticTransfer 6m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         let ruleCorrespondingToRequiredApproval =
+            Expect.wantSome
+               (commandRequiresApproval cmd rules progress Stub.accrual)
+               "command requires approval"
+
+         Expect.equal ruleCorrespondingToRequiredApproval rule2 ""
+      }
+
+      test
+         "commandRequiresApproval chooses the appropriate rule among (Some, Some) & (None, Some)
+          when the amount equals the lower bound of one rule & the upper bound of another" {
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.DomesticTransfer
+            Criteria =
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 4m
+               }
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rule2 = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.DomesticTransfer
+            Criteria =
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 4m
+                  UpperBound = Some 7m
+               }
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
+         let progress = Map.empty
+
+         let cmd =
+            AccountStub.command.domesticTransfer 4m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         Expect.hasLength
+            (associatedCommandApprovalRulesForCommand
+               cmd
+               rules
+               progress
+               Stub.accrual)
+            1
+            "When the lower bound of 1 rule meets the upper bound of another, only 1 will win"
+
+         let ruleCorrespondingToRequiredApproval =
+            Expect.wantSome
+               (commandRequiresApproval cmd rules progress Stub.accrual)
+               "command requires approval"
+
+         Expect.equal
+            ruleCorrespondingToRequiredApproval
+            rule2
+            "when one rule has an upper bound = txn amount & another rule has
+             lower bound = txn amount then the latter is chosen"
+
+         let cmd =
+            AccountStub.command.domesticTransfer 6m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         let ruleCorrespondingToRequiredApproval =
+            Expect.wantSome
+               (commandRequiresApproval cmd rules progress Stub.accrual)
+               "command requires approval"
 
          Expect.equal ruleCorrespondingToRequiredApproval rule2 ""
       }
@@ -1777,7 +1918,7 @@ let tests =
             Stub.commandTypes.Payment
          ]
 
-         let conflictingCriteria = [
+         let criteria = [
             [
                Criteria.AmountDailyLimit 10m
 
@@ -1831,10 +1972,34 @@ let tests =
                   UpperBound = Some 20m
                }
             ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 10m
+               }
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = Some 20m
+               }
+            ]
+
+            [
+               Criteria.AmountPerCommand {
+                  LowerBound = None
+                  UpperBound = Some 10m
+               }
+
+               Criteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = None
+               }
+            ]
          ]
 
          for cmdType in commandTypes do
-            for [ criteriaOfFirst; criteriaOfSecond ] in conflictingCriteria do
+            for [ criteriaOfFirst; criteriaOfSecond ] in criteria do
                let rule = {
                   RuleId = Stub.ruleId ()
                   OrgId = Stub.orgId
@@ -1938,7 +2103,7 @@ let tests =
             Expect.isTrue
                false
                "Request command approval for a command with no
-            associated rule should error"
+               associated rule should error"
 
          let cmd =
             RequestCommandApproval.create
@@ -1983,7 +2148,7 @@ let tests =
             Expect.isTrue
                false
                "It is not allowed for the same approver to
-            approve an approval progress item multiple times"
+               approve an approval progress item multiple times"
 
          let cmd =
             AcquireCommandApproval.create Stub.orgId {
@@ -2005,9 +2170,9 @@ let tests =
             Expect.isTrue
                false
                "Recognize that the AcquireCommandApproval
-            command will lead to all approvals being acquired for the command so
-            go ahead & recognize it as an
-            OrgEvent.CommandApprovalProcessCompleted instead of OrgEvent.CommandApprovalAcquired"
+               command will lead to all approvals being acquired for the command so
+               go ahead & recognize it as an
+               OrgEvent.CommandApprovalProcessCompleted instead of OrgEvent.CommandApprovalAcquired"
 
          let progress = Seq.head org.Info.CommandApprovalProgress.Values
 
@@ -2033,6 +2198,6 @@ let tests =
             Expect.isTrue
                false
                "Should not be able to acquire additional
-            approvals once progress item is no longer active"
+               approvals once progress item is no longer active"
       }
    ]

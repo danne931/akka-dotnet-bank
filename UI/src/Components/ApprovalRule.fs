@@ -240,11 +240,11 @@ let EditApprovalRuleComponent
                React.fragment [
                   Html.small ">="
                   renderMoney low
-                  Html.small "and <="
+                  Html.small "and <"
                   renderMoney high
                ]
             | Some low, None ->
-               React.fragment [ Html.small ">"; renderMoney low ]
+               React.fragment [ Html.small ">="; renderMoney low ]
             | None, Some high ->
                React.fragment [ Html.small "<"; renderMoney high ]
             | None, None -> Html.none
