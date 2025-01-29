@@ -311,7 +311,7 @@ let ApprovalRuleManagementDashboardComponent
       else
          let rules =
             rules.Values
-            |> Seq.sortBy (_.Criteria >> CommandApprovalRule.Criteria.sortOrder)
+            |> Seq.sortBy (_.Criteria >> CommandApprovalRule.Criteria.sortBy)
             |> Seq.sortBy (fun r ->
                match r.CommandType with
                | ApprovableCommandType.ApprovableAmountBased FulfillPlatformPaymentCommandType ->

@@ -254,6 +254,10 @@ type OrgStateTransitionError =
    | ApprovalRuleNotFound
    | ApprovalRuleHasConflictingCriteria
    | ApprovalRuleMultipleOfType of commandType: string
+   | ApprovalRuleHasGapInCriteria of
+      gap: decimal *
+      amountToCloseGap: decimal *
+      gapPrecedesOrFollows: string
    | ApprovalProgressWorklowNotActive
    | ApproverUnrecognized of EmployeeId * name: string
    | ApproverAlreadyApprovedCommand of EmployeeId * name: string
@@ -342,6 +346,11 @@ type Err =
             "Approval Rule Contains Criteria Conflicting With Another Rule"
          | OrgStateTransitionError.ApprovalRuleMultipleOfType cmdType ->
             $"Configuring multiple rules are not allowed for command type {cmdType}"
+         | OrgStateTransitionError.ApprovalRuleHasGapInCriteria(gap,
+                                                                amountToCloseGap,
+                                                                gapPrecedesOrFollows) ->
+            $"Detected a ${Math.Round(gap, 2)} gap with the {gapPrecedesOrFollows} rule's criteria.
+              Set to ${Math.Round(amountToCloseGap, 2)} to fix it."
          | OrgStateTransitionError.ApproverUnrecognized(employeeId, name) ->
             $"Unrecognized approver approved/declined command {name}-{employeeId}"
          | OrgStateTransitionError.ApprovalProgressWorklowNotActive ->

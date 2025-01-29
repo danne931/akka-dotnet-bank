@@ -21,6 +21,200 @@ let initState = Stub.orgStateWithEvents
 
 let tests =
    testList "Command Approval domain" [
+      test "AmountPerCommandRange has no gaps if no existing ranges" {
+         let ranges = []
+
+         let range = {
+            LowerBound = Some 15m
+            UpperBound = None
+         }
+
+         Expect.isNone
+            (AmountPerCommandRange.hasGap ranges range)
+            "should not have a gap"
+      }
+
+      test
+         "AmountPerCommandRange detects between existing ranges & a new range
+            when new range is at end of sorted ranges" {
+         let ranges = [
+            {
+               LowerBound = None
+               UpperBound = Some 3m
+            }
+            {
+               LowerBound = Some 3m
+               UpperBound = Some 10m
+            }
+         ]
+
+         let range = {
+            LowerBound = Some 15m
+            UpperBound = None
+         }
+
+         let gap =
+            Expect.wantSome
+               (AmountPerCommandRange.hasGap ranges range)
+               "should have a gap"
+
+         Expect.equal gap.Gap 5m "expected gap"
+
+         Expect.equal
+            gap.SetToAmountToCloseGap
+            10m
+            "expected amount to close gap should be equivalent of preceding
+            upper bound"
+
+         Expect.equal
+            gap.Direction
+            GapDirection.Precedes
+            "gap is between item to add & previous item in sorted ranges"
+
+         let range = {
+            range with
+               LowerBound = Some gap.SetToAmountToCloseGap
+         }
+
+         Expect.isNone
+            (AmountPerCommandRange.hasGap ranges range)
+            "No gap detected when range adjusted to SetToAmountToCloseGap"
+      }
+
+      test
+         "AmountPerCommandRange detects between existing ranges & a new range
+            when new range is at start of sorted ranges" {
+         let ranges = [
+            {
+               LowerBound = Some 3m
+               UpperBound = Some 10m
+            }
+            {
+               LowerBound = Some 10m
+               UpperBound = Some 16m
+            }
+            {
+               LowerBound = Some 16m
+               UpperBound = None
+            }
+         ]
+
+         let range = {
+            LowerBound = None
+            UpperBound = Some 1m
+         }
+
+         let gap =
+            Expect.wantSome
+               (AmountPerCommandRange.hasGap ranges range)
+               "should have a gap"
+
+         Expect.equal gap.Gap 2m "expected gap"
+
+         Expect.equal
+            gap.SetToAmountToCloseGap
+            3m
+            "expected amount to close gap should be equivalent of following
+            lower bound"
+
+         Expect.equal
+            gap.Direction
+            GapDirection.Follows
+            "gap is between item to add & following item in sorted ranges"
+
+         let range = {
+            range with
+               UpperBound = Some gap.SetToAmountToCloseGap
+         }
+
+         Expect.isNone
+            (AmountPerCommandRange.hasGap ranges range)
+            "No gap detected when range adjusted to SetToAmountToCloseGap"
+      }
+
+      test
+         "AmountPerCommandRange detects between existing ranges & a new range
+            when new range is somewhere in the middle of sorted ranges" {
+         let ranges = [
+            {
+               LowerBound = None
+               UpperBound = Some 3m
+            }
+            {
+               LowerBound = Some 3m
+               UpperBound = Some 10m
+            }
+            {
+               LowerBound = Some 16m
+               UpperBound = None
+            }
+         ]
+
+         let range = {
+            LowerBound = Some 13m
+            UpperBound = Some 16m
+         }
+
+         let gap =
+            Expect.wantSome
+               (AmountPerCommandRange.hasGap ranges range)
+               "should have a gap"
+
+         Expect.equal gap.Gap 3m "expected gap"
+
+         Expect.equal
+            gap.SetToAmountToCloseGap
+            10m
+            "expected amount to close gap should be equivalent to preceding
+            upper bound"
+
+         Expect.equal
+            gap.Direction
+            GapDirection.Precedes
+            "gap is between item to add & preceding item in sorted ranges"
+
+         let range = {
+            range with
+               LowerBound = Some gap.SetToAmountToCloseGap
+         }
+
+         Expect.isNone
+            (AmountPerCommandRange.hasGap ranges range)
+            "No gap detected when range adjusted to SetToAmountToCloseGap"
+
+         let range = {
+            LowerBound = Some 10m
+            UpperBound = Some 12m
+         }
+
+         let gap =
+            Expect.wantSome
+               (AmountPerCommandRange.hasGap ranges range)
+               "should have a gap"
+
+         Expect.equal gap.Gap 4m "expected gap"
+
+         Expect.equal
+            gap.SetToAmountToCloseGap
+            16m
+            "expected amount to close gap should be equivalent to following
+            lower bound"
+
+         Expect.equal
+            gap.Direction
+            GapDirection.Follows
+            "gap is between item to add & following item in sorted ranges"
+
+         let range = {
+            range with
+               UpperBound = Some gap.SetToAmountToCloseGap
+         }
+
+         Expect.isNone
+            (AmountPerCommandRange.hasGap ranges range)
+            "No gap detected when range adjusted to SetToAmountToCloseGap"
+      }
+
       test "AmountPerCommandRange detects overlap in Some, Some, Some, None" {
          let existingRange = {
             LowerBound = Some 2m
@@ -1944,7 +2138,7 @@ let tests =
                }
 
                Criteria.AmountPerCommand {
-                  LowerBound = Some 15m
+                  LowerBound = Some 14m
                   UpperBound = None
                }
             ]
@@ -1956,7 +2150,7 @@ let tests =
                }
 
                Criteria.AmountPerCommand {
-                  LowerBound = Some 21m
+                  LowerBound = Some 20m
                   UpperBound = None
                }
             ]
@@ -1968,7 +2162,7 @@ let tests =
                }
 
                Criteria.AmountPerCommand {
-                  LowerBound = Some 10m
+                  LowerBound = Some 9m
                   UpperBound = Some 20m
                }
             ]
