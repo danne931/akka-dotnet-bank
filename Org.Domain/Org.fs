@@ -299,6 +299,7 @@ module private StateTransition =
             state
             (ConfigureFeatureFlagCommand.toEvent cmd)
 
+   /// Create/Edit command approval rule
    let configureCommandApprovalRule
       (state: OrgWithEvents)
       (cmd: CommandApprovalRule.ConfigureApprovalRuleCommand)
@@ -325,10 +326,18 @@ module private StateTransition =
          transitionErr
             OrgStateTransitionError.ApprovalRuleHasConflictingCriteria
       else
-         map
-            CommandApprovalRuleConfigured
-            state
-            (CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd)
+         let containsAmountBasedGaps =
+            CommandApprovalRule.newRuleContainsAmountGapWithExistingRule
+               existingRules
+               rule
+
+         match containsAmountBasedGaps with
+         | Some gap -> transitionErr (CommandApprovalRule.RangeGap.toError gap)
+         | None ->
+            map
+               CommandApprovalRuleConfigured
+               state
+               (CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd)
 
    let deleteCommandApprovalRule
       (state: OrgWithEvents)

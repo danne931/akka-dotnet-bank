@@ -140,7 +140,41 @@ module CommandApprovalRule =
       UpperBound: decimal option
    }
 
+   [<RequireQualifiedAccess>]
+   type GapDirection =
+      | Precedes
+      | Follows
+
+      override x.ToString() =
+         match x with
+         | Precedes -> "previous"
+         | Follows -> "next"
+
+   type RangeGap = {
+      Gap: decimal
+      SetToAmountToCloseGap: decimal
+      Direction: GapDirection
+   }
+
+   module RangeGap =
+      let toError (gap: RangeGap) : OrgStateTransitionError =
+         OrgStateTransitionError.ApprovalRuleHasGapInCriteria(
+            gap.Gap,
+            gap.SetToAmountToCloseGap,
+            string gap.Direction
+         )
+
    module AmountPerCommandRange =
+      let sortBy (range: AmountPerCommandRange) =
+         match range.LowerBound, range.UpperBound with
+         | None, Some high -> 0, None, Some high
+         | Some low, Some high -> 1, Some low, Some high
+         | Some low, None -> 2, Some low, None
+         // NOTE: Case should not occur.
+         // Consider making a type which enforces either
+         // lower or upper being Some.
+         | None, None -> 3, None, None
+
       let hasOverlap
          (existingRange: AmountPerCommandRange)
          (range: AmountPerCommandRange)
@@ -163,6 +197,113 @@ module CommandApprovalRule =
          | Some eLow, None, Some _, Some high -> high > eLow
          | Some eLow, None, None, Some high -> high > eLow
          | Some _, None, Some _, None -> true
+
+      /// Check whether a new AmountPerCommandRange has gaps with 
+      /// other AmountPerCommand ranges.
+      /// Ex: existing: [{ high = Some 100; low = None }; { low = Some 100; high = 500 }]
+      ///     new: { low = 605; high = none }
+      ///     gap detected: 105 between new lower bound and preceding upper bound
+      let hasGap
+         (existingRanges: AmountPerCommandRange list)
+         (range: AmountPerCommandRange)
+         : RangeGap option
+         =
+         if existingRanges.Length = 0 then
+            None
+         else
+            let ranges = range :: existingRanges |> List.sortBy sortBy
+
+            ranges
+            |> List.tryFindIndex (fun r -> r = range)
+            |> Option.bind (function
+               | 0 ->
+                  // New range is at front of list
+
+                  let rangeUpperBound =
+                     ranges |> List.tryItem 0 |> Option.bind _.UpperBound
+
+                  let followingRangeLowerBound =
+                     ranges |> List.tryItem 1 |> Option.bind _.LowerBound
+
+                  match rangeUpperBound, followingRangeLowerBound with
+                  | Some up, Some lowFollowing ->
+                     let diff = lowFollowing - up
+
+                     if diff > 0m then
+                        Some {
+                           Gap = diff
+                           SetToAmountToCloseGap = lowFollowing
+                           Direction = GapDirection.Follows
+                        }
+                     else
+                        None
+                  | _ -> None
+               | index when index = ranges.Length - 1 ->
+                  // New range is at end of list
+
+                  let rangeLowerBound =
+                     ranges |> List.tryItem index |> Option.bind _.LowerBound
+
+                  let precedingRangeUpperBound =
+                     ranges
+                     |> List.tryItem (index - 1)
+                     |> Option.bind _.UpperBound
+
+                  match rangeLowerBound, precedingRangeUpperBound with
+                  | Some low, Some upPreceding ->
+                     let diff = low - upPreceding
+
+                     if diff > 0m then
+                        Some {
+                           Gap = diff
+                           SetToAmountToCloseGap = upPreceding
+                           Direction = GapDirection.Precedes
+                        }
+                     else
+                        None
+                  | _ -> None
+               | index ->
+                  // New range is somewhere in the middle
+
+                  let range = ranges |> List.tryItem index
+                  let rangeLowerBound = range |> Option.bind _.LowerBound
+                  let rangeUpperBound = range |> Option.bind _.UpperBound
+
+                  let precedingRangeUpperBound =
+                     ranges
+                     |> List.tryItem (index - 1)
+                     |> Option.bind _.UpperBound
+
+                  let followingRangeLowerBound =
+                     ranges
+                     |> List.tryItem (index + 1)
+                     |> Option.bind _.LowerBound
+
+                  match
+                     rangeLowerBound,
+                     rangeUpperBound,
+                     precedingRangeUpperBound,
+                     followingRangeLowerBound
+                  with
+                  | Some low, Some up, Some upPreceding, Some lowFollowing ->
+                     let diffBetweenPreceding = low - upPreceding
+                     let diffBetweenFollowing = lowFollowing - up
+
+                     if diffBetweenPreceding > 0m then
+                        Some {
+                           Gap = diffBetweenPreceding
+                           SetToAmountToCloseGap = upPreceding
+                           Direction = GapDirection.Precedes
+                        }
+                     elif diffBetweenFollowing > 0m then
+                        Some {
+                           Gap = diffBetweenFollowing
+                           SetToAmountToCloseGap = lowFollowing
+                           Direction = GapDirection.Follows
+                        }
+                     else
+                        None
+                  | _ -> None)
 
    [<RequireQualifiedAccess>]
    type Criteria =
@@ -193,17 +334,9 @@ module CommandApprovalRule =
             |> Result.map (fun _ -> criteria)
          | Criteria.PerCommand -> Ok criteria
 
-      static member sortOrder(criteria: Criteria) =
+      static member sortBy(criteria: Criteria) =
          match criteria with
-         | Criteria.AmountPerCommand range ->
-            match range.LowerBound, range.UpperBound with
-            | None, Some high -> 0, None, Some high
-            | Some low, Some high -> 1, Some low, Some high
-            | Some low, None -> 2, Some low, None
-            // NOTE: Case should not occur.
-            // Consider making a type which enforces either
-            // lower or upper being Some.
-            | None, None -> 3, None, None
+         | Criteria.AmountPerCommand range -> AmountPerCommandRange.sortBy range
          | Criteria.AmountDailyLimit _ -> 4, None, None
          | Criteria.PerCommand -> 5, None, None
 
@@ -303,7 +436,7 @@ module CommandApprovalRule =
       // ignoring an existing rule if we are editing it's configuration.
       let keepAmountBasedCommandRules (existing: T) =
          existing.CommandType = rule.CommandType
-         && existing.RuleId <> rule.RuleId
+         && existing.RuleId <> rule.RuleId // Editing existing rule
          && match existing.Criteria with
             | Criteria.AmountPerCommand _ -> true
             | Criteria.AmountDailyLimit _ -> true
@@ -329,6 +462,31 @@ module CommandApprovalRule =
             | Criteria.AmountPerCommand range ->
                rangeConflictsWithDailyLimit limit range
             | _ -> false)
+
+   /// Check whether a new rule contains gaps with other AmountPerCommand
+   /// rules for the same command type.
+   let newRuleContainsAmountGapWithExistingRule
+      (existingRules: T seq)
+      (rule: T)
+      : RangeGap option
+      =
+      match rule.Criteria with
+      | Criteria.AmountPerCommand range ->
+         let existingRanges =
+            existingRules
+            |> Seq.fold
+               (fun acc r ->
+                  match
+                     rule.RuleId <> r.RuleId, // Editing an existing rule
+                     r.CommandType = rule.CommandType,
+                     r.Criteria
+                  with
+                  | true, true, Criteria.AmountPerCommand range -> range :: acc
+                  | _ -> acc)
+               []
+
+         AmountPerCommandRange.hasGap existingRanges range
+      | _ -> None
 
    type ApprovalRuleDeleted = {
       RuleId: CommandApprovalRuleId
