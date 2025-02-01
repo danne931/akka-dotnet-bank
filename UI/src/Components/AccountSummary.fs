@@ -7,20 +7,29 @@ open Feliz.Router
 open Bank.Account.Domain
 
 type private RotatingMetric =
-   | DailyInternalTransfer
+   | DailyInternalTransferWithinOrg
+   | DailyInternalTransferBetweenOrgs
    | DailyDomesticTransfer
-   | MonthlyInternalTransfer
-   | MonthlyDomesticTransfer
+   | DailyPaymentPaid
    | DailyPurchaseAccrued
+   | MonthlyInternalTransferWithinOrg
+   | MonthlyInternalTransferBetweenOrgs
+   | MonthlyDomesticTransfer
+   | MonthlyPaymentPaid
    | MonthlyPurchaseAccrued
+
 
 let private rotatingMetrics = [
    RotatingMetric.DailyPurchaseAccrued
-   RotatingMetric.DailyInternalTransfer
+   RotatingMetric.DailyInternalTransferWithinOrg
+   RotatingMetric.DailyInternalTransferBetweenOrgs
    RotatingMetric.DailyDomesticTransfer
+   RotatingMetric.DailyPaymentPaid
    RotatingMetric.MonthlyPurchaseAccrued
-   RotatingMetric.MonthlyInternalTransfer
+   RotatingMetric.MonthlyInternalTransferWithinOrg
+   RotatingMetric.MonthlyInternalTransferBetweenOrgs
    RotatingMetric.MonthlyDomesticTransfer
+   RotatingMetric.MonthlyPaymentPaid
 ]
 
 [<ReactComponent>]
@@ -29,7 +38,7 @@ let AccountSummaryComponent (profile: AccountProfile) =
    let flow, setFlow = React.useState MoneyFlow.Out
 
    let rotatingMetric, setMetric =
-      React.useState RotatingMetric.DailyInternalTransfer
+      React.useState RotatingMetric.DailyPurchaseAccrued
 
    let monthlyMoneyFlow, setMonthlyMoneyFlow =
       React.useState Deferred.InProgress
@@ -155,28 +164,57 @@ let AccountSummaryComponent (profile: AccountProfile) =
                if isFading then "fade-out" else "fade-in"
             ] [
                match rotatingMetric with
-               | RotatingMetric.DailyInternalTransfer ->
-                  Html.p "Daily Internal Transfer: "
+               | RotatingMetric.DailyInternalTransferWithinOrg ->
+                  Html.p "Daily Internal Transfer Within Org: "
 
                   Html.ins [
                      attr.text (
-                        Money.formatShort metrics.DailyInternalTransferAccrued
+                        Money.formatShort metrics.DailyInternalTransferWithinOrg
+                     )
+                  ]
+               | RotatingMetric.DailyInternalTransferBetweenOrgs ->
+                  Html.p "Daily Internal Transfer Between Orgs: "
+
+                  Html.ins [
+                     attr.text (
+                        Money.formatShort
+                           metrics.DailyInternalTransferBetweenOrgs
                      )
                   ]
                | RotatingMetric.DailyDomesticTransfer ->
                   Html.p "Daily Domestic Transfer: "
 
                   Html.ins [
-                     attr.text (
-                        Money.formatShort metrics.DailyDomesticTransferAccrued
-                     )
+                     attr.text (Money.formatShort metrics.DailyDomesticTransfer)
                   ]
-               | RotatingMetric.MonthlyInternalTransfer ->
-                  Html.p "Monthly Internal Transfer: "
+               | RotatingMetric.DailyPaymentPaid ->
+                  Html.p "Daily Payments Paid: "
+
+                  Html.ins [
+                     attr.text (Money.formatShort metrics.DailyPaymentPaid)
+                  ]
+               | RotatingMetric.DailyPurchaseAccrued ->
+                  Html.p "Daily Purchase: "
+
+                  Html.ins [
+                     attr.text (Money.formatShort metrics.DailyPurchase)
+                  ]
+               | RotatingMetric.MonthlyInternalTransferWithinOrg ->
+                  Html.p "Monthly Internal Transfer Within Org: "
 
                   Html.ins [
                      attr.text (
-                        Money.formatShort metrics.MonthlyInternalTransferAccrued
+                        Money.formatShort
+                           metrics.MonthlyInternalTransferWithinOrg
+                     )
+                  ]
+               | RotatingMetric.MonthlyInternalTransferBetweenOrgs ->
+                  Html.p "Monthly Internal Transfer Between Orgs: "
+
+                  Html.ins [
+                     attr.text (
+                        Money.formatShort
+                           metrics.MonthlyInternalTransferWithinOrg
                      )
                   ]
                | RotatingMetric.MonthlyDomesticTransfer ->
@@ -184,22 +222,20 @@ let AccountSummaryComponent (profile: AccountProfile) =
 
                   Html.ins [
                      attr.text (
-                        Money.formatShort metrics.MonthlyDomesticTransferAccrued
+                        Money.formatShort metrics.MonthlyDomesticTransfer
                      )
-                  ]
-               | RotatingMetric.DailyPurchaseAccrued ->
-                  Html.p "Daily Purchase: "
-
-                  Html.ins [
-                     attr.text (Money.formatShort metrics.DailyPurchaseAccrued)
                   ]
                | RotatingMetric.MonthlyPurchaseAccrued ->
                   Html.p "Monthly Purchase: "
 
                   Html.ins [
-                     attr.text (
-                        Money.formatShort metrics.MonthlyPurchaseAccrued
-                     )
+                     attr.text (Money.formatShort metrics.MonthlyPurchase)
+                  ]
+               | RotatingMetric.MonthlyPaymentPaid ->
+                  Html.p "Monthly Payments Paid: "
+
+                  Html.ins [
+                     attr.text (Money.formatShort metrics.DailyPaymentPaid)
                   ]
             ]
          ]

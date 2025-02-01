@@ -1,9 +1,11 @@
 module Bank.Employee.Forms.DailyPurchaseLimitForm
 
+open Feliz
 open Fable.Form.Simple
 open Validus.Operators
 
 open Bank.Employee.Domain
+open UIDomain.Employee
 open Lib.Validators
 open Lib.SharedTypes
 open FormContainer
@@ -38,9 +40,10 @@ let onSubmit (card: Card) (employee: Employee) initiatedBy amount =
 
    Msg.Submit(employee, cmd, Started)
 
+[<ReactComponent>]
 let DailyPurchaseLimitFormComponent
    (session: UserSession)
-   (notifyParentOnSubmit: ParentOnSubmitHandler)
+   (notifyParentOnSubmit: EmployeeCommandReceipt -> unit)
    (card: Card)
    (employee: Employee)
    =
@@ -48,4 +51,9 @@ let DailyPurchaseLimitFormComponent
       Form.succeed (onSubmit card employee (InitiatedById session.EmployeeId))
       |> Form.append dailyPurchaseLimitField
 
-   EmployeeFormContainer { Amount = "" } form notifyParentOnSubmit None
+   EmployeeFormContainer {|
+      InitialValues = { Amount = "" }
+      Form = form
+      Action = None
+      OnSubmit = notifyParentOnSubmit
+   |}

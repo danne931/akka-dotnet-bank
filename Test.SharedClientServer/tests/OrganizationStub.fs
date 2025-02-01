@@ -58,7 +58,7 @@ let progress (cmd: ApprovableCommand) : CommandApprovalProgress.T = {
    CommandToInitiateOnApproval = cmd
 }
 
-let accrual: DailyAccrual = {
+let accrual: CommandApprovalDailyAccrual = {
    PaymentsPaid = 0m
    DomesticTransfer = 0m
    InternalTransferBetweenOrgs = 0m

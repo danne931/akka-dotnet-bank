@@ -1,8 +1,10 @@
 module Bank.Employee.Forms.PurchaseLimitForm
 
+open Feliz
 open Fable.Form.Simple
 
 open Bank.Employee.Domain
+open UIDomain.Employee
 open Lib.SharedTypes
 open FormContainer
 
@@ -21,9 +23,10 @@ let durationSelect =
       }
    }
 
+[<ReactComponent>]
 let PurchaseLimitFormComponent
    (session: UserSession)
-   (notifyParentOnSubmit: ParentOnSubmitHandler)
+   (notifyParentOnSubmit: EmployeeCommandReceipt -> unit)
    (card: Card)
    (employee: Employee)
    =
@@ -55,8 +58,9 @@ let PurchaseLimitFormComponent
                }
             ))
 
-   EmployeeFormContainer
-      { Amount = ""; Duration = "daily" }
-      form
-      notifyParentOnSubmit
-      None
+   EmployeeFormContainer {|
+      InitialValues = { Amount = ""; Duration = "daily" }
+      Form = form
+      Action = None
+      OnSubmit = notifyParentOnSubmit
+   |}

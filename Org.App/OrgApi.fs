@@ -72,12 +72,16 @@ let getOrgAndAccountProfiles
             o.{Fields.statusDetail},
             features.{Fields.socialTransferDiscoveryAccountId},
             a.*,
-            dta.internal_transfer_accrued as dita,
-            dta.domestic_transfer_accrued as dida,
-            mta.internal_transfer_accrued as mita,
-            mta.domestic_transfer_accrued as mida,
-            {mpaView}.amount_accrued as mpa,
-            {dpaView}.amount_accrued as dpa
+            dta.internal_transfer_within_org_accrued as daily_internal_within,
+            dta.internal_transfer_between_orgs_accrued as daily_internal_between,
+            dta.domestic_transfer_accrued as daily_domestic,
+            dta.payment_paid_accrued as daily_payment_paid,
+            mta.internal_transfer_within_org_accrued as monthly_internal_within,
+            mta.internal_transfer_between_orgs_accrued as monthly_internal_between,
+            mta.domestic_transfer_accrued as monthly_domestic,
+            mta.payment_paid_accrued as monthly_payment_paid,
+            {mpaView}.amount_accrued as monthly_purchase,
+            {dpaView}.amount_accrued as daily_purchase
          FROM {table} o
          LEFT JOIN {OrganizationSqlMapper.featureFlagsTable} features using({Fields.orgId})
          JOIN {AccountSqlMapper.table} a using({Fields.orgId})
@@ -97,18 +101,36 @@ let getOrgAndAccountProfiles
                {
                   Account = AccountSqlMapper.AccountSqlReader.account read
                   Metrics = {
-                     DailyInternalTransferAccrued =
-                        read.decimalOrNone "dita" |> Option.defaultValue 0m
-                     DailyDomesticTransferAccrued =
-                        read.decimalOrNone "dida" |> Option.defaultValue 0m
-                     MonthlyInternalTransferAccrued =
-                        read.decimalOrNone "mita" |> Option.defaultValue 0m
-                     MonthlyDomesticTransferAccrued =
-                        read.decimalOrNone "mida" |> Option.defaultValue 0m
-                     DailyPurchaseAccrued =
-                        read.decimalOrNone "dpa" |> Option.defaultValue 0m
-                     MonthlyPurchaseAccrued =
-                        read.decimalOrNone "mpa" |> Option.defaultValue 0m
+                     DailyInternalTransferWithinOrg =
+                        read.decimalOrNone "daily_internal_within"
+                        |> Option.defaultValue 0m
+                     DailyInternalTransferBetweenOrgs =
+                        read.decimalOrNone "daily_internal_between"
+                        |> Option.defaultValue 0m
+                     DailyDomesticTransfer =
+                        read.decimalOrNone "daily_domestic"
+                        |> Option.defaultValue 0m
+                     DailyPaymentPaid =
+                        read.decimalOrNone "daily_payment_paid"
+                        |> Option.defaultValue 0m
+                     DailyPurchase =
+                        read.decimalOrNone "daily_purchase"
+                        |> Option.defaultValue 0m
+                     MonthlyInternalTransferWithinOrg =
+                        read.decimalOrNone "monthly_internal_within"
+                        |> Option.defaultValue 0m
+                     MonthlyInternalTransferBetweenOrgs =
+                        read.decimalOrNone "monthly_internal_between"
+                        |> Option.defaultValue 0m
+                     MonthlyDomesticTransfer =
+                        read.decimalOrNone "monthly_domestic"
+                        |> Option.defaultValue 0m
+                     MonthlyPaymentPaid =
+                        read.decimalOrNone "monthly_payment_paid"
+                        |> Option.defaultValue 0m
+                     MonthlyPurchase =
+                        read.decimalOrNone "monthly_purchase"
+                        |> Option.defaultValue 0m
                   }
                })
          |> TaskResult.map OrgDBResult.AccountProfilesWithOrg

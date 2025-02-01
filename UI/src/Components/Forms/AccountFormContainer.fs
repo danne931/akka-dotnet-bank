@@ -10,8 +10,6 @@ open Lib.SharedTypes
 open Bank.Account.Domain
 open UIDomain.Account
 
-type ParentOnSubmitHandler = AccountCommandReceipt -> unit
-
 type State<'Values> = { FormModel: Form.View.Model<'Values> }
 
 type Msg<'Values> =
@@ -23,11 +21,14 @@ type Msg<'Values> =
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
    | ErrorReceivedViaSignalR of Err
 
-let init (values: 'Values) () =
-   { FormModel = Form.View.idle values }, Cmd.none
+let init (initValues: 'Values) () =
+   {
+      FormModel = Form.View.idle initValues
+   },
+   Cmd.none
 
 let update
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: AccountCommandReceipt -> unit)
    (msg: Msg<'Values>)
    (state: State<'Values>)
    =
@@ -82,11 +83,16 @@ let update
 
 [<ReactComponent>]
 let AccountFormContainer
-   (values: 'Values)
-   (form: Form.Form<'Values, Msg<'Values>, IReactProperty>)
-   (onSubmit: ParentOnSubmitHandler)
+   (props:
+      {|
+         InitialValues: 'Values
+         Form: Form.Form<'Values, Msg<'Values>, IReactProperty>
+         Action: Form.View.Action<Msg<'Values>> option
+         OnSubmit: AccountCommandReceipt -> unit
+      |})
    =
-   let state, dispatch = React.useElmish (init values, update onSubmit, [||])
+   let state, dispatch =
+      React.useElmish (init props.InitialValues, update props.OnSubmit, [||])
 
    (*
    let signalRContext = React.useContext SignalRConnectionProvider.context
@@ -107,8 +113,10 @@ let AccountFormContainer
       {
          Dispatch = dispatch
          OnChange = FormChanged
-         Action = Form.View.Action.SubmitOnly "Submit"
+         Action =
+            props.Action
+            |> Option.defaultValue (Form.View.Action.SubmitOnly "Submit")
          Validation = Form.View.ValidateOnSubmit
       }
-      form
+      props.Form
       state.FormModel

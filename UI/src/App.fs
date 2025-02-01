@@ -25,7 +25,10 @@ let App () =
       , [| box (string currentUrl) |]
    )
 
-   let appShell (activePage: UserSession -> Fable.React.ReactElement) =
+   let appShell
+      (contextProvider: (ReactElement -> ReactElement) option)
+      (activePage: UserSession -> Fable.React.ReactElement)
+      =
       (fun (session: UserSession) ->
          React.strictMode [
             Navigation.NavigationComponent()
@@ -50,12 +53,13 @@ let App () =
             ]
          ])
       |> UserSessionSuspense
+      |> (contextProvider |> Option.defaultValue id)
       |> OrgProvider
       |> UserSessionProvider
 
    match currentUrl with
    | Routes.IndexUrl.Analytics url ->
-      appShell (fun session ->
+      appShell None (fun session ->
          React.suspense (
             [
                React.lazy' (
@@ -66,24 +70,29 @@ let App () =
             Html.progress []
          ))
    | Routes.IndexUrl.Account url ->
-      appShell (AccountDashboard.AccountDashboardComponent url)
+      appShell None (AccountDashboard.AccountDashboardComponent url)
    | Routes.IndexUrl.Approvals url ->
-      appShell (ApprovalDashboard.ApprovalDashboardComponent url)
+      appShell None (ApprovalDashboard.ApprovalDashboardComponent url)
    | Routes.IndexUrl.Employees url ->
-      appShell (EmployeeDashboard.EmployeeDashboardComponent url)
+      appShell None (EmployeeDashboard.EmployeeDashboardComponent url)
    | Routes.IndexUrl.EmployeeHistory url ->
-      appShell (EmployeeHistoryDashboard.EmployeeHistoryDashboardComponent url)
+      appShell
+         None
+         (EmployeeHistoryDashboard.EmployeeHistoryDashboardComponent url)
    | Routes.IndexUrl.Cards url ->
-      appShell (CardDashboard.CardDashboardComponent url)
+      appShell None (CardDashboard.CardDashboardComponent url)
    | Routes.IndexUrl.Transaction url ->
-      TransactionDashboard.TransactionDashboardComponent url
-      |> appShell
-      |> (SignalRConnectionProvider
-          << SignalRAccountEventProvider
-          << MerchantProvider
-          << TransactionCategoryProvider)
+      let contextProviders =
+         SignalRConnectionProvider
+         << SignalRAccountEventProvider
+         << MerchantProvider
+         << TransactionCategoryProvider
+
+      appShell
+         (Some contextProviders)
+         (TransactionDashboard.TransactionDashboardComponent url)
    | Routes.IndexUrl.Payments url ->
-      appShell (PaymentDashboard.PaymentDashboardComponent url)
+      appShell None (PaymentDashboard.PaymentDashboardComponent url)
    | Routes.IndexUrl.NotFound -> Html.h1 "Not Found"
 
 let root = ReactDOM.createRoot <| document.getElementById "bank-react-root"

@@ -38,6 +38,7 @@ type Msg =
       reason: string option *
       Payment *
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
+   | SubmitPaymentForApproval
 
 let init () =
    { IsFulfillingPayment = false }, Cmd.none
@@ -142,13 +143,13 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
       }
 
       state, Cmd.fromAsync cancel
-   | ConfirmCancelPaymentRequest(session, _, p, Finished(Ok receipt)) ->
+   | ConfirmCancelPaymentRequest(_, _, p, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
 
       state,
       Alerts.toastSuccessCommand
          $"Cancelled payment request to {Payment.payer p}"
-   | ConfirmCancelPaymentRequest(session, _, _, Finished(Error err)) ->
+   | ConfirmCancelPaymentRequest(_, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
    | ConfirmDeclinePaymentRequest(session, reason, payment, Started) ->
@@ -204,13 +205,19 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
       }
 
       state, Cmd.fromAsync decline
-   | ConfirmDeclinePaymentRequest(session, _, p, Finished(Ok receipt)) ->
+   | ConfirmDeclinePaymentRequest(_, _, p, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
       let payee = (Payment.baseInfo p).Payee.OrgName
       state, Alerts.toastSuccessCommand $"Declined payment request from {payee}"
-   | ConfirmDeclinePaymentRequest(session, _, _, Finished(Error err)) ->
+   | ConfirmDeclinePaymentRequest(_, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
+   | SubmitPaymentForApproval ->
+      { IsFulfillingPayment = false },
+      Cmd.batch [
+         Alerts.toastSuccessCommand "Submitted payment for approval."
+         Cmd.navigate Routes.PaymentUrl.BasePath
+      ]
 
 [<ReactComponent>]
 let PaymentDetailComponent
@@ -219,6 +226,8 @@ let PaymentDetailComponent
    (org: OrgWithAccountProfiles)
    (notifyParentOnUpdate: AccountCommandReceipt -> unit)
    =
+   let orgDispatch = React.useContext OrgProvider.dispatchContext
+
    let state, dispatch =
       React.useElmish (init, update notifyParentOnUpdate, [||])
 
@@ -229,7 +238,14 @@ let PaymentDetailComponent
    let paymentPendingApproval =
       paymentFulfillmentPendingApproval
          org.Org.CommandApprovalProgress.Values
-         baseInfo
+         baseInfo.Id
+
+   let approvalRemainingCnt (progress: CommandApprovalProgress.T) =
+      org.Org.CommandApprovalRules.TryFind progress.RuleId
+      |> Option.map (fun rule ->
+         CommandApprovalProgress.remainingApprovalRequiredBy rule progress
+         |> _.Length
+         |> string)
 
    let canManagePayment =
       Payment.canManage payment && paymentPendingApproval.IsNone
@@ -242,17 +258,20 @@ let PaymentDetailComponent
          ]
          Html.div [
             Html.small [
-               if paymentPendingApproval.IsSome then
+               match paymentPendingApproval with
+               | Some progress ->
+                  let cnt =
+                     approvalRemainingCnt progress |> Option.defaultValue "all"
+
                   attr.text (Payment.statusDisplay payment + " -> Paid")
 
                   attr.custom (
                      "data-tooltip",
-                     "Updates to Paid when all approvals acquired."
+                     $"Updates to Paid when {cnt} approvals acquired."
                   )
 
                   attr.custom ("data-placement", "right")
-               else
-                  attr.text (Payment.statusDisplay payment)
+               | None -> attr.text (Payment.statusDisplay payment)
             ]
          ]
       ]
@@ -333,14 +352,18 @@ let PaymentDetailComponent
          PaymentFulfillmentFormComponent
             session
             accounts
+            org.Org.CommandApprovalRules
             payment
             (fun receipt ->
                dispatch Msg.TogglePaymentFulfillment
+               notifyParentOnUpdate receipt)
+            (fun cmdApprovalRequest ->
+               cmdApprovalRequest
+               |> OrgCommand.RequestCommandApproval
+               |> OrgProvider.Msg.OrgCommand
+               |> orgDispatch
 
-               if paymentPendingApproval.IsNone then
-                  notifyParentOnUpdate receipt
-               else
-                  Router.navigate Routes.PaymentUrl.BasePath)
+               dispatch Msg.SubmitPaymentForApproval)
       else
          match canManagePayment, isPaymentOutgoing with
          | true, true ->
@@ -370,12 +393,18 @@ let PaymentDetailComponent
                ]
             ]
          | false, false ->
-            if Payment.isUnpaid payment && session.Role = Role.Admin then
-               Html.button [
-                  attr.classes [ "outline" ]
-                  attr.text "View Payment Approval Progress"
-                  attr.onClick (fun _ ->
-                     Router.navigate Routes.ApprovalsUrl.BasePath)
-               ]
+            match paymentPendingApproval |> Option.map approvalRemainingCnt with
+            | Some cnt ->
+               Html.p
+                  $"Payment will be sent when {cnt} more approvals acquired."
+
+               if session.Role = Role.Admin then
+                  Html.button [
+                     attr.classes [ "outline" ]
+                     attr.text "View Payment Approval Progress"
+                     attr.onClick (fun _ ->
+                        Router.navigate Routes.ApprovalsUrl.BasePath)
+                  ]
+            | None -> ()
          | _ -> ()
    ]

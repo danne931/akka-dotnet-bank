@@ -8,6 +8,7 @@ open Fable.Form.Simple.Pico
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
+open UIDomain.Account
 open Lib.Validators
 open FormContainer
 open Lib.SharedTypes
@@ -224,11 +225,12 @@ let form
    fieldAccountEnvironment
    |> Form.andThen (fun _ -> domesticRecipientForm state initiatedBy)
 
+[<ReactComponent>]
 let RegisterTransferRecipientFormComponent
    (session: UserSession)
    (account: Account)
    (recipientIdForEdit: AccountId option)
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: AccountCommandReceipt -> unit)
    =
    let recipient =
       recipientIdForEdit
@@ -257,12 +259,17 @@ let RegisterTransferRecipientFormComponent
         }
       | _ -> formProps
 
-   AccountFormContainer
-      formProps
-      (form
+   let form =
+      form
          {
             Account = account
             EditingDomesticRecipient = recipient
          }
-         (InitiatedById session.EmployeeId))
-      onSubmit
+         (InitiatedById session.EmployeeId)
+
+   AccountFormContainer {|
+      InitialValues = formProps
+      Form = form
+      Action = None
+      OnSubmit = onSubmit
+   |}

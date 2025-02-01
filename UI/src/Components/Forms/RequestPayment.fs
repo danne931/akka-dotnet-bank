@@ -9,6 +9,7 @@ open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
+open UIDomain.Account
 open Lib.Validators
 open FormContainer
 open Lib.SharedTypes
@@ -176,8 +177,12 @@ let PaymentRequestFormComponent
    (session: UserSession)
    (payeeOrg: Org)
    (payeeDestinationAccounts: Map<AccountId, Account>)
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: AccountCommandReceipt -> unit)
    =
+   let payeeDestinationAccounts =
+      payeeDestinationAccounts
+      |> Map.filter (fun _ a -> a.Depository = AccountDepository.Checking)
+
    let defaultDestinationAccount =
       payeeDestinationAccounts
       |> Map.toSeq
@@ -234,14 +239,17 @@ let PaymentRequestFormComponent
                      })
                      |> Option.defaultValue initValues
 
-                  AccountFormContainer
-                     initValues
-                     (formPlatformPayment
-                        payeeOrg
-                        payeeDestinationAccounts
-                        orgs
-                        initiatedBy)
-                     onSubmit
+                  AccountFormContainer {|
+                     InitialValues = initValues
+                     Form =
+                        formPlatformPayment
+                           payeeOrg
+                           payeeDestinationAccounts
+                           orgs
+                           initiatedBy
+                     Action = None
+                     OnSubmit = onSubmit
+                  |}
                | Deferred.Resolved(Ok None) ->
                   Html.p $"No orgs found by search query {searchInput}."
                | _ -> Html.none)

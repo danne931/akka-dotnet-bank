@@ -5,6 +5,7 @@ open Fable.Form.Simple
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
+open UIDomain.Employee
 open FormContainer
 
 type Values = { Locked: bool }
@@ -45,16 +46,18 @@ let form
 
    Form.succeed onSubmit |> Form.append isLockedField
 
+[<ReactComponent>]
 let CardAccessFormComponent
    (session: UserSession)
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: EmployeeCommandReceipt -> unit)
    (card: Card)
    (employee: Employee)
    =
-   EmployeeFormContainer
-      {
+   EmployeeFormContainer {|
+      InitialValues = {
          Locked = card.Status = CardStatus.Frozen
       }
-      (form employee card (InitiatedById session.EmployeeId))
-      onSubmit
-      None
+      Form = form employee card (InitiatedById session.EmployeeId)
+      Action = None
+      OnSubmit = onSubmit
+   |}

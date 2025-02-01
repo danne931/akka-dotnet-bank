@@ -7,6 +7,7 @@ open System
 open Fable.Form.Simple.Pico
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open UIDomain.Employee
 open Lib.Validators
 open Lib.SharedTypes
 open FormContainer
@@ -64,14 +65,16 @@ let form
 
    Form.succeed onSubmit |> Form.append amountField |> Form.append originField
 
+[<ReactComponent>]
 let DebitFormComponent
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: EmployeeCommandReceipt -> unit)
    (account: Account)
    (selectedCardId: CardId)
    (employee: Employee)
    =
-   EmployeeFormContainer
-      { Amount = ""; Origin = "" }
-      (form account employee selectedCardId)
-      onSubmit
-      None
+   EmployeeFormContainer {|
+      InitialValues = { Amount = ""; Origin = "" }
+      Form = form account employee selectedCardId
+      Action = None
+      OnSubmit = onSubmit
+   |}

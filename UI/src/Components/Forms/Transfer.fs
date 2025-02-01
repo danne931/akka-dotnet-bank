@@ -11,6 +11,7 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
+open UIDomain.Org
 open Lib.Validators
 open FormContainer
 open Lib.SharedTypes
@@ -308,31 +309,166 @@ let formDomestic
    |> Form.append scheduledAtField
 
 [<ReactComponent>]
-let TransferFormComponent
+let TransferInternalWithinOrgComponent
    (session: UserSession)
    (account: Account)
    (recipients: Map<AccountId, Account>)
-   (onSubmit: ParentOnSubmitHandler)
-   (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
+   (onSubmit: AccountCommandReceipt -> unit)
    =
-   let defaultId =
-      selectedRecipient |> Option.map (snd >> string) |> Option.defaultValue ""
+   let initiatedBy = InitiatedById session.EmployeeId
 
-   let defaultEnv =
-      selectedRecipient
-      |> Option.map fst
-      |> Option.defaultValue RecipientAccountEnvironment.InternalWithinOrg
+   AccountFormContainer {|
+      InitialValues = {
+         Amount = ""
+         RecipientId = ""
+         Memo = ""
+         ScheduledAt = "TODAY"
+      }
+      Form = formInternalWithinOrg account recipients initiatedBy
+      Action = None
+      OnSubmit = onSubmit
+   |}
 
+[<ReactComponent>]
+let TransferInternalBetweenOrgsComponent
+   (destinationOrgs: Org list)
+   (session: UserSession)
+   (account: Account)
+   (org: OrgWithAccountProfiles)
+   (onSubmit: AccountCommandReceipt -> unit)
+   (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
+   =
    let initValues = {
       Amount = ""
-      RecipientId = defaultId
+      RecipientId = ""
       Memo = ""
       ScheduledAt = "TODAY"
    }
 
+   let initValues =
+      destinationOrgs
+      |> List.tryHead
+      |> Option.map (fun o ->
+         o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId)
+      |> Option.map (fun accountId -> {
+         initValues with
+            RecipientId = string accountId
+      })
+      |> Option.defaultValue initValues
+
+   AccountFormContainer {|
+      InitialValues = initValues
+      Form =
+         formInternalCrossOrg
+            account
+            destinationOrgs
+            (InitiatedById session.EmployeeId)
+      Action = None
+      OnSubmit =
+         fun receipt ->
+            match receipt.PendingCommand with
+            | AccountCommand.InternalTransferBetweenOrgs cmd ->
+               let cmd =
+                  cmd
+                  |> InternalTransferBetweenOrgs
+                  |> ApprovableCommand.AmountBased
+
+               let requiresApproval =
+                  CommandApprovalRule.commandRequiresApproval
+                     cmd
+                     {
+                        InternalTransferBetweenOrgs =
+                           org.Metrics.DailyInternalTransferBetweenOrgs
+                        PaymentsPaid = 0m
+                        DomesticTransfer = 0m
+                     }
+                     (Seq.toList org.Org.CommandApprovalRules.Values)
+
+               match requiresApproval with
+               | None -> onSubmit receipt
+               | Some rule ->
+                  CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
+                     session
+                     rule
+                     cmd
+                  |> onSubmitForApproval
+            | _ -> ()
+   |}
+
+[<ReactComponent>]
+let TransferDomesticFormComponent
+   (session: UserSession)
+   (account: Account)
+   (org: OrgWithAccountProfiles)
+   (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
+   (onSubmit: AccountCommandReceipt -> unit)
+   (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
+   =
    let initiatedBy = InitiatedById session.EmployeeId
 
-   let selectedAccountEnv, setSelectedAccountEnv = React.useState defaultEnv
+   let defaultRecipientId =
+      match selectedRecipient with
+      | Some(env, accountId) when env = RecipientAccountEnvironment.Domestic ->
+         string accountId
+      | _ ->
+         account.DomesticTransferRecipients.Values
+         |> Seq.tryHead
+         |> Option.map (_.AccountId >> string)
+         |> Option.defaultValue ""
+
+   AccountFormContainer {|
+      InitialValues = {
+         Amount = ""
+         RecipientId = defaultRecipientId
+         Memo = ""
+         ScheduledAt = "TODAY"
+      }
+      Form = formDomestic account initiatedBy
+      Action = None
+      OnSubmit =
+         fun receipt ->
+            match receipt.PendingCommand with
+            | AccountCommand.DomesticTransfer cmd ->
+               let cmd =
+                  cmd |> DomesticTransfer |> ApprovableCommand.AmountBased
+
+               let requiresApproval =
+                  CommandApprovalRule.commandRequiresApproval
+                     cmd
+                     {
+                        InternalTransferBetweenOrgs = 0m
+                        PaymentsPaid = 0m
+                        DomesticTransfer = org.Metrics.DailyDomesticTransfer
+                     }
+                     (Seq.toList org.Org.CommandApprovalRules.Values)
+
+               match requiresApproval with
+               | None -> onSubmit receipt
+               | Some rule ->
+                  CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
+                     session
+                     rule
+                     cmd
+                  |> onSubmitForApproval
+            | _ -> ()
+   |}
+
+[<ReactComponent>]
+let TransferFormComponent
+   (session: UserSession)
+   (account: Account)
+   (org: OrgWithAccountProfiles)
+   (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
+   (onSubmit: AccountCommandReceipt -> unit)
+   (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
+   =
+   let initialSelectedEnv =
+      selectedRecipient
+      |> Option.map fst
+      |> Option.defaultValue RecipientAccountEnvironment.InternalWithinOrg
+
+   let selectedAccountEnv, setSelectedAccountEnv =
+      React.useState initialSelectedEnv
 
    React.fragment [
       Html.select [
@@ -366,32 +502,25 @@ let TransferFormComponent
       | RecipientAccountEnvironment.InternalBetweenOrgs ->
          OrgSocialTransferDiscovery.OrgSearchComponent
             session.OrgId
-            (fun searchInput orgs ->
-               match orgs with
+            (fun searchInput destinationOrgs ->
+               match destinationOrgs with
                | Deferred.InProgress -> Html.progress []
-               | Deferred.Resolved(Ok(Some orgs)) ->
-                  let initValues =
-                     orgs
-                     |> List.head
-                     |> (fun o ->
-                        o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId)
-                     |> Option.map (fun accountId -> {
-                        initValues with
-                           RecipientId = string accountId
-                     })
-                     |> Option.defaultValue initValues
-
-                  AccountFormContainer
-                     initValues
-                     (formInternalCrossOrg account orgs initiatedBy)
+               | Deferred.Resolved(Ok(Some destinationOrgs)) ->
+                  TransferInternalBetweenOrgsComponent
+                     destinationOrgs
+                     session
+                     account
+                     org
                      onSubmit
+                     onSubmitForApproval
                | Deferred.Resolved(Ok None) ->
                   Html.p $"No orgs found by search query {searchInput}."
                | _ -> Html.none)
       | RecipientAccountEnvironment.InternalWithinOrg ->
-         AccountFormContainer
-            initValues
-            (formInternalWithinOrg account recipients initiatedBy)
+         TransferInternalWithinOrgComponent
+            session
+            account
+            org.Accounts
             onSubmit
       | RecipientAccountEnvironment.Domestic ->
          if account.DomesticTransferRecipients.Count = 0 then
@@ -414,8 +543,11 @@ let TransferFormComponent
                   Router.navigate [| yield! pathArr; queryString |])
             ]
          else
-            AccountFormContainer
-               initValues
-               (formDomestic account initiatedBy)
+            TransferDomesticFormComponent
+               session
+               account
+               org
+               selectedRecipient
                onSubmit
+               onSubmitForApproval
    ]

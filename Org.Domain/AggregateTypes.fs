@@ -104,6 +104,39 @@ type OrgWithAccountProfiles = {
    member x.Accounts: Map<AccountId, Account> =
       x.AccountProfiles |> Map.map (fun _ profile -> profile.Account)
 
+   member x.Metrics: AccountMetrics =
+      x.AccountProfiles.Values
+      |> Seq.fold
+            (fun acc profile -> {
+               DailyInternalTransferWithinOrg =
+                  acc.DailyInternalTransferWithinOrg
+                  + profile.Metrics.DailyInternalTransferWithinOrg
+               DailyInternalTransferBetweenOrgs =
+                  acc.DailyInternalTransferBetweenOrgs
+                  + profile.Metrics.DailyInternalTransferBetweenOrgs
+               DailyDomesticTransfer =
+                  acc.DailyDomesticTransfer
+                  + profile.Metrics.DailyDomesticTransfer
+               DailyPaymentPaid =
+                  acc.DailyPaymentPaid + profile.Metrics.DailyPaymentPaid
+               DailyPurchase =
+                  acc.DailyPurchase + profile.Metrics.DailyPurchase
+               MonthlyInternalTransferWithinOrg =
+                  acc.DailyInternalTransferWithinOrg
+                  + profile.Metrics.DailyInternalTransferWithinOrg
+               MonthlyInternalTransferBetweenOrgs =
+                  acc.DailyInternalTransferBetweenOrgs
+                  + profile.Metrics.DailyInternalTransferBetweenOrgs
+               MonthlyDomesticTransfer =
+                  acc.DailyDomesticTransfer
+                  + profile.Metrics.DailyDomesticTransfer
+               MonthlyPaymentPaid =
+                  acc.DailyPaymentPaid + profile.Metrics.DailyPaymentPaid
+               MonthlyPurchase =
+                  acc.DailyPurchase + profile.Metrics.DailyPurchase
+            })
+            AccountMetrics.empty
+
 [<RequireQualifiedAccess>]
 type OrgMessage =
    | GetOrg

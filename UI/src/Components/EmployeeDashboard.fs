@@ -40,12 +40,33 @@ let private actionNav (action: EmployeeActionView option) =
       |> EmployeeBrowserQuery.toQueryParams
       |> Router.encodeQueryString
 
-   Router.navigate [| Routes.EmployeeUrl.BasePath; queryString |]
+   [| Routes.EmployeeUrl.BasePath; queryString |]
+
+let private employeeCommandProcessing
+   (state: State)
+   (receipt: EmployeeCommandReceipt)
+   =
+   let em = receipt.PendingState
+
+   {
+      state with
+         Employees =
+            (Deferred.map << Result.map << Option.map)
+               (fun employees ->
+                  match receipt.PendingEvent with
+                  | EmployeeEvent.CreatedEmployee _ -> em :: employees
+                  | _ ->
+                     employees
+                     |> List.map (fun e ->
+                        if e.EmployeeId = em.EmployeeId then em else e))
+               state.Employees
+   }
 
 type Msg =
    | LoadEmployees of EmployeeQuery * AsyncOperationStatus<EmployeesMaybe>
    | UpdateFilter of EmployeeFilter
    | EmployeeCommandProcessing of EmployeeCommandReceipt
+   | SubmittedEmployeeForApproval of EmployeeCommandReceipt
 
 let init (browserQuery: EmployeeBrowserQuery) () =
    let query = EmployeeService.networkQueryFromBrowserQuery browserQuery
@@ -105,22 +126,16 @@ let update orgId msg state =
 
       state, Cmd.navigate (Routes.EmployeeUrl.BasePath, browserQueryParams)
    | EmployeeCommandProcessing receipt ->
-      let em = receipt.PendingState
+      let state = employeeCommandProcessing state receipt
+      state, Cmd.none
+   | SubmittedEmployeeForApproval receipt ->
+      let state = employeeCommandProcessing state receipt
 
-      {
-         state with
-            Employees =
-               (Deferred.map << Result.map << Option.map)
-                  (fun employees ->
-                     match receipt.PendingEvent with
-                     | EmployeeEvent.CreatedEmployee _ -> em :: employees
-                     | _ ->
-                        employees
-                        |> List.map (fun e ->
-                           if e.EmployeeId = em.EmployeeId then em else e))
-                  state.Employees
-      },
-      Cmd.none
+      state,
+      Cmd.batch [
+         Cmd.navigate (actionNav None)
+         Alerts.toastSuccessCommand "Employee invite submitted for approval"
+      ]
 
 let selectedEmployee
    (selectedEmployeeId: EmployeeId)
@@ -138,7 +153,9 @@ let renderTableRow
    (selectedEmployeeId: EmployeeId option)
    =
    let updatedRolePendingApproval =
-      employeeRolePendingApproval org.CommandApprovalProgress.Values employee
+      employeeRolePendingApproval
+         org.CommandApprovalProgress.Values
+         employee.EmployeeId
 
    Html.tr [
       attr.key (string employee.EmployeeId)
@@ -151,7 +168,8 @@ let renderTableRow
          employee.EmployeeId
          |> EmployeeActionView.ViewEmployee
          |> Some
-         |> actionNav)
+         |> actionNav
+         |> Router.navigate)
 
       attr.children [
          Html.th [ attr.scope "row" ]
@@ -206,61 +224,6 @@ let renderTable
       ]
    ]
 
-// NOTE:
-// Following the initial creation of an employee in the employee actor
-// there may be a message sent to org actor to create an approval request
-// for employee access.
-//
-// There is currently no SignalR integration for org related state transitions
-// that would update the in-browser state of the org in to include the
-// approval request on Org.CommandApprovalProgress.
-//
-// As such we will update the in-browser state of the org via the org
-// dispatch context so the command approval request is immediately available.
-let private notifyOrgOfEmployeeInviteApprovalRequest
-   (orgDispatch: OrgProvider.Msg -> unit)
-   (rule: CommandApprovalRule.T)
-   (org: Org)
-   (createEmployeeReceipt: EmployeeCommandReceipt)
-   =
-   let employee = createEmployeeReceipt.PendingState
-   let envelope = createEmployeeReceipt.Envelope
-
-   let cmd =
-      CommandApprovalProgress.RequestCommandApproval.create
-         employee.OrgId
-         envelope.InitiatedById
-         envelope.CorrelationId
-         {
-            RuleId = rule.RuleId
-            Command =
-               ApproveAccessCommand.create
-                  employee.CompositeId
-                  envelope.InitiatedById
-                  envelope.CorrelationId
-                  {
-                     Name = employee.Name
-                     Reference = None
-                  }
-               |> InviteEmployee
-               |> ApprovableCommand.PerCommand
-            Requester = {
-               EmployeeName = employee.Name
-               EmployeeId = InitiatedById.toEmployeeId envelope.InitiatedById
-            }
-            RequesterIsConfiguredAsAnApprover =
-               CommandApprovalRule.isRequesterOneOfManyApprovers
-                  envelope.InitiatedById
-                  rule
-         }
-      |> OrgCommand.RequestCommandApproval
-
-   let validation = Org.stateTransition { Info = org; Events = [] } cmd
-
-   match validation with
-   | Ok(_, newState) -> orgDispatch (OrgProvider.Msg.OrgUpdated newState.Info)
-   | _ -> ()
-
 [<ReactComponent>]
 let EmployeeDashboardComponent
    (url: Routes.EmployeeUrl)
@@ -276,11 +239,11 @@ let EmployeeDashboardComponent
       )
 
    let orgCtx = React.useContext OrgProvider.context
-   let orgDispatchCtx = React.useContext OrgProvider.dispatchContext
+   let orgDispatch = React.useContext OrgProvider.dispatchContext
 
    let selectedEmployeeId = Routes.EmployeeUrl.employeeIdMaybe url
 
-   let close _ = actionNav None
+   let close _ = Router.navigate (actionNav None)
 
    let employees =
       state.Employees
@@ -376,7 +339,7 @@ let EmployeeDashboardComponent
                                           |> List.filter (fun e ->
                                              e.Id <> employee.Id)
                                           |> fun es ->
-                                             (if es.Length = 0 then
+                                             (if es.IsEmpty then
                                                  None
                                               else
                                                  Some es)
@@ -396,23 +359,22 @@ let EmployeeDashboardComponent
                               ]
 
                               attr.onClick (fun _ ->
-                                 actionNav (Some EmployeeActionView.Create))
+                                 Some EmployeeActionView.Create
+                                 |> actionNav
+                                 |> Router.navigate)
                            ]
                         ]
                   |}
 
-                  match employees with
-                  | Resolved(Error err) ->
+                  match orgCtx, employees with
+                  | _, Resolved(Error _) ->
                      Html.small "Uh oh. Error getting employees."
-                  | Resolved(Ok None) -> Html.small "Uh oh. No employees."
-                  | Resolved(Ok(Some employees)) ->
+                  | _, Resolved(Ok None) -> Html.small "Uh oh. No employees."
+                  | Resolved(Ok(Some org)), Resolved(Ok(Some employees)) ->
                      if employees.IsEmpty then
                         Html.small "Uh oh. No employees."
                      else
-                        match orgCtx with
-                        | Deferred.Resolved(Ok(Some org)) ->
-                           renderTable org.Org employees selectedEmployeeId
-                        | _ -> Html.progress []
+                        renderTable org.Org employees selectedEmployeeId
                   | _ -> ()
                ]
             ]
@@ -432,25 +394,20 @@ let EmployeeDashboardComponent
 
                      match action with
                      | EmployeeActionView.Create ->
-                        match orgCtx with
-                        | Deferred.Resolved(Ok(Some org)) ->
-                           EmployeeCreateFormComponent session (fun receipt ->
-                              dispatch (Msg.EmployeeCommandProcessing receipt)
+                        EmployeeCreateFormComponent
+                           session
+                           (fun receipt ->
                               close ()
+                              dispatch (Msg.EmployeeCommandProcessing receipt))
+                           (fun (approvalRequest, receipt) ->
+                              approvalRequest
+                              |> OrgCommand.RequestCommandApproval
+                              |> OrgProvider.Msg.OrgCommand
+                              |> orgDispatch
 
-                              match receipt.PendingCommand with
-                              | EmployeeCommand.CreateEmployee c ->
-                                 c.Data.OrgRequiresEmployeeInviteApproval
-                                 |> Option.bind
-                                       org.Org.CommandApprovalRules.TryFind
-                                 |> Option.iter (fun rule ->
-                                    notifyOrgOfEmployeeInviteApprovalRequest
-                                       orgDispatchCtx
-                                       rule
-                                       org.Org
-                                       receipt)
-                              | _ -> ())
-                        | _ -> Html.progress []
+                              receipt
+                              |> Msg.SubmittedEmployeeForApproval
+                              |> dispatch)
                      | EmployeeActionView.ViewEmployee id ->
                         classyNode Html.div [ "employee-detail" ] [
                            match employees, orgCtx with
@@ -464,9 +421,6 @@ let EmployeeDashboardComponent
                                     employee
                                     org.Org
                                     (Msg.EmployeeCommandProcessing >> dispatch)
-                                    (_.PendingState
-                                     >> OrgProvider.Msg.OrgUpdated
-                                     >> orgDispatchCtx)
                            | _ -> Html.progress []
                         ]
                   ]
