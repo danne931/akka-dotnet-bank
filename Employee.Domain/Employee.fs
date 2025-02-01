@@ -188,7 +188,12 @@ let applyEvent
         }
       | AccessRestored _ -> {
          em with
-            Status = EmployeeStatus.Active
+            Status =
+               match em.AuthProviderUserId with
+               | Some _ -> EmployeeStatus.Active
+               | None ->
+                  InviteToken.generate ()
+                  |> EmployeeStatus.PendingInviteConfirmation
         }
 
    {
