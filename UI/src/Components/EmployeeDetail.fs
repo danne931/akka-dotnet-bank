@@ -22,7 +22,8 @@ type Msg =
    | OpenRoleEdit
    | CancelRoleEdit
    | SetPendingRole of Role option
-   | ConfirmRole of EmployeeCommandReceipt * Org
+   | ConfirmRole of EmployeeCommandReceipt
+   | SubmitRoleUpdateForApproval
    | ResendInviteNotification of
       Employee *
       AsyncOperationStatus<Result<unit, Err>>
@@ -62,7 +63,7 @@ let closeRoleSelect state = {
 
 let update
    (onEmployeeUpdate: EmployeeCommandReceipt -> unit)
-   (onOrgUpdate: OrgCommandReceipt -> unit)
+   (orgDispatch: OrgProvider.Msg -> unit)
    msg
    state
    =
@@ -70,20 +71,12 @@ let update
    | OpenRoleEdit -> { state with IsEditingRole = true }, Cmd.none
    | CancelRoleEdit -> closeRoleSelect state, Cmd.none
    | SetPendingRole role -> { state with PendingRole = role }, Cmd.none
-   | ConfirmRole(receipt, org) ->
-      let associatedApprovalRule =
-         org.CommandApprovalRules.Values
-         |> Seq.tryFind (fun r ->
-            r.CommandType = ApprovableCommandType.ApprovablePerCommand
-               UpdateEmployeeRoleCommandType)
-
-      match associatedApprovalRule with
-      | None ->
-         onEmployeeUpdate receipt
-         closeRoleSelect state, Cmd.none
-      | Some _ ->
-         closeRoleSelect state,
-         Alerts.toastSuccessCommand "Role update submitted for approval."
+   | ConfirmRole receipt ->
+      onEmployeeUpdate receipt
+      closeRoleSelect state, Cmd.none
+   | SubmitRoleUpdateForApproval ->
+      closeRoleSelect state,
+      Alerts.toastSuccessCommand "Role update submitted for approval."
    | ResendInviteNotification(employee, Started) ->
       let send = async {
          let! res = EmployeeService.resendEmployeeInvitation employee
@@ -156,7 +149,7 @@ let update
 
       state, Cmd.fromAsync approve
    | ApproveAccess(_, _, _, Finished(Ok receipt)) ->
-      onOrgUpdate receipt
+      orgDispatch (OrgProvider.Msg.OrgUpdated receipt.PendingState)
       state, Alerts.toastSuccessCommand "Access approval acquired."
    | ApproveAccess(_, _, _, Finished(Error err)) ->
       state, Alerts.toastCommand err
@@ -181,7 +174,7 @@ let update
 
       state, Cmd.fromAsync approve
    | DisapproveAccess(_, _, _, Finished(Ok receipt)) ->
-      onOrgUpdate receipt
+      orgDispatch (OrgProvider.Msg.OrgUpdated receipt.PendingState)
       state, Alerts.toastSuccessCommand "Access denied."
    | DisapproveAccess(_, _, _, Finished(Error err)) ->
       state, Alerts.toastCommand err
@@ -213,13 +206,16 @@ let EmployeeDetailComponent
    (employee: Employee)
    (org: Org)
    (onEmployeeUpdate: EmployeeCommandReceipt -> unit)
-   (onOrgUpdate: OrgCommandReceipt -> unit)
    =
+   let orgDispatch = React.useContext OrgProvider.dispatchContext
+
    let state, dispatch =
-      React.useElmish (init, update onEmployeeUpdate onOrgUpdate, [||])
+      React.useElmish (init, update onEmployeeUpdate orgDispatch, [||])
 
    let updatedRolePendingApproval =
-      employeeRolePendingApproval org.CommandApprovalProgress.Values employee
+      employeeRolePendingApproval
+         org.CommandApprovalProgress.Values
+         employee.EmployeeId
 
    let employeeInviteProgressOpt =
       match employee.Status with
@@ -385,8 +381,15 @@ let EmployeeDetailComponent
          EmployeeRoleFormComponent
             (fun () -> Msg.CancelRoleEdit |> dispatch)
             (Some >> Msg.SetPendingRole >> dispatch)
-            (fun receipt -> Msg.ConfirmRole(receipt, org) |> dispatch)
             employee
+            (Msg.ConfirmRole >> dispatch)
+            (fun approvalRequest ->
+               approvalRequest
+               |> OrgCommand.RequestCommandApproval
+               |> OrgProvider.Msg.OrgCommand
+               |> orgDispatch
+
+               dispatch Msg.SubmitRoleUpdateForApproval)
 
       state.PendingRole
       |> Option.defaultValue employee.Role

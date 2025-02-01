@@ -44,7 +44,7 @@ let private canManageApprovalProgress
          )
          |> Error
 
-let dailyAccrual (events: OrgEvent list) : DailyAccrual =
+let dailyAccrual (events: OrgEvent list) : CommandApprovalDailyAccrual =
    List.fold
       (fun acc evt ->
          match evt with

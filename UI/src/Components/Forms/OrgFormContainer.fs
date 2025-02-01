@@ -10,8 +10,6 @@ open Lib.SharedTypes
 open Bank.Org.Domain
 open UIDomain.Org
 
-type ParentOnSubmitHandler = OrgCommandReceipt -> unit
-
 type State<'Values> = { FormModel: Form.View.Model<'Values> }
 
 type Msg<'Values> =
@@ -26,7 +24,7 @@ let init (values: 'Values) () =
    { FormModel = Form.View.idle values }, Cmd.none
 
 let update
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: OrgCommandReceipt -> unit)
    (msg: Msg<'Values>)
    (state: State<'Values>)
    =
@@ -63,20 +61,25 @@ let update
 
 [<ReactComponent>]
 let OrgFormContainer
-   (values: 'Values)
-   (form: Form.Form<'Values, Msg<'Values>, IReactProperty>)
-   (onSubmit: ParentOnSubmitHandler)
-   (action: Form.View.Action<Msg<'Values>> option)
+   (props:
+      {|
+         InitialValues: 'Values
+         Form: Form.Form<'Values, Msg<'Values>, IReactProperty>
+         OnSubmit: OrgCommandReceipt -> unit
+         Action: Form.View.Action<Msg<'Values>> option
+      |})
    =
-   let state, dispatch = React.useElmish (init values, update onSubmit, [||])
+   let state, dispatch =
+      React.useElmish (init props.InitialValues, update props.OnSubmit, [||])
 
    Form.View.asHtml
       {
          Dispatch = dispatch
          OnChange = FormChanged
          Action =
-            action |> Option.defaultValue (Form.View.Action.SubmitOnly "Submit")
+            props.Action
+            |> Option.defaultValue (Form.View.Action.SubmitOnly "Submit")
          Validation = Form.View.ValidateOnSubmit
       }
-      form
+      props.Form
       state.FormModel

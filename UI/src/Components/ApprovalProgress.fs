@@ -122,18 +122,22 @@ let ApprovalProgressComponent
       React.useElmish (init, update onOrgUpdate, [| box session.OrgId |])
 
    let approvals =
-      org.CommandApprovalProgress.Values
-      |> Seq.choose (fun progress ->
-         org.CommandApprovalRules
-         |> Map.tryFind progress.RuleId
-         |> Option.map (fun rule -> rule, progress))
-      |> Seq.sortByDescending (fun (_, progress) -> progress.CreatedAt)
-      |> Seq.sortBy (fun (_, progress) ->
-         match progress.Status with
-         | CommandApprovalProgress.Status.Pending -> 1
-         | CommandApprovalProgress.Status.Approved -> 2
-         | CommandApprovalProgress.Status.Declined -> 3
-         | CommandApprovalProgress.Status.Terminated _ -> 4)
+      React.useMemo (
+         fun () ->
+            org.CommandApprovalProgress.Values
+            |> Seq.choose (fun progress ->
+               org.CommandApprovalRules
+               |> Map.tryFind progress.RuleId
+               |> Option.map (fun rule -> rule, progress))
+            |> Seq.sortByDescending (fun (_, progress) -> progress.CreatedAt)
+            |> Seq.sortBy (fun (_, progress) ->
+               match progress.Status with
+               | CommandApprovalProgress.Status.Pending -> 1
+               | CommandApprovalProgress.Status.Approved -> 2
+               | CommandApprovalProgress.Status.Declined -> 3
+               | CommandApprovalProgress.Status.Terminated _ -> 4)
+         , [| org.CommandApprovalProgress |]
+      )
 
    if Seq.isEmpty approvals then
       Html.p "No commands require approval."

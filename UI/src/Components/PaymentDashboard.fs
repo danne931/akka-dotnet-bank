@@ -169,7 +169,7 @@ let renderIncomingTableRow
    let statusDisplay = Payment.statusDisplay (Payment.Platform payment)
 
    let paymentPendingApproval =
-      paymentFulfillmentPendingApproval progress payment.BaseInfo
+      paymentFulfillmentPendingApproval progress paymentId
 
    Html.tr [
       attr.key (string paymentId)

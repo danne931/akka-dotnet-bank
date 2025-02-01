@@ -7,6 +7,7 @@ open Lib.Validators
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open UIDomain.Account
 open FormContainer
 
 type Values = { Amount: string }
@@ -43,12 +44,15 @@ let form
 
    Form.succeed onSubmit |> Form.append amountField
 
+[<ReactComponent>]
 let DepositFormComponent
    (session: UserSession)
    (account: Account)
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: AccountCommandReceipt -> unit)
    =
-   AccountFormContainer
-      { Amount = "" }
-      (form account (InitiatedById session.EmployeeId))
-      onSubmit
+   AccountFormContainer {|
+      InitialValues = { Amount = "" }
+      Form = form account (InitiatedById session.EmployeeId)
+      Action = None
+      OnSubmit = onSubmit
+   |}

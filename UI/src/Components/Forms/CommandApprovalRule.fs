@@ -106,7 +106,7 @@ let rangeUpperField =
       }
    }
 
-let fieldApprovableCommandType =
+let private fieldApprovableCommandType =
    Form.selectField {
       Parser =
          fun input ->
@@ -179,7 +179,7 @@ let private fieldAmountBasedCriteria =
       }
    }
 
-let approverItemForm
+let private approverItemForm
    (admins: Map<EmployeeId, Employee>)
    (values: Values)
    (index: int)
@@ -224,7 +224,7 @@ let approverItemForm
 
    Form.succeed id |> Form.append fieldApproverSelect
 
-let approverListForm
+let private approverListForm
    (employees: Map<EmployeeId, Employee>)
    : Form.Form<Values, CommandApprovalRule.Approver list, IReactProperty>
    =
@@ -285,7 +285,7 @@ let private amountBasedCriteriaForm (criteriaType: AmountBasedCriteriaType) =
       Form.succeed CommandApprovalRule.Criteria.AmountDailyLimit
       |> Form.append fieldDailyLimit
 
-let ruleCreateForm
+let private ruleCreateForm
    (org: Org)
    (employees: Map<EmployeeId, Employee>)
    (session: UserSession)
@@ -323,7 +323,7 @@ let ruleCreateForm
                |> Form.append (approverListForm employees)))
    )
 
-let ruleEditForm
+let private ruleEditForm
    (org: Org)
    (employees: Map<EmployeeId, Employee>)
    (session: UserSession)
@@ -413,12 +413,12 @@ let CommandApprovalRuleEditFormComponent
         }
       | CommandApprovalRule.Criteria.PerCommand -> initValues
 
-   OrgFormContainer
-      initValues
-      (ruleEditForm org employees session rule)
-      onSubmit
-      (Some(customFormSubmit onCancel))
-
+   OrgFormContainer {|
+      InitialValues = initValues
+      Form = ruleEditForm org employees session rule
+      OnSubmit = onSubmit
+      Action = Some(customFormSubmit onCancel)
+   |}
 
 [<ReactComponent>]
 let CommandApprovalRuleCreateFormComponent
@@ -428,20 +428,20 @@ let CommandApprovalRuleCreateFormComponent
    (org: Org)
    (employees: Map<EmployeeId, Employee>)
    =
-   let initValues = {
-      CommandType =
-         InviteEmployeeCommandType
-         |> ApprovableCommandType.ApprovablePerCommand
-         |> string
-      Approvers = [ { EmployeeId = ""; Name = "" } ]
-      AmountBasedCriteriaType = string CommandApprovalRule.Criteria.PerCommand
-      DailyLimit = ""
-      RangeLowerBound = ""
-      RangeUpperBound = ""
-   }
-
-   OrgFormContainer
-      initValues
-      (ruleCreateForm org employees session)
-      onSubmit
-      (Some(customFormSubmit onCancel))
+   OrgFormContainer {|
+      InitialValues = {
+         CommandType =
+            InviteEmployeeCommandType
+            |> ApprovableCommandType.ApprovablePerCommand
+            |> string
+         Approvers = [ { EmployeeId = ""; Name = "" } ]
+         AmountBasedCriteriaType =
+            string CommandApprovalRule.Criteria.PerCommand
+         DailyLimit = ""
+         RangeLowerBound = ""
+         RangeUpperBound = ""
+      }
+      Form = ruleCreateForm org employees session
+      OnSubmit = onSubmit
+      Action = Some(customFormSubmit onCancel)
+   |}

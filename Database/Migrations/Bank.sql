@@ -1164,8 +1164,10 @@ CREATE OR REPLACE FUNCTION transfer_accrued(
 )
 RETURNS TABLE (
    account_id UUID,
-   internal_transfer_accrued NUMERIC,
-   domestic_transfer_accrued NUMERIC
+   internal_transfer_within_org_accrued NUMERIC,
+   internal_transfer_between_orgs_accrued NUMERIC,
+   domestic_transfer_accrued NUMERIC,
+   payment_paid_accrued NUMERIC
 ) AS $$
 BEGIN
   RETURN QUERY
@@ -1177,15 +1179,12 @@ BEGIN
            CASE
            WHEN t.name IN(
               'InternalTransferWithinOrgPending',
-              'InternalTransferBetweenOrgsPending',
-              'PlatformPaymentPaid',
               'InternalAutomatedTransferPending'
            )
            THEN t.amount::numeric
 
            WHEN t.name IN(
               'InternalTransferWithinOrgRejected',
-              'InternalTransferBetweenOrgsRejected',
               'InternalAutomatedTransferRejected'
            )
            THEN -t.amount::numeric
@@ -1194,21 +1193,49 @@ BEGIN
            END
         ),
         0
-     ) AS internal_transfer_accrued,
+     ) AS internal_transfer_within_org_accrued,
 
      COALESCE(
         SUM(
-           CASE 
+           CASE
+           WHEN t.name = 'InternalTransferBetweenOrgsPending'
+           THEN t.amount::numeric
+
+           WHEN t.name = 'InternalTransferBetweenOrgsRejected'
+           THEN -t.amount::numeric
+
+           ELSE 0
+           END
+        ),
+        0
+     ) AS internal_transfer_between_orgs_accrued,
+
+     COALESCE(
+        SUM(
+           CASE
            WHEN t.name = 'DomesticTransferPending' THEN t.amount::numeric
            WHEN t.name = 'DomesticTransferRejected' THEN -t.amount::numeric
            ELSE 0
            END
         ),
         0
-     ) AS domestic_transfer_accrued
+     ) AS domestic_transfer_accrued,
+
+     COALESCE(
+        SUM(
+           CASE
+           WHEN t.name = 'PlatformPaymentPaid' THEN t.amount::numeric
+           ELSE 0
+           END
+        ),
+        0
+     ) AS payment_paid_accrued
   FROM transaction t
-  JOIN transfer ON t.correlation_id = transfer.transfer_id
   JOIN account using(account_id)
+  -- Transactions related to transfers are represented as "transfer" read models.
+  -- Transactions related to platform payments are represented as "payment_platform" read models.
+  -- Use LEFT JOIN instead of JOIN on transfer or we will miss out on payments paid metrics.
+  LEFT JOIN transfer ON t.correlation_id = transfer.transfer_id
   WHERE
      t.org_id = orgId
      AND t.amount IS NOT NULL
@@ -1223,10 +1250,25 @@ BEGIN
      AND
        CASE
        WHEN timeFrame = 'Day'
-       THEN transfer.scheduled_at::date = CURRENT_DATE
+       THEN
+          CASE
+          WHEN transfer.scheduled_at IS NOT NULL
+          THEN transfer.scheduled_at::date = CURRENT_DATE
 
+          WHEN t.name = 'PlatformPaymentPaid'
+          THEN t.timestamp::date = CURRENT_DATE
+
+          ELSE false
+          END
        WHEN timeFrame = 'Month'
-       THEN transfer.scheduled_at::date >= date_trunc('month', CURRENT_DATE)
+       THEN
+          CASE
+          WHEN t.name = 'PlatformPaymentPaid'
+          THEN t.timestamp::date >= date_trunc('month', CURRENT_DATE)
+          -- Transaction corresponds to a transfer rather than a payment.
+          -- Need to check it's scheduled_at date rather than transaction.timestamp.
+          ELSE transfer.scheduled_at::date >= date_trunc('month', CURRENT_DATE)
+          END
        END
   GROUP BY account.account_id;
 END

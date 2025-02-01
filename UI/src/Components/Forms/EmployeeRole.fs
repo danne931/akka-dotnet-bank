@@ -4,8 +4,11 @@ open Feliz
 open Fable.Form.Simple
 
 open Fable.Form.Simple.Pico
+open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Account.Domain
+open UIDomain.Employee
+open UIDomain.Org
 open FormContainer
 open Lib.SharedTypes
 open DailyPurchaseLimitForm
@@ -115,8 +118,9 @@ let private form
 let EmployeeRoleFormComponent
    (onCancel: unit -> unit)
    (onSelect: Role -> unit)
-   (onSubmit: ParentOnSubmitHandler)
    (employee: Employee)
+   (onSubmit: EmployeeCommandReceipt -> unit)
+   (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
    let session = React.useContext UserSessionProvider.context
    let orgCtx = React.useContext OrgProvider.context
@@ -135,15 +139,43 @@ let EmployeeRoleFormComponent
 
    match orgCtx, session with
    | Deferred.Resolved(Ok(Some org)), Deferred.Resolved(Ok session) ->
-      EmployeeFormContainer
-      <| formProps
-      <| form session employee org.Accounts onSelect
-      <| onSubmit
-      <| Some(
+      let roleChangeRequiresApproval =
+         CommandApprovalRule.commandTypeRequiresApproval
+            (ApprovableCommandType.ApprovablePerCommand
+               UpdateEmployeeRoleCommandType)
+            (InitiatedById session.EmployeeId)
+            (Seq.toList org.Org.CommandApprovalRules.Values)
+
+      let customAction =
          Form.View.Action.Custom(fun state _ ->
             if selectedRole = employee.Role then
                Form.View.cancelButton onCancel state
             else
-               Form.View.submitAndCancelButton "Save Role" onCancel state)
-      )
+               match roleChangeRequiresApproval with
+               | None ->
+                  Form.View.submitAndCancelButton "Save Role" onCancel state
+               | Some _ ->
+                  Form.View.submitAndCancelButton
+                     "Request Approval for Role Update"
+                     onCancel
+                     state)
+
+      EmployeeFormContainer {|
+         InitialValues = formProps
+         Form = form session employee org.Accounts onSelect
+         Action = Some customAction
+         OnSubmit =
+            fun receipt ->
+               match roleChangeRequiresApproval, receipt.PendingCommand with
+               | Some rule, EmployeeCommand.UpdateRole cmd ->
+                  let cmd =
+                     cmd |> UpdateEmployeeRole |> ApprovableCommand.PerCommand
+
+                  CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
+                     session
+                     rule
+                     cmd
+                  |> onSubmitForApproval
+               | _ -> onSubmit receipt
+      |}
    | _ -> Html.progress []

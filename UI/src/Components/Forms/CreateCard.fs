@@ -7,6 +7,7 @@ open System
 open Fable.Form.Simple.Pico
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open UIDomain.Employee
 open Lib.SharedTypes
 open FormContainer
 open AccountProfileForm
@@ -152,7 +153,7 @@ let private form
 
 [<ReactComponent>]
 let CreateCardFormComponent
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: EmployeeCommandReceipt -> unit)
    (employee: Employee)
    =
    let sessionCtx = React.useContext UserSessionProvider.context
@@ -169,12 +170,14 @@ let CreateCardFormComponent
 
    match orgCtx, sessionCtx with
    | Deferred.Resolved(Ok(Some org)), Deferred.Resolved(Ok session) ->
-      EmployeeFormContainer
-      <| formProps
-      <| form session employee org.Accounts
-      <| onSubmit
-      <| Some(
-         Form.View.Action.Custom(fun state _ ->
-            Form.View.submitButton "Create Card" state)
-      )
+      EmployeeFormContainer {|
+         InitialValues = formProps
+         Form = form session employee org.Accounts
+         Action =
+            Some(
+               Form.View.Action.Custom(fun state _ ->
+                  Form.View.submitButton "Create Card" state)
+            )
+         OnSubmit = onSubmit
+      |}
    | _ -> Html.progress []

@@ -15,11 +15,38 @@ type OrgCommandReceipt = {
 type CommandApprovalProgressMaybe =
    Result<Map<CommandApprovalProgressId, CommandApprovalProgress.T> option, Err>
 
+module CommandApprovalProgress =
+   module RequestCommandApproval =
+      let fromApprovableCommand
+         (session: UserSession)
+         (rule: CommandApprovalRule.T)
+         (command: ApprovableCommand)
+         : CommandApprovalProgress.RequestCommandApproval
+         =
+         let initiatedBy = InitiatedById session.EmployeeId
+
+         CommandApprovalProgress.RequestCommandApproval.create
+            session.OrgId
+            initiatedBy
+            command.CorrelationId
+            {
+               RuleId = rule.RuleId
+               Command = command
+               Requester = {
+                  EmployeeName = session.Name
+                  EmployeeId = session.EmployeeId
+               }
+               RequesterIsConfiguredAsAnApprover =
+                  CommandApprovalRule.isRequesterOneOfManyApprovers
+                     initiatedBy
+                     rule
+            }
+
 /// Determines if there is a pending command approval for updating an employee
 /// role. If there is then returns that pending role.
 let employeeRolePendingApproval
    (progress: CommandApprovalProgress.T seq)
-   (employee: Employee)
+   (employeeId: EmployeeId)
    : Role option
    =
    progress
@@ -27,7 +54,7 @@ let employeeRolePendingApproval
       match p.Status, p.CommandToInitiateOnApproval with
       | CommandApprovalProgress.Status.Pending,
         ApprovableCommand.PerCommand(UpdateEmployeeRole cmd) ->
-         if (EmployeeId.fromEntityId cmd.EntityId) = employee.EmployeeId then
+         if (EmployeeId.fromEntityId cmd.EntityId) = employeeId then
             Some cmd.Data.Role
          else
             None
@@ -37,7 +64,7 @@ let employeeRolePendingApproval
 /// a payment fulfillment.
 let paymentFulfillmentPendingApproval
    (progress: CommandApprovalProgress.T seq)
-   (payment: PaymentBaseInfo)
+   (paymentId: PaymentId)
    : CommandApprovalProgress.T option
    =
    progress
@@ -45,7 +72,7 @@ let paymentFulfillmentPendingApproval
       match p.Status, p.CommandToInitiateOnApproval with
       | CommandApprovalProgress.Status.Pending,
         ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
-         if cmd.Data.RequestedPayment.BaseInfo.Id = payment.Id then
+         if cmd.Data.RequestedPayment.BaseInfo.Id = paymentId then
             Some p
          else
             None

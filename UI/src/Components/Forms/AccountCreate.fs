@@ -7,6 +7,7 @@ open System
 open Fable.Form.Simple.Pico
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open UIDomain.Account
 open Lib.Validators
 open FormContainer
 open Lib.SharedTypes
@@ -78,13 +79,17 @@ let private form
    |> Form.append fieldAccountDepository
    |> Form.append fieldAccountName
 
+[<ReactComponent>]
 let AccountCreateFormComponent
    (session: UserSession)
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: AccountCommandReceipt -> unit)
    =
-   let formProps: Values = {
-      AccountName = ""
-      AccountDepository = "checking"
-   }
-
-   AccountFormContainer formProps (form session) onSubmit
+   AccountFormContainer {|
+      InitialValues = {
+         AccountName = ""
+         AccountDepository = "checking"
+      }
+      Form = form session
+      Action = None
+      OnSubmit = onSubmit
+   |}

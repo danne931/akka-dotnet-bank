@@ -49,17 +49,9 @@ let private sendApprovedCommand
          let cmd = AccountCommand.FulfillPlatformPayment cmd
          accountRef <! AccountMessage.StateChange cmd
       | DomesticTransfer cmd ->
-         let accountId = cmd.Data.Sender.AccountId
-
-         let cmd =
-            DomesticTransferCommand.create
-               (accountId, cmd.OrgId)
-               cmd.CorrelationId
-               cmd.InitiatedBy
-               cmd.Data
-            |> AccountCommand.DomesticTransfer
-
-         getAccountRef accountId <! AccountMessage.StateChange cmd
+         let accountRef = getAccountRef (AccountId.fromEntityId cmd.EntityId)
+         let cmd = AccountCommand.DomesticTransfer cmd
+         accountRef <! AccountMessage.StateChange cmd
       | InternalTransferBetweenOrgs cmd ->
          let accountRef = getAccountRef cmd.Data.Sender.AccountId
          let cmd = AccountCommand.InternalTransferBetweenOrgs cmd
@@ -173,6 +165,21 @@ let actorProps
                      |> EmployeeMessage.StateChange
 
                   (getEmployeeRef employeeId) <! msg
+               | ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
+                  let accountRef =
+                     getAccountRef (AccountId.fromEntityId cmd.EntityId)
+
+                  let msg =
+                     DeclinePlatformPaymentCommand.create e.InitiatedById {
+                        RequestedPayment = cmd.Data.RequestedPayment
+                        Reason =
+                           Some
+                              $"Outgoing payment declined by {e.Data.DeclinedBy.EmployeeName}"
+                     }
+                     |> AccountCommand.DeclinePlatformPayment
+                     |> AccountMessage.StateChange
+
+                  accountRef <! msg
                | _ -> ()
             | _ -> ()
 

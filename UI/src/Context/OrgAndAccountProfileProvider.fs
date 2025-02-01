@@ -25,6 +25,7 @@ type Msg =
    | AccountCreated of Account
    | AccountUpdated of AccountEventPersistedConfirmation
    | OrgUpdated of Org
+   | OrgCommand of OrgCommand
    | CommandApprovalRulesLoaded of CommandApprovalRule.T list
 
 let private initState = Deferred.Idle
@@ -44,12 +45,19 @@ let update msg state =
    | Load(_, Finished(Error err)) ->
       Log.error $"Issue loading org + account profiles. {err}"
       state, Cmd.none
-   | OrgUpdated org ->
+   | OrgCommand cmd ->
       let state =
-         (Deferred.map << Result.map << Option.map)
-            (fun state -> { state with Org = org })
-            state
+         updateState state (fun o ->
+            let validation =
+               Org.stateTransition { Info = o.Org; Events = [] } cmd
 
+            match validation with
+            | Error _ -> o
+            | Ok(_, newState) -> { o with Org = newState.Info })
+
+      state, Cmd.none
+   | OrgUpdated org ->
+      let state = updateState state (fun o -> { o with Org = org })
       state, Cmd.none
    | AccountUpdated conf ->
       let accountId = conf.Account.AccountId
@@ -61,46 +69,59 @@ let update msg state =
          |> Option.map (fun profile ->
             let metrics = profile.Metrics
 
-            let internalTransferAccrued (amount: decimal) = {
+            let internalTransferWithinOrg (amount: decimal) = {
                metrics with
-                  DailyInternalTransferAccrued =
-                     metrics.DailyInternalTransferAccrued + amount
-                  MonthlyInternalTransferAccrued =
-                     metrics.MonthlyInternalTransferAccrued + amount
+                  DailyInternalTransferWithinOrg =
+                     metrics.DailyInternalTransferWithinOrg + amount
+                  MonthlyInternalTransferWithinOrg =
+                     metrics.MonthlyInternalTransferWithinOrg + amount
             }
 
-            let domesticTransferAccrued (amount: decimal) = {
+            let internalTransferBetweenOrgs (amount: decimal) = {
                metrics with
-                  DailyDomesticTransferAccrued =
-                     metrics.DailyDomesticTransferAccrued + amount
-                  MonthlyDomesticTransferAccrued =
-                     metrics.MonthlyDomesticTransferAccrued + amount
+                  DailyInternalTransferBetweenOrgs =
+                     metrics.DailyInternalTransferBetweenOrgs + amount
+                  MonthlyInternalTransferBetweenOrgs =
+                     metrics.MonthlyInternalTransferBetweenOrgs + amount
+            }
+
+            let domesticTransfer (amount: decimal) = {
+               metrics with
+                  DailyDomesticTransfer =
+                     metrics.DailyDomesticTransfer + amount
+                  MonthlyDomesticTransfer =
+                     metrics.MonthlyDomesticTransfer + amount
             }
 
             let metrics =
                match evt with
-               | AccountEvent.InternalTransferBetweenOrgsPending e ->
-                  internalTransferAccrued e.Data.BaseInfo.Amount
                | AccountEvent.InternalTransferWithinOrgPending e ->
-                  internalTransferAccrued e.Data.BaseInfo.Amount
-               | AccountEvent.InternalAutomatedTransferPending e ->
-                  internalTransferAccrued e.Data.BaseInfo.Amount
-               | AccountEvent.DomesticTransferPending e ->
-                  domesticTransferAccrued e.Data.BaseInfo.Amount
+                  internalTransferWithinOrg e.Data.BaseInfo.Amount
                | AccountEvent.InternalTransferWithinOrgRejected e ->
-                  internalTransferAccrued -e.Data.BaseInfo.Amount
-               | AccountEvent.InternalTransferBetweenOrgsRejected e ->
-                  internalTransferAccrued -e.Data.BaseInfo.Amount
+                  internalTransferWithinOrg -e.Data.BaseInfo.Amount
+               | AccountEvent.InternalAutomatedTransferPending e ->
+                  internalTransferWithinOrg e.Data.BaseInfo.Amount
                | AccountEvent.InternalAutomatedTransferRejected e ->
-                  internalTransferAccrued -e.Data.BaseInfo.Amount
+                  internalTransferWithinOrg -e.Data.BaseInfo.Amount
+               | AccountEvent.DomesticTransferPending e ->
+                  domesticTransfer e.Data.BaseInfo.Amount
                | AccountEvent.DomesticTransferRejected e ->
-                  domesticTransferAccrued -e.Data.BaseInfo.Amount
+                  domesticTransfer -e.Data.BaseInfo.Amount
+               | AccountEvent.InternalTransferBetweenOrgsPending e ->
+                  internalTransferBetweenOrgs e.Data.BaseInfo.Amount
+               | AccountEvent.InternalTransferBetweenOrgsRejected e ->
+                  internalTransferBetweenOrgs -e.Data.BaseInfo.Amount
+               | AccountEvent.PlatformPaymentPaid e -> {
+                  metrics with
+                     DailyPaymentPaid =
+                        metrics.DailyPaymentPaid + e.Data.BaseInfo.Amount
+                     MonthlyPaymentPaid =
+                        metrics.MonthlyPaymentPaid + e.Data.BaseInfo.Amount
+                 }
                | AccountEvent.DebitedAccount e -> {
                   metrics with
-                     DailyPurchaseAccrued =
-                        metrics.DailyPurchaseAccrued + e.Data.Amount
-                     MonthlyPurchaseAccrued =
-                        metrics.MonthlyPurchaseAccrued + e.Data.Amount
+                     DailyPurchase = metrics.DailyPurchase + e.Data.Amount
+                     MonthlyPurchase = metrics.MonthlyPurchase + e.Data.Amount
                  }
                | _ -> metrics
 
@@ -170,14 +191,7 @@ let update msg state =
    | AccountCreated account ->
       let profile = {
          Account = account
-         Metrics = {
-            DailyInternalTransferAccrued = 0m
-            DailyDomesticTransferAccrued = 0m
-            MonthlyInternalTransferAccrued = 0m
-            MonthlyDomesticTransferAccrued = 0m
-            DailyPurchaseAccrued = 0m
-            MonthlyPurchaseAccrued = 0m
-         }
+         Metrics = AccountMetrics.empty
       }
 
       updateState state (fun state -> {

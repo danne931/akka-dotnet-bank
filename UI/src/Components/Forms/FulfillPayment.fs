@@ -8,6 +8,9 @@ open Fable.Form.Simple.Pico
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
+open Bank.Org.Domain
+open UIDomain.Org
+open UIDomain.Account
 open FormContainer
 open Lib.SharedTypes
 
@@ -65,9 +68,15 @@ let formFulfillPlatformPayment
 let PaymentFulfillmentFormComponent
    (session: UserSession)
    (payerAccounts: Map<AccountId, Account>)
+   (commandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
    (payment: Payment)
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: AccountCommandReceipt -> unit)
+   (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
+   let payerAccounts =
+      payerAccounts
+      |> Map.filter (fun _ a -> a.Depository = AccountDepository.Checking)
+
    let defaultSourceAccountId =
       payerAccounts
       |> Map.toSeq
@@ -80,6 +89,20 @@ let PaymentFulfillmentFormComponent
    }
 
    let initiatedBy = InitiatedById session.EmployeeId
+
+   let payRequiresApproval =
+      CommandApprovalRule.commandTypeRequiresApproval
+         (ApprovableCommandType.ApprovableAmountBased
+            FulfillPlatformPaymentCommandType)
+         initiatedBy
+         (commandApprovalRules.Values |> Seq.toList)
+
+   let customAction =
+      match payRequiresApproval with
+      | Some _ -> "Submit Payment for Approval"
+      | None -> "Submit Payment"
+      |> Form.View.Action.SubmitOnly
+      |> Some
 
    React.fragment [
       match payment with
@@ -104,8 +127,24 @@ let PaymentFulfillmentFormComponent
             ]
          ]
 
-         AccountFormContainer
-            initValues
-            (formFulfillPlatformPayment payerAccounts payment initiatedBy)
-            onSubmit
+         AccountFormContainer {|
+            InitialValues = initValues
+            Form = formFulfillPlatformPayment payerAccounts payment initiatedBy
+            Action = customAction
+            OnSubmit =
+               fun receipt ->
+                  match payRequiresApproval, receipt.PendingCommand with
+                  | Some rule, AccountCommand.FulfillPlatformPayment cmd ->
+                     let cmd =
+                        cmd
+                        |> FulfillPlatformPayment
+                        |> ApprovableCommand.AmountBased
+
+                     CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
+                        session
+                        rule
+                        cmd
+                     |> onSubmitForApproval
+                  | _ -> onSubmit receipt
+         |}
    ]

@@ -17,9 +17,3 @@ type OrgStatus =
    | InitialEmptyState
    | PendingOnboardingTasksFulfilled
    | Active
-
-type DailyAccrual = {
-   PaymentsPaid: decimal
-   InternalTransferBetweenOrgs: decimal
-   DomesticTransfer: decimal
-}

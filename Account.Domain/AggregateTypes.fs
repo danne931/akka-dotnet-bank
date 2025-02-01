@@ -354,13 +354,31 @@ type AccountWithEvents = {
 }
 
 type AccountMetrics = {
-   DailyInternalTransferAccrued: decimal
-   DailyDomesticTransferAccrued: decimal
-   MonthlyInternalTransferAccrued: decimal
-   MonthlyDomesticTransferAccrued: decimal
-   DailyPurchaseAccrued: decimal
-   MonthlyPurchaseAccrued: decimal
+   DailyInternalTransferWithinOrg: decimal
+   DailyInternalTransferBetweenOrgs: decimal
+   DailyDomesticTransfer: decimal
+   DailyPaymentPaid: decimal
+   DailyPurchase: decimal
+   MonthlyInternalTransferWithinOrg: decimal
+   MonthlyInternalTransferBetweenOrgs: decimal
+   MonthlyDomesticTransfer: decimal
+   MonthlyPurchase: decimal
+   MonthlyPaymentPaid: decimal
 }
+
+module AccountMetrics =
+   let empty: AccountMetrics = {
+      DailyInternalTransferWithinOrg = 0m
+      DailyInternalTransferBetweenOrgs = 0m
+      DailyDomesticTransfer = 0m
+      DailyPaymentPaid = 0m
+      DailyPurchase = 0m
+      MonthlyInternalTransferWithinOrg = 0m
+      MonthlyInternalTransferBetweenOrgs = 0m
+      MonthlyDomesticTransfer = 0m
+      MonthlyPaymentPaid = 0m
+      MonthlyPurchase = 0m
+   }
 
 type AccountProfile = {
    Account: Account

@@ -7,6 +7,14 @@ open Lib.SharedTypes
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
 
+/// Daily org metrics required to determine whether a
+/// command requires approval based on AmountDailyLimit criteria.
+type CommandApprovalDailyAccrual = {
+   PaymentsPaid: decimal
+   InternalTransferBetweenOrgs: decimal
+   DomesticTransfer: decimal
+}
+
 type ApprovablePerCommand =
    | InviteEmployeeCommandType
    | UpdateEmployeeRoleCommandType
@@ -198,7 +206,7 @@ module CommandApprovalRule =
          | Some eLow, None, None, Some high -> high > eLow
          | Some _, None, Some _, None -> true
 
-      /// Check whether a new AmountPerCommandRange has gaps with 
+      /// Check whether a new AmountPerCommandRange has gaps with
       /// other AmountPerCommand ranges.
       /// Ex: existing: [{ high = Some 100; low = None }; { low = Some 100; high = 500 }]
       ///     new: { low = 605; high = none }
@@ -488,6 +496,103 @@ module CommandApprovalRule =
          AmountPerCommandRange.hasGap existingRanges range
       | _ -> None
 
+   // It is possible for a command type to require approval from
+   // multiple rules (Ex: A transaction amount may meet the
+   // AmountDailyLimit criteria as well as an AmountPerCommand criteria
+   // given an AmountPerCommand criteria with range
+   // { LowerBound = Some; UpperBound = None }).
+   // In such cases the AmountDailyLimit rule will be applied.
+   let selectOneOfAssociatedRules (rules: T list) =
+      rules
+      |> List.sortBy (fun r ->
+         match r.Criteria with
+         | Criteria.AmountDailyLimit _ -> 0
+         | _ -> 1)
+      |> List.tryHead
+
+   /// Determines if a rule requires approval for a command type given
+   /// the requester is not the only configured approver for that rule.
+   let ruleDemandsApprovalForCommandType
+      (commandType: ApprovableCommandType)
+      (requester: InitiatedById)
+      (rule: T)
+      : bool
+      =
+      let onlyApprover = isRequesterTheOnlyConfiguredApprover requester rule
+      rule.CommandType = commandType && not onlyApprover
+
+   let ruleDemandsApprovalForCriteria
+      (command: ApprovableCommand)
+      (accrual: CommandApprovalDailyAccrual)
+      (rule: T)
+      : bool
+      =
+      match rule.Criteria with
+      | Criteria.PerCommand ->
+         match command with
+         | ApprovableCommand.PerCommand _ -> true
+         | ApprovableCommand.AmountBased _ -> false
+      | Criteria.AmountPerCommand range ->
+         match range.LowerBound, range.UpperBound with
+         | None, None -> false // This case should not be reached
+         | Some low, None -> command.Amount >= low
+         | None, Some high -> command.Amount < high
+         | Some low, Some high -> command.Amount >= low && command.Amount < high
+      | Criteria.AmountDailyLimit limit ->
+         match command with
+         | ApprovableCommand.PerCommand _ -> false
+         | ApprovableCommand.AmountBased c ->
+            match c with
+            | FulfillPlatformPayment cmd ->
+               let overLimit =
+                  cmd.Data.RequestedPayment.BaseInfo.Amount
+                  + accrual.PaymentsPaid > limit
+
+               overLimit
+            | InternalTransferBetweenOrgs cmd ->
+               let overLimit =
+                  cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit
+
+               overLimit
+            | DomesticTransfer cmd ->
+               let overLimit =
+                  cmd.Data.Amount + accrual.DomesticTransfer > limit
+
+               overLimit
+
+   /// Detect if a command type requires initiation into the
+   /// approval workflow before issuing the command.
+   let commandTypeRequiresApproval
+      (commandType: ApprovableCommandType)
+      (requester: InitiatedById)
+      (rules: T list)
+      : T option
+      =
+      rules
+      |> List.filter (ruleDemandsApprovalForCommandType commandType requester)
+      |> selectOneOfAssociatedRules
+
+   /// Detect if a command requires initiation into the
+   /// approval workflow before issuing the command.
+   let commandRequiresApproval
+      (command: ApprovableCommand)
+      (accrual: CommandApprovalDailyAccrual)
+      (rules: T list)
+      : T option
+      =
+      rules
+      |> List.filter (fun rule ->
+         let forCommandType =
+            ruleDemandsApprovalForCommandType
+               command.CommandType
+               command.InitiatedBy
+               rule
+
+         let forCriteria = ruleDemandsApprovalForCriteria command accrual rule
+
+         forCommandType && forCriteria)
+      |> selectOneOfAssociatedRules
+
    type ApprovalRuleDeleted = {
       RuleId: CommandApprovalRuleId
       OrgId: OrgId
@@ -627,83 +732,36 @@ module CommandApprovalProgress =
          rule.Approvers
          progress.ApprovedBy
 
-   let requiresApprovalForPairOfRuleAndProgress
-      (command: ApprovableCommand)
-      (accrual: DailyAccrual)
-      (progress: T option)
-      (rule: CommandApprovalRule.T)
-      =
-      let criteria = rule.Criteria
-
-      match progress with
-      | Some progress when progress.Status <> Status.Pending -> None
-      | _ ->
-         match criteria with
-         | CommandApprovalRule.Criteria.PerCommand ->
-            match command with
-            | ApprovableCommand.PerCommand _ -> Some rule
-            | ApprovableCommand.AmountBased _ -> None
-         | CommandApprovalRule.Criteria.AmountPerCommand range ->
-            match range.LowerBound, range.UpperBound with
-            | None, None -> None // This case should not be reached
-            | Some low, None ->
-               if command.Amount >= low then Some rule else None
-            | None, Some high ->
-               if command.Amount < high then Some rule else None
-            | Some low, Some high ->
-               if command.Amount >= low && command.Amount < high then
-                  Some rule
-               else
-                  None
-         | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
-            match command with
-            | ApprovableCommand.PerCommand _ -> None
-            | ApprovableCommand.AmountBased c ->
-               match c with
-               | FulfillPlatformPayment cmd ->
-                  let overLimit =
-                     cmd.Data.RequestedPayment.BaseInfo.Amount
-                     + accrual.PaymentsPaid > limit
-
-                  if overLimit then Some rule else None
-               | InternalTransferBetweenOrgs cmd ->
-                  let overLimit =
-                     cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit
-
-                  if overLimit then Some rule else None
-               | DomesticTransfer cmd ->
-                  let overLimit =
-                     cmd.Data.Amount + accrual.DomesticTransfer > limit
-
-                  if overLimit then Some rule else None
-
+   /// Get all relevant command approval rules applying
+   /// to a given command given daily accrual & in-progress
+   /// approval workflows.
    let associatedCommandApprovalRulesForCommand
       (command: ApprovableCommand)
       (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
       (progress: Map<CommandApprovalProgressId, T>)
-      (accrual: DailyAccrual)
+      (accrual: CommandApprovalDailyAccrual)
       : CommandApprovalRule.T list
       =
-      let rulesForCommand =
-         rules.Values
-         |> Seq.toList
-         |> List.filter (fun rule ->
-            let onlyApprover =
-               CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
-                  command.InitiatedBy
-                  rule
-
-            rule.CommandType = command.CommandType && not onlyApprover)
-
-      let requiresApproval =
-         requiresApprovalForPairOfRuleAndProgress
-            command
-            accrual
-            (Map.tryFind
+      rules.Values
+      |> Seq.toList
+      |> List.filter (
+         CommandApprovalRule.ruleDemandsApprovalForCommandType
+            command.CommandType
+            command.InitiatedBy
+      )
+      |> List.filter (fun rule ->
+         let p =
+            Map.tryFind
                (CommandApprovalProgressId command.CorrelationId)
-               progress)
+               progress
 
-      rulesForCommand |> List.choose requiresApproval
+         match p with
+         | Some p when p.Status <> Status.Pending -> false
+         | _ ->
+            CommandApprovalRule.ruleDemandsApprovalForCriteria
+               command
+               accrual
+               rule)
 
    /// Detect if an incoming command requires additional approvals or
    /// initiation into the approval workflow before issuing the command.
@@ -711,18 +769,11 @@ module CommandApprovalProgress =
       (command: ApprovableCommand)
       (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
       (progress: Map<CommandApprovalProgressId, T>)
-      (accrual: DailyAccrual)
+      (accrual: CommandApprovalDailyAccrual)
       : CommandApprovalRule.T option
       =
       associatedCommandApprovalRulesForCommand command rules progress accrual
-      // Prioritize daily limit over range (Some, None) when a command
-      // meets the criteria of multiple rules (AmountDailyLimit +
-      // AmountPerCommand).
-      |> List.sortBy (fun r ->
-         match r.Criteria with
-         | CommandApprovalRule.Criteria.AmountDailyLimit _ -> 0
-         | _ -> 1)
-      |> List.tryHead
+      |> CommandApprovalRule.selectOneOfAssociatedRules
 
    let numberOfApprovalsUserCanManage
       (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)

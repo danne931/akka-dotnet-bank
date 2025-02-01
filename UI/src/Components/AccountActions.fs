@@ -37,6 +37,7 @@ type Msg =
    | NetworkAckDomesticRecipient of Envelope * recipientId: AccountId
    | AccountEventReceived of CorrelationId
    | CheckForEventConfirmation of Envelope * attemptNumber: int
+   | SubmitCommandForApproval of action: string
    | Noop
 
 let init () =
@@ -138,6 +139,12 @@ let update
 
             state, Cmd.fromAsync getReadModel
          | _ -> state, Cmd.none
+   | SubmitCommandForApproval action ->
+      state,
+      Cmd.batch [
+         Alerts.toastSuccessCommand $"Submitted {action} for approval."
+         Cmd.navigate (navigation None)
+      ]
    | Noop -> state, Cmd.none
 
 [<ReactComponent>]
@@ -251,40 +258,20 @@ let AccountActionsComponent
             account
             (Some accountId)
             (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
-      | AccountActionView.Transfer qParamsOpt ->
+      | AccountActionView.Transfer selectedRecipient ->
          TransferForm.TransferFormComponent
             session
             account
-            org.Accounts
-            (fun receipt ->
-               let approvableCommandType =
-                  match receipt.PendingCommand with
-                  | AccountCommand.DomesticTransfer _ ->
-                     DomesticTransferCommandType
-                     |> ApprovableCommandType.ApprovableAmountBased
-                     |> Some
-                  | AccountCommand.InternalTransferBetweenOrgs _ ->
-                     InternalTransferBetweenOrgsCommandType
-                     |> ApprovableCommandType.ApprovableAmountBased
-                     |> Some
-                  | _ -> None
+            org
+            selectedRecipient
+            (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
+            (fun approvableTransfer ->
+               approvableTransfer
+               |> OrgCommand.RequestCommandApproval
+               |> OrgProvider.Msg.OrgCommand
+               |> orgDispatch
 
-               let associatedApprovalRule =
-                  approvableCommandType
-                  |> Option.map (fun cmdType ->
-                     org.Org.CommandApprovalRules.Values
-                     |> Seq.tryFind (fun r -> r.CommandType = cmdType))
-
-               // NOTE:
-               // If the command requires approval then we won't expect an
-               // AccountEvent for some time given the command won't be issued
-               // until it goes through the admin approval process.
-               // If this is the case, then for now just go ahead & close the
-               // form.
-               match associatedApprovalRule with
-               | Some _ -> Router.navigate (navigation account.AccountId None)
-               | None -> dispatch (Msg.NetworkAckCommand receipt.Envelope))
-            qParamsOpt
+               dispatch (Msg.SubmitCommandForApproval "transfer"))
       | AccountActionView.Debit ->
          EmployeeCardSelectSearchComponent {|
             OrgId = account.OrgId

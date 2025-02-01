@@ -7,6 +7,8 @@ open Fable.Form.Simple.Pico
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open UIDomain.Employee
+open UIDomain.Org
 open Lib.Validators
 open FormContainer
 open EmployeeRoleForm
@@ -28,7 +30,7 @@ type Values = {
 let form
    (initiatedBy: UserSession)
    (accounts: Map<AccountId, Account>)
-   (employeeInviteRuleIdOpt: CommandApprovalRuleId option)
+   (employeeInviteRuleOpt: CommandApprovalRule.T option)
    (onRoleSelect: Role -> unit)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -88,7 +90,8 @@ let form
             LastName = lastName
             Role = role
             OrgId = initiatedBy.OrgId
-            OrgRequiresEmployeeInviteApproval = employeeInviteRuleIdOpt
+            OrgRequiresEmployeeInviteApproval =
+               employeeInviteRuleOpt |> Option.map _.RuleId
             CardInfo = cardInfo
          }
          |> EmployeeCommand.CreateEmployee
@@ -168,7 +171,10 @@ let form
 [<ReactComponent>]
 let EmployeeCreateFormComponent
    (session: UserSession)
-   (onSubmit: ParentOnSubmitHandler)
+   (onSubmit: EmployeeCommandReceipt -> unit)
+   (onSubmitForApproval:
+      CommandApprovalProgress.RequestCommandApproval * EmployeeCommandReceipt
+         -> unit)
    =
    let orgCtx = React.useContext OrgProvider.context
 
@@ -190,31 +196,51 @@ let EmployeeCreateFormComponent
       match orgCtx with
       | Deferred.Resolved(Ok(Some org)) ->
          let employeeInviteRequiresApproval =
-            org.Org.CommandApprovalRules
-            |> Map.tryPick (fun ruleId rule ->
-               let isSoleApprover =
-                  CommandApprovalRule.isRequesterTheOnlyConfiguredApprover
-                     (InitiatedById session.EmployeeId)
-                     rule
+            CommandApprovalRule.commandTypeRequiresApproval
+               (ApprovableCommandType.ApprovablePerCommand
+                  InviteEmployeeCommandType)
+               (InitiatedById session.EmployeeId)
+               (Seq.toList org.Org.CommandApprovalRules.Values)
 
-               let inviteType =
-                  ApprovableCommandType.ApprovablePerCommand
-                     InviteEmployeeCommandType
-
-               if rule.CommandType = inviteType && not isSoleApprover then
-                  Some ruleId
-               else
-                  None)
-
-         let submitText =
+         let customAction =
             match employeeInviteRequiresApproval with
             | Some _ -> "Request Approval for Employee Invite"
             | None -> "Invite Employee"
+            |> Form.View.Action.SubmitOnly
+            |> Some
 
-         EmployeeFormContainer
-            formProps
-            (form session org.Accounts employeeInviteRequiresApproval setRole)
-            onSubmit
-            (Some <| Form.View.Action.SubmitOnly submitText)
+         EmployeeFormContainer {|
+            InitialValues = formProps
+            Form =
+               form session org.Accounts employeeInviteRequiresApproval setRole
+            Action = customAction
+            OnSubmit =
+               fun receipt ->
+                  match employeeInviteRequiresApproval with
+                  | None -> onSubmit receipt
+                  | Some rule ->
+                     let employee = receipt.PendingState
+                     let envelope = receipt.Envelope
+
+                     let commandToInitiateOnApproval =
+                        ApproveAccessCommand.create
+                           employee.CompositeId
+                           envelope.InitiatedById
+                           envelope.CorrelationId
+                           {
+                              Name = employee.Name
+                              Reference = None
+                           }
+                        |> InviteEmployee
+                        |> ApprovableCommand.PerCommand
+
+                     let approvalRequest =
+                        CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
+                           session
+                           rule
+                           commandToInitiateOnApproval
+
+                     onSubmitForApproval (approvalRequest, receipt)
+         |}
       | _ -> Html.progress []
    ]
