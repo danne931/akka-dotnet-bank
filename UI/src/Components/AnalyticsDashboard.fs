@@ -506,13 +506,18 @@ let renderTopNMonthSelect
          prevPrevDate.Month, prevPrevDate
       ]
 
+   let datesSorted =
+      dateMap
+      |> Map.toSeq
+      |> Seq.sortByDescending (fun (month, date) -> date.Year, month)
+
    Html.select [
       attr.value selectedMonth.Month
 
       attr.onChange (fun (month: string) -> onSelect dateMap[int month])
 
       attr.children [
-         for month, opt in Map.toSeq dateMap do
+         for month, opt in datesSorted do
             Html.option [
                attr.value month
                attr.text $"{DateTime.numberToDisplayMonth[month]} {opt.Year}"
