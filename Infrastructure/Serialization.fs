@@ -111,6 +111,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       match o with
       | :? ConfirmableMessageEnvelope -> "ConfirmableMessageEnvelope"
       | :? Lib.ReadModelSyncActor.State -> "ReadModelSyncState"
+      | :? CommandApprovalDailyAccrual -> "CommandApprovalDailyAccrual"
       | :? OrgWithEvents -> "OrgWithEvents"
       | :? Option<Org> -> "OrgOption"
       | :? OrgMessage as msg ->
@@ -244,6 +245,9 @@ type BankSerializer(system: ExtendedActorSystem) =
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | msg ->
             JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+      // OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy response
+      // serialized for message sent from org cluster nodes to web node
+      | :? CommandApprovalDailyAccrual
       // OrgMessage.GetOrg response serialized for message sent
       // from org cluster nodes to Web node.
       | :? Option<Org>
@@ -279,6 +283,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AccountLoadTestMessage" ->
             typeof<AccountLoadTestTypes.AccountLoadTestMessage>
          | "ReadModelSyncState" -> typeof<Lib.ReadModelSyncActor.State>
+         | "CommandApprovalDailyAccrual" -> typeof<CommandApprovalDailyAccrual>
          | "OrgWithEvents" -> typeof<OrgWithEvents>
          | "OrgOption" -> typeof<Org option>
          | "OrgEvent" -> typeof<OrgEvent>

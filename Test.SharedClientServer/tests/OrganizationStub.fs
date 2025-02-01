@@ -76,6 +76,7 @@ let orgStateWithEvents: OrgWithEvents = {
       CommandApprovalProgress = Map.empty
    }
    Events = []
+   AccrualMetrics = Map.empty
 }
 
 let commandTypes = {|

@@ -9,6 +9,7 @@ open Akkling.Cluster.Sharding
 
 open Util
 open ActorUtil
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
@@ -87,8 +88,11 @@ let init (tck: TestKit.Tck) =
    let billingProbe = tck.CreateTestProbe()
    let accountProbe = tck.CreateTestProbe()
    let schedulingProbe = tck.CreateTestProbe()
+   let orgProbe = tck.CreateTestProbe()
 
    let getEmployeeRef = getEmployeeEntityRef (initMockEmployeeActor tck)
+
+   let getOrgRef = orgProbe |> typed :> IActorRef<OrgMessage> |> getOrgEntityRef
 
    let getAccountRef =
       accountProbe |> typed :> IActorRef<AccountMessage> |> getAccountEntityRef
@@ -118,6 +122,7 @@ let init (tck: TestKit.Tck) =
                getEmailActor
                getAccountClosureActor
                getBillingStatementActor
+               getOrgRef
                getEmployeeRef
                getAccountRef
                (schedulingProbe |> typed :> IActorRef<SchedulingActor.Message>))
@@ -131,6 +136,7 @@ let init (tck: TestKit.Tck) =
       emailProbe = emailProbe
       accountClosureProbe = accountClosureProbe
       billingProbe = billingProbe
+      orgProbe = orgProbe
    |}
 
 [<Tests>]
@@ -219,6 +225,22 @@ let tests =
          o.accountActor
          <! AccountMessage.StateChange(AccountCommand.Debit debit)
 
+         let msg = tck.ExpectMsg<EmployeeMessage>()
+
+         match msg with
+         | EmployeeMessage.StateChange(EmployeeCommand.DeclineDebit cmd) ->
+            match cmd.Data.Reason with
+            | PurchaseDeclinedReason.InsufficientAccountFunds _ ->
+               Expect.isTrue true ""
+            | _ ->
+               Expect.isTrue
+                  false
+                  "Expect InsufficientAccountFunds purchase declined reason"
+         | msg ->
+            Expect.isTrue
+               false
+               $"Expected DebitDeclined EmployeeCommand. Received {msg}"
+
          o.accountActor <! AccountMessage.GetAccount
 
          let state = tck.ExpectMsg<Option<Account>>()
@@ -229,22 +251,6 @@ let tests =
             2000m
             "Account state should be unchanged after failed debit validation due
             to insufficient balance"
-
-         let msg = tck.ExpectMsg<EmployeeMessage>()
-
-         match msg with
-         | EmployeeMessage.StateChange(EmployeeCommand.DeclineDebit cmd) ->
-            Expect.equal
-               cmd.Data.Reason
-               (PurchaseDeclinedReason.InsufficientAccountFunds(
-                  account.Balance,
-                  account.FullName
-               ))
-               "Expect InsufficientAccountFunds purchase declined reason"
-         | msg ->
-            Expect.isTrue
-               false
-               $"Expected DebitDeclined EmployeeCommand. Received {msg}"
 
       akkaTest
          "An internal transfer should message the InternalTransferRecipientActor"

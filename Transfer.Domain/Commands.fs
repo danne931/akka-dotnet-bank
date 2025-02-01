@@ -649,7 +649,7 @@ module UpdateDomesticTransferProgressCommand =
       BankEvent.create<DomesticTransferProgressUpdate> cmd |> Ok
 
 module DomesticTransferToCommand =
-   let progress (txn: DomesticTransfer) (progress: string) =
+   let progress (txn: DomesticTransfer) (progress: DomesticTransferInProgress) =
       UpdateDomesticTransferProgressCommand.create
          (txn.Sender.AccountId, txn.Sender.OrgId)
          (txn.TransferId |> TransferId.get |> CorrelationId)

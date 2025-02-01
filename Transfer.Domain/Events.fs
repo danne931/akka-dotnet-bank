@@ -38,7 +38,7 @@ type DomesticTransferPending = { BaseInfo: BaseDomesticTransferInfo }
 
 type DomesticTransferProgressUpdate = {
    BaseInfo: BaseDomesticTransferInfo
-   InProgressInfo: string
+   InProgressInfo: DomesticTransferInProgress
 }
 
 type DomesticTransferApproved = { BaseInfo: BaseDomesticTransferInfo }

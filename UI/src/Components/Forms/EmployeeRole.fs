@@ -144,7 +144,7 @@ let EmployeeRoleFormComponent
             (ApprovableCommandType.ApprovablePerCommand
                UpdateEmployeeRoleCommandType)
             (InitiatedById session.EmployeeId)
-            (Seq.toList org.Org.CommandApprovalRules.Values)
+            org.Org.CommandApprovalRules
 
       let customAction =
          Form.View.Action.Custom(fun state _ ->

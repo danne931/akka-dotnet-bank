@@ -44,48 +44,50 @@ let private canManageApprovalProgress
          )
          |> Error
 
-let dailyAccrual (events: OrgEvent list) : CommandApprovalDailyAccrual =
-   List.fold
-      (fun acc evt ->
-         match evt with
-         | CommandApprovalRequested e ->
-            if DateTime.isToday e.Timestamp then
-               match e.Data.Command with
-               | ApprovableCommand.PerCommand _ -> acc
-               | ApprovableCommand.AmountBased c ->
-                  match c with
-                  | FulfillPlatformPayment cmd -> {
-                     acc with
-                        PaymentsPaid =
-                           acc.PaymentsPaid
-                           + cmd.Data.RequestedPayment.BaseInfo.Amount
-                    }
-                  | DomesticTransfer cmd -> {
-                     acc with
-                        DomesticTransfer =
-                           acc.DomesticTransfer + cmd.Data.Amount
-                    }
-                  | InternalTransferBetweenOrgs cmd -> {
-                     acc with
-                        InternalTransferBetweenOrgs =
-                           acc.InternalTransferBetweenOrgs + cmd.Data.Amount
-                    }
-            else
-               acc
-         | _ -> acc)
+let dailyAccrual
+   (initiatedBy: InitiatedById)
+   (metrics: Map<CorrelationId, OrgAccrualMetric>)
+   : CommandApprovalDailyAccrual
+   =
+   metrics
+   |> Map.fold
+      (fun acc _ metrics ->
+         if
+            DateTime.isToday metrics.Timestamp
+            && metrics.InitiatedById = initiatedBy
+         then
+            match metrics.EventType with
+            | OrgAccrualMetricEventType.PaymentPaid -> {
+               acc with
+                  PaymentsPaid = acc.PaymentsPaid + metrics.TransactionAmount
+              }
+            | OrgAccrualMetricEventType.DomesticTransfer -> {
+               acc with
+                  DomesticTransfer =
+                     acc.DomesticTransfer + metrics.TransactionAmount
+              }
+            | OrgAccrualMetricEventType.InternalTransferBetweenOrgs -> {
+               acc with
+                  InternalTransferBetweenOrgs =
+                     acc.InternalTransferBetweenOrgs
+                     + metrics.TransactionAmount
+              }
+         else
+            acc)
       {
          PaymentsPaid = 0m
          InternalTransferBetweenOrgs = 0m
          DomesticTransfer = 0m
       }
-      events
 
 let commandRequiresApproval (cmd: ApprovableCommand) (state: OrgWithEvents) =
+   let accrual = dailyAccrual cmd.InitiatedBy state.AccrualMetrics
+
    CommandApprovalProgress.commandRequiresApproval
       cmd
       state.Info.CommandApprovalRules
       state.Info.CommandApprovalProgress
-      (dailyAccrual state.Events)
+      accrual
 
 // NOTE:
 // Being able to reference events directly during state transitions
@@ -99,6 +101,9 @@ let private trimExcess (state: OrgWithEvents) : OrgWithEvents =
       date.ToUniversalTime() > DateTime.UtcNow.AddDays(-2.)
 
    {
+      AccrualMetrics =
+         state.AccrualMetrics
+         |> Map.filter (fun _ m -> dateWithinLookbackPeriod m.Timestamp)
       Events =
          state.Events
          |> List.filter (fun e ->
@@ -482,14 +487,3 @@ let stateTransition (state: OrgWithEvents) (command: OrgCommand) =
       StateTransition.declineCommandApproval state cmd
    | OrgCommand.TerminateCommandApproval cmd ->
       StateTransition.terminateCommandApproval state cmd
-
-let empty: Org = {
-   OrgId = OrgId System.Guid.Empty
-   Name = ""
-   Status = OrgStatus.InitialEmptyState
-   FeatureFlags = {
-      SocialTransferDiscoveryPrimaryAccountId = None
-   }
-   CommandApprovalRules = Map.empty
-   CommandApprovalProgress = Map.empty
-}

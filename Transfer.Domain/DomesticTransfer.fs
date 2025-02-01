@@ -93,10 +93,15 @@ type DomesticTransferDeclinedReason =
    | Unknown of string
 
 [<RequireQualifiedAccess>]
+type DomesticTransferInProgress =
+   | InitialHandshakeAck
+   | Other of string
+
+[<RequireQualifiedAccess>]
 type DomesticTransferProgress =
    | Scheduled
    | Outgoing
-   | InProgress of string
+   | InProgress of DomesticTransferInProgress
    | Complete
    | Failed of DomesticTransferDeclinedReason
 

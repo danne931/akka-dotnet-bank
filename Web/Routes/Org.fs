@@ -126,3 +126,15 @@ let startOrgRoutes (app: WebApplication) =
       )
       .RBAC(Permissions.ManageCommandApprovalProgress)
    |> ignore
+
+   app.MapGet(
+      OrgPath.CommandApprovalDailyAccrual,
+      Func<ActorSystem, Guid, Guid, Task<IResult>>
+         (fun sys orgId initiatedById ->
+            getTodaysCommandApprovalDailyAccrualByInitiatedBy
+               sys
+               (OrgId orgId)
+               (InitiatedById(EmployeeId initiatedById))
+            |> RouteUtil.unwrapTask)
+   )
+   |> ignore

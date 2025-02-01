@@ -93,7 +93,30 @@ type Org = {
       Map<CommandApprovalProgressId, CommandApprovalProgress.T>
 }
 
-type OrgWithEvents = { Info: Org; Events: OrgEvent list }
+module Org =
+   let empty: Org = {
+      OrgId = OrgId System.Guid.Empty
+      Name = ""
+      Status = OrgStatus.InitialEmptyState
+      FeatureFlags = {
+         SocialTransferDiscoveryPrimaryAccountId = None
+      }
+      CommandApprovalRules = Map.empty
+      CommandApprovalProgress = Map.empty
+   }
+
+type OrgWithEvents = {
+   Info: Org
+   Events: OrgEvent list
+   AccrualMetrics: Map<CorrelationId, OrgAccrualMetric>
+}
+
+module OrgWithEvents =
+   let empty: OrgWithEvents = {
+      Info = Org.empty
+      Events = []
+      AccrualMetrics = Map.empty
+   }
 
 type OrgWithAccountProfiles = {
    Org: Org
@@ -140,6 +163,7 @@ type OrgWithAccountProfiles = {
 [<RequireQualifiedAccess>]
 type OrgMessage =
    | GetOrg
+   | GetCommandApprovalDailyAccrualByInitiatedBy of InitiatedById
    | ApprovableRequest of ApprovableCommand
    | StateChange of OrgCommand
    | Event of OrgEvent

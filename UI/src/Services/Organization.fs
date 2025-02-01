@@ -43,7 +43,13 @@ let submitCommand
       // This same validation occurs on the server when an actor is
       // processing a command.
       let! evt, newState =
-         Org.stateTransition { Info = org; Events = [] } command
+         Org.stateTransition
+            {
+               Info = org
+               Events = []
+               AccrualMetrics = Map.empty
+            }
+            command
 
       let! res = postJson command
       let code = res.statusCode
@@ -169,3 +175,26 @@ let getCommandApprovals (orgId: OrgId) : Async<CommandApprovalProgressMaybe> = a
             |> Map.ofList
             |> Some)
 }
+
+/// Provides employee accrual metrics before a user submits a domestic
+/// transfer, internal transfer between orgs, or payment.
+/// The CommandApprovalDailyAccrual metrics are used in
+/// CommandApprovalRule.requiresCommandApproval to determine if an employee
+/// is attempting to submit a command above the configured daily limit for that
+/// command (as specified in an org's configured command approval rules).
+let getTodaysAccrualMetricsByInitiatedBy
+   (orgId: OrgId)
+   (initiatedById: InitiatedById)
+   : Async<Result<CommandApprovalDailyAccrual, Err>>
+   =
+   async {
+      let! (code, responseText) =
+         OrgPath.commandApprovalDailyAccrual orgId initiatedById |> Http.get
+
+      if code <> 200 then
+         return Error <| Err.InvalidStatusCodeError(serviceName, code)
+      else
+         return
+            responseText
+            |> Serialization.deserialize<CommandApprovalDailyAccrual>
+   }

@@ -180,6 +180,13 @@ let setupApprovalRequest
 
    configureApprovalRuleCmd, rule, progress.Value
 
+let fishForAccrual (tck: TestKit.Tck) : CommandApprovalDailyAccrual =
+   tck.FishForMessage(
+      fun msg -> box msg :? CommandApprovalDailyAccrual
+      , TimeSpan.FromSeconds 3
+   )
+   :?> CommandApprovalDailyAccrual
+
 [<Tests>]
 let tests =
    testList "Organization Actor" [
@@ -414,4 +421,263 @@ let tests =
                "Expected the employee actor to receive an CancelInvitation command
                 associated with an in-progress approval item after the approval
                 is declined."
+
+      akkaTest
+         "Org Actor should accrue daily metrics for approvable command
+                when it does not require approval."
+      <| Some config
+      <| fun tck ->
+         let o = init tck
+         setupOrg tck o.orgActor
+
+         let cmd =
+            AccountStub.command.domesticTransfer 100m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         o.orgActor <! OrgMessage.ApprovableRequest cmd
+
+         let cmd2 =
+            {
+               AccountStub.command.domesticTransfer 50m with
+                  CorrelationId = Guid.NewGuid() |> CorrelationId
+            }
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         o.orgActor <! OrgMessage.ApprovableRequest cmd2
+
+         o.orgActor
+         <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
+               cmd.InitiatedBy
+
+         let accrual = fishForAccrual tck
+
+         Expect.equal
+            accrual.DomesticTransfer
+            (cmd.Amount + cmd2.Amount)
+            "expect to accrue metrics for initiated command"
+
+      akkaTest
+         "Org Actor should accrue daily metrics for approvable command
+                by the initiator of the command."
+      <| Some config
+      <| fun tck ->
+         let o = init tck
+         setupOrg tck o.orgActor
+
+         let cmd =
+            AccountStub.command.domesticTransfer 100m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         o.orgActor <! OrgMessage.ApprovableRequest cmd
+
+         let cmd2 =
+            {
+               AccountStub.command.domesticTransfer 500m with
+                  CorrelationId = Guid.NewGuid() |> CorrelationId
+            }
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         o.orgActor <! OrgMessage.ApprovableRequest cmd2
+
+         o.orgActor
+         <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
+               cmd.InitiatedBy
+
+         let accrual = fishForAccrual tck
+
+         Expect.equal
+            accrual.DomesticTransfer
+            (cmd.Amount + cmd2.Amount)
+            "expect to accrue metrics"
+
+         let cmd3 =
+            {
+               AccountStub.command.domesticTransfer 300m with
+                  CorrelationId = Guid.NewGuid() |> CorrelationId
+                  InitiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById
+            }
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         o.orgActor <! OrgMessage.ApprovableRequest cmd3
+
+         o.orgActor
+         <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
+               cmd3.InitiatedBy
+
+         let accrual = fishForAccrual tck
+
+         Expect.equal
+            accrual.DomesticTransfer
+            cmd3.Amount
+            "expect to accrue metrics separately by the employee initiating the command"
+
+         o.orgActor
+         <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
+               cmd.InitiatedBy
+
+         let accrual = fishForAccrual tck
+
+         Expect.equal
+            accrual.DomesticTransfer
+            (cmd.Amount + cmd2.Amount)
+            "expect to accrue metrics"
+
+      akkaTest
+         "Org Actor should accrue daily metrics for approvable command
+                when it requires approval."
+      <| Some config
+      <| fun tck ->
+         let o = init tck
+         setupOrg tck o.orgActor
+
+         let cmd =
+            AccountStub.command.domesticTransfer 100m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         o.orgActor <! OrgMessage.ApprovableRequest cmd
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType =
+               ApprovableCommandType.ApprovableAmountBased
+                  DomesticTransferCommandType
+            Criteria = Criteria.AmountDailyLimit 550m
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let configureApprovalRuleCmd =
+            ConfigureApprovalRuleCommand.create
+               rule.OrgId
+               (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+               rule
+
+         let msg =
+            configureApprovalRuleCmd
+            |> OrgCommand.ConfigureApprovalRule
+            |> OrgMessage.StateChange
+
+         o.orgActor <! msg
+
+         let cmd2 =
+            {
+               AccountStub.command.domesticTransfer 500m with
+                  CorrelationId = Guid.NewGuid() |> CorrelationId
+            }
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         o.orgActor <! OrgMessage.ApprovableRequest cmd2
+
+         tck.AwaitAssert(
+            fun () ->
+               o.orgActor
+               <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
+                     cmd.InitiatedBy
+
+               let accrual = tck.ExpectMsg<CommandApprovalDailyAccrual>()
+
+               Expect.equal
+                  accrual.DomesticTransfer
+                  (cmd.Amount + cmd2.Amount)
+                  "expect to accrue metrics for command entering approval workflow"
+            , TimeSpan.FromSeconds 3
+         )
+
+      akkaTest
+         "Org Actor should reverse the accrual if a command in a
+                pending approvable workflow is declined."
+      <| Some config
+      <| fun tck ->
+         let o = init tck
+         setupOrg tck o.orgActor
+
+         let rule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType =
+               ApprovableCommandType.ApprovableAmountBased
+                  DomesticTransferCommandType
+            Criteria = Criteria.AmountDailyLimit 550m
+            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+         }
+
+         let configureApprovalRuleCmd =
+            ConfigureApprovalRuleCommand.create
+               rule.OrgId
+               (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+               rule
+
+         let msg =
+            configureApprovalRuleCmd
+            |> OrgCommand.ConfigureApprovalRule
+            |> OrgMessage.StateChange
+
+         o.orgActor <! msg
+
+         let cmd =
+            AccountStub.command.domesticTransfer 100m
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         let cmd2 =
+            {
+               AccountStub.command.domesticTransfer 500m with
+                  CorrelationId = Guid.NewGuid() |> CorrelationId
+            }
+            |> DomesticTransfer
+            |> ApprovableCommand.AmountBased
+
+         o.orgActor <! OrgMessage.ApprovableRequest cmd
+         o.orgActor <! OrgMessage.ApprovableRequest cmd2
+
+         tck.AwaitAssert(
+            fun () ->
+               o.orgActor
+               <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
+                     cmd.InitiatedBy
+
+               let accrual = tck.ExpectMsg<CommandApprovalDailyAccrual>()
+
+               Expect.equal
+                  accrual.DomesticTransfer
+                  (cmd.Amount + cmd2.Amount)
+                  "expect to accrue metrics for command entering approval workflow"
+            , TimeSpan.FromSeconds 3
+         )
+
+         let declineCmd =
+            DeclineCommandApproval.create rule.OrgId {
+               RuleId = rule.RuleId
+               DeclinedBy = {
+                  EmployeeId = Guid.NewGuid() |> EmployeeId
+                  EmployeeName = "B"
+               }
+               ProgressId = CommandApprovalProgressId cmd2.CorrelationId
+               Command = cmd2
+            }
+            |> OrgCommand.DeclineCommandApproval
+
+         o.orgActor <! OrgMessage.StateChange declineCmd
+
+         tck.AwaitAssert(
+            fun () ->
+               o.orgActor
+               <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
+                     cmd2.InitiatedBy
+
+               let accrual = tck.ExpectMsg<CommandApprovalDailyAccrual>()
+
+               Expect.equal
+                  accrual.DomesticTransfer
+                  cmd.Amount
+                  "expect to reverse the accrual of cmd2 after cmd2 declined"
+            , TimeSpan.FromSeconds 3
+         )
    ]

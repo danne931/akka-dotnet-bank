@@ -200,7 +200,7 @@ let EmployeeCreateFormComponent
                (ApprovableCommandType.ApprovablePerCommand
                   InviteEmployeeCommandType)
                (InitiatedById session.EmployeeId)
-               (Seq.toList org.Org.CommandApprovalRules.Values)
+               org.Org.CommandApprovalRules
 
          let customAction =
             match employeeInviteRequiresApproval with

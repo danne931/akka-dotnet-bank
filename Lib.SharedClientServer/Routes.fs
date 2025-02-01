@@ -32,6 +32,15 @@ module OrgPath =
 
    let getCommandApprovals (orgId: OrgId) = Base + $"/command-approvals/{orgId}"
 
+   let CommandApprovalDailyAccrual =
+      Base + "/command-approval-daily-accrual/{orgId}/{initiatedByid}"
+
+   let commandApprovalDailyAccrual
+      (orgId: OrgId)
+      (initiatedById: InitiatedById)
+      =
+      $"{Base}/command-approval-daily-accrual/{orgId}/{initiatedById}"
+
 module AccountPath =
    let Base = $"{API}/accounts"
    let account (id: AccountId) = $"{Base}/{id}"

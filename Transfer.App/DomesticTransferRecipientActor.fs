@@ -43,7 +43,13 @@ let private actorName = ActorUtil.ActorMetadata.domesticTransfer.Name
 let private progressFromResponse (response: DomesticTransferServiceResponse) =
    match response.Status with
    | "Complete" -> DomesticTransferProgress.Complete
-   | status -> DomesticTransferProgress.InProgress status
+   | "ReceivedRequest" ->
+      DomesticTransferProgress.InProgress
+         DomesticTransferInProgress.InitialHandshakeAck
+   | status ->
+      DomesticTransferProgress.InProgress(
+         DomesticTransferInProgress.Other status
+      )
 
 let private declinedReasonFromError (err: string) : DeclinedReason =
    match err with
