@@ -155,6 +155,17 @@ let actorProps
                   Email = employee.Email
                   Token = e.Data.InviteToken
                }
+            | EmployeeEvent.AccessRestored _ ->
+               match employee.Status with
+               | EmployeeStatus.PendingInviteConfirmation token ->
+                  getEmailActor mailbox.System
+                  <! EmailActor.EmailMessage.EmployeeInvite {
+                     OrgId = employee.OrgId
+                     Name = employee.Name
+                     Email = employee.Email
+                     Token = token
+                  }
+               | _ -> ()
             | EmployeeEvent.InvitationTokenRefreshed e ->
                getEmailActor mailbox.System
                <! EmailActor.EmailMessage.EmployeeInvite {
