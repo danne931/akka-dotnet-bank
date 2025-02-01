@@ -575,7 +575,7 @@ let mockEmployees =
          FirstName = "Den"
          LastName = "Vau"
          OrgId = orgId
-         Role = Role.CardOnly
+         Role = Role.Admin
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
@@ -683,22 +683,26 @@ let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task
    for payer, request in [ List.head requestsFromDemoAccount ] do
       let info = request.Data.BaseInfo
       let accountId = payer.PrimaryAccountId
+      let buffer = DateTime.UtcNow.AddDays(-2)
 
       let msg =
-         FulfillPlatformPaymentCommand.create
-            (InitiatedById payer.AccountOwnerId)
-            {
-               RequestedPayment = {
-                  Memo = request.Data.Memo
-                  Expiration =
-                     request
-                     |> RequestPlatformPaymentCommand.toEvent
-                     |> Result.toValueOption
-                     |> fun p -> p.Value.Data.Expiration
-                  BaseInfo = info
-               }
-               PaymentMethod = accountId
-            }
+         {
+            FulfillPlatformPaymentCommand.create
+               (InitiatedById payer.AccountOwnerId)
+               {
+                  RequestedPayment = {
+                     Memo = request.Data.Memo
+                     Expiration =
+                        request
+                        |> RequestPlatformPaymentCommand.toEvent
+                        |> Result.toValueOption
+                        |> fun p -> p.Value.Data.Expiration
+                     BaseInfo = info
+                  }
+                  PaymentMethod = accountId
+               } with
+               Timestamp = buffer
+         }
          |> AccountCommand.FulfillPlatformPayment
          |> AccountMessage.StateChange
 
@@ -942,7 +946,11 @@ let seedAccountOwnerActions
    accountRef <! msg
 
    for month in [ 1..3 ] do
-      let timestamp = timestamp.AddMonths month
+      let timestamp =
+         if month = 3 then
+            timestamp.AddMonths(month).AddDays(-2)
+         else
+            timestamp.AddMonths month
 
       let transferCmd = {
          DomesticTransferCommand.create

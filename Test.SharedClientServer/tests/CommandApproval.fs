@@ -1665,11 +1665,7 @@ let tests =
             |> ApprovableCommand.AmountBased
 
          Expect.hasLength
-            (associatedCommandApprovalRulesForCommand
-               cmd
-               rules
-               progress
-               Stub.accrual)
+            (associatedCommandApprovalRulesForCommand cmd Stub.accrual rules)
             1
             "When the lower bound of 1 rule meets the upper bound of another, only 1 will win"
 
@@ -1733,11 +1729,7 @@ let tests =
             |> ApprovableCommand.AmountBased
 
          Expect.hasLength
-            (associatedCommandApprovalRulesForCommand
-               cmd
-               rules
-               progress
-               Stub.accrual)
+            (associatedCommandApprovalRulesForCommand cmd Stub.accrual rules)
             1
             "When the lower bound of 1 rule meets the upper bound of another, only 1 will win"
 
@@ -1801,11 +1793,7 @@ let tests =
             |> ApprovableCommand.AmountBased
 
          Expect.hasLength
-            (associatedCommandApprovalRulesForCommand
-               cmd
-               rules
-               progress
-               Stub.accrual)
+            (associatedCommandApprovalRulesForCommand cmd Stub.accrual rules)
             1
             "When the lower bound of 1 rule meets the upper bound of another, only 1 will win"
 

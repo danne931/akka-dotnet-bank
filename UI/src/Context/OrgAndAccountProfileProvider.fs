@@ -49,7 +49,13 @@ let update msg state =
       let state =
          updateState state (fun o ->
             let validation =
-               Org.stateTransition { Info = o.Org; Events = [] } cmd
+               Org.stateTransition
+                  {
+                     Info = o.Org
+                     Events = []
+                     AccrualMetrics = Map.empty
+                  }
+                  cmd
 
             match validation with
             | Error _ -> o

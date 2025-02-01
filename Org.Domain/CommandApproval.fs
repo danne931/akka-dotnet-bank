@@ -110,6 +110,8 @@ type ApprovableCommand =
 
    member x.CorrelationId = ApprovableCommand.envelope x |> _.CorrelationId
 
+   member x.Timestamp = ApprovableCommand.envelope x |> _.Timestamp
+
    member x.Amount =
       match x with
       | ApprovableCommand.PerCommand _ -> 0m
@@ -553,6 +555,7 @@ module CommandApprovalRule =
                let overLimit =
                   cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit
 
+
                overLimit
             | DomesticTransfer cmd ->
                let overLimit =
@@ -565,22 +568,24 @@ module CommandApprovalRule =
    let commandTypeRequiresApproval
       (commandType: ApprovableCommandType)
       (requester: InitiatedById)
-      (rules: T list)
+      (rules: Map<CommandApprovalRuleId, T>)
       : T option
       =
-      rules
+      rules.Values
+      |> Seq.toList
       |> List.filter (ruleDemandsApprovalForCommandType commandType requester)
       |> selectOneOfAssociatedRules
 
-   /// Detect if a command requires initiation into the
-   /// approval workflow before issuing the command.
-   let commandRequiresApproval
+   /// Get all relevant command approval rules applying
+   /// to a given command.
+   let associatedCommandApprovalRulesForCommand
       (command: ApprovableCommand)
       (accrual: CommandApprovalDailyAccrual)
-      (rules: T list)
-      : T option
+      (rules: Map<CommandApprovalRuleId, T>)
+      : T list
       =
-      rules
+      rules.Values
+      |> Seq.toList
       |> List.filter (fun rule ->
          let forCommandType =
             ruleDemandsApprovalForCommandType
@@ -591,6 +596,16 @@ module CommandApprovalRule =
          let forCriteria = ruleDemandsApprovalForCriteria command accrual rule
 
          forCommandType && forCriteria)
+
+   /// Detect if a command requires initiation into the
+   /// approval workflow before issuing the command.
+   let commandRequiresApproval
+      (command: ApprovableCommand)
+      (accrual: CommandApprovalDailyAccrual)
+      (rules: Map<CommandApprovalRuleId, T>)
+      : T option
+      =
+      associatedCommandApprovalRulesForCommand command accrual rules
       |> selectOneOfAssociatedRules
 
    type ApprovalRuleDeleted = {
@@ -732,37 +747,6 @@ module CommandApprovalProgress =
          rule.Approvers
          progress.ApprovedBy
 
-   /// Get all relevant command approval rules applying
-   /// to a given command given daily accrual & in-progress
-   /// approval workflows.
-   let associatedCommandApprovalRulesForCommand
-      (command: ApprovableCommand)
-      (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
-      (progress: Map<CommandApprovalProgressId, T>)
-      (accrual: CommandApprovalDailyAccrual)
-      : CommandApprovalRule.T list
-      =
-      rules.Values
-      |> Seq.toList
-      |> List.filter (
-         CommandApprovalRule.ruleDemandsApprovalForCommandType
-            command.CommandType
-            command.InitiatedBy
-      )
-      |> List.filter (fun rule ->
-         let p =
-            Map.tryFind
-               (CommandApprovalProgressId command.CorrelationId)
-               progress
-
-         match p with
-         | Some p when p.Status <> Status.Pending -> false
-         | _ ->
-            CommandApprovalRule.ruleDemandsApprovalForCriteria
-               command
-               accrual
-               rule)
-
    /// Detect if an incoming command requires additional approvals or
    /// initiation into the approval workflow before issuing the command.
    let commandRequiresApproval
@@ -772,8 +756,12 @@ module CommandApprovalProgress =
       (accrual: CommandApprovalDailyAccrual)
       : CommandApprovalRule.T option
       =
-      associatedCommandApprovalRulesForCommand command rules progress accrual
-      |> CommandApprovalRule.selectOneOfAssociatedRules
+      let p =
+         Map.tryFind (CommandApprovalProgressId command.CorrelationId) progress
+
+      match p with
+      | Some p when p.Status <> Status.Pending -> None
+      | _ -> CommandApprovalRule.commandRequiresApproval command accrual rules
 
    let numberOfApprovalsUserCanManage
       (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)

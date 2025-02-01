@@ -228,7 +228,7 @@ let EditApprovalRuleComponent
             Html.small "For every request require approval from:"
          | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
             Html.small
-               "If transaction amount plus the daily accrued amount is >="
+               "If transaction amount plus the daily accrued amount (per employee) is >="
 
             renderMoney limit
             Html.small "require approval from:"

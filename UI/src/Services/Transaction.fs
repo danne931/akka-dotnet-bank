@@ -5,6 +5,7 @@ open Fable.SimpleHttp
 open Feliz.Router
 
 open Bank.Account.Domain
+open Bank.Org.Domain
 open UIDomain
 open UIDomain.Account
 open Lib.SharedTypes

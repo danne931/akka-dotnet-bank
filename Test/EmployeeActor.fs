@@ -183,6 +183,20 @@ let tests =
          o.employeeActor
          <! EmployeeMessage.StateChange(EmployeeCommand.CreateEmployee cmd)
 
+         let msg = tck.ExpectMsg<OrgMessage>()
+
+         match msg with
+         | OrgMessage.ApprovableRequest cmd ->
+            Expect.equal
+               cmd.CommandType
+               (ApprovableCommandType.ApprovablePerCommand
+                  InviteEmployeeCommandType)
+               "Request command approval for employee invite received by org actor"
+         | _ ->
+            Expect.isTrue
+               false
+               "Expected RequestCommandApproval for employee invite sent to org actor"
+
          o.employeeActor <! EmployeeMessage.GetEmployee
 
          let state = tck.ExpectMsg<Option<Employee>>()
@@ -198,20 +212,6 @@ let tests =
             employee.Status
             expectedState
             "Expecting employee state to be PendingInviteApproval"
-
-         let msg = tck.ExpectMsg<OrgMessage>()
-
-         match msg with
-         | OrgMessage.ApprovableRequest cmd ->
-            Expect.equal
-               cmd.CommandType
-               (ApprovableCommandType.ApprovablePerCommand
-                  InviteEmployeeCommandType)
-               "Request command approval for employee invite received by org actor"
-         | _ ->
-            Expect.isTrue
-               false
-               "Expected RequestCommandApproval for employee invite sent to org actor"
 
       akkaTest
          "Creating an employee with card details should create a card

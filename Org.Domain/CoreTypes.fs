@@ -17,3 +17,20 @@ type OrgStatus =
    | InitialEmptyState
    | PendingOnboardingTasksFulfilled
    | Active
+
+[<RequireQualifiedAccess>]
+type OrgAccrualMetricEventType =
+   | PaymentPaid
+   | InternalTransferBetweenOrgs
+   | DomesticTransfer
+
+/// This is currently used to restrict command approval requests
+/// with corresponding AmountDailyLimit rules configured but may
+/// have additional uses in the future.
+type OrgAccrualMetric = {
+   TransactionAmount: decimal
+   EventType: OrgAccrualMetricEventType
+   CorrelationId: CorrelationId
+   InitiatedById: InitiatedById
+   Timestamp: System.DateTime
+}

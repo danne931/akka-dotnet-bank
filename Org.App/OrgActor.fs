@@ -57,6 +57,57 @@ let private sendApprovedCommand
          let cmd = AccountCommand.InternalTransferBetweenOrgs cmd
          accountRef <! AccountMessage.StateChange cmd
 
+// Does the approvable command contribute to the OrgAccrualMetric
+// daily tally?
+let private hasAccruableTransaction
+   (cmd: ApprovableCommand)
+   : OrgAccrualMetric option
+   =
+   match cmd with
+   | ApprovableCommand.PerCommand _ -> None
+   | ApprovableCommand.AmountBased c ->
+      Some {
+         TransactionAmount = cmd.Amount
+         EventType =
+            match c with
+            | FulfillPlatformPayment _ -> OrgAccrualMetricEventType.PaymentPaid
+            | DomesticTransfer _ -> OrgAccrualMetricEventType.DomesticTransfer
+            | InternalTransferBetweenOrgs _ ->
+               OrgAccrualMetricEventType.InternalTransferBetweenOrgs
+         CorrelationId = cmd.CorrelationId
+         InitiatedById = cmd.InitiatedBy
+         Timestamp = cmd.Timestamp
+      }
+
+// Add an OrgAccrualMetric to the daily tally so we can determine if
+// an incoming ApprovableCommand should enter the approvable workflow
+// due to exceeding the daily limit for a that command type.
+let private updateStateWithAccruableTransaction
+   (state: OrgWithEvents)
+   (metrics: OrgAccrualMetric)
+   =
+   {
+      state with
+         AccrualMetrics =
+            state.AccrualMetrics |> Map.add metrics.CorrelationId metrics
+   }
+
+// Undo the accrual associated with a command if the command is declined.
+let private updateStateWithAccrualReversal
+   (state: OrgWithEvents)
+   (correlationId: CorrelationId)
+   =
+   {
+      state with
+         AccrualMetrics = state.AccrualMetrics |> Map.remove correlationId
+   }
+
+// Early termination of progress workflows will result in their
+// ApprovableCommands being initiated, similar to what is expected when
+// an approval workflow obtains all necessary approvals.
+// This happens if the associated rule is deleted or an approval rule is
+// edited such that the list of required approvers is reduced to at or below
+// the count of approvals received thus far.
 let private terminateProgressAssociatedWithRule
    (mailbox: IActorRef<OrgMessage>)
    (progressPertainingToRule: CommandApprovalProgress.T seq)
@@ -86,8 +137,7 @@ let actorProps
       let rec loop (stateOpt: OrgWithEvents option) = actor {
          let! msg = mailbox.Receive()
 
-         let state =
-            stateOpt |> Option.defaultValue { Info = Org.empty; Events = [] }
+         let state = stateOpt |> Option.defaultValue OrgWithEvents.empty
 
          let org = state.Info
 
@@ -183,7 +233,25 @@ let actorProps
                | _ -> ()
             | _ -> ()
 
-            return! loop <| Some state
+            let state =
+               match evt with
+               | CommandApprovalRequested e ->
+                  match hasAccruableTransaction e.Data.Command with
+                  | Some accrual ->
+                     updateStateWithAccruableTransaction state accrual
+                  | None -> state
+               | CommandApprovalDeclined e ->
+                  match hasAccruableTransaction e.Data.Command with
+                  | Some accrual ->
+                     updateStateWithAccrualReversal state accrual.CorrelationId
+                  | None -> state
+               | _ -> state
+
+            let effect = loop (Some state)
+
+            match state.Events.Length % 10 with
+            | 0 -> return! effect <@> SaveSnapshot state
+            | _ -> return! effect
          | :? SnapshotOffer as o -> return! loop <| Some(unbox o.Snapshot)
          | :? ConfirmableMessageEnvelope as envelope ->
             let unknownMsg msg =
@@ -209,7 +277,11 @@ let actorProps
          | :? OrgMessage as msg ->
             match msg with
             | OrgMessage.GetOrg ->
-               mailbox.Sender() <! (stateOpt |> Option.map _.Info)
+               let org = stateOpt |> Option.map _.Info
+               mailbox.Sender() <! org
+            | OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy initiatedBy ->
+               let accrual = Org.dailyAccrual initiatedBy state.AccrualMetrics
+               mailbox.Sender() <! accrual
             | OrgMessage.ApprovableRequest _ when org.Status <> OrgStatus.Active ->
                let errMsg =
                   $"Attempt to initiate an approvable request for an inactive org {org.Name}-{org.OrgId}"
@@ -257,7 +329,16 @@ let actorProps
                      |> OrgCommand.RequestCommandApproval
 
                   mailbox.Parent() <! OrgMessage.StateChange cmd
-               | None -> sendApprovedCommand cmd
+               | None ->
+                  sendApprovedCommand cmd
+
+                  match hasAccruableTransaction cmd with
+                  | Some accrual ->
+                     let state =
+                        updateStateWithAccruableTransaction state accrual
+
+                     return! loop (Some state)
+                  | _ -> ()
          // Event replay on actor start
          | :? OrgEvent as e when mailbox.IsRecovering() ->
             return! loop <| Some(Org.applyEvent state e)
@@ -272,6 +353,7 @@ let actorProps
 
                            logError msg
                            ignored ()
+                     LifecyclePostStop = fun _ -> SaveSnapshot state
                }
                mailbox
                msg

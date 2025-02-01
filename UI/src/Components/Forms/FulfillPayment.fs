@@ -68,11 +68,30 @@ let formFulfillPlatformPayment
 let PaymentFulfillmentFormComponent
    (session: UserSession)
    (payerAccounts: Map<AccountId, Account>)
-   (commandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+   (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
    (payment: Payment)
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
+   let dailyAccrual, setDailyAccrual =
+      React.useState<Deferred<Result<CommandApprovalDailyAccrual, Err>>>
+         Deferred.InProgress
+
+   React.useEffectOnce (fun () ->
+      async {
+         let! res =
+            OrgService.getTodaysAccrualMetricsByInitiatedBy
+               session.OrgId
+               (InitiatedById session.EmployeeId)
+
+         match res with
+         | Error e -> Log.error $"Error getting employee accrual metrics {e}"
+         | _ -> ()
+
+         setDailyAccrual (Deferred.Resolved res)
+      }
+      |> Async.StartImmediate)
+
    let payerAccounts =
       payerAccounts
       |> Map.filter (fun _ a -> a.Depository = AccountDepository.Checking)
@@ -89,20 +108,6 @@ let PaymentFulfillmentFormComponent
    }
 
    let initiatedBy = InitiatedById session.EmployeeId
-
-   let payRequiresApproval =
-      CommandApprovalRule.commandTypeRequiresApproval
-         (ApprovableCommandType.ApprovableAmountBased
-            FulfillPlatformPaymentCommandType)
-         initiatedBy
-         (commandApprovalRules.Values |> Seq.toList)
-
-   let customAction =
-      match payRequiresApproval with
-      | Some _ -> "Submit Payment for Approval"
-      | None -> "Submit Payment"
-      |> Form.View.Action.SubmitOnly
-      |> Some
 
    React.fragment [
       match payment with
@@ -127,24 +132,37 @@ let PaymentFulfillmentFormComponent
             ]
          ]
 
-         AccountFormContainer {|
-            InitialValues = initValues
-            Form = formFulfillPlatformPayment payerAccounts payment initiatedBy
-            Action = customAction
-            OnSubmit =
-               fun receipt ->
-                  match payRequiresApproval, receipt.PendingCommand with
-                  | Some rule, AccountCommand.FulfillPlatformPayment cmd ->
-                     let cmd =
-                        cmd
-                        |> FulfillPlatformPayment
-                        |> ApprovableCommand.AmountBased
+         match dailyAccrual with
+         | Deferred.Resolved(Ok employeeAccrual) ->
+            AccountFormContainer {|
+               InitialValues = initValues
+               Form =
+                  formFulfillPlatformPayment payerAccounts payment initiatedBy
+               Action = Some(Form.View.Action.SubmitOnly "Submit Payment")
+               OnSubmit =
+                  fun receipt ->
+                     match receipt.PendingCommand with
+                     | AccountCommand.FulfillPlatformPayment cmd ->
+                        let cmd =
+                           cmd
+                           |> FulfillPlatformPayment
+                           |> ApprovableCommand.AmountBased
 
-                     CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
-                        session
-                        rule
-                        cmd
-                     |> onSubmitForApproval
-                  | _ -> onSubmit receipt
-         |}
+                        let requiresApproval =
+                           CommandApprovalRule.commandRequiresApproval
+                              cmd
+                              employeeAccrual
+                              rules
+
+                        match requiresApproval with
+                        | Some rule ->
+                           CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
+                              session
+                              rule
+                              cmd
+                           |> onSubmitForApproval
+                        | _ -> onSubmit receipt
+                     | _ -> ()
+            |}
+         | _ -> Html.progress []
    ]

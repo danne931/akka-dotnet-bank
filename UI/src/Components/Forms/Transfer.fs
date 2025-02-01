@@ -334,7 +334,8 @@ let TransferInternalBetweenOrgsComponent
    (destinationOrgs: Org list)
    (session: UserSession)
    (account: Account)
-   (org: OrgWithAccountProfiles)
+   (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+   (employeeAccrual: CommandApprovalDailyAccrual)
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
@@ -376,13 +377,8 @@ let TransferInternalBetweenOrgsComponent
                let requiresApproval =
                   CommandApprovalRule.commandRequiresApproval
                      cmd
-                     {
-                        InternalTransferBetweenOrgs =
-                           org.Metrics.DailyInternalTransferBetweenOrgs
-                        PaymentsPaid = 0m
-                        DomesticTransfer = 0m
-                     }
-                     (Seq.toList org.Org.CommandApprovalRules.Values)
+                     employeeAccrual
+                     rules
 
                match requiresApproval with
                | None -> onSubmit receipt
@@ -399,7 +395,8 @@ let TransferInternalBetweenOrgsComponent
 let TransferDomesticFormComponent
    (session: UserSession)
    (account: Account)
-   (org: OrgWithAccountProfiles)
+   (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+   (employeeAccrual: CommandApprovalDailyAccrual)
    (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
@@ -435,12 +432,8 @@ let TransferDomesticFormComponent
                let requiresApproval =
                   CommandApprovalRule.commandRequiresApproval
                      cmd
-                     {
-                        InternalTransferBetweenOrgs = 0m
-                        PaymentsPaid = 0m
-                        DomesticTransfer = org.Metrics.DailyDomesticTransfer
-                     }
-                     (Seq.toList org.Org.CommandApprovalRules.Values)
+                     employeeAccrual
+                     rules
 
                match requiresApproval with
                | None -> onSubmit receipt
@@ -462,6 +455,25 @@ let TransferFormComponent
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
+   let dailyAccrual, setDailyAccrual =
+      React.useState<Deferred<Result<CommandApprovalDailyAccrual, Err>>>
+         Deferred.InProgress
+
+   React.useEffectOnce (fun () ->
+      async {
+         let! res =
+            OrgService.getTodaysAccrualMetricsByInitiatedBy
+               session.OrgId
+               (InitiatedById session.EmployeeId)
+
+         match res with
+         | Error e -> Log.error $"Error getting employee accrual metrics {e}"
+         | _ -> ()
+
+         setDailyAccrual (Deferred.Resolved res)
+      }
+      |> Async.StartImmediate)
+
    let initialSelectedEnv =
       selectedRecipient
       |> Option.map fst
@@ -504,15 +516,18 @@ let TransferFormComponent
             session.OrgId
             (fun searchInput destinationOrgs ->
                match destinationOrgs with
-               | Deferred.InProgress -> Html.progress []
                | Deferred.Resolved(Ok(Some destinationOrgs)) ->
-                  TransferInternalBetweenOrgsComponent
-                     destinationOrgs
-                     session
-                     account
-                     org
-                     onSubmit
-                     onSubmitForApproval
+                  match dailyAccrual with
+                  | Deferred.Resolved(Ok accrual) ->
+                     TransferInternalBetweenOrgsComponent
+                        destinationOrgs
+                        session
+                        account
+                        org.Org.CommandApprovalRules
+                        accrual
+                        onSubmit
+                        onSubmitForApproval
+                  | _ -> Html.progress []
                | Deferred.Resolved(Ok None) ->
                   Html.p $"No orgs found by search query {searchInput}."
                | _ -> Html.none)
@@ -543,11 +558,15 @@ let TransferFormComponent
                   Router.navigate [| yield! pathArr; queryString |])
             ]
          else
-            TransferDomesticFormComponent
-               session
-               account
-               org
-               selectedRecipient
-               onSubmit
-               onSubmitForApproval
+            match dailyAccrual with
+            | Deferred.Resolved(Ok accrual) ->
+               TransferDomesticFormComponent
+                  session
+                  account
+                  org.Org.CommandApprovalRules
+                  accrual
+                  selectedRecipient
+                  onSubmit
+                  onSubmitForApproval
+            | _ -> Html.progress []
    ]

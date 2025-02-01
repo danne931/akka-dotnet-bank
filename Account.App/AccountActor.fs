@@ -12,6 +12,7 @@ open Akkling.Cluster.Sharding
 open Lib.SharedTypes
 open Lib.Types
 open ActorUtil
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
@@ -147,6 +148,7 @@ let actorProps
    (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
    (getAccountClosureActor: ActorSystem -> IActorRef<AccountClosureMessage>)
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (schedulingRef: IActorRef<SchedulingActor.Message>)
@@ -444,6 +446,7 @@ let initProps
    (system: ActorSystem)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    =
    let getOrStartInternalTransferActor mailbox =
@@ -457,6 +460,7 @@ let initProps
          EmailActor.get
          AccountClosureActor.get
          BillingStatementActor.get
+         getOrgRef
          getEmployeeRef
          (get system)
          (SchedulingActor.get system)

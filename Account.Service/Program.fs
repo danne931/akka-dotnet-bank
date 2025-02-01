@@ -100,6 +100,7 @@ builder.Services.AddAkka(
                   <| system
                   <| Env.config.AccountActorSupervisor
                   <| persistenceId
+                  <| OrgActor.get system
                   <| EmployeeActor.get system
 
                props),

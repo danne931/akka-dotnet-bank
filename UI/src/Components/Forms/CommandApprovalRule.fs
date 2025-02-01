@@ -46,7 +46,7 @@ let fieldDailyLimit =
          }
       Error = fun _ -> None
       Attributes = {
-         Label = "Daily Limit:"
+         Label = "Daily Limit Per Employee:"
          Placeholder = "Daily limit"
          HtmlAttributes = []
       }
