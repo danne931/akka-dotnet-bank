@@ -353,7 +353,10 @@ let actorProps
 
                            logError msg
                            ignored ()
-                     LifecyclePostStop = fun _ -> SaveSnapshot state
+                     LifecyclePostStop =
+                        fun _ ->
+                           logInfo mailbox $"ORG POSTSTOP {org.Name}"
+                           SaveSnapshot state
                }
                mailbox
                msg
