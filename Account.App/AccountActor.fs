@@ -421,6 +421,13 @@ let actorProps
                               (Err.DatabaseError err)
 
                            ignored ()
+                     LifecyclePostStop =
+                        fun _ ->
+                           logInfo
+                              mailbox
+                              $"ACCOUNT POSTSTOP {account.FullName} {account.AccountId}"
+
+                           ignored ()
                }
                mailbox
                msg

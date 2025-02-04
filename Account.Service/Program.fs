@@ -3,6 +3,7 @@ open Akka.Actor
 open Akka.Event
 open Akka.Hosting
 open Akka.Cluster.Hosting
+open Akka.Persistence
 open Akka.Persistence.Hosting
 open Akka.Persistence.Sql.Hosting
 open Akka.Routing
@@ -87,7 +88,10 @@ builder.Services.AddAkka(
 
                props),
             ClusterMetadata.orgShardRegion.messageExtractor,
-            ShardOptions(Role = ClusterMetadata.roles.org)
+            ShardOptions(
+               RememberEntities = true,
+               Role = ClusterMetadata.roles.org
+            )
          )
          .WithShardRegion<ActorMetadata.AccountMarker>(
             ClusterMetadata.accountShardRegion.name,
@@ -105,7 +109,10 @@ builder.Services.AddAkka(
 
                props),
             ClusterMetadata.accountShardRegion.messageExtractor,
-            ShardOptions(Role = ClusterMetadata.roles.account)
+            ShardOptions(
+               RememberEntities = true,
+               Role = ClusterMetadata.roles.account
+            )
          )
          .WithShardRegion<ActorMetadata.EmployeeMarker>(
             ClusterMetadata.employeeShardRegion.name,
@@ -225,7 +232,13 @@ builder.Services.AddAkka(
 
                   let rec loop () = actor {
                      let! (msg: AllDeadLetters) = ctx.Receive()
-                     logError ctx $"Dead letter: {msg}"
+
+                     let logMsg = $"Dead letter: {msg}"
+
+                     match msg.Message with
+                     | :? SaveSnapshotSuccess -> logWarning ctx logMsg
+                     | _ -> logError ctx logMsg
+
                      return! loop ()
                   }
 
