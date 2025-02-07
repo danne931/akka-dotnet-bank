@@ -241,7 +241,7 @@ let RegisterTransferRecipientFormComponent
          async {
             let! res =
                AccountService.getDomesticTransfersRetryableUponRecipientEdit
-                  r.AccountId
+                  r.RecipientAccountId
 
             match res with
             | Error err ->

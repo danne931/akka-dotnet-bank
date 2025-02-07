@@ -612,7 +612,7 @@ CREATE TYPE payment_network AS ENUM ('ACH');
 
 CREATE TABLE transfer_domestic_recipient(
    recipient_account_id UUID PRIMARY KEY,
-   org_id UUID REFERENCES organization,
+   sender_org_id UUID REFERENCES organization(org_id),
    first_name VARCHAR(50) NOT NULL,
    last_name VARCHAR(50) NOT NULL,
    nickname VARCHAR(100),
@@ -626,7 +626,7 @@ CREATE TABLE transfer_domestic_recipient(
 SELECT add_created_at_column('transfer_domestic_recipient');
 SELECT add_updated_at_column_and_trigger('transfer_domestic_recipient');
 
-CREATE INDEX transfer_domestic_recipient_org_id_idx ON transfer_domestic_recipient(org_id);
+CREATE INDEX transfer_domestic_recipient_sender_org_id_idx ON transfer_domestic_recipient(sender_org_id);
 
 
 --- DOMESTIC TRANSFERS ---

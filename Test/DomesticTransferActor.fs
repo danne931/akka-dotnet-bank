@@ -28,10 +28,10 @@ let initMockAccountActor (tck: TestKit.Tck) =
                | AccountCommand.UpdateDomesticTransferProgress cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
-               | AccountCommand.RejectDomesticTransfer cmd ->
+               | AccountCommand.FailDomesticTransfer cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
-               | AccountCommand.ApproveDomesticTransfer cmd ->
+               | AccountCommand.CompleteDomesticTransfer cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
                | msg -> unhandled msg
@@ -71,7 +71,7 @@ let mockTransferRequestFactory () : DomesticTransferRequest =
       else
          let status =
             match action with
-            | DomesticTransferServiceAction.TransferRequest -> "Processing"
+            | DomesticTransferServiceAction.TransferAck -> "Processing"
             | DomesticTransferServiceAction.ProgressCheck -> "Complete"
 
          let response: DomesticTransferServiceResponse = {
@@ -190,7 +190,7 @@ let tests =
 
          domesticTransferRef
          <! DomesticTransferMessage.TransferRequest(
-            DomesticTransferServiceAction.TransferRequest,
+            DomesticTransferServiceAction.TransferAck,
             txn
          )
 
@@ -213,7 +213,7 @@ let tests =
             txn
          )
 
-         let cmd = tck.ExpectMsg<ApproveDomesticTransferCommand>()
+         let cmd = tck.ExpectMsg<CompleteDomesticTransferCommand>()
 
          Expect.equal
             (AccountId.fromEntityId cmd.EntityId)
@@ -234,11 +234,11 @@ let tests =
 
          domesticTransferRef
          <! DomesticTransferMessage.TransferRequest(
-            DomesticTransferServiceAction.TransferRequest,
+            DomesticTransferServiceAction.TransferAck,
             txn
          )
 
-         let msg = tck.ExpectMsg<RejectDomesticTransferCommand>()
+         let msg = tck.ExpectMsg<FailDomesticTransferCommand>()
 
          Expect.equal
             (AccountId.fromEntityId msg.EntityId)
@@ -266,7 +266,7 @@ let tests =
 
          domesticTransferRef
          <! DomesticTransferMessage.TransferRequest(
-            DomesticTransferServiceAction.TransferRequest,
+            DomesticTransferServiceAction.TransferAck,
             txn
          )
 
@@ -304,7 +304,7 @@ let tests =
 
          domesticTransferRef
          <! DomesticTransferMessage.TransferRequest(
-            DomesticTransferServiceAction.TransferRequest,
+            DomesticTransferServiceAction.TransferAck,
             txn
          )
 
@@ -335,7 +335,7 @@ let tests =
 
          let transferMsg =
             DomesticTransferMessage.TransferRequest(
-               DomesticTransferServiceAction.TransferRequest,
+               DomesticTransferServiceAction.TransferAck,
                txn
             )
 
@@ -355,7 +355,7 @@ let tests =
          )
 
          // 1st message succeeds
-         tck.ExpectMsg<ApproveDomesticTransferCommand>() |> ignore
+         tck.ExpectMsg<CompleteDomesticTransferCommand>() |> ignore
 
          // Message 2 & 3 fail, opening the circuit breaker &
          // stashing corresponding messages.  Subsequent messages

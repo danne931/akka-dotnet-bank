@@ -30,7 +30,7 @@ let private billingCycle
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
    (mailbox: Eventsourced<obj>)
-   (state: AccountWithEvents)
+   (state: AccountSnapshot)
    (evt: BankEvent<BillingCycleStarted>)
    =
    let account = state.Info
@@ -158,10 +158,10 @@ let actorProps
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
 
-      let rec loop (stateOpt: AccountWithEvents option) = actor {
+      let rec loop (stateOpt: AccountSnapshot option) = actor {
          let! msg = mailbox.Receive()
 
-         let state = stateOpt |> Option.defaultValue AccountWithEvents.empty
+         let state = stateOpt |> Option.defaultValue AccountSnapshot.empty
 
          let account = state.Info
 
@@ -245,7 +245,7 @@ let actorProps
                         e.OrgId
                         e.InitiatedById
                         {
-                           RecipientId = info.Recipient.AccountId
+                           RecipientId = info.Recipient.RecipientAccountId
                            TransferId = info.TransferId
                            Reason = failReason
                         }
@@ -263,7 +263,7 @@ let actorProps
                         e.OrgId
                         e.InitiatedById
                         {
-                           RecipientId = info.Recipient.AccountId
+                           RecipientId = info.Recipient.RecipientAccountId
                            TransferId = info.TransferId
                         }
                      |> OrgCommand.DomesticTransferRetryConfirmsRecipient
@@ -466,7 +466,7 @@ let actorProps
 let get (sys: ActorSystem) (accountId: AccountId) : IEntityRef<AccountMessage> =
    getEntityRef sys ClusterMetadata.accountShardRegion (AccountId.get accountId)
 
-let private isPersistableMessage (msg: obj) =
+let isPersistableMessage (msg: obj) =
    match msg with
    | :? AccountMessage as msg ->
       match msg with

@@ -87,7 +87,7 @@ let actorProps
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
 
-      let rec loop (stateOpt: EmployeeWithEvents option) = actor {
+      let rec loop (stateOpt: EmployeeSnapshot option) = actor {
          let! msg = mailbox.Receive()
 
          let state =

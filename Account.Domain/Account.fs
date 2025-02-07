@@ -80,7 +80,7 @@ module TransferLimits =
 
 let private applyInternalTransferPending
    (info: BaseInternalTransferInfo)
-   (state: AccountWithEvents)
+   (state: AccountSnapshot)
    =
    let account = state.Info
    let balance = account.Balance - info.Amount
@@ -102,7 +102,7 @@ let private applyInternalTransferPending
 
 let private applyInternalTransferCompleted
    (info: BaseInternalTransferInfo)
-   (state: AccountWithEvents)
+   (state: AccountSnapshot)
    =
    {
       state with
@@ -112,7 +112,7 @@ let private applyInternalTransferCompleted
 
 let private applyInternalTransferFailed
    (info: BaseInternalTransferInfo)
-   (state: AccountWithEvents)
+   (state: AccountSnapshot)
    =
    let account = state.Info
    let balance = account.Balance + info.Amount
@@ -128,17 +128,17 @@ let private applyInternalTransferFailed
             Map.remove info.TransferId state.InProgressInternalTransfers
    }
 
-let private applyTransferDeposit (state: AccountWithEvents) (amount: decimal) = {
+let private applyTransferDeposit (state: AccountSnapshot) (amount: decimal) = {
    state with
       Info.Balance = state.Info.Balance + amount
       Info.MaintenanceFeeCriteria =
          MaintenanceFee.fromDeposit state.Info.MaintenanceFeeCriteria amount
 }
 
-let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
+let applyEvent (state: AccountSnapshot) (evt: AccountEvent) =
    let account = state.Info
 
-   let updatedState: AccountWithEvents =
+   let updatedState: AccountSnapshot =
       match evt with
       | BillingCycleStarted e -> {
          state with
@@ -346,7 +346,7 @@ module private StateTransition =
 
    let map
       (eventTransform: BankEvent<'t> -> AccountEvent)
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (eventValidation: ValidationResult<BankEvent<'t>>)
       =
       eventValidation
@@ -355,14 +355,14 @@ module private StateTransition =
          let evt = eventTransform evt
          (evt, applyEvent state evt))
 
-   let create (state: AccountWithEvents) (cmd: CreateAccountCommand) =
+   let create (state: AccountSnapshot) (cmd: CreateAccountCommand) =
       if state.Info.Status <> AccountStatus.InitialEmptyState then
          transitionErr AccountNotReadyToActivate
       else
          map CreatedAccount state (CreateAccountCommand.toEvent cmd)
 
    let startBillingcycle
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: StartBillingCycleCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
@@ -370,13 +370,13 @@ module private StateTransition =
       else
          map BillingCycleStarted state (StartBillingCycleCommand.toEvent cmd)
 
-   let deposit (state: AccountWithEvents) (cmd: DepositCashCommand) =
+   let deposit (state: AccountSnapshot) (cmd: DepositCashCommand) =
       if state.Info.Status <> AccountStatus.Active then
          transitionErr AccountNotActive
       else
          map DepositedCash state (DepositCashCommand.toEvent cmd)
 
-   let debit (state: AccountWithEvents) (cmd: DebitCommand) =
+   let debit (state: AccountSnapshot) (cmd: DebitCommand) =
       let input = cmd.Data
       let account = state.Info
 
@@ -387,7 +387,7 @@ module private StateTransition =
       else
          map DebitedAccount state (DebitCommand.toEvent cmd)
 
-   let maintenanceFee (state: AccountWithEvents) (cmd: MaintenanceFeeCommand) =
+   let maintenanceFee (state: AccountSnapshot) (cmd: MaintenanceFeeCommand) =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
@@ -398,7 +398,7 @@ module private StateTransition =
          map MaintenanceFeeDebited state (MaintenanceFeeCommand.toEvent cmd)
 
    let skipMaintenanceFee
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: SkipMaintenanceFeeCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
@@ -407,7 +407,7 @@ module private StateTransition =
          map MaintenanceFeeSkipped state (SkipMaintenanceFeeCommand.toEvent cmd)
 
    let internalTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: InternalTransferWithinOrgCommand)
       =
       let input = cmd.Data
@@ -435,7 +435,7 @@ module private StateTransition =
             (InternalTransferWithinOrgCommand.toEvent cmd)
 
    let completeInternalTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: CompleteInternalTransferWithinOrgCommand)
       =
       let account = state.Info
@@ -455,7 +455,7 @@ module private StateTransition =
             (CompleteInternalTransferWithinOrgCommand.toEvent cmd)
 
    let failInternalTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: FailInternalTransferWithinOrgCommand)
       =
       let account = state.Info
@@ -475,7 +475,7 @@ module private StateTransition =
             (FailInternalTransferWithinOrgCommand.toEvent cmd)
 
    let scheduleInternalTransferBetweenOrgs
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: ScheduleInternalTransferBetweenOrgsCommand)
       =
       let input = cmd.Data.TransferInput
@@ -492,7 +492,7 @@ module private StateTransition =
             (ScheduleInternalTransferBetweenOrgsCommand.toEvent cmd)
 
    let internalTransferBetweenOrgs
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: InternalTransferBetweenOrgsCommand)
       =
       let input = cmd.Data
@@ -518,7 +518,7 @@ module private StateTransition =
             (InternalTransferBetweenOrgsCommand.toEvent cmd)
 
    let completeInternalTransferBetweenOrgs
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: CompleteInternalTransferBetweenOrgsCommand)
       =
       let account = state.Info
@@ -538,7 +538,7 @@ module private StateTransition =
             (CompleteInternalTransferBetweenOrgsCommand.toEvent cmd)
 
    let failInternalTransferBetweenOrgs
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: FailInternalTransferBetweenOrgsCommand)
       =
       let account = state.Info
@@ -558,7 +558,7 @@ module private StateTransition =
             (FailInternalTransferBetweenOrgsCommand.toEvent cmd)
 
    let scheduleDomesticTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: ScheduleDomesticTransferCommand)
       =
       let input = cmd.Data.TransferInput
@@ -575,7 +575,7 @@ module private StateTransition =
             (ScheduleDomesticTransferCommand.toEvent cmd)
 
    let domesticTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: DomesticTransferCommand)
       =
       let input = cmd.Data
@@ -598,7 +598,7 @@ module private StateTransition =
          map DomesticTransferPending state (DomesticTransferCommand.toEvent cmd)
 
    let domesticTransferProgress
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: UpdateDomesticTransferProgressCommand)
       =
       let account = state.Info
@@ -630,7 +630,7 @@ module private StateTransition =
                   (UpdateDomesticTransferProgressCommand.toEvent cmd)
 
    let completeDomesticTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: CompleteDomesticTransferCommand)
       =
       let account = state.Info
@@ -662,7 +662,7 @@ module private StateTransition =
             (CompleteDomesticTransferCommand.toEvent cmd)
 
    let failDomesticTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: FailDomesticTransferCommand)
       =
       let account = state.Info
@@ -682,7 +682,7 @@ module private StateTransition =
             (FailDomesticTransferCommand.toEvent cmd)
 
    let depositTransferWithinOrg
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: DepositInternalTransferWithinOrgCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
@@ -692,7 +692,7 @@ module private StateTransition =
          <| (DepositInternalTransferWithinOrgCommand.toEvent cmd)
 
    let depositTransferBetweenOrgs
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: DepositInternalTransferBetweenOrgsCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
@@ -702,7 +702,7 @@ module private StateTransition =
          <| (DepositInternalTransferBetweenOrgsCommand.toEvent cmd)
 
    let platformPaymentRequested
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: RequestPlatformPaymentCommand)
       =
       let account = state.Info
@@ -716,7 +716,7 @@ module private StateTransition =
             (RequestPlatformPaymentCommand.toEvent cmd)
 
    let platformPaymentCancelled
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: CancelPlatformPaymentCommand)
       =
       let account = state.Info
@@ -730,7 +730,7 @@ module private StateTransition =
             (CancelPlatformPaymentCommand.toEvent cmd)
 
    let platformPaymentDeclined
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: DeclinePlatformPaymentCommand)
       =
       let account = state.Info
@@ -744,7 +744,7 @@ module private StateTransition =
             (DeclinePlatformPaymentCommand.toEvent cmd)
 
    let platformPaymentPaid
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: FulfillPlatformPaymentCommand)
       =
       let input = cmd.Data.RequestedPayment.BaseInfo
@@ -770,7 +770,7 @@ module private StateTransition =
             (FulfillPlatformPaymentCommand.toEvent cmd)
 
    let platformPaymentDeposited
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: DepositPlatformPaymentCommand)
       =
       let account = state.Info
@@ -783,11 +783,11 @@ module private StateTransition =
             state
             (DepositPlatformPaymentCommand.toEvent cmd)
 
-   let closeAccount (state: AccountWithEvents) (cmd: CloseAccountCommand) =
+   let closeAccount (state: AccountSnapshot) (cmd: CloseAccountCommand) =
       map AccountEvent.AccountClosed state (CloseAccountCommand.toEvent cmd)
 
    let configureAutoTransferRule
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: ConfigureAutoTransferRuleCommand)
       =
       let account = state.Info
@@ -807,7 +807,7 @@ module private StateTransition =
                (ConfigureAutoTransferRuleCommand.toEvent cmd)
 
    let deleteAutoTransferRule
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: DeleteAutoTransferRuleCommand)
       =
       let account = state.Info
@@ -821,7 +821,7 @@ module private StateTransition =
             (DeleteAutoTransferRuleCommand.toEvent cmd)
 
    let internalAutoTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: InternalAutoTransferCommand)
       =
       let input = cmd.Data.Transfer
@@ -850,7 +850,7 @@ module private StateTransition =
             (InternalAutoTransferCommand.toEvent cmd)
 
    let completeInternalAutoTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: CompleteInternalAutoTransferCommand)
       =
       let account = state.Info
@@ -870,7 +870,7 @@ module private StateTransition =
             (CompleteInternalAutoTransferCommand.toEvent cmd)
 
    let failInternalAutoTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: FailInternalAutoTransferCommand)
       =
       let account = state.Info
@@ -890,7 +890,7 @@ module private StateTransition =
             (FailInternalAutoTransferCommand.toEvent cmd)
 
    let depositInternalAutoTransfer
-      (state: AccountWithEvents)
+      (state: AccountSnapshot)
       (cmd: DepositInternalAutoTransferCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
@@ -899,7 +899,7 @@ module private StateTransition =
          map InternalAutomatedTransferDeposited state
          <| (DepositInternalAutoTransferCommand.toEvent cmd)
 
-let stateTransition (state: AccountWithEvents) (command: AccountCommand) =
+let stateTransition (state: AccountSnapshot) (command: AccountCommand) =
    match command with
    | AccountCommand.CreateAccount cmd -> StateTransition.create state cmd
    | AccountCommand.StartBillingCycle cmd ->

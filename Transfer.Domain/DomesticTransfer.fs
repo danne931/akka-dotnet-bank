@@ -67,8 +67,8 @@ type DomesticTransferRecipient = {
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
    Status: RecipientRegistrationStatus
-   AccountId: AccountId
-   OrgId: OrgId
+   RecipientAccountId: AccountId
+   SenderOrgId: OrgId
    Depository: DomesticRecipientAccountDepository
    PaymentNetwork: PaymentNetwork
    CreatedAt: DateTime

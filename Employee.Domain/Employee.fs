@@ -32,9 +32,9 @@ let dailyPurchaseAccrued = purchaseAccrued DateTime.isToday
 let monthlyPurchaseAccrued = purchaseAccrued DateTime.isThisMonth
 
 let applyEvent
-   (state: EmployeeWithEvents)
+   (state: EmployeeSnapshot)
    (evt: EmployeeEvent)
-   : EmployeeWithEvents
+   : EmployeeSnapshot
    =
    let em = state.Info
 
@@ -207,7 +207,7 @@ module private StateTransition =
 
    let map
       (eventTransform: BankEvent<'t> -> EmployeeEvent)
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (eventValidation: ValidationResult<BankEvent<'t>>)
       =
       eventValidation
@@ -217,7 +217,7 @@ module private StateTransition =
          (evt, applyEvent state evt))
 
    let createAccountOwner
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (cmd: CreateAccountOwnerCommand)
       =
       if state.Info.Status <> EmployeeStatus.InitialEmptyState then
@@ -225,20 +225,20 @@ module private StateTransition =
       else
          map CreatedAccountOwner state (CreateAccountOwnerCommand.toEvent cmd)
 
-   let create (state: EmployeeWithEvents) (cmd: CreateEmployeeCommand) =
+   let create (state: EmployeeSnapshot) (cmd: CreateEmployeeCommand) =
       if state.Info.Status <> EmployeeStatus.InitialEmptyState then
          transitionErr EmployeeNotReadyToActivate
       else
          map CreatedEmployee state (CreateEmployeeCommand.toEvent cmd)
 
-   let createCard (state: EmployeeWithEvents) (cmd: CreateCardCommand) =
+   let createCard (state: EmployeeSnapshot) (cmd: CreateCardCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotActive
       else
          map CreatedCard state (CreateCardCommand.toEvent cmd)
 
    let limitDailyDebits
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (cmd: LimitDailyDebitsCommand)
       =
       if state.Info.Status <> EmployeeStatus.Active then
@@ -247,7 +247,7 @@ module private StateTransition =
          map DailyDebitLimitUpdated state (LimitDailyDebitsCommand.toEvent cmd)
 
    let limitMonthlyDebits
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (cmd: LimitMonthlyDebitsCommand)
       =
       if state.Info.Status <> EmployeeStatus.Active then
@@ -258,22 +258,19 @@ module private StateTransition =
             state
             (LimitMonthlyDebitsCommand.toEvent cmd)
 
-   let lockCard (state: EmployeeWithEvents) (cmd: LockCardCommand) =
+   let lockCard (state: EmployeeSnapshot) (cmd: LockCardCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotActive
       else
          map LockedCard state (LockCardCommand.toEvent cmd)
 
-   let unlockCard (state: EmployeeWithEvents) (cmd: UnlockCardCommand) =
+   let unlockCard (state: EmployeeSnapshot) (cmd: UnlockCardCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotActive
       else
          map UnlockedCard state (UnlockCardCommand.toEvent cmd)
 
-   let purchasePending
-      (state: EmployeeWithEvents)
-      (cmd: PurchasePendingCommand)
-      =
+   let purchasePending (state: EmployeeSnapshot) (cmd: PurchasePendingCommand) =
       let em = state.Info
       let info = cmd.Data
 
@@ -305,7 +302,7 @@ module private StateTransition =
                map PurchasePending state (PurchasePendingCommand.toEvent cmd)
 
    let accountConfirmsPurchase
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (cmd: AccountConfirmsPurchaseCommand)
       =
       let em = state.Info
@@ -323,7 +320,7 @@ module private StateTransition =
             (AccountConfirmsPurchaseCommand.toEvent cmd)
 
    let accountRejectsPurchase
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (cmd: AccountRejectsPurchaseCommand)
       =
       let em = state.Info
@@ -340,20 +337,20 @@ module private StateTransition =
             state
             (AccountRejectsPurchaseCommand.toEvent cmd)
 
-   let updateRole (state: EmployeeWithEvents) (cmd: UpdateRoleCommand) =
+   let updateRole (state: EmployeeSnapshot) (cmd: UpdateRoleCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotActive
       else
          map UpdatedRole state (UpdateRoleCommand.toEvent cmd)
 
-   let nicknameCard (state: EmployeeWithEvents) (cmd: EditCardNicknameCommand) =
+   let nicknameCard (state: EmployeeSnapshot) (cmd: EditCardNicknameCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotActive
       else
          map CardNicknamed state (EditCardNicknameCommand.toEvent cmd)
 
    let refreshEmployeeInvitationToken
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (cmd: RefreshInvitationTokenCommand)
       =
       let em = state.Info
@@ -369,7 +366,7 @@ module private StateTransition =
          <| EmployeeStatusDisallowsInviteProgression(string em.Status)
 
    let cancelEmployeeInvitation
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (cmd: CancelInvitationCommand)
       =
       let em = state.Info
@@ -383,7 +380,7 @@ module private StateTransition =
          <| EmployeeStatusDisallowsInviteProgression(string em.Status)
 
    let confirmEmployeeInvitation
-      (state: EmployeeWithEvents)
+      (state: EmployeeSnapshot)
       (cmd: ConfirmInvitationCommand)
       =
       let em = state.Info
@@ -395,7 +392,7 @@ module private StateTransition =
          transitionErr
          <| EmployeeStatusDisallowsInviteProgression(string em.Status)
 
-   let approveAccess (state: EmployeeWithEvents) (cmd: ApproveAccessCommand) =
+   let approveAccess (state: EmployeeSnapshot) (cmd: ApproveAccessCommand) =
       let em = state.Info
 
       match em.Status with
@@ -405,7 +402,7 @@ module private StateTransition =
          transitionErr
          <| EmployeeStatusDisallowsInviteProgression(string em.Status)
 
-   let restoreAccess (state: EmployeeWithEvents) (cmd: RestoreAccessCommand) =
+   let restoreAccess (state: EmployeeSnapshot) (cmd: RestoreAccessCommand) =
       let em = state.Info
 
       if em.Status <> EmployeeStatus.Closed then
@@ -413,7 +410,7 @@ module private StateTransition =
       else
          map AccessRestored state (RestoreAccessCommand.toEvent cmd)
 
-let stateTransition (state: EmployeeWithEvents) (command: EmployeeCommand) =
+let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
    match command with
    | EmployeeCommand.CreateAccountOwner cmd ->
       StateTransition.createAccountOwner state cmd

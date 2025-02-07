@@ -50,8 +50,8 @@ module TransferFields =
 
    // Specific to domestic_transfer_recipient table
    module DomesticRecipient =
-      let accountId = "recipient_account_id"
-      let orgId = "org_id"
+      let recipientAccountId = "recipient_account_id"
+      let senderOrgId = "sender_org_id"
       let firstName = "first_name"
       let lastName = "last_name"
       let nickname = "nickname"
@@ -101,10 +101,13 @@ module TransferSqlReader =
          TransferFields.Internal.recipientAccountId |> read.uuid |> AccountId
 
    module DomesticRecipient =
-      let accountId (read: RowReader) =
-         TransferFields.DomesticRecipient.accountId |> read.uuid |> AccountId
+      let recipientAccountId (read: RowReader) =
+         TransferFields.DomesticRecipient.recipientAccountId
+         |> read.uuid
+         |> AccountId
 
-      let orgId = OrgSqlReader.orgId
+      let senderOrgId (read: RowReader) =
+         TransferFields.DomesticRecipient.senderOrgId |> read.uuid |> OrgId
 
       let firstName (read: RowReader) =
          TransferFields.DomesticRecipient.firstName |> read.string
@@ -140,8 +143,8 @@ module TransferSqlReader =
          AccountNumber = accountNumber read
          RoutingNumber = routingNumber read
          Status = status read
-         AccountId = accountId read
-         OrgId = orgId read
+         RecipientAccountId = recipientAccountId read
+         SenderOrgId = senderOrgId read
          Depository = depository read
          PaymentNetwork = paymentNetwork read
          CreatedAt = createdAt read
@@ -218,8 +221,8 @@ module TransferSqlWriter =
       let recipientAccountId = AccountSqlWriter.accountId
 
    module DomesticRecipient =
-      let accountId = AccountSqlWriter.accountId
-      let orgId = OrgSqlWriter.orgId
+      let recipientAccountId = AccountSqlWriter.accountId
+      let senderOrgId = OrgSqlWriter.orgId
       let firstName = Sql.string
       let lastName = Sql.string
       let nickname = Sql.stringOrNone
@@ -260,7 +263,6 @@ module Query =
          a.{AccountFields.name},
          a.{AccountFields.accountNumber} as sender_account_number,
          a.{AccountFields.routingNumber} as sender_routing_number,
-         a.{AccountFields.orgId},
          a.{AccountFields.accountId}
       FROM {Table.domesticTransfer} dt
       JOIN {Table.domesticRecipient} dr using({TransferFields.Domestic.recipientAccountId})
@@ -272,8 +274,8 @@ module Query =
    let domesticTransferRecipient =
       $"""
       SELECT
-         dr.{TransferFields.DomesticRecipient.accountId},
-         dr.{TransferFields.DomesticRecipient.orgId},
+         dr.{TransferFields.DomesticRecipient.recipientAccountId},
+         dr.{TransferFields.DomesticRecipient.senderOrgId},
          dr.{TransferFields.DomesticRecipient.firstName},
          dr.{TransferFields.DomesticRecipient.lastName},
          dr.{TransferFields.DomesticRecipient.nickname},

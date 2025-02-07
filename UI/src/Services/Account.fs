@@ -75,7 +75,7 @@ let submitCommand
       // This same validation occurs on the server when an actor is
       // processing a command.
       let state = {
-         AccountWithEvents.empty with
+         AccountSnapshot.empty with
             Info = account
       }
 

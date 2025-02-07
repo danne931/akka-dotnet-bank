@@ -96,7 +96,7 @@ let transactionUIFriendly
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      UIDomain.Org.domesticRecipientName org recipientFromEvt.AccountId
+      UIDomain.Org.domesticRecipientName org recipientFromEvt.RecipientAccountId
       |> Option.defaultValue recipientFromEvt.FullName
 
    match txn with

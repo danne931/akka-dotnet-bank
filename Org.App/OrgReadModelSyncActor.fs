@@ -37,9 +37,11 @@ let private domesticRecipientReducer
    (recipient: DomesticTransferRecipient)
    =
    let qParams = [
-      "accountId",
-      TransferSqlWriter.DomesticRecipient.accountId recipient.AccountId
-      "orgId", TransferSqlWriter.DomesticRecipient.orgId recipient.OrgId
+      "recipientAccountId",
+      TransferSqlWriter.DomesticRecipient.recipientAccountId
+         recipient.RecipientAccountId
+      "senderOrgId",
+      TransferSqlWriter.DomesticRecipient.senderOrgId recipient.SenderOrgId
       "lastName",
       TransferSqlWriter.DomesticRecipient.lastName recipient.LastName
       "firstName",
@@ -332,7 +334,8 @@ let sqlParamReducer
    | OrgEvent.NicknamedDomesticTransferRecipient e ->
       let qParams = [
          "accountId",
-         TransferSqlWriter.DomesticRecipient.accountId e.Data.RecipientId
+         TransferSqlWriter.DomesticRecipient.recipientAccountId
+            e.Data.RecipientId
          "nickname",
          TransferSqlWriter.DomesticRecipient.nickname e.Data.Nickname
       ]
@@ -351,7 +354,8 @@ let sqlParamReducer
 
       let qParams = [
          "recipientAccountId",
-         TransferSqlWriter.DomesticRecipient.accountId e.Data.RecipientId
+         TransferSqlWriter.DomesticRecipient.recipientAccountId
+            e.Data.RecipientId
 
          "status", TransferSqlWriter.DomesticRecipient.status updatedStatus
       ]
@@ -364,7 +368,8 @@ let sqlParamReducer
    | OrgEvent.DomesticTransferRetryConfirmsRecipient e ->
       let qParams = [
          "recipientAccountId",
-         TransferSqlWriter.DomesticRecipient.accountId e.Data.RecipientId
+         TransferSqlWriter.DomesticRecipient.recipientAccountId
+            e.Data.RecipientId
 
          "status",
          TransferSqlWriter.DomesticRecipient.status
@@ -606,8 +611,8 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
       if not sqlParams.DomesticTransferRecipient.IsEmpty then
          $"""
          INSERT into {TransferSqlMapper.Table.domesticRecipient}
-            ({TransferFields.DomesticRecipient.accountId},
-             {TransferFields.DomesticRecipient.orgId},
+            ({TransferFields.DomesticRecipient.recipientAccountId},
+             {TransferFields.DomesticRecipient.senderOrgId},
              {TransferFields.DomesticRecipient.firstName},
              {TransferFields.DomesticRecipient.lastName},
              {TransferFields.DomesticRecipient.nickname},
@@ -617,8 +622,8 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
              {TransferFields.DomesticRecipient.depository},
              {TransferFields.DomesticRecipient.paymentNetwork})
          VALUES
-            (@accountId,
-             @orgId,
+            (@recipientAccountId,
+             @senderOrgId,
              @firstName,
              @lastName,
              @nickname,
@@ -627,7 +632,7 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
              @status::{TransferTypeCast.domesticRecipientStatus},
              @depository::{TransferTypeCast.domesticRecipientAccountDepository},
              @paymentNetwork::{TransferTypeCast.paymentNetwork})
-         ON CONFLICT ({TransferFields.DomesticRecipient.accountId})
+         ON CONFLICT ({TransferFields.DomesticRecipient.recipientAccountId})
          DO UPDATE SET
             {TransferFields.DomesticRecipient.firstName} = @firstName,
             {TransferFields.DomesticRecipient.lastName} = @lastName,
@@ -647,7 +652,7 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
          $"""
          UPDATE {TransferSqlMapper.Table.domesticRecipient}
          SET {TransferFields.DomesticRecipient.status} = @status::{TransferTypeCast.domesticRecipientStatus}
-         WHERE {TransferFields.DomesticRecipient.accountId} = @recipientAccountId;
+         WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
          """,
          sqlParams.UpdatedDomesticTransferRecipientStatus
    ]

@@ -104,7 +104,7 @@ let orgHistoryUIFriendly (org: Org) (evt: OrgEvent) : OrgHistoryUIFriendly =
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      domesticRecipientName org recipientFromEvt.AccountId
+      domesticRecipientName org recipientFromEvt.RecipientAccountId
       |> Option.defaultValue recipientFromEvt.FullName
 
    match evt with

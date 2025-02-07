@@ -141,14 +141,14 @@ module Org =
       DomesticTransferRecipients = Map.empty
    }
 
-type OrgWithEvents = {
+type OrgSnapshot = {
    Info: Org
    Events: OrgEvent list
    AccrualMetrics: Map<CorrelationId, OrgAccrualMetric>
 }
 
-module OrgWithEvents =
-   let empty: OrgWithEvents = {
+module OrgSnapshot =
+   let empty: OrgSnapshot = {
       Info = Org.empty
       Events = []
       AccrualMetrics = Map.empty

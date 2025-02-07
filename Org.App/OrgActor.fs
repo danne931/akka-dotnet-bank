@@ -105,7 +105,7 @@ let private hasAccruableTransaction
 // due to exceeding the daily limit for a particular employee issuing
 // a command.
 let private updateStateWithAccruableTransaction
-   (state: OrgWithEvents)
+   (state: OrgSnapshot)
    (metrics: OrgAccrualMetric)
    =
    {
@@ -116,7 +116,7 @@ let private updateStateWithAccruableTransaction
 
 // Undo the accrual associated with a command if the command is declined.
 let private updateStateWithAccrualReversal
-   (state: OrgWithEvents)
+   (state: OrgSnapshot)
    (correlationId: CorrelationId)
    =
    {
@@ -202,10 +202,10 @@ let actorProps
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
 
-      let rec loop (stateOpt: OrgWithEvents option) = actor {
+      let rec loop (stateOpt: OrgSnapshot option) = actor {
          let! msg = mailbox.Receive()
 
-         let state = stateOpt |> Option.defaultValue OrgWithEvents.empty
+         let state = stateOpt |> Option.defaultValue OrgSnapshot.empty
 
          let org = state.Info
 
@@ -307,7 +307,7 @@ let actorProps
                      getDomesticTransfersRetryableUponRecipientEdit
                      mailbox
 
-               aref <! e.Data.Recipient.AccountId
+               aref <! e.Data.Recipient.RecipientAccountId
             | _ -> ()
 
             let state =
@@ -446,7 +446,7 @@ let actorProps
 let get (sys: ActorSystem) (orgId: OrgId) : IEntityRef<OrgMessage> =
    getEntityRef sys ClusterMetadata.orgShardRegion (OrgId.get orgId)
 
-let private isPersistableMessage (msg: obj) =
+let isPersistableMessage (msg: obj) =
    match msg with
    | :? OrgMessage as msg ->
       match msg with
