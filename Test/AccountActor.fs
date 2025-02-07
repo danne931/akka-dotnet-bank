@@ -68,9 +68,9 @@ let initMockEmployeeActor (tck: TestKit.Tck) =
          match envelope.Message with
          | :? EmployeeMessage as msg ->
             match msg with
-            | EmployeeMessage.StateChange(EmployeeCommand.DeclineDebit cmd) ->
+            | EmployeeMessage.StateChange(EmployeeCommand.AccountRejectsPurchase cmd) ->
                cmd
-               |> EmployeeCommand.DeclineDebit
+               |> EmployeeCommand.AccountRejectsPurchase
                |> EmployeeMessage.StateChange
                |> tck.TestActor.Tell
                |> ignored
@@ -228,9 +228,9 @@ let tests =
          let msg = tck.ExpectMsg<EmployeeMessage>()
 
          match msg with
-         | EmployeeMessage.StateChange(EmployeeCommand.DeclineDebit cmd) ->
+         | EmployeeMessage.StateChange(EmployeeCommand.AccountRejectsPurchase cmd) ->
             match cmd.Data.Reason with
-            | PurchaseDeclinedReason.InsufficientAccountFunds _ ->
+            | PurchaseFailReason.InsufficientAccountFunds _ ->
                Expect.isTrue true ""
             | _ ->
                Expect.isTrue
@@ -290,26 +290,7 @@ let tests =
          o.accountActor
          <! AccountMessage.StateChange(initialDepositCommand 2000m)
 
-         let msg =
-            Stub.command.registerDomesticRecipient
-            |> AccountCommand.RegisterDomesticTransferRecipient
-            |> AccountMessage.StateChange
-
-         o.accountActor <! msg
-
-         o.accountActor <! AccountMessage.GetAccount
-         let state = tck.ExpectMsg<Option<Account>>()
-         let account = Expect.wantSome state ""
-
-         let recipientStubIdOverride =
-            account.DomesticTransferRecipients.Head().Key
-
          let transfer = Stub.command.domesticTransfer 31m
-
-         let transfer = {
-            transfer with
-               Data.Recipient.AccountId = recipientStubIdOverride
-         }
 
          let cmd = AccountCommand.DomesticTransfer transfer
 

@@ -197,7 +197,7 @@ let AccountActionsComponent
 
                   let redirectTo =
                      (RecipientAccountEnvironment.Domestic,
-                      e.Data.Recipient.AccountId)
+                      e.Data.Recipient.RecipientAccountId)
                      |> Some
                      |> AccountActionView.Transfer
                      |> Some

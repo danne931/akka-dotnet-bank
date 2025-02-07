@@ -123,8 +123,8 @@ let tests =
             "A pending transfer decrements balance"
 
          let cmd =
-            AccountCommand.ApproveInternalTransfer
-               Stub.command.approveInternalTransfer
+            AccountCommand.CompleteInternalTransfer
+               Stub.command.completeInternalTransfer
 
          let res = update state cmd
          let _, state = Expect.wantOk res "should be Result.Ok"
@@ -135,7 +135,7 @@ let tests =
             "Approving a transfer does not decrement balance"
       }
 
-      test "RejectTransferCommand updates balance" {
+      test "FailTransferCommand updates balance" {
          let res =
             update initState
             <| AccountCommand.InternalTransfer(
@@ -144,9 +144,9 @@ let tests =
 
          let _, state = Expect.wantOk res "should be Result.Ok"
 
-         let command = Stub.command.rejectInternalTransfer 101m
+         let command = Stub.command.failInternalTransfer 101m
 
-         let res = update state <| AccountCommand.RejectInternalTransfer command
+         let res = update state <| AccountCommand.FailInternalTransfer command
 
          let _, state = Expect.wantOk res "should be Result.Ok"
 
@@ -156,7 +156,7 @@ let tests =
             "should add the transfer amount back to the balance"
       }
 
-      test "RejectTransferCommand recomputes maintenance fee" {
+      test "FailTransferCommand recomputes maintenance fee" {
          let initState = {
             initState with
                Info.Balance = MaintenanceFee.DailyBalanceThreshold + 100m
@@ -175,9 +175,9 @@ let tests =
             false
             "the transfer should invalidate the daily balance threshold"
 
-         let command = Stub.command.rejectInternalTransfer amount
+         let command = Stub.command.failInternalTransfer amount
 
-         let res = update state <| AccountCommand.RejectInternalTransfer command
+         let res = update state <| AccountCommand.FailInternalTransfer command
 
          let _, state = Expect.wantOk res "should be Result.Ok"
 
@@ -329,9 +329,9 @@ let tests =
             transferAmount
             "DailyInternalTransferAccrued should accrue transfers for the day"
 
-         let cmd = Stub.command.rejectInternalTransfer transferAmount
+         let cmd = Stub.command.failInternalTransfer transferAmount
 
-         let res = update state <| AccountCommand.RejectInternalTransfer cmd
+         let res = update state <| AccountCommand.FailInternalTransfer cmd
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          Expect.equal
@@ -341,27 +341,11 @@ let tests =
       }
 
       test "Domestic transfers accrue a daily transfer balance" {
-         let res =
-            update
-               initState
-               (AccountCommand.RegisterDomesticTransferRecipient
-                  Stub.command.registerDomesticRecipient)
-
-         let (AccountEvent.DomesticTransferRecipient evt), state =
-            Expect.wantOk res "should be Result.Ok"
-
-         let recipientStubIdOverride = evt.Data.Recipient.AccountId
-
          let updates =
             List.fold
                (fun acc amount ->
                   let account, total = acc
                   let cmd = Stub.command.domesticTransfer amount
-
-                  let cmd = {
-                     cmd with
-                        Data.Recipient.AccountId = recipientStubIdOverride
-                  }
 
                   let res =
                      update account <| AccountCommand.DomesticTransfer cmd
@@ -369,7 +353,7 @@ let tests =
                   let _, newState = Expect.wantOk res "should be Result.Ok"
 
                   newState, total + amount)
-               (state, 0m)
+               (initState, 0m)
                [ 25m; 30m; 100m ]
 
          let newState, transferTotal = updates
@@ -386,7 +370,6 @@ let tests =
                // TODO
                Data.ScheduledDateSeedOverride =
                   Some(DateTime.UtcNow.AddDays(-1))
-               Data.Recipient.AccountId = recipientStubIdOverride
          }
 
          let res = update newState <| AccountCommand.DomesticTransfer command
@@ -399,24 +382,10 @@ let tests =
       }
 
       test "Rejected domestic transfers are removed from daily transfer accrual" {
-         let res =
-            update
-               initState
-               (AccountCommand.RegisterDomesticTransferRecipient
-                  Stub.command.registerDomesticRecipient)
-
-         let (AccountEvent.DomesticTransferRecipient evt), state =
-            Expect.wantOk res "should be Result.Ok"
-
          let transferAmount = 100m
          let command = Stub.command.domesticTransfer transferAmount
 
-         let command = {
-            command with
-               Data.Recipient.AccountId = evt.Data.Recipient.AccountId
-         }
-
-         let res = update state <| AccountCommand.DomesticTransfer command
+         let res = update initState <| AccountCommand.DomesticTransfer command
 
          let (AccountEvent.DomesticTransferPending transferPendingEvt), state =
             Expect.wantOk res "should be Result.Ok"
@@ -427,16 +396,16 @@ let tests =
             "DailyDomesticTransferAccrued should accrue transfers for the day"
 
          let cmd =
-            RejectDomesticTransferCommand.create
+            FailDomesticTransferCommand.create
                state.Info.CompositeId
                transferPendingEvt.CorrelationId
                transferPendingEvt.InitiatedById
                {
                   BaseInfo = transferPendingEvt.Data.BaseInfo
-                  Reason = DomesticTransferDeclinedReason.AccountClosed
+                  Reason = DomesticTransferFailReason.AccountClosed
                }
 
-         let res = update state <| AccountCommand.RejectDomesticTransfer cmd
+         let res = update state <| AccountCommand.FailDomesticTransfer cmd
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          Expect.equal
@@ -541,8 +510,6 @@ let tests =
             AccountCommand.DepositCash <| Stub.command.depositCash 10m
             AccountCommand.InternalTransfer <| Stub.command.internalTransfer 33m
             AccountCommand.DomesticTransfer <| Stub.command.domesticTransfer 31m
-            AccountCommand.RegisterDomesticTransferRecipient
-            <| Stub.command.registerDomesticRecipient
             AccountCommand.DepositTransferWithinOrg
             <| Stub.command.depositTransfer 931m
             AccountCommand.MaintenanceFee Stub.command.maintenanceFee

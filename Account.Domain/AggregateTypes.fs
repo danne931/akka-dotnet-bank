@@ -342,7 +342,7 @@ type Account = {
       AutoTransferRule = None
    }
 
-type AccountWithEvents = {
+type AccountSnapshot = {
    Info: Account
    Events: AccountEvent list
    // TODO: Add Scheduled transfer fields & probably change these
@@ -352,8 +352,8 @@ type AccountWithEvents = {
    FailedDomesticTransfers: Map<TransferId, DomesticTransfer>
 }
 
-module AccountWithEvents =
-   let empty: AccountWithEvents = {
+module AccountSnapshot =
+   let empty: AccountSnapshot = {
       Info = Account.empty
       Events = []
       InProgressInternalTransfers = Map.empty

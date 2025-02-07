@@ -6,6 +6,7 @@ open Akkling
 open Akkling.Cluster.Sharding
 open Akka.Actor
 open Akka.Persistence.Extras
+open System.Threading.Tasks
 
 open Util
 open ActorUtil
@@ -86,6 +87,9 @@ let mockPersistenceSupervisorProps
 
    props init
 
+let getRetryableDomesticTransfers (recipientId: AccountId) =
+   Task.FromResult(Ok None)
+
 let init (tck: TestKit.Tck) =
    let getEmployeeRef = getEmployeeEntityRef (initMockEmployeeActor tck)
 
@@ -93,15 +97,20 @@ let init (tck: TestKit.Tck) =
 
    let prop =
       mockPersistenceSupervisorProps (fun ctx ->
-         spawn ctx ActorMetadata.org.Name
-         <| OrgActor.actorProps getEmployeeRef getAccountRef)
+         let orgProps =
+            OrgActor.actorProps
+               getEmployeeRef
+               getAccountRef
+               getRetryableDomesticTransfers
+
+         spawn ctx ActorMetadata.org.Name orgProps)
 
    let orgActor = spawn tck ActorMetadata.employee.Name prop
 
    {| orgActor = orgActor |}
 
 let setupOrg (tck: TestKit.Tck) (orgActor: IActorRef<OrgMessage>) =
-   let cmd = Stub.createOrgCommand |> OrgCommand.CreateOrg
+   let cmd = OrgCommand.CreateOrg Stub.command.createOrg
    let msg = OrgMessage.StateChange cmd
    orgActor <! msg
 
@@ -152,9 +161,9 @@ let setupApprovalRequest
    let cmd =
       match cmdType with
       | ApprovableCommandType.ApprovablePerCommand UpdateEmployeeRoleCommandType ->
-         Stub.updateRoleCommand
+         Stub.command.updateRole
       | ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType ->
-         Stub.inviteEmployeeCommand
+         Stub.command.inviteEmployee
       | _ -> failwith $"Unhandled command type in setupApprovalRequest"
 
    orgActor <! OrgMessage.ApprovableRequest cmd
@@ -198,7 +207,7 @@ let tests =
          let o = init tck
          setupOrg tck o.orgActor
 
-         let cmd = Stub.updateRoleCommand
+         let cmd = Stub.command.updateRole
          let msg = OrgMessage.ApprovableRequest cmd
 
          o.orgActor <! msg

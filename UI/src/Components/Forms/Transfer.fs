@@ -411,7 +411,7 @@ let TransferDomesticFormComponent
       | _ ->
          org.DomesticTransferRecipients.Values
          |> Seq.tryHead
-         |> Option.map (_.AccountId >> string)
+         |> Option.map (_.RecipientAccountId >> string)
          |> Option.defaultValue ""
 
    AccountFormContainer {|

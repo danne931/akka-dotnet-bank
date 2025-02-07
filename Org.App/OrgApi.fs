@@ -66,11 +66,11 @@ let getDomesticTransferRecipients
    pgQuery<DomesticTransferRecipient>
       $"""
       {TransferSqlMapper.Query.domesticTransferRecipient}
-      WHERE dr.{TransferSqlMapper.TransferFields.DomesticRecipient.orgId} = @orgId
+      WHERE dr.{TransferSqlMapper.TransferFields.DomesticRecipient.senderOrgId} = @orgId
       """
       (Some [
          "orgId",
-         TransferSqlMapper.TransferSqlWriter.DomesticRecipient.orgId orgId
+         TransferSqlMapper.TransferSqlWriter.DomesticRecipient.senderOrgId orgId
       ])
       TransferSqlMapper.TransferSqlReader.DomesticRecipient.recipient
 
@@ -217,7 +217,8 @@ let getOrgAndAccountProfiles
                | Some recipients -> {
                   org with
                      DomesticTransferRecipients =
-                        [ for r in recipients -> r.AccountId, r ] |> Map.ofList
+                        [ for r in recipients -> r.RecipientAccountId, r ]
+                        |> Map.ofList
                  }
 
             Some {

@@ -66,7 +66,7 @@ let billingTransactions (period: BillingPeriod) (evts: AccountEvent list) =
 open System.Text.Json
 
 let billingStatement
-   (state: AccountWithEvents)
+   (state: AccountSnapshot)
    (period: BillingPeriod)
    (lastPersistedEventSequenceNumber: Int64)
    : BillingStatement

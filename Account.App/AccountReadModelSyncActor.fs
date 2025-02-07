@@ -63,7 +63,7 @@ let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
    "amount", TransferSqlWriter.amount o.Amount
 
    "recipientAccountId",
-   TransferSqlWriter.Domestic.recipientAccountId o.Recipient.AccountId
+   TransferSqlWriter.Domestic.recipientAccountId o.Recipient.RecipientAccountId
 
    "memo", TransferSqlWriter.memo o.Memo
 ]

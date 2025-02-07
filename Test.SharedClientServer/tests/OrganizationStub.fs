@@ -6,41 +6,68 @@ open System
 open Lib.SharedTypes
 open Bank.Org.Domain
 open Bank.Employee.Domain
+open Bank.Transfer.Domain
 
 let orgId = Guid.NewGuid() |> OrgId
 let ruleId () = Guid.NewGuid() |> CommandApprovalRuleId
+let initiatedById = Guid.NewGuid() |> EmployeeId |> InitiatedById
 
 let progressId () =
    Guid.NewGuid() |> CorrelationId |> CommandApprovalProgressId
 
-let updateRoleCommand =
-   UpdateRoleCommand.create
-      (Guid.NewGuid() |> EmployeeId, orgId)
-      (Guid.NewGuid() |> EmployeeId |> InitiatedById)
-      {
-         Name = ""
-         Role = Role.Admin
-         PriorRole = Role.Scholar
-         CardInfo = None
+let domesticRecipient: DomesticTransferRecipient = {
+   SenderOrgId = orgId
+   LastName = "fish"
+   FirstName = "big"
+   Nickname = None
+   AccountNumber = AccountNumber <| Int64.Parse "123456789123456"
+   RoutingNumber = RoutingNumber 123456789
+   Status = RecipientRegistrationStatus.Confirmed
+   RecipientAccountId = Guid.NewGuid() |> AccountId
+   Depository = DomesticRecipientAccountDepository.Checking
+   PaymentNetwork = PaymentNetwork.ACH
+   CreatedAt = DateTime.UtcNow
+}
+
+let command = {|
+   updateRole =
+      UpdateRoleCommand.create
+         (Guid.NewGuid() |> EmployeeId, orgId)
+         (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+         {
+            Name = ""
+            Role = Role.Admin
+            PriorRole = Role.Scholar
+            CardInfo = None
+         }
+      |> UpdateEmployeeRole
+      |> ApprovableCommand.PerCommand
+
+   inviteEmployee =
+      ApproveAccessCommand.create
+         (Guid.NewGuid() |> EmployeeId, orgId)
+         (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+         (Guid.NewGuid() |> CorrelationId)
+         { Name = "Dan E"; Reference = None }
+      |> InviteEmployee
+      |> ApprovableCommand.PerCommand
+   createOrg =
+      CreateOrgCommand.create {
+         OrgId = orgId
+         Name = "new org"
+         InitiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById
       }
-   |> UpdateEmployeeRole
-   |> ApprovableCommand.PerCommand
-
-let inviteEmployeeCommand =
-   ApproveAccessCommand.create
-      (Guid.NewGuid() |> EmployeeId, orgId)
-      (Guid.NewGuid() |> EmployeeId |> InitiatedById)
-      (Guid.NewGuid() |> CorrelationId)
-      { Name = "Dan E"; Reference = None }
-   |> InviteEmployee
-   |> ApprovableCommand.PerCommand
-
-let createOrgCommand =
-   CreateOrgCommand.create {
-      OrgId = orgId
-      Name = "new org"
-      InitiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById
-   }
+   registerDomesticRecipient =
+      RegisterDomesticTransferRecipientCommand.create orgId initiatedById {
+         AccountId = Guid.NewGuid() |> AccountId
+         FirstName = domesticRecipient.FirstName
+         LastName = domesticRecipient.LastName
+         AccountNumber = string domesticRecipient.AccountNumber
+         RoutingNumber = string domesticRecipient.RoutingNumber
+         Depository = DomesticRecipientAccountDepository.Checking
+         PaymentNetwork = PaymentNetwork.ACH
+      }
+|}
 
 let progress (cmd: ApprovableCommand) : CommandApprovalProgress.T = {
    ProgressId = progressId ()
@@ -64,7 +91,7 @@ let accrual: CommandApprovalDailyAccrual = {
    InternalTransferBetweenOrgs = 0m
 }
 
-let orgStateWithEvents: OrgWithEvents = {
+let orgStateWithEvents: OrgSnapshot = {
    Info = {
       Name = "Sapphire Health"
       OrgId = orgId
@@ -74,6 +101,7 @@ let orgStateWithEvents: OrgWithEvents = {
       }
       CommandApprovalRules = Map.empty
       CommandApprovalProgress = Map.empty
+      DomesticTransferRecipients = Map.empty
    }
    Events = []
    AccrualMetrics = Map.empty

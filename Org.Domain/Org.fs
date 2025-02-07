@@ -81,7 +81,7 @@ let dailyAccrual
          DomesticTransfer = 0m
       }
 
-let commandRequiresApproval (cmd: ApprovableCommand) (state: OrgWithEvents) =
+let commandRequiresApproval (cmd: ApprovableCommand) (state: OrgSnapshot) =
    let accrual = dailyAccrual cmd.InitiatedBy state.AccrualMetrics
 
    CommandApprovalProgress.commandRequiresApproval
@@ -97,7 +97,7 @@ let commandRequiresApproval (cmd: ApprovableCommand) (state: OrgWithEvents) =
 // No need to keep them around otherwise, especially as they are persisted
 // as events in the akka_event_journal as well as a read model
 // organization_event table.
-let private trimExcess (state: OrgWithEvents) : OrgWithEvents =
+let private trimExcess (state: OrgSnapshot) : OrgSnapshot =
    let dateWithinLookbackPeriod (date: DateTime) =
       date.ToUniversalTime() > DateTime.UtcNow.AddDays(-2.)
 
@@ -126,7 +126,7 @@ let private trimExcess (state: OrgWithEvents) : OrgWithEvents =
       }
    }
 
-let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
+let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
    let org = state.Info
 
    let updatedOrg =
@@ -261,7 +261,7 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
             org with
                DomesticTransferRecipients =
                   org.DomesticTransferRecipients.Add(
-                     recipient.AccountId,
+                     recipient.RecipientAccountId,
                      recipient
                   )
          }
@@ -272,7 +272,7 @@ let applyEvent (state: OrgWithEvents) (evt: OrgEvent) =
             org with
                DomesticTransferRecipients =
                   org.DomesticTransferRecipients.Change(
-                     recipient.AccountId,
+                     recipient.RecipientAccountId,
                      Option.map (fun _ -> recipient)
                   )
          }
@@ -330,7 +330,7 @@ module private StateTransition =
 
    let map
       (eventTransform: BankEvent<'t> -> OrgEvent)
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (eventValidation: ValidationResult<BankEvent<'t>>)
       =
       eventValidation
@@ -339,14 +339,14 @@ module private StateTransition =
          let evt = eventTransform evt
          (evt, applyEvent state evt))
 
-   let create (state: OrgWithEvents) (cmd: CreateOrgCommand) =
+   let create (state: OrgSnapshot) (cmd: CreateOrgCommand) =
       if state.Info.Status <> OrgStatus.InitialEmptyState then
          transitionErr OrgStateTransitionError.OrgNotReadyToStartOnboarding
       else
          map OrgCreated state (CreateOrgCommand.toEvent cmd)
 
    let finalizeOnboarding
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: FinalizeOrgOnboardingCommand)
       =
       if state.Info.Status <> OrgStatus.PendingOnboardingTasksFulfilled then
@@ -358,7 +358,7 @@ module private StateTransition =
             (FinalizeOrgOnboardingCommand.toEvent cmd)
 
    let configureFeatureFlag
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: ConfigureFeatureFlagCommand)
       =
       if state.Info.Status <> OrgStatus.Active then
@@ -371,7 +371,7 @@ module private StateTransition =
 
    /// Create/Edit command approval rule
    let configureCommandApprovalRule
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: CommandApprovalRule.ConfigureApprovalRuleCommand)
       =
       let org = state.Info
@@ -410,7 +410,7 @@ module private StateTransition =
                (CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd)
 
    let deleteCommandApprovalRule
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: CommandApprovalRule.DeleteApprovalRuleCommand)
       =
       let org = state.Info
@@ -428,7 +428,7 @@ module private StateTransition =
                (CommandApprovalRule.DeleteApprovalRuleCommand.toEvent cmd)
 
    let requestCommandApproval
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: CommandApprovalProgress.RequestCommandApproval)
       =
       let org = state.Info
@@ -445,7 +445,7 @@ module private StateTransition =
                (CommandApprovalProgress.RequestCommandApproval.toEvent cmd)
 
    let acquireCommandApproval
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: CommandApprovalProgress.AcquireCommandApproval)
       =
       let org = state.Info
@@ -489,7 +489,7 @@ module private StateTransition =
                   (CommandApprovalProgress.AcquireCommandApproval.toEvent cmd)
 
    let declineCommandApproval
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: CommandApprovalProgress.DeclineCommandApproval)
       =
       let org = state.Info
@@ -514,7 +514,7 @@ module private StateTransition =
                (CommandApprovalProgress.DeclineCommandApproval.toEvent cmd)
 
    let terminateCommandApproval
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: CommandApprovalProgress.TerminateCommandApproval)
       =
       let org = state.Info
@@ -534,7 +534,7 @@ module private StateTransition =
                (CommandApprovalProgress.TerminateCommandApproval.toEvent cmd)
 
    let registerDomesticTransferRecipient
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: RegisterDomesticTransferRecipientCommand)
       =
       let org = state.Info
@@ -553,7 +553,7 @@ module private StateTransition =
          <| RegisterDomesticTransferRecipientCommand.toEvent cmd
 
    let editDomesticTransferRecipient
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: EditDomesticTransferRecipientCommand)
       =
       let org = state.Info
@@ -562,7 +562,8 @@ module private StateTransition =
          transitionErr OrgStateTransitionError.OrgNotActive
       elif
          org.DomesticTransferRecipients
-         |> Map.tryFind cmd.Data.RecipientWithoutAppliedUpdates.AccountId
+         |> Map.tryFind
+               cmd.Data.RecipientWithoutAppliedUpdates.RecipientAccountId
          |> Option.bind (fun recipient ->
             if recipient.Status = RecipientRegistrationStatus.Closed then
                Some recipient
@@ -576,7 +577,7 @@ module private StateTransition =
          <| EditDomesticTransferRecipientCommand.toEvent cmd
 
    let nicknameDomesticTransferRecipient
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: NicknameDomesticTransferRecipientCommand)
       =
       let org = state.Info
@@ -600,7 +601,7 @@ module private StateTransition =
             (NicknameDomesticTransferRecipientCommand.toEvent cmd)
 
    let failDomesticTransferRecipient
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: FailDomesticTransferRecipientCommand)
       =
       let org = state.Info
@@ -624,7 +625,7 @@ module private StateTransition =
                (FailDomesticTransferRecipientCommand.toEvent cmd)
 
    let domesticTransferRetryConfirmsRecipient
-      (state: OrgWithEvents)
+      (state: OrgSnapshot)
       (cmd: DomesticTransferRetryConfirmsRecipientCommand)
       =
       let org = state.Info
@@ -647,7 +648,7 @@ module private StateTransition =
                state
                (DomesticTransferRetryConfirmsRecipientCommand.toEvent cmd)
 
-let stateTransition (state: OrgWithEvents) (command: OrgCommand) =
+let stateTransition (state: OrgSnapshot) (command: OrgCommand) =
    match command with
    | OrgCommand.CreateOrg cmd -> StateTransition.create state cmd
    | OrgCommand.FinalizeOrgOnboarding cmd ->

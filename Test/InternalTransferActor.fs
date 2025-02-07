@@ -32,10 +32,10 @@ let initMockAccountActor (tck: TestKit.Tck) (accountOpt: Account option) =
                | AccountCommand.DepositTransferWithinOrg cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
-               | AccountCommand.RejectInternalTransfer cmd ->
+               | AccountCommand.FailInternalTransfer cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
-               | AccountCommand.ApproveInternalTransfer cmd ->
+               | AccountCommand.CompleteInternalTransfer cmd ->
                   tck.TestActor.Tell cmd
                   ignored ()
                | msg -> unhandled msg
@@ -68,7 +68,7 @@ let tests =
          <! InternalTransferMessage.TransferRequestWithinOrg
                Stub.event.internalTransferPending
 
-         tck.ExpectMsg<RejectInternalTransferWithinOrgCommand>() |> ignore
+         tck.ExpectMsg<FailInternalTransferWithinOrgCommand>() |> ignore
 
       akkaTest
          "Issuing a transfer to a closed account should reject the transfer"
@@ -83,7 +83,7 @@ let tests =
          <! InternalTransferMessage.TransferRequestWithinOrg
                Stub.event.internalTransferPending
 
-         tck.ExpectMsg<RejectInternalTransferWithinOrgCommand>() |> ignore
+         tck.ExpectMsg<FailInternalTransferWithinOrgCommand>() |> ignore
 
       akkaTest
          "Issuing a transfer to an active account should approve the transfer"
@@ -99,7 +99,7 @@ let tests =
          let transferRequest = Stub.event.internalTransferPending
          ref <! InternalTransferMessage.TransferRequestWithinOrg transferRequest
 
-         let msg = tck.ExpectMsg<ApproveInternalTransferWithinOrgCommand>()
+         let msg = tck.ExpectMsg<CompleteInternalTransferWithinOrgCommand>()
 
          Expect.equal
             (AccountId.fromEntityId msg.EntityId)

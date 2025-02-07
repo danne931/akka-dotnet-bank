@@ -1169,7 +1169,7 @@ let tests =
          }
 
          let progress = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                ApprovedBy = [ approver ]
          }
 
@@ -1201,7 +1201,7 @@ let tests =
          }
 
          let progress = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                RuleId = rule.RuleId
                ApprovedBy = [ approver ]
          }
@@ -1267,7 +1267,7 @@ let tests =
          }
 
          let progress = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                RuleId = rule.RuleId
                ApprovedBy = []
          }
@@ -1345,34 +1345,34 @@ let tests =
          }
 
          let progress1 = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                RuleId = rule1.RuleId
                ApprovedBy = [ approverA ]
          }
 
          let progress2 = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                ProgressId = Stub.progressId ()
                RuleId = rule1.RuleId
                ApprovedBy = []
          }
 
          let progress3 = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                ProgressId = Stub.progressId ()
                RuleId = rule2.RuleId
                ApprovedBy = [ approverB ]
          }
 
          let progress4 = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                ProgressId = Stub.progressId ()
                RuleId = rule2.RuleId
                ApprovedBy = [ approverA ]
          }
 
          let progress5 = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                ProgressId = Stub.progressId ()
                RuleId = rule2.RuleId
                ApprovedBy = []
@@ -1425,7 +1425,7 @@ let tests =
          let ruleRequiringCommandApproval =
             Expect.wantSome
                (commandRequiresApproval
-                  Stub.updateRoleCommand
+                  Stub.command.updateRole
                   rules
                   progress
                   Stub.accrual)
@@ -1442,7 +1442,7 @@ let tests =
 
          Expect.isNone
             (commandRequiresApproval
-               Stub.updateRoleCommand
+               Stub.command.updateRole
                rules
                progress
                Stub.accrual)
@@ -1453,7 +1453,7 @@ let tests =
 
          Expect.isNone
             (commandRequiresApproval
-               Stub.updateRoleCommand
+               Stub.command.updateRole
                rules
                progress
                Stub.accrual)
@@ -1844,7 +1844,7 @@ let tests =
          let rules = Map [ rule.RuleId, rule ]
 
          let p = {
-            Stub.progress Stub.updateRoleCommand with
+            Stub.progress Stub.command.updateRole with
                ProgressId = CommandApprovalProgressId cmd.CorrelationId
                RuleId = rule.RuleId
                Status = Status.Pending
@@ -2264,7 +2264,7 @@ let tests =
             RuleId = Stub.ruleId ()
             Requester = approverA
             RequesterIsConfiguredAsAnApprover = true
-            Command = Stub.updateRoleCommand
+            Command = Stub.command.updateRole
          }
 
          let cmd =

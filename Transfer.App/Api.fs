@@ -114,7 +114,8 @@ let getFailedDomesticTransfersByRecipient
       query
       (Some [
          "recipientId",
-         TransferSqlWriter.DomesticRecipient.accountId recipientAccountId
+         TransferSqlWriter.DomesticRecipient.recipientAccountId
+            recipientAccountId
       ])
       TransferSqlReader.Domestic.transfer
 

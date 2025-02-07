@@ -49,19 +49,6 @@ let internalTransferBetweenOrgsBaseInfo = {
    ScheduledDate = DateTime.UtcNow
 }
 
-let domesticRecipient: DomesticTransferRecipient = {
-   LastName = "fish"
-   FirstName = "big"
-   Nickname = None
-   AccountNumber = AccountNumber <| Int64.Parse "123456789123456"
-   RoutingNumber = RoutingNumber 123456789
-   Status = RecipientRegistrationStatus.Confirmed
-   AccountId = Guid.NewGuid() |> AccountId
-   Depository = DomesticRecipientAccountDepository.Checking
-   PaymentNetwork = PaymentNetwork.ACH
-   CreatedAt = DateTime.UtcNow
-}
-
 let domesticSender: DomesticTransferSender = {
    Name = "Operations"
    AccountNumber = AccountNumber <| Int64.Parse "987654321123456"
@@ -88,7 +75,7 @@ let command = {|
          DebitCommand.create compositeId correlationId initiatedById {
             Date = DateTime.UtcNow
             Amount = amount
-            Origin = "Groceries"
+            Merchant = "Groceries"
             Reference = None
             EmployeePurchaseReference = {
                EmployeeName = "Dan Eis"
@@ -103,21 +90,11 @@ let command = {|
             Amount = amount
             Origin = None
          }
-   registerDomesticRecipient =
-      RegisterDomesticTransferRecipientCommand.create compositeId initiatedById {
-         AccountId = accountId
-         FirstName = domesticRecipient.FirstName
-         LastName = domesticRecipient.LastName
-         AccountNumber = string domesticRecipient.AccountNumber
-         RoutingNumber = string domesticRecipient.RoutingNumber
-         Depository = DomesticRecipientAccountDepository.Checking
-         PaymentNetwork = PaymentNetwork.ACH
-      }
    domesticTransfer =
       fun amount ->
          DomesticTransferCommand.create compositeId correlationId initiatedById {
             Sender = domesticSender
-            Recipient = domesticRecipient
+            Recipient = OrganizationStub.domesticRecipient
             Amount = amount
             Memo = None
             ScheduledDateSeedOverride = None
@@ -137,17 +114,17 @@ let command = {|
             transferCmd with
                CorrelationId = correlationId
          }
-   approveInternalTransfer =
-      ApproveInternalTransferWithinOrgCommand.create
+   completeInternalTransfer =
+      CompleteInternalTransferWithinOrgCommand.create
          compositeId
          correlationId
          initiatedById
          {
             BaseInfo = internalTransferWithinOrgBaseInfo
          }
-   rejectInternalTransfer =
+   failInternalTransfer =
       fun amount ->
-         RejectInternalTransferWithinOrgCommand.create
+         FailInternalTransferWithinOrgCommand.create
             compositeId
             correlationId
             initiatedById
@@ -156,7 +133,7 @@ let command = {|
                   internalTransferWithinOrgBaseInfo with
                      Amount = amount
                }
-               Reason = InternalTransferDeclinedReason.AccountClosed
+               Reason = InternalTransferFailReason.AccountClosed
             }
    depositTransfer =
       fun amount ->
@@ -199,7 +176,7 @@ type EventIndex = {
    maintenanceFeeDebited: BankEvent<MaintenanceFeeDebited>
    internalTransferPending: BankEvent<InternalTransferWithinOrgPending>
    domesticTransferPending: BankEvent<DomesticTransferPending>
-   internalTransferRejected: BankEvent<InternalTransferWithinOrgRejected>
+   internalTransferFailed: BankEvent<InternalTransferWithinOrgFailed>
    transferDeposited: BankEvent<InternalTransferWithinOrgDeposited>
 }
 
@@ -234,9 +211,9 @@ let event: EventIndex = {
       |> DomesticTransferCommand.toEvent
       |> Result.toValueOption
       |> _.Value
-   internalTransferRejected =
-      command.rejectInternalTransfer 20m
-      |> RejectInternalTransferWithinOrgCommand.toEvent
+   internalTransferFailed =
+      command.failInternalTransfer 20m
+      |> FailInternalTransferWithinOrgCommand.toEvent
       |> Result.toValueOption
       |> _.Value
    transferDeposited =
@@ -260,9 +237,9 @@ let commands: AccountCommand list = [
    <| command.internalTransfer
          event.internalTransferPending.Data.BaseInfo.Amount
 
-   AccountCommand.RejectInternalTransfer
-   <| command.rejectInternalTransfer
-         event.internalTransferRejected.Data.BaseInfo.Amount
+   AccountCommand.FailInternalTransfer
+   <| command.failInternalTransfer
+         event.internalTransferFailed.Data.BaseInfo.Amount
 ]
 
 let accountEvents = [
@@ -271,7 +248,7 @@ let accountEvents = [
    AccountEnvelope.wrap event.debitedAccount
    AccountEnvelope.wrap event.maintenanceFeeDebited
    AccountEnvelope.wrap event.internalTransferPending
-   AccountEnvelope.wrap event.internalTransferRejected
+   AccountEnvelope.wrap event.internalTransferFailed
 ]
 
 let accountState = {
@@ -284,12 +261,13 @@ let accountState = {
       Balance = 300m
 }
 
-let accountStateWithEvents: AccountWithEvents = {
-   Info = accountState
-   Events = [
-      AccountEnvelope.wrap event.createdAccount
-      AccountEnvelope.wrap event.depositedCash
-   ]
+let accountStateWithEvents: AccountSnapshot = {
+   AccountSnapshot.empty with
+      Info = accountState
+      Events = [
+         AccountEnvelope.wrap event.createdAccount
+         AccountEnvelope.wrap event.depositedCash
+      ]
 }
 
 let accountStateAfterCreate = {
@@ -307,9 +285,10 @@ let accountStateAfterCreate = {
       }
 }
 
-let accountStateAfterCreateWithEvents: AccountWithEvents = {
-   Info = accountStateAfterCreate
-   Events = [ AccountEnvelope.wrap event.createdAccount ]
+let accountStateAfterCreateWithEvents: AccountSnapshot = {
+   AccountSnapshot.empty with
+      Info = accountStateAfterCreate
+      Events = [ AccountEnvelope.wrap event.createdAccount ]
 }
 
 let billingPeriod: BillingPeriod =
@@ -344,8 +323,8 @@ let billingTransactions: BillingTransaction list = [
    |> createBillingTxn
    |> _.Value
 
-   event.internalTransferRejected
-   |> AccountEvent.InternalTransferWithinOrgRejected
+   event.internalTransferFailed
+   |> AccountEvent.InternalTransferWithinOrgFailed
    |> createBillingTxn
    |> _.Value
 ]

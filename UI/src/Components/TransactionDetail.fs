@@ -41,10 +41,10 @@ let canEditTransferRecipient
    let recipientIdOpt =
       match evt with
       | AccountEvent.DomesticTransferPending evt ->
-         Some evt.Data.BaseInfo.Recipient.AccountId
+         Some evt.Data.BaseInfo.Recipient.RecipientAccountId
       //| OrgEvent.RegisteredDomesticTransferRecipient
       | AccountEvent.DomesticTransferFailed evt ->
-         Some evt.Data.BaseInfo.Recipient.AccountId
+         Some evt.Data.BaseInfo.Recipient.RecipientAccountId
       | _ -> None
 
    recipientIdOpt
@@ -487,11 +487,11 @@ let renderTransactionInfo
          *)
          | AccountEvent.DomesticTransferPending e when isEditingNickname ->
             RecipientNicknameEditComponent
-               e.Data.BaseInfo.Recipient.AccountId
+               e.Data.BaseInfo.Recipient.RecipientAccountId
                RecipientAccountEnvironment.Domestic
          | AccountEvent.DomesticTransferFailed e when isEditingNickname ->
             RecipientNicknameEditComponent
-               e.Data.BaseInfo.Recipient.AccountId
+               e.Data.BaseInfo.Recipient.RecipientAccountId
                RecipientAccountEnvironment.Domestic
          | AccountEvent.DebitedAccount e when isEditingNickname ->
             MerchantNicknameEditComponent e merchants dispatch
@@ -622,7 +622,7 @@ let renderFooterMenuControls
                                 dispatch (
                                    Msg.EditTransferRecipient(
                                       account.AccountId,
-                                      recipient.AccountId
+                                      recipient.RecipientAccountId
                                    )
                                 )
                           IsSelected = isEditingNickname

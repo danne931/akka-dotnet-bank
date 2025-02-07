@@ -361,7 +361,7 @@ let tests =
          let amount = 150m
 
          let debitCmd = Stub.command.debit amount
-         let debitMsg = EmployeeCommand.DebitRequest debitCmd
+         let debitMsg = EmployeeCommand.PurchasePending debitCmd
 
          o.employeeActor <! EmployeeMessage.StateChange debitMsg
 
@@ -410,7 +410,7 @@ let tests =
          let expectedAccrued = 98m
 
          let debitCmd = Stub.command.debit expectedAccrued
-         let debitMsg = EmployeeCommand.DebitRequest debitCmd
+         let debitMsg = EmployeeCommand.PurchasePending debitCmd
 
          // Mock the approval sent from the account actor
          let approveDebitCmd = Stub.command.approveDebit
@@ -420,10 +420,11 @@ let tests =
                Data.Info.Amount = debitCmd.Data.Amount
          }
 
-         let approveDebitMsg = EmployeeCommand.ApproveDebit approveDebitCmd
+         let approveDebitMsg =
+            EmployeeCommand.AccountConfirmsPurchase approveDebitCmd
 
          let debitToBeRejectedMsg =
-            EmployeeCommand.DebitRequest <| Stub.command.debit 33m
+            EmployeeCommand.PurchasePending <| Stub.command.debit 33m
 
          o.employeeActor <! EmployeeMessage.StateChange debitMsg
          o.employeeActor <! EmployeeMessage.StateChange approveDebitMsg
@@ -434,10 +435,10 @@ let tests =
          let msg = o.emailProbe.ExpectMsg<EmailActor.EmailMessage>()
 
          match msg with
-         | EmailActor.EmailMessage.PurchaseDeclined info ->
+         | EmailActor.EmailMessage.PurchaseFailed info ->
             Expect.equal
                info.Reason
-               (PurchaseDeclinedReason.ExceededDailyCardLimit(
+               (PurchaseFailReason.ExceededDailyCardLimit(
                   dailyLimit,
                   expectedAccrued
                ))

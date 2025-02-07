@@ -16,7 +16,7 @@ let cardId = Guid.NewGuid() |> CardId
 let cardNumberLast4 = "9310"
 let initiatedById = Guid.NewGuid() |> EmployeeId |> InitiatedById
 
-let purchaseInfo: DebitInfo = {
+let purchaseInfo: PurchaseInfo = {
    CardId = cardId
    AccountId = accountId
    EmployeeId = employeeId
@@ -24,7 +24,7 @@ let purchaseInfo: DebitInfo = {
    CardNumberLast4 = cardNumberLast4
    Date = DateTime.UtcNow
    Amount = 10m
-   Origin = "Groceries"
+   Merchant = "Groceries"
    Reference = None
 }
 
@@ -91,19 +91,21 @@ let command =
          }
       debit =
          fun amount -> {
-            DebitRequestCommand.create compositeId {
+            PurchasePendingCommand.create compositeId {
                CardId = purchaseInfo.CardId
                CardNumberLast4 = purchaseInfo.CardNumberLast4
                AccountId = purchaseInfo.AccountId
                Date = purchaseInfo.Date
                Amount = amount
-               Origin = purchaseInfo.Origin
+               Merchant = purchaseInfo.Merchant
                Reference = purchaseInfo.Reference
             } with
                CorrelationId = correlationId
          }
       approveDebit =
-         ApproveDebitCommand.create compositeId { Info = purchaseInfo }
+         AccountConfirmsPurchaseCommand.create compositeId {
+            Info = purchaseInfo
+         }
       limitDailyDebits =
          fun amount ->
             LimitDailyDebitsCommand.create compositeId initiatedById {
@@ -176,7 +178,7 @@ let employeeState =
             ]
    }
 
-let employeeStateWithEvents: EmployeeWithEvents = {
+let employeeStateWithEvents: EmployeeSnapshot = {
    Info = employeeState
    Events = [
       EmployeeEnvelope.wrap event.employeeCreated

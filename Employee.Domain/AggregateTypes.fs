@@ -145,7 +145,7 @@ type Employee = {
       |> Seq.exists (fun card ->
          not (card.IsExpired()) && card.Status <> CardStatus.Closed)
 
-type EmployeeWithEvents = {
+type EmployeeSnapshot = {
    Info: Employee
    Events: EmployeeEvent list
 }

@@ -112,13 +112,13 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? ConfirmableMessageEnvelope -> "ConfirmableMessageEnvelope"
       | :? Lib.ReadModelSyncActor.State -> "ReadModelSyncState"
       | :? CommandApprovalDailyAccrual -> "CommandApprovalDailyAccrual"
-      | :? OrgWithEvents -> "OrgWithEvents"
+      | :? OrgSnapshot -> "OrgSnapshot"
       | :? Option<Org> -> "OrgOption"
       | :? OrgMessage as msg ->
          match msg with
          | OrgMessage.Event _ -> "OrgEvent"
          | _ -> "OrgMessage"
-      | :? EmployeeWithEvents -> "EmployeeWithEvents"
+      | :? EmployeeSnapshot -> "EmployeeSnapshot"
       | :? Option<Employee> -> "EmployeeOption"
       | :? EmployeeMessage as msg ->
          match msg with
@@ -130,7 +130,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? SchedulingActor.Message -> "SchedulingActorMessage"
       | :? AccountClosureMessage -> "AccountClosureActorMessage"
       | :? List<AccountEvent> -> "AccountEventList"
-      | :? AccountWithEvents -> "AccountWithEvents"
+      | :? AccountSnapshot -> "AccountSnapshot"
       | :? Option<Account> -> "AccountOption"
       | :? List<Account> -> "AccountList"
       | :? Map<AccountId, Account> -> "AccountMap"
@@ -223,7 +223,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // Allow emails to also be sent from web nodes.
       | :? EmailActor.EmailMessage
       // AccountActor persistence snapshot.
-      | :? AccountWithEvents as o ->
+      | :? AccountSnapshot as o ->
          JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
       | :? AccountMessage as msg ->
          match msg with
@@ -236,7 +236,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // from employee cluster nodes to Web node.
       | :? Option<Employee>
       // EmployeeActor persistence snapshot.
-      | :? EmployeeWithEvents as o ->
+      | :? EmployeeSnapshot as o ->
          JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
       | :? EmployeeMessage as msg ->
          match msg with
@@ -252,7 +252,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // from org cluster nodes to Web node.
       | :? Option<Org>
       // OrgActor persistence snapshot.
-      | :? OrgWithEvents as o ->
+      | :? OrgSnapshot as o ->
          JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
       | :? OrgMessage as msg ->
          match msg with
@@ -284,17 +284,17 @@ type BankSerializer(system: ExtendedActorSystem) =
             typeof<AccountLoadTestTypes.AccountLoadTestMessage>
          | "ReadModelSyncState" -> typeof<Lib.ReadModelSyncActor.State>
          | "CommandApprovalDailyAccrual" -> typeof<CommandApprovalDailyAccrual>
-         | "OrgWithEvents" -> typeof<OrgWithEvents>
+         | "OrgSnapshot" -> typeof<OrgSnapshot>
          | "OrgOption" -> typeof<Org option>
          | "OrgEvent" -> typeof<OrgEvent>
          | "OrgMessage" -> typeof<OrgMessage>
          | "OrgShardEnvelope" -> typeof<OrgShardEnvelope>
-         | "EmployeeWithEvents" -> typeof<EmployeeWithEvents>
+         | "EmployeeSnapshot" -> typeof<EmployeeSnapshot>
          | "EmployeeOption" -> typeof<Employee option>
          | "EmployeeEvent" -> typeof<EmployeeEvent>
          | "EmployeeMessage" -> typeof<EmployeeMessage>
          | "EmployeeShardEnvelope" -> typeof<EmployeeShardEnvelope>
-         | "AccountWithEvents" -> typeof<AccountWithEvents>
+         | "AccountSnapshot" -> typeof<AccountSnapshot>
          | "AccountOption" -> typeof<Account option>
          | "AccountMap" -> typeof<Map<AccountId, Account>>
          | "AccountList" -> typeof<Account list>
