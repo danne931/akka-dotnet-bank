@@ -75,7 +75,6 @@ type SqlParamsDerivedFromAccountEvents = {
    Transfer: (string * SqlValue) list list
    InternalTransfer: (string * SqlValue) list list
    DomesticTransfer: (string * SqlValue) list list
-   DomesticTransferRecipient: (string * SqlValue) list list
 }
 
 let private internalTransferStatusReducer
@@ -110,36 +109,6 @@ let private domesticTransferStatusReducer
    {
       acc with
          DomesticTransfer = qParams :: acc.DomesticTransfer
-   }
-
-let private domesticRecipientReducer
-   (acc: SqlParamsDerivedFromAccountEvents)
-   (recipient: DomesticTransferRecipient)
-   =
-   let qParams = [
-      "accountId",
-      TransferSqlWriter.DomesticRecipient.accountId recipient.AccountId
-      "lastName",
-      TransferSqlWriter.DomesticRecipient.lastName recipient.LastName
-      "firstName",
-      TransferSqlWriter.DomesticRecipient.firstName recipient.FirstName
-      "accountNumber",
-      TransferSqlWriter.DomesticRecipient.accountNumber recipient.AccountNumber
-      "routingNumber",
-      TransferSqlWriter.DomesticRecipient.routingNumber recipient.RoutingNumber
-      "status", TransferSqlWriter.DomesticRecipient.status recipient.Status
-      "depository",
-      TransferSqlWriter.DomesticRecipient.depository recipient.Depository
-      "paymentNetwork",
-      TransferSqlWriter.DomesticRecipient.paymentNetwork
-         recipient.PaymentNetwork
-      "nickname",
-      TransferSqlWriter.DomesticRecipient.nickname recipient.Nickname
-   ]
-
-   {
-      acc with
-         DomesticTransferRecipient = qParams :: acc.DomesticTransferRecipient
    }
 
 let sqlParamReducer
@@ -404,22 +373,6 @@ let sqlParamReducer
          acc
          DomesticTransferProgress.Complete
          e.Data.BaseInfo
-   | AccountEvent.DomesticTransferRecipient e ->
-      domesticRecipientReducer acc e.Data.Recipient
-   | AccountEvent.RecipientNicknamed e ->
-      let qParams = [
-         "accountId",
-         TransferSqlWriter.DomesticRecipient.accountId e.Data.RecipientId
-         "nickname",
-         TransferSqlWriter.DomesticRecipient.nickname e.Data.Nickname
-      ]
-
-      {
-         acc with
-            DomesticTransferRecipient = qParams :: acc.DomesticTransferRecipient
-      }
-   | AccountEvent.EditedDomesticTransferRecipient e ->
-      domesticRecipientReducer acc e.Data.Recipient
    | AccountEvent.PlatformPaymentRequested e ->
       let pInfo = e.Data.BaseInfo
 
@@ -510,10 +463,6 @@ let sqlParamsFromAccount (account: Account) : (string * SqlValue) list = [
    "lastBillingCycleDate",
    AccountSqlWriter.lastBillingCycleDate account.LastBillingCycleDate
 
-   "domesticTransferRecipients",
-   AccountSqlWriter.domesticTransferRecipients
-      account.DomesticTransferRecipients
-
    "maintenanceFeeQualifyingDepositFound",
    AccountSqlWriter.maintenanceFeeQualifyingDepositFound
       account.MaintenanceFeeCriteria.QualifyingDepositFound
@@ -521,25 +470,6 @@ let sqlParamsFromAccount (account: Account) : (string * SqlValue) list = [
    "maintenanceFeeDailyBalanceThreshold",
    AccountSqlWriter.maintenanceFeeDailyBalanceThreshold
       account.MaintenanceFeeCriteria.DailyBalanceThreshold
-
-   "inProgressInternalTransfers",
-   AccountSqlWriter.inProgressInternalTransfers
-      account.InProgressInternalTransfers
-
-   "inProgressInternalTransfersCount",
-   AccountSqlWriter.transfersCount account.InProgressInternalTransfers.Count
-
-   "inProgressDomesticTransfers",
-   AccountSqlWriter.domesticTransfers account.InProgressDomesticTransfers
-
-   "inProgressDomesticTransfersCount",
-   AccountSqlWriter.transfersCount account.InProgressDomesticTransfers.Count
-
-   "failedDomesticTransfers",
-   AccountSqlWriter.domesticTransfers account.FailedDomesticTransfers
-
-   "failedDomesticTransfersCount",
-   AccountSqlWriter.transfersCount account.FailedDomesticTransfers.Count
 
    "autoTransferRule",
    AccountSqlWriter.autoTransferRule account.AutoTransferRule
@@ -565,7 +495,6 @@ let upsertReadModels
          Transfer = []
          InternalTransfer = []
          DomesticTransfer = []
-         DomesticTransferRecipient = []
       }
 
    pgTransaction [
@@ -581,15 +510,8 @@ let upsertReadModels
           {AccountFields.currency},
           {AccountFields.status},
           {AccountFields.lastBillingCycleDate},
-          {AccountFields.domesticTransferRecipients},
           {AccountFields.maintenanceFeeQualifyingDepositFound},
           {AccountFields.maintenanceFeeDailyBalanceThreshold},
-          {AccountFields.inProgressInternalTransfers},
-          {AccountFields.inProgressInternalTransfersCount},
-          {AccountFields.inProgressDomesticTransfers},
-          {AccountFields.inProgressDomesticTransfersCount},
-          {AccountFields.failedDomesticTransfers},
-          {AccountFields.failedDomesticTransfersCount},
           {AccountFields.autoTransferRule},
           {AccountFields.autoTransferRuleFrequency})
       VALUES
@@ -603,15 +525,8 @@ let upsertReadModels
           @currency,
           @status::{AccountTypeCast.status},
           @lastBillingCycleDate,
-          @domesticTransferRecipients,
           @maintenanceFeeQualifyingDepositFound,
           @maintenanceFeeDailyBalanceThreshold,
-          @inProgressInternalTransfers,
-          @inProgressInternalTransfersCount,
-          @inProgressDomesticTransfers,
-          @inProgressDomesticTransfersCount,
-          @failedDomesticTransfers,
-          @failedDomesticTransfersCount,
           @autoTransferRule,
           @autoTransferRuleFrequency::{AccountTypeCast.autoTransferRuleFrequency})
       ON CONFLICT ({AccountFields.accountId})
@@ -619,15 +534,8 @@ let upsertReadModels
          {AccountFields.balance} = @balance,
          {AccountFields.status} = @status::{AccountTypeCast.status},
          {AccountFields.lastBillingCycleDate} = @lastBillingCycleDate,
-         {AccountFields.domesticTransferRecipients} = @domesticTransferRecipients,
          {AccountFields.maintenanceFeeQualifyingDepositFound} = @maintenanceFeeQualifyingDepositFound,
          {AccountFields.maintenanceFeeDailyBalanceThreshold} = @maintenanceFeeDailyBalanceThreshold,
-         {AccountFields.inProgressInternalTransfers} = @inProgressInternalTransfers,
-         {AccountFields.inProgressInternalTransfersCount} = @inProgressInternalTransfersCount,
-         {AccountFields.inProgressDomesticTransfers} = @inProgressDomesticTransfers,
-         {AccountFields.inProgressDomesticTransfersCount} = @inProgressDomesticTransfersCount,
-         {AccountFields.failedDomesticTransfers} = @failedDomesticTransfers,
-         {AccountFields.failedDomesticTransfersCount} = @failedDomesticTransfersCount,
          {AccountFields.autoTransferRule} = @autoTransferRule,
          {AccountFields.autoTransferRuleFrequency} = @autoTransferRuleFrequency::{AccountTypeCast.autoTransferRuleFrequency};
       """,
@@ -755,46 +663,6 @@ let upsertReadModels
             {TransferFields.Internal.statusDetail} = @statusDetail;
          """,
          sqlParamsDerivedFromAccountEvents.InternalTransfer
-
-      if
-         not sqlParamsDerivedFromAccountEvents.DomesticTransferRecipient.IsEmpty
-      then
-         $"""
-         INSERT into {TransferSqlMapper.Table.domesticRecipient}
-            ({TransferFields.DomesticRecipient.accountId},
-             {TransferFields.DomesticRecipient.firstName},
-             {TransferFields.DomesticRecipient.lastName},
-             {TransferFields.DomesticRecipient.nickname},
-             {TransferFields.DomesticRecipient.routingNumber},
-             {TransferFields.DomesticRecipient.accountNumber},
-             {TransferFields.DomesticRecipient.status},
-             {TransferFields.DomesticRecipient.depository},
-             {TransferFields.DomesticRecipient.paymentNetwork})
-         VALUES
-            (@accountId,
-             @firstName,
-             @lastName,
-             @nickname,
-             @routingNumber,
-             @accountNumber,
-             @status::{TransferTypeCast.domesticRecipientStatus},
-             @depository::{TransferTypeCast.domesticRecipientAccountDepository},
-             @paymentNetwork::{TransferTypeCast.paymentNetwork})
-         ON CONFLICT ({TransferFields.DomesticRecipient.accountId})
-         DO UPDATE SET
-            {TransferFields.DomesticRecipient.firstName} = @firstName,
-            {TransferFields.DomesticRecipient.lastName} = @lastName,
-            {TransferFields.DomesticRecipient.nickname} = @nickname,
-            {TransferFields.DomesticRecipient.routingNumber} = @routingNumber,
-            {TransferFields.DomesticRecipient.accountNumber} = @accountNumber,
-            {TransferFields.DomesticRecipient.status} =
-               @status::{TransferTypeCast.domesticRecipientStatus},
-            {TransferFields.DomesticRecipient.depository} =
-               @depository::{TransferTypeCast.domesticRecipientAccountDepository},
-            {TransferFields.DomesticRecipient.paymentNetwork} =
-               @paymentNetwork::{TransferTypeCast.paymentNetwork};
-         """,
-         sqlParamsDerivedFromAccountEvents.DomesticTransferRecipient
 
       if not sqlParamsDerivedFromAccountEvents.DomesticTransfer.IsEmpty then
          $"""

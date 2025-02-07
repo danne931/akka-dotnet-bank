@@ -11,6 +11,7 @@ open Lib.Postgres
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Org.Domain
+open Bank.Transfer.Domain
 open TransactionMerchantSqlMapper
 
 module Fields = OrganizationSqlMapper.OrgFields
@@ -36,6 +37,15 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
       | OrgCommand.DeclineCommandApproval cmd ->
          CommandApprovalProgress.DeclineCommandApproval.toEvent cmd
          |> Result.map OrgEnvelope.get
+      | OrgCommand.RegisterDomesticTransferRecipient cmd ->
+         RegisterDomesticTransferRecipientCommand.toEvent cmd
+         |> Result.map OrgEnvelope.get
+      | OrgCommand.EditDomesticTransferRecipient cmd ->
+         EditDomesticTransferRecipientCommand.toEvent cmd
+         |> Result.map OrgEnvelope.get
+      | OrgCommand.NicknameDomesticTransferRecipient cmd ->
+         NicknameDomesticTransferRecipientCommand.toEvent cmd
+         |> Result.map OrgEnvelope.get
       | cmd ->
          ValidationErrors.create "" [
             $"Command processing not implemented for {cmd}"
@@ -48,10 +58,27 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
    return res
 }
 
+
+let getDomesticTransferRecipients
+   (orgId: OrgId)
+   : Result<DomesticTransferRecipient list option, Err> Task
+   =
+   pgQuery<DomesticTransferRecipient>
+      $"""
+      {TransferSqlMapper.Query.domesticTransferRecipient}
+      WHERE dr.{TransferSqlMapper.TransferFields.DomesticRecipient.orgId} = @orgId
+      """
+      (Some [
+         "orgId",
+         TransferSqlMapper.TransferSqlWriter.DomesticRecipient.orgId orgId
+      ])
+      TransferSqlMapper.TransferSqlReader.DomesticRecipient.recipient
+
 type private OrgDBResult =
    | AccountProfilesWithOrg of (Org * AccountProfile) list option
    | CommandApprovalRules of CommandApprovalRule.T list option
    | CommandApprovalProgress of CommandApprovalProgress.T list option
+   | DomesticTransferRecipients of DomesticTransferRecipient list option
 
 let getOrgAndAccountProfiles
    (orgId: OrgId)
@@ -144,8 +171,17 @@ let getOrgAndAccountProfiles
          Bank.CommandApproval.Api.getCommandApprovals orgId
          |> TaskResult.map OrgDBResult.CommandApprovalProgress
 
+      let domesticTransferRecipientTask =
+         getDomesticTransferRecipients orgId
+         |> TaskResult.map OrgDBResult.DomesticTransferRecipients
+
       let! res =
-         Task.WhenAll [| orgTask; approvalRuleTask; approvalProgressTask |]
+         Task.WhenAll [|
+            orgTask
+            approvalRuleTask
+            approvalProgressTask
+            domesticTransferRecipientTask
+         |]
 
       let! res = res |> List.ofArray |> List.traverseResultM id
 
@@ -153,7 +189,8 @@ let getOrgAndAccountProfiles
          match res with
          | [ OrgDBResult.AccountProfilesWithOrg(Some accountProfilesWithOrg)
              OrgDBResult.CommandApprovalRules rulesOpt
-             OrgDBResult.CommandApprovalProgress progressOpt ] ->
+             OrgDBResult.CommandApprovalProgress progressOpt
+             OrgDBResult.DomesticTransferRecipients recipientsOpt ] ->
             let org = fst (List.head accountProfilesWithOrg)
 
             let org =
@@ -172,6 +209,15 @@ let getOrgAndAccountProfiles
                   org with
                      CommandApprovalProgress =
                         [ for p in progress -> p.ProgressId, p ] |> Map.ofList
+                 }
+
+            let org =
+               match recipientsOpt with
+               | None -> org
+               | Some recipients -> {
+                  org with
+                     DomesticTransferRecipients =
+                        [ for r in recipients -> r.AccountId, r ] |> Map.ofList
                  }
 
             Some {

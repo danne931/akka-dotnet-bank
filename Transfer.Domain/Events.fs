@@ -41,7 +41,12 @@ type DomesticTransferProgressUpdate = {
    InProgressInfo: DomesticTransferInProgress
 }
 
-type DomesticTransferApproved = { BaseInfo: BaseDomesticTransferInfo }
+type DomesticTransferApproved = {
+   BaseInfo: BaseDomesticTransferInfo
+   /// Indicates the transfer was approved after previously failing
+   /// and then retrying.
+   FromRetry: DomesticTransferDeclinedReason option
+}
 
 type DomesticTransferRejected = {
    BaseInfo: BaseDomesticTransferInfo
@@ -54,13 +59,31 @@ type RegisteredDomesticTransferRecipient = {
 
 type EditedDomesticTransferRecipient = { Recipient: DomesticTransferRecipient }
 
+[<RequireQualifiedAccess>]
+type DomesticTransferRecipientFailReason =
+   | InvalidAccountInfo
+   | ClosedAccount
+
+type DomesticTransferRecipientFailed = {
+   RecipientId: AccountId
+   TransferId: TransferId
+   Reason: DomesticTransferRecipientFailReason
+}
+
+/// Successful retry of a previously failed domestic transfer infers that
+/// the recipient info has been corrected.
+type DomesticTransferRetryConfirmsRecipient = {
+   RecipientId: AccountId
+   TransferId: TransferId
+}
+
 type InternalTransferWithinOrgDeposited = { BaseInfo: BaseInternalTransferInfo }
 
 type InternalTransferBetweenOrgsDeposited = {
    BaseInfo: BaseInternalTransferInfo
 }
 
-type RecipientNicknamed = {
+type NicknamedDomesticTransferRecipient = {
    RecipientId: AccountId
    RecipientAccountEnvironment: RecipientAccountEnvironment
    Nickname: string option

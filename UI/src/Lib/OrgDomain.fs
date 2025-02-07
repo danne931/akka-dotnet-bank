@@ -77,3 +77,53 @@ let paymentFulfillmentPendingApproval
          else
             None
       | _ -> None)
+
+
+let domesticRecipientName (org: Org) (recipientId: AccountId) : string option =
+   org.DomesticTransferRecipients
+   |> Map.tryFind recipientId
+   |> Option.map _.FullName
+
+type OrgHistoryUIFriendly = {
+   Name: string
+   Date: string
+   Amount: string
+   Info: string
+   Initiator: string
+}
+
+let orgHistoryUIFriendly (org: Org) (evt: OrgEvent) : OrgHistoryUIFriendly =
+   let _, envelope = OrgEnvelope.unwrap evt
+
+   let props = {
+      Name = envelope.EventName
+      Date = dateUIFriendly envelope.Timestamp
+      Amount = "-"
+      Info = ""
+      Initiator = ""
+   }
+
+   let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
+      domesticRecipientName org recipientFromEvt.AccountId
+      |> Option.defaultValue recipientFromEvt.FullName
+
+   match evt with
+   | RegisteredDomesticTransferRecipient evt -> {
+      props with
+         Name = "Created Domestic Recipient"
+         Info =
+            $"Created domestic recipient: {domesticRecipientName evt.Data.Recipient}"
+     }
+   | EditedDomesticTransferRecipient evt -> {
+      props with
+         Name = "Edited Domestic Recipient"
+         Info = $"Edited recipient: {domesticRecipientName evt.Data.Recipient}"
+     }
+   | NicknamedDomesticTransferRecipient evt -> {
+      props with
+         Info =
+            match evt.Data.Nickname with
+            | None -> "Removed recipient nickname."
+            | Some name -> $"Updated recipient nickname to {name}"
+     }
+   | _ -> props

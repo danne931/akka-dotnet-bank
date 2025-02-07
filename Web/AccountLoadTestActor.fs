@@ -115,8 +115,9 @@ let private prepareTestData () = {
 
 let actorProps (getAccountRef: AccountId -> IEntityRef<AccountMessage>) =
    let handler (mailbox: Actor<AccountLoadTestMessage>) =
+      PubSub.subscribePointToPoint (PubSub.get mailbox.System) mailbox.Self
+
       let logInfo, logError = logInfo mailbox, logError mailbox
-      registerSelfForPubSub mailbox
 
       let rec loop (state: AccountLoadTestState) = actor {
          let! msg = mailbox.Receive()

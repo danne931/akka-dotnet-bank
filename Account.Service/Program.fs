@@ -85,6 +85,7 @@ builder.Services.AddAkka(
                      persistenceId
                      (AccountActor.get system)
                      (EmployeeActor.get system)
+                     Bank.Transfer.Api.getDomesticTransfersRetryableUponRecipientCorrection
 
                props),
             ClusterMetadata.orgShardRegion.messageExtractor,

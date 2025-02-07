@@ -68,8 +68,18 @@ module TransferPath =
    let DomesticTransferRecipient = Domestic + "/register-recipient"
    let DomesticTransferRecipientEdit = Domestic + "/edit-recipient"
    let NicknameRecipient = Base + "/recipient-nickname"
-   let ConfigureAutoTransferRule = Base + "configure-auto-transfer-rule"
-   let DeleteAutoTransferRule = Base + "delete-auto-transfer-rule"
+   let ConfigureAutoTransferRule = Base + "/configure-auto-transfer-rule"
+   let DeleteAutoTransferRule = Base + "/delete-auto-transfer-rule"
+
+   let RetryableDomesticTransfersUponRecipientCorrection =
+      Base
+      + "/retryable-domestic-transfers-upon-recipient-correction/{recipientAccountId}"
+
+   let retryableDomesticTransfersUponRecipientCorrection
+      (recipientAccountId: AccountId)
+      =
+      Base
+      + $"/retryable-domestic-transfers-upon-recipient-correction/{recipientAccountId}"
 
 module PaymentPath =
    let Base = $"{API}/payments"

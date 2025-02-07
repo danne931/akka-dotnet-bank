@@ -51,14 +51,6 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
       | AccountCommand.ScheduleDomesticTransfer cmd ->
          ScheduleDomesticTransferCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | AccountCommand.RegisterDomesticTransferRecipient cmd ->
-         RegisterDomesticTransferRecipientCommand.toEvent cmd
-         |> Result.map AccountEnvelope.get
-      | AccountCommand.EditDomesticTransferRecipient cmd ->
-         EditDomesticTransferRecipientCommand.toEvent cmd
-         |> Result.map AccountEnvelope.get
-      | AccountCommand.NicknameRecipient cmd ->
-         NicknameRecipientCommand.toEvent cmd |> Result.map AccountEnvelope.get
       | AccountCommand.CloseAccount cmd ->
          CloseAccountCommand.toEvent cmd |> Result.map AccountEnvelope.get
       | AccountCommand.RequestPlatformPayment cmd ->

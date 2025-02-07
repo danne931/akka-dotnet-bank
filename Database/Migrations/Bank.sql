@@ -151,6 +151,7 @@ CREATE TABLE organization (
 SELECT add_created_at_column('organization');
 SELECT add_updated_at_column_and_trigger('organization');
 
+CREATE INDEX org_org_id_idx ON organization(org_id);
 CREATE INDEX org_search_idx ON organization USING gist (org_name gist_trgm_ops);
 
 
@@ -170,15 +171,8 @@ CREATE TABLE account (
    status account_status NOT NULL,
    auto_transfer_rule JSONB,
    auto_transfer_rule_frequency auto_transfer_rule_frequency,
-   domestic_transfer_recipients JSONB NOT NULL,
    maintenance_fee_qualifying_deposit_found BOOLEAN NOT NULL,
    maintenance_fee_daily_balance_threshold BOOLEAN NOT NULL,
-   in_progress_internal_transfers JSONB NOT NULL,
-   in_progress_internal_transfers_count INT NOT NULL,
-   in_progress_domestic_transfers JSONB NOT NULL,
-   in_progress_domestic_transfers_count INT NOT NULL,
-   failed_domestic_transfers JSONB NOT NULL,
-   failed_domestic_transfers_count INT NOT NULL,
    org_id UUID NOT NULL REFERENCES organization,
    last_billing_cycle_at TIMESTAMPTZ
 );
@@ -186,7 +180,6 @@ CREATE TABLE account (
 SELECT add_created_at_column('account');
 SELECT add_updated_at_column_and_trigger('account');
 
-CREATE INDEX account_in_progress_domestic_transfers_count_idx ON account(in_progress_domestic_transfers_count);
 CREATE INDEX account_last_billing_cycle_at_idx ON account(last_billing_cycle_at);
 CREATE INDEX account_org_id_idx ON account(org_id);
 
@@ -619,6 +612,7 @@ CREATE TYPE payment_network AS ENUM ('ACH');
 
 CREATE TABLE transfer_domestic_recipient(
    recipient_account_id UUID PRIMARY KEY,
+   org_id UUID REFERENCES organization,
    first_name VARCHAR(50) NOT NULL,
    last_name VARCHAR(50) NOT NULL,
    nickname VARCHAR(100),
@@ -631,6 +625,8 @@ CREATE TABLE transfer_domestic_recipient(
 
 SELECT add_created_at_column('transfer_domestic_recipient');
 SELECT add_updated_at_column_and_trigger('transfer_domestic_recipient');
+
+CREATE INDEX transfer_domestic_recipient_org_id_idx ON transfer_domestic_recipient(org_id);
 
 
 --- DOMESTIC TRANSFERS ---

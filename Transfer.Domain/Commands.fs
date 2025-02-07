@@ -317,26 +317,27 @@ module DepositInternalTransferBetweenOrgsCommand =
       =
       BankEvent.create<InternalTransferBetweenOrgsDeposited> cmd |> Ok
 
-type NicknameRecipientCommand = Command<RecipientNicknamed>
+type NicknameDomesticTransferRecipientCommand =
+   Command<NicknamedDomesticTransferRecipient>
 
-module NicknameRecipientCommand =
+module NicknameDomesticTransferRecipientCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (orgId: OrgId)
       (initiatedBy: InitiatedById)
-      (data: RecipientNicknamed)
+      (data: NicknamedDomesticTransferRecipient)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (OrgId.toEntityId orgId)
          orgId
          (CorrelationId.create ())
          (initiatedBy: InitiatedById)
          data
 
    let toEvent
-      (cmd: NicknameRecipientCommand)
-      : ValidationResult<BankEvent<RecipientNicknamed>>
+      (cmd: NicknameDomesticTransferRecipientCommand)
+      : ValidationResult<BankEvent<NicknamedDomesticTransferRecipient>>
       =
-      BankEvent.create<RecipientNicknamed> cmd |> Ok
+      BankEvent.create<NicknamedDomesticTransferRecipient> cmd |> Ok
 
 type DomesticTransferRecipientInput = {
    AccountId: AccountId
@@ -353,12 +354,12 @@ type RegisterDomesticTransferRecipientCommand =
 
 module RegisterDomesticTransferRecipientCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (orgId: OrgId)
       (initiatedBy: InitiatedById)
       (data: DomesticTransferRecipientInput)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (OrgId.toEntityId orgId)
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -385,6 +386,7 @@ module RegisterDomesticTransferRecipientCommand =
             AccountNumber = accountNumber
             RoutingNumber = routingNumber
             Status = RecipientRegistrationStatus.Confirmed
+            OrgId = cmd.OrgId
             AccountId = cmd.Data.AccountId
             Depository = cmd.Data.Depository
             PaymentNetwork = cmd.Data.PaymentNetwork
@@ -415,12 +417,12 @@ type EditDomesticTransferRecipientCommand =
 
 module EditDomesticTransferRecipientCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (orgId: OrgId)
       (initiatedBy: InitiatedById)
       (data: EditDomesticTransferRecipientInput)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (OrgId.toEntityId orgId)
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -458,6 +460,50 @@ module EditDomesticTransferRecipientCommand =
                cmd
                { Recipient = recipient }
       }
+
+type FailDomesticTransferRecipientCommand =
+   Command<DomesticTransferRecipientFailed>
+
+module FailDomesticTransferRecipientCommand =
+   let create
+      (orgId: OrgId)
+      (initiatedBy: InitiatedById)
+      (data: DomesticTransferRecipientFailed)
+      =
+      Command.create
+         (OrgId.toEntityId orgId)
+         orgId
+         (CorrelationId.create ())
+         initiatedBy
+         data
+
+   let toEvent
+      (cmd: FailDomesticTransferRecipientCommand)
+      : ValidationResult<BankEvent<DomesticTransferRecipientFailed>>
+      =
+      BankEvent.create<DomesticTransferRecipientFailed> cmd |> Ok
+
+type DomesticTransferRetryConfirmsRecipientCommand =
+   Command<DomesticTransferRetryConfirmsRecipient>
+
+module DomesticTransferRetryConfirmsRecipientCommand =
+   let create
+      (orgId: OrgId)
+      (initiatedBy: InitiatedById)
+      (data: DomesticTransferRetryConfirmsRecipient)
+      =
+      Command.create
+         (OrgId.toEntityId orgId)
+         orgId
+         (CorrelationId.create ())
+         initiatedBy
+         data
+
+   let toEvent
+      (cmd: DomesticTransferRetryConfirmsRecipientCommand)
+      : ValidationResult<BankEvent<DomesticTransferRetryConfirmsRecipient>>
+      =
+      BankEvent.create<DomesticTransferRetryConfirmsRecipient> cmd |> Ok
 
 type DomesticTransferInput = {
    Amount: decimal
@@ -649,6 +695,7 @@ module UpdateDomesticTransferProgressCommand =
       BankEvent.create<DomesticTransferProgressUpdate> cmd |> Ok
 
 module DomesticTransferToCommand =
+   /// Received a "InProgress" progress response from domestic transfer service.
    let progress (txn: DomesticTransfer) (progress: DomesticTransferInProgress) =
       UpdateDomesticTransferProgressCommand.create
          (txn.Sender.AccountId, txn.Sender.OrgId)
@@ -667,6 +714,7 @@ module DomesticTransferToCommand =
             InProgressInfo = progress
          }
 
+   /// Received a "Complete" progress response from domestic transfer service.
    let approve (txn: DomesticTransfer) =
       ApproveDomesticTransferCommand.create
          (txn.Sender.AccountId, txn.Sender.OrgId)
@@ -682,8 +730,12 @@ module DomesticTransferToCommand =
                Amount = txn.Amount
                Memo = txn.Memo
             }
+            // Will be overwritten during the account actor state transition
+            // upon detecting a previously failed transfer by txn.TransferId.
+            FromRetry = None
          }
 
+   /// Received a "Failed" response from domestic transfer service.
    let reject (txn: DomesticTransfer) (reason: DomesticTransferDeclinedReason) =
       RejectDomesticTransferCommand.create
          (txn.Sender.AccountId, txn.Sender.OrgId)

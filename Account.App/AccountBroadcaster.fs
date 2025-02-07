@@ -3,7 +3,6 @@ module AccountBroadcaster
 
 open Akkling
 open Akka.Actor
-open Akka.Cluster.Tools.PublishSubscribe
 open System
 
 open Lib.SharedTypes
@@ -12,8 +11,9 @@ open ActorUtil
 open AccountLoadTestTypes
 
 let init (system: ActorSystem) : AccountBroadcast =
-   let mediator = DistributedPubSub.Get(system).Mediator
+   let pubSub = PubSub.get system
    let signalRPath = ActorMetadata.signalR.Path.ToStringWithoutAddress()
+   let sendToSignalR = PubSub.sendPointToPoint pubSub signalRPath
 
    let loadTestPath =
       ActorMetadata.accountLoadTest.SingletonPath.ToStringWithoutAddress()
@@ -21,60 +21,51 @@ let init (system: ActorSystem) : AccountBroadcast =
    {
       accountEventPersisted =
          fun event account ->
-            mediator.Tell(
-               Send(
-                  signalRPath,
-                  SignalRActor.Msg.AccountEventPersisted(
-                     {
-                        Date = DateTime.UtcNow
-                        EventPersisted = event
-                        Account = account
-                     }
-                  )
+            let msg =
+               SignalRActor.Msg.AccountEventPersisted(
+                  {
+                     Date = DateTime.UtcNow
+                     EventPersisted = event
+                     Account = account
+                  }
                )
-            )
+
+            sendToSignalR msg
 
             if Env.allowLiveLoadTest then
-               mediator.Tell(
-                  Send(
-                     loadTestPath,
-                     AccountLoadTestMessage.AccountEventPersisted {
-                        AccountId = account.AccountId
-                        Event = event
-                        AccountBalance = account.Balance
-                     }
-                  )
-               )
+               let msg =
+                  AccountLoadTestMessage.AccountEventPersisted {
+                     AccountId = account.AccountId
+                     Event = event
+                     AccountBalance = account.Balance
+                  }
+
+               PubSub.sendPointToPoint pubSub loadTestPath msg
+
       accountEventValidationFail =
          fun accountId err ->
-            mediator.Tell(
-               Send(
-                  signalRPath,
-                  SignalRActor.Msg.AccountEventValidationFail {
-                     AccountId = accountId
-                     Error = err
-                     Date = DateTime.UtcNow
-                  }
-               )
-            )
+            let msg =
+               SignalRActor.Msg.AccountEventValidationFail {
+                  AccountId = accountId
+                  Error = err
+                  Date = DateTime.UtcNow
+               }
+
+            sendToSignalR msg
       accountEventPersistenceFail =
          fun accountId err ->
-            mediator.Tell(
-               Send(
-                  signalRPath,
-                  SignalRActor.Msg.AccountEventPersistenceFail {
-                     AccountId = accountId
-                     Error = err
-                     Date = DateTime.UtcNow
-                  }
-               )
-            )
+            let msg =
+               SignalRActor.Msg.AccountEventPersistenceFail {
+                  AccountId = accountId
+                  Error = err
+                  Date = DateTime.UtcNow
+               }
+
+            sendToSignalR msg
       circuitBreaker =
          fun msg ->
             let circuitBreakerAref = CircuitBreakerActor.get system
             circuitBreakerAref <! CircuitBreakerMessage.CircuitBreaker msg
 
-            mediator.Tell(
-               Send(signalRPath, SignalRActor.Msg.CircuitBreaker msg)
-            )
+            sendToSignalR (SignalRActor.Msg.CircuitBreaker msg)
    }

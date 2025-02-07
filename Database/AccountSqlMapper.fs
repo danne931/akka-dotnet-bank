@@ -5,7 +5,6 @@ open System
 open Lib.SharedTypes
 open MaintenanceFee
 open Bank.Account.Domain
-open Bank.Transfer.Domain
 open OrganizationSqlMapper
 open AutomaticTransfer
 
@@ -27,22 +26,12 @@ module AccountFields =
    let status = "status"
    let balance = "balance"
    let lastBillingCycleDate = "last_billing_cycle_at"
-   let domesticTransferRecipients = "domestic_transfer_recipients"
 
    let maintenanceFeeQualifyingDepositFound =
       "maintenance_fee_qualifying_deposit_found"
 
    let maintenanceFeeDailyBalanceThreshold =
       "maintenance_fee_daily_balance_threshold"
-
-   let inProgressInternalTransfers = "in_progress_internal_transfers"
-   let inProgressInternalTransfersCount = "in_progress_internal_transfers_count"
-
-   let inProgressDomesticTransfers = "in_progress_domestic_transfers"
-   let inProgressDomesticTransfersCount = "in_progress_domestic_transfers_count"
-
-   let failedDomesticTransfers = "failed_domestic_transfers"
-   let failedDomesticTransfersCount = "failed_domestic_transfers_count"
 
    let autoTransferRule = "auto_transfer_rule"
 
@@ -78,31 +67,12 @@ module AccountSqlReader =
    let lastBillingCycleDate (read: RowReader) =
       read.dateTimeOrNone AccountFields.lastBillingCycleDate
 
-   let domesticTransferRecipients (read: RowReader) =
-      read.text AccountFields.domesticTransferRecipients
-      |> Serialization.deserializeUnsafe<DomesticTransferRecipient list>
-
    let maintenanceFeeCriteria (read: RowReader) = {
       QualifyingDepositFound =
          read.bool AccountFields.maintenanceFeeQualifyingDepositFound
       DailyBalanceThreshold =
          read.bool AccountFields.maintenanceFeeDailyBalanceThreshold
    }
-
-   let inProgressInternalTransfers
-      (read: RowReader)
-      : InProgressInternalTransfer list
-      =
-      read.text AccountFields.inProgressInternalTransfers
-      |> Serialization.deserializeUnsafe<InProgressInternalTransfer list>
-
-   let inProgressDomesticTransfers (read: RowReader) =
-      read.text AccountFields.inProgressDomesticTransfers
-      |> Serialization.deserializeUnsafe<DomesticTransfer list>
-
-   let failedDomesticTransfers (read: RowReader) =
-      read.text AccountFields.failedDomesticTransfers
-      |> Serialization.deserializeUnsafe<DomesticTransfer list>
 
    let autoTransferRule (read: RowReader) : AutomaticTransferConfig option =
       read.textOrNone AccountFields.autoTransferRule
@@ -119,23 +89,7 @@ module AccountSqlReader =
       Status = status read
       Balance = balance read
       LastBillingCycleDate = lastBillingCycleDate read
-      DomesticTransferRecipients =
-         domesticTransferRecipients read
-         |> List.map (fun recipient -> recipient.AccountId, recipient)
-         |> Map.ofList
       MaintenanceFeeCriteria = maintenanceFeeCriteria read
-      InProgressInternalTransfers =
-         inProgressInternalTransfers read
-         |> List.map (fun t -> t.TransferId, t)
-         |> Map.ofList
-      InProgressDomesticTransfers =
-         inProgressDomesticTransfers read
-         |> List.map (fun t -> t.TransferId, t)
-         |> Map.ofList
-      FailedDomesticTransfers =
-         failedDomesticTransfers read
-         |> List.map (fun t -> t.TransferId, t)
-         |> Map.ofList
       AutoTransferRule = autoTransferRule read
    }
 
@@ -152,41 +106,14 @@ module AccountSqlWriter =
       Sql.int routingNum
 
    let depository (dep: AccountDepository) = dep |> string |> Sql.string
-
    let name = Sql.string
    let balance = Sql.money
    let currency (currency: Currency) = Sql.string <| string currency
-
    let status (status: AccountStatus) = status |> string |> Sql.string
 
-   let dailyInternalTransferAccrued = Sql.decimal
-   let dailyDomesticTransferAccrued = Sql.decimal
-
-   let lastInternalTransferDate (date: DateTime option) =
-      Sql.timestamptzOrNone date
-
-   let lastDomesticTransferDate (date: DateTime option) =
-      Sql.timestamptzOrNone date
-
    let lastBillingCycleDate (date: DateTime option) = Sql.timestamptzOrNone date
-
-   let domesticTransferRecipients
-      (recipients: Map<AccountId, DomesticTransferRecipient>)
-      =
-      recipients.Values |> Seq.toList |> Serialization.serialize |> Sql.jsonb
-
    let maintenanceFeeQualifyingDepositFound = Sql.bool
    let maintenanceFeeDailyBalanceThreshold = Sql.bool
-
-   let inProgressInternalTransfers
-      (transfers: Map<TransferId, InProgressInternalTransfer>)
-      =
-      transfers.Values |> Seq.toList |> Serialization.serialize |> Sql.jsonb
-
-   let domesticTransfers (transfers: Map<TransferId, DomesticTransfer>) =
-      transfers.Values |> Seq.toList |> Serialization.serialize |> Sql.jsonb
-
-   let transfersCount = Sql.int
 
    let autoTransferRule (rule: AutomaticTransferConfig option) =
       rule |> Option.map Serialization.serialize |> Sql.jsonbOrNone

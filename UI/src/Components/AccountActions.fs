@@ -8,6 +8,7 @@ open Elmish
 open Bank.Account.Domain
 open UIDomain.Account
 open Bank.Account.Forms
+open Bank.Org.Forms
 open Bank.Employee.Domain
 open Bank.Employee.Forms
 open Bank.Transfer.Domain
@@ -26,26 +27,17 @@ let navigation (accountId: AccountId) (view: AccountActionView option) =
 
    [| Routes.TransactionUrl.BasePath; string accountId; queryString |]
 
-type State = {
-   PendingAction: Envelope option
-   DomesticTransferRedirectOnRecipientCreate: AccountId option
-}
+type State = { PendingAction: Envelope option }
 
 type Msg =
    | Cancel
    | NetworkAckCommand of Envelope
-   | NetworkAckDomesticRecipient of Envelope * recipientId: AccountId
    | AccountEventReceived of CorrelationId
    | CheckForEventConfirmation of Envelope * attemptNumber: int
    | SubmitCommandForApproval of action: string
    | Noop
 
-let init () =
-   {
-      PendingAction = None
-      DomesticTransferRedirectOnRecipientCreate = None
-   },
-   Cmd.none
+let init () = { PendingAction = None }, Cmd.none
 
 // HTTP request returned 200. Command accepted by network.  Wait
 // for account actor cluster to successfully process the command into
@@ -71,37 +63,11 @@ let update
    match msg with
    | Cancel -> state, Cmd.navigate (navigation None)
    | NetworkAckCommand envelope -> networkAck state envelope
-   | NetworkAckDomesticRecipient(envelope, accountId) ->
-      let state, cmd = networkAck state envelope
-
-      {
-         state with
-            DomesticTransferRedirectOnRecipientCreate = Some accountId
-      },
-      cmd
    | AccountEventReceived _ when state.PendingAction.IsNone -> state, Cmd.none
    | AccountEventReceived correlationId ->
       match state.PendingAction with
       | Some envelope when envelope.CorrelationId = correlationId ->
-         let state = { state with PendingAction = None }
-
-         match
-            Routes.IndexUrl.accountBrowserQuery().Action,
-            state.DomesticTransferRedirectOnRecipientCreate
-         with
-         | Some AccountActionView.RegisterTransferRecipient, Some recipientId ->
-            let redirectTo =
-               (RecipientAccountEnvironment.Domestic, recipientId)
-               |> Some
-               |> AccountActionView.Transfer
-               |> Some
-
-            {
-               state with
-                  DomesticTransferRedirectOnRecipientCreate = None
-            },
-            Cmd.navigate (navigation redirectTo)
-         | _ -> state, Cmd.navigate (navigation None)
+         { state with PendingAction = None }, Cmd.navigate (navigation None)
       | _ -> state, Cmd.none
    // Verify the PendingAction was persisted.
    // If a SignalR event doesn't dispatch a Msg.AccountEventReceived within
@@ -220,44 +186,42 @@ let AccountActionsComponent
       | AccountActionView.RegisterTransferRecipient ->
          RegisterTransferRecipientForm.RegisterTransferRecipientFormComponent
             session
-            account
+            org.Org
             None
             (fun conf ->
                match conf.PendingEvent with
-               | AccountEvent.DomesticTransferRecipient e ->
-                  (conf.Envelope, e.Data.Recipient.AccountId)
-                  |> Msg.NetworkAckDomesticRecipient
-                  |> dispatch
-               | _ -> dispatch (Msg.NetworkAckCommand conf.Envelope))
+               | OrgEvent.RegisteredDomesticTransferRecipient e ->
+                  conf.PendingCommand
+                  |> OrgProvider.Msg.OrgCommand
+                  |> orgDispatch
+
+                  let redirectTo =
+                     (RecipientAccountEnvironment.Domestic,
+                      e.Data.Recipient.AccountId)
+                     |> Some
+                     |> AccountActionView.Transfer
+                     |> Some
+
+                  Router.navigate (navigation account.AccountId redirectTo)
+               | evt ->
+                  Log.error
+                     $"Unknown evt {evt} in RegisterTransferRecipient submit handler")
       | AccountActionView.EditTransferRecipient accountId ->
-         let invalidAccount =
-            DomesticTransferDeclinedReason.InvalidAccountInfo
-            |> DomesticTransferProgress.Failed
-
-         let count =
-            account.FailedDomesticTransfers
-            |> Map.filter (fun _ t -> t.Status = invalidAccount)
-            |> Map.count
-
-         let msg = "will be retried upon editing recipient info."
-
-         let msg =
-            match count with
-            | 0 -> None
-            | 1 -> Some $"1 failed transfer {msg}"
-            | count -> Some $"{count} failed transfers {msg}"
-
-         match msg with
-         | Some msg ->
-            Html.div [ Html.ins msg ]
-            Html.br []
-         | None -> ()
-
          RegisterTransferRecipientForm.RegisterTransferRecipientFormComponent
             session
-            account
+            org.Org
             (Some accountId)
-            (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
+            (fun conf ->
+               match conf.PendingEvent with
+               | OrgEvent.EditedDomesticTransferRecipient _ ->
+                  conf.PendingCommand
+                  |> OrgProvider.Msg.OrgCommand
+                  |> orgDispatch
+
+                  Router.navigate (navigation account.AccountId None)
+               | evt ->
+                  Log.error
+                     $"Unknown evt {evt} in EditTransferRecipient submit handler")
       | AccountActionView.Transfer selectedRecipient ->
          TransferForm.TransferFormComponent
             session

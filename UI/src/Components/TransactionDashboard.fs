@@ -53,9 +53,12 @@ let TransactionDashboardComponent
             Html.section [
                Html.h4 "Transactions"
 
-               match accountOpt with
-               | Some account ->
-                  TransactionTable.TransactionTableComponent account session
+               match orgCtx, accountOpt with
+               | Deferred.Resolved(Ok(Some org)), Some account ->
+                  TransactionTable.TransactionTableComponent
+                     org.Org
+                     account
+                     session
                | _ -> Html.progress []
             ]
 
@@ -71,9 +74,9 @@ let TransactionDashboardComponent
 
             match Routes.TransactionUrl.transactionIdMaybe url with
             | Some txnId ->
-               match accountOpt with
-               | Some account ->
-                  TransactionDetailComponent session account txnId
+               match orgCtx, accountOpt with
+               | Deferred.Resolved(Ok(Some org)), Some account ->
+                  TransactionDetailComponent session org.Org account txnId
                | _ -> Html.progress []
                |> ScreenOverlay.Portal
             | None -> ()

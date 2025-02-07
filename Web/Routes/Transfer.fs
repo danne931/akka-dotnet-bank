@@ -12,11 +12,13 @@ open FsToolkit.ErrorHandling
 open Lib.SharedTypes
 open Bank.Transfer.Api
 open Bank.Transfer.Domain
-open Bank.Account.Api
 open Bank.Org.Domain
 open Bank.Account.Domain
 open RoutePaths
 open Bank.UserSession.Middleware
+
+let processAccountCommand = Bank.Account.Api.processCommand
+let processOrgCommand = Bank.Org.Api.processCommand
 
 let startTransferRoutes (app: WebApplication) =
    app
@@ -28,9 +30,9 @@ let startTransferRoutes (app: WebApplication) =
             Task<IResult>
           >
             (fun sys cmd ->
-               processCommand
+               processOrgCommand
                   sys
-                  (AccountCommand.RegisterDomesticTransferRecipient cmd)
+                  (OrgCommand.RegisterDomesticTransferRecipient cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -41,10 +43,21 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.DomesticTransferRecipientEdit,
          Func<ActorSystem, EditDomesticTransferRecipientCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand
+               processOrgCommand
                   sys
-                  (AccountCommand.EditDomesticTransferRecipient cmd)
+                  (OrgCommand.EditDomesticTransferRecipient cmd)
                |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ManageTransferRecipient)
+   |> ignore
+
+   app
+      .MapGet(
+         TransferPath.RetryableDomesticTransfersUponRecipientCorrection,
+         Func<Guid, Task<IResult>>(fun recipientAccountId ->
+            AccountId recipientAccountId
+            |> getDomesticTransfersRetryableUponRecipientCorrection
+            |> RouteUtil.unwrapTaskResultOption)
       )
       .RBAC(Permissions.ManageTransferRecipient)
    |> ignore
@@ -54,7 +67,7 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.InternalWithinOrg,
          Func<ActorSystem, InternalTransferWithinOrgCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (AccountCommand.InternalTransfer cmd)
+               processAccountCommand sys (AccountCommand.InternalTransfer cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.SubmitTransfer)
@@ -97,7 +110,7 @@ let startTransferRoutes (app: WebApplication) =
             Task<IResult>
           >
             (fun sys cmd ->
-               processCommand
+               processAccountCommand
                   sys
                   (AccountCommand.ScheduleInternalTransferBetweenOrgs cmd)
                |> RouteUtil.unwrapTaskResult)
@@ -137,7 +150,9 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.ScheduleDomestic,
          Func<ActorSystem, ScheduleDomesticTransferCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (AccountCommand.ScheduleDomesticTransfer cmd)
+               processAccountCommand
+                  sys
+                  (AccountCommand.ScheduleDomesticTransfer cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.SubmitTransfer)
@@ -146,9 +161,15 @@ let startTransferRoutes (app: WebApplication) =
    app
       .MapPost(
          TransferPath.NicknameRecipient,
-         Func<ActorSystem, NicknameRecipientCommand, Task<IResult>>
+         Func<
+            ActorSystem,
+            NicknameDomesticTransferRecipientCommand,
+            Task<IResult>
+          >
             (fun sys cmd ->
-               processCommand sys (AccountCommand.NicknameRecipient cmd)
+               processOrgCommand
+                  sys
+                  (OrgCommand.NicknameDomesticTransferRecipient cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -168,7 +189,9 @@ let startTransferRoutes (app: WebApplication) =
          PaymentPath.RequestPayment,
          Func<ActorSystem, RequestPlatformPaymentCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (AccountCommand.RequestPlatformPayment cmd)
+               processAccountCommand
+                  sys
+                  (AccountCommand.RequestPlatformPayment cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)
@@ -179,7 +202,9 @@ let startTransferRoutes (app: WebApplication) =
          PaymentPath.CancelPayment,
          Func<ActorSystem, CancelPlatformPaymentCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (AccountCommand.CancelPlatformPayment cmd)
+               processAccountCommand
+                  sys
+                  (AccountCommand.CancelPlatformPayment cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)
@@ -190,7 +215,9 @@ let startTransferRoutes (app: WebApplication) =
          PaymentPath.DeclinePayment,
          Func<ActorSystem, DeclinePlatformPaymentCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (AccountCommand.DeclinePlatformPayment cmd)
+               processAccountCommand
+                  sys
+                  (AccountCommand.DeclinePlatformPayment cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)
@@ -228,7 +255,7 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.ConfigureAutoTransferRule,
          Func<ActorSystem, ConfigureAutoTransferRuleCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand
+               processAccountCommand
                   sys
                   (AccountCommand.ConfigureAutoTransferRule cmd)
                |> RouteUtil.unwrapTaskResult)
@@ -241,7 +268,9 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.DeleteAutoTransferRule,
          Func<ActorSystem, DeleteAutoTransferRuleCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (AccountCommand.DeleteAutoTransferRule cmd)
+               processAccountCommand
+                  sys
+                  (AccountCommand.DeleteAutoTransferRule cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageAutoTransferRules)

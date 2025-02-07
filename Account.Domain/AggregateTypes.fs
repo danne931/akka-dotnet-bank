@@ -26,9 +26,6 @@ type AccountCommand =
       RejectInternalTransferBetweenOrgsCommand
    | DepositTransferWithinOrg of DepositInternalTransferWithinOrgCommand
    | DepositTransferBetweenOrgs of DepositInternalTransferBetweenOrgsCommand
-   | RegisterDomesticTransferRecipient of
-      RegisterDomesticTransferRecipientCommand
-   | EditDomesticTransferRecipient of EditDomesticTransferRecipientCommand
    | ScheduleDomesticTransfer of ScheduleDomesticTransferCommand
    | DomesticTransfer of DomesticTransferCommand
    | UpdateDomesticTransferProgress of UpdateDomesticTransferProgressCommand
@@ -39,7 +36,6 @@ type AccountCommand =
    | DeclinePlatformPayment of DeclinePlatformPaymentCommand
    | FulfillPlatformPayment of FulfillPlatformPaymentCommand
    | DepositPlatformPayment of DepositPlatformPaymentCommand
-   | NicknameRecipient of NicknameRecipientCommand
    | CloseAccount of CloseAccountCommand
    | StartBillingCycle of StartBillingCycleCommand
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
@@ -73,9 +69,6 @@ type AccountEvent =
       BankEvent<InternalTransferWithinOrgDeposited>
    | InternalTransferBetweenOrgsDeposited of
       BankEvent<InternalTransferBetweenOrgsDeposited>
-   | DomesticTransferRecipient of BankEvent<RegisteredDomesticTransferRecipient>
-   | EditedDomesticTransferRecipient of
-      BankEvent<EditedDomesticTransferRecipient>
    | DomesticTransferScheduled of BankEvent<DomesticTransferScheduled>
    | DomesticTransferPending of BankEvent<DomesticTransferPending>
    | DomesticTransferProgress of BankEvent<DomesticTransferProgressUpdate>
@@ -86,7 +79,6 @@ type AccountEvent =
    | PlatformPaymentDeclined of BankEvent<PlatformPaymentDeclined>
    | PlatformPaymentPaid of BankEvent<PlatformPaymentPaid>
    | PlatformPaymentDeposited of BankEvent<PlatformPaymentDeposited>
-   | RecipientNicknamed of BankEvent<RecipientNicknamed>
    | AccountClosed of BankEvent<AccountClosed>
    | BillingCycleStarted of BankEvent<BillingCycleStarted>
    | AutoTransferRuleConfigured of BankEvent<AutomaticTransferRuleConfigured>
@@ -202,12 +194,6 @@ module AccountEnvelope =
       | :? BankEvent<DebitedAccount> as evt -> DebitedAccount evt
       | :? BankEvent<MaintenanceFeeDebited> as evt -> MaintenanceFeeDebited evt
       | :? BankEvent<MaintenanceFeeSkipped> as evt -> MaintenanceFeeSkipped evt
-      | :? BankEvent<RegisteredDomesticTransferRecipient> as evt ->
-         DomesticTransferRecipient evt
-      | :? BankEvent<EditedDomesticTransferRecipient> as evt ->
-         EditedDomesticTransferRecipient evt
-      | :? BankEvent<RecipientNicknamed> as evt ->
-         AccountEvent.RecipientNicknamed evt
       | :? BankEvent<InternalTransferWithinOrgPending> as evt ->
          InternalTransferWithinOrgPending evt
       | :? BankEvent<InternalTransferWithinOrgApproved> as evt ->
@@ -275,14 +261,11 @@ module AccountEnvelope =
       | InternalTransferBetweenOrgsPending evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsApproved evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsRejected evt -> wrap evt, get evt
-      | DomesticTransferRecipient evt -> wrap evt, get evt
-      | EditedDomesticTransferRecipient evt -> wrap evt, get evt
       | DomesticTransferScheduled evt -> wrap evt, get evt
       | DomesticTransferPending evt -> wrap evt, get evt
       | DomesticTransferProgress evt -> wrap evt, get evt
       | DomesticTransferApproved evt -> wrap evt, get evt
       | DomesticTransferRejected evt -> wrap evt, get evt
-      | RecipientNicknamed evt -> wrap evt, get evt
       | InternalTransferWithinOrgDeposited evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsDeposited evt -> wrap evt, get evt
       | PlatformPaymentRequested evt -> wrap evt, get evt
@@ -308,12 +291,6 @@ type Account = {
    Status: AccountStatus
    Balance: decimal
    LastBillingCycleDate: DateTime option
-   // TODO: Add Scheduled transfer fields & probably change these
-   //       in-progress/failed fields to just contain the Id
-   DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
-   InProgressInternalTransfers: Map<TransferId, InProgressInternalTransfer>
-   InProgressDomesticTransfers: Map<TransferId, DomesticTransfer>
-   FailedDomesticTransfers: Map<TransferId, DomesticTransfer>
    MaintenanceFeeCriteria: MaintenanceFeeCriteria
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
@@ -348,10 +325,42 @@ type Account = {
    member x.AutoTransfers =
       x.autoTransferManagement AutomaticTransfer.computeTransfer
 
+   static member empty: Account = {
+      AccountId = AccountId System.Guid.Empty
+      OrgId = OrgId System.Guid.Empty
+      Name = ""
+      Depository = AccountDepository.Checking
+      Currency = Currency.USD
+      Status = AccountStatus.InitialEmptyState
+      Balance = 0m
+      LastBillingCycleDate = None
+      MaintenanceFeeCriteria = {
+         QualifyingDepositFound = false
+         DailyBalanceThreshold = false
+      }
+      AccountNumber = AccountNumber <| System.Int64.Parse "123456789123456"
+      RoutingNumber = RoutingNumber 123456789
+      AutoTransferRule = None
+   }
+
 type AccountWithEvents = {
    Info: Account
    Events: AccountEvent list
+   // TODO: Add Scheduled transfer fields & probably change these
+   //       in-progress/failed fields to just contain the Id
+   InProgressInternalTransfers: Map<TransferId, InProgressInternalTransfer>
+   InProgressDomesticTransfers: Map<TransferId, DomesticTransfer>
+   FailedDomesticTransfers: Map<TransferId, DomesticTransfer>
 }
+
+module AccountWithEvents =
+   let empty: AccountWithEvents = {
+      Info = Account.empty
+      Events = []
+      InProgressInternalTransfers = Map.empty
+      InProgressDomesticTransfers = Map.empty
+      FailedDomesticTransfers = Map.empty
+   }
 
 type AccountMetrics = {
    DailyInternalTransferWithinOrg: decimal

@@ -51,6 +51,7 @@ module TransferFields =
    // Specific to domestic_transfer_recipient table
    module DomesticRecipient =
       let accountId = "recipient_account_id"
+      let orgId = "org_id"
       let firstName = "first_name"
       let lastName = "last_name"
       let nickname = "nickname"
@@ -103,6 +104,8 @@ module TransferSqlReader =
       let accountId (read: RowReader) =
          TransferFields.DomesticRecipient.accountId |> read.uuid |> AccountId
 
+      let orgId = OrgSqlReader.orgId
+
       let firstName (read: RowReader) =
          TransferFields.DomesticRecipient.firstName |> read.string
 
@@ -138,6 +141,7 @@ module TransferSqlReader =
          RoutingNumber = routingNumber read
          Status = status read
          AccountId = accountId read
+         OrgId = orgId read
          Depository = depository read
          PaymentNetwork = paymentNetwork read
          CreatedAt = createdAt read
@@ -215,6 +219,7 @@ module TransferSqlWriter =
 
    module DomesticRecipient =
       let accountId = AccountSqlWriter.accountId
+      let orgId = OrgSqlWriter.orgId
       let firstName = Sql.string
       let lastName = Sql.string
       let nickname = Sql.stringOrNone
@@ -262,4 +267,21 @@ module Query =
       JOIN {Table.transfer} t using({TransferFields.transferId})
       JOIN {AccountSqlMapper.table} a
          ON t.{TransferFields.senderAccountId} = a.{AccountFields.accountId}
+      """
+
+   let domesticTransferRecipient =
+      $"""
+      SELECT
+         dr.{TransferFields.DomesticRecipient.accountId},
+         dr.{TransferFields.DomesticRecipient.orgId},
+         dr.{TransferFields.DomesticRecipient.firstName},
+         dr.{TransferFields.DomesticRecipient.lastName},
+         dr.{TransferFields.DomesticRecipient.nickname},
+         dr.{TransferFields.DomesticRecipient.accountNumber},
+         dr.{TransferFields.DomesticRecipient.routingNumber},
+         dr.{TransferFields.DomesticRecipient.depository},
+         dr.{TransferFields.DomesticRecipient.paymentNetwork},
+         dr.{TransferFields.DomesticRecipient.status},
+         dr.{TransferFields.createdAt}
+      FROM {Table.domesticRecipient} dr
       """

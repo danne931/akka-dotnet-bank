@@ -68,6 +68,7 @@ type DomesticTransferRecipient = {
    RoutingNumber: RoutingNumber
    Status: RecipientRegistrationStatus
    AccountId: AccountId
+   OrgId: OrgId
    Depository: DomesticRecipientAccountDepository
    PaymentNetwork: PaymentNetwork
    CreatedAt: DateTime
@@ -91,6 +92,17 @@ type DomesticTransferDeclinedReason =
    | AccountClosed
    | InvalidAccountInfo
    | Unknown of string
+
+   member x.Display =
+      match x with
+      | CorruptData -> "Corrupt Data"
+      | InvalidAction -> "Invalid Action"
+      | InvalidPaymentNetwork -> "Invalid Payment Network"
+      | InvalidDepository -> "Invalid Depository"
+      | InvalidAmount -> "Invalid Amount"
+      | AccountClosed -> "Account Closed"
+      | InvalidAccountInfo -> "Invalid Account Info"
+      | Unknown r -> r
 
 [<RequireQualifiedAccess>]
 type DomesticTransferInProgress =
@@ -139,7 +151,7 @@ type DomesticTransfer = {
 
 [<RequireQualifiedAccess>]
 type DomesticTransferServiceAction =
-   | TransferRequest
+   | TransferAck
    | ProgressCheck
 
 type DomesticTransferServiceSender = {
