@@ -63,7 +63,7 @@
     <Compile Include="Components/Forms/DailyDebitLimit.fs" />
     <Compile Include="Components/Forms/MonthlyDebitLimit.fs" />
     <Compile Include="Components/Forms/PurchaseLimit.fs" />
-    <Compile Include="Components/Forms/Debit.fs" />
+    <Compile Include="Components/Forms/Purchase.fs" />
     <Compile Include="Components/Forms/Deposit.fs" />
     <Compile Include="Components/Forms/EmployeeRole.fs" />
     <Compile Include="Components/Forms/EmployeeCreate.fs" />

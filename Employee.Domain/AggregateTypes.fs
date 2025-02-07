@@ -9,9 +9,9 @@ type EmployeeCommand =
    | CreateAccountOwner of CreateAccountOwnerCommand
    | CreateEmployee of CreateEmployeeCommand
    | CreateCard of CreateCardCommand
-   | DebitRequest of DebitRequestCommand
-   | ApproveDebit of ApproveDebitCommand
-   | DeclineDebit of DeclineDebitCommand
+   | PurchasePending of PurchasePendingCommand
+   | AccountConfirmsPurchase of AccountConfirmsPurchaseCommand
+   | AccountRejectsPurchase of AccountRejectsPurchaseCommand
    | LimitDailyDebits of LimitDailyDebitsCommand
    | LimitMonthlyDebits of LimitMonthlyDebitsCommand
    | LockCard of LockCardCommand
@@ -28,9 +28,9 @@ type EmployeeEvent =
    | CreatedAccountOwner of BankEvent<CreatedAccountOwner>
    | CreatedEmployee of BankEvent<CreatedEmployee>
    | CreatedCard of BankEvent<CreatedCard>
-   | DebitRequested of BankEvent<DebitRequested>
-   | DebitApproved of BankEvent<DebitApproved>
-   | DebitDeclined of BankEvent<DebitDeclined>
+   | PurchasePending of BankEvent<PurchasePending>
+   | PurchaseConfirmedByAccount of BankEvent<PurchaseConfirmedByAccount>
+   | PurchaseRejectedByAccount of BankEvent<PurchaseRejectedByAccount>
    | DailyDebitLimitUpdated of BankEvent<DailyDebitLimitUpdated>
    | MonthlyDebitLimitUpdated of BankEvent<MonthlyDebitLimitUpdated>
    | LockedCard of BankEvent<LockedCard>
@@ -62,9 +62,11 @@ module EmployeeEnvelope =
       | :? BankEvent<CreatedAccountOwner> as evt -> CreatedAccountOwner evt
       | :? BankEvent<CreatedEmployee> as evt -> CreatedEmployee evt
       | :? BankEvent<CreatedCard> as evt -> CreatedCard evt
-      | :? BankEvent<DebitRequested> as evt -> DebitRequested evt
-      | :? BankEvent<DebitApproved> as evt -> DebitApproved evt
-      | :? BankEvent<DebitDeclined> as evt -> DebitDeclined evt
+      | :? BankEvent<PurchasePending> as evt -> PurchasePending evt
+      | :? BankEvent<PurchaseConfirmedByAccount> as evt ->
+         PurchaseConfirmedByAccount evt
+      | :? BankEvent<PurchaseRejectedByAccount> as evt ->
+         PurchaseRejectedByAccount evt
       | :? BankEvent<DailyDebitLimitUpdated> as evt ->
          DailyDebitLimitUpdated evt
       | :? BankEvent<MonthlyDebitLimitUpdated> as evt ->
@@ -86,9 +88,9 @@ module EmployeeEnvelope =
       | CreatedAccountOwner evt -> wrap evt, get evt
       | CreatedEmployee evt -> wrap evt, get evt
       | CreatedCard evt -> wrap evt, get evt
-      | DebitRequested evt -> wrap evt, get evt
-      | DebitApproved evt -> wrap evt, get evt
-      | DebitDeclined evt -> wrap evt, get evt
+      | PurchasePending evt -> wrap evt, get evt
+      | PurchaseConfirmedByAccount evt -> wrap evt, get evt
+      | PurchaseRejectedByAccount evt -> wrap evt, get evt
       | DailyDebitLimitUpdated evt -> wrap evt, get evt
       | MonthlyDebitLimitUpdated evt -> wrap evt, get evt
       | LockedCard evt -> wrap evt, get evt
@@ -123,7 +125,7 @@ type Employee = {
    LastName: string
    Cards: Map<CardId, Card>
    Status: EmployeeStatus
-   PendingPurchases: Map<CorrelationId, DebitInfo>
+   PendingPurchases: Map<CorrelationId, PurchaseInfo>
    OnboardingTasks: EmployeeOnboardingTask list
    AuthProviderUserId: Guid option
 } with

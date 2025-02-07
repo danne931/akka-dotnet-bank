@@ -17,7 +17,7 @@ let private purchaseAccrued
    List.fold
       (fun acc evt ->
          match evt with
-         | DebitApproved e ->
+         | PurchaseConfirmedByAccount e ->
             let e = e.Data.Info
 
             if e.CardId = cardId && satisfiesDate e.Date then
@@ -90,12 +90,12 @@ let applyEvent
                   |> List.filter (function
                      | EmployeeOnboardingTask.CreateCard _ -> false)
          }
-      | DebitRequested e -> {
+      | PurchasePending e -> {
          em with
             PendingPurchases =
                em.PendingPurchases |> Map.add e.CorrelationId e.Data.Info
         }
-      | DebitApproved e -> {
+      | PurchaseConfirmedByAccount e -> {
          em with
             PendingPurchases = em.PendingPurchases |> Map.remove e.CorrelationId
             Cards =
@@ -108,7 +108,7 @@ let applyEvent
                   em.Cards
 
         }
-      | DebitDeclined e -> {
+      | PurchaseRejectedByAccount e -> {
          em with
             PendingPurchases = em.PendingPurchases |> Map.remove e.CorrelationId
         }
@@ -270,7 +270,10 @@ module private StateTransition =
       else
          map UnlockedCard state (UnlockCardCommand.toEvent cmd)
 
-   let debitRequest (state: EmployeeWithEvents) (cmd: DebitRequestCommand) =
+   let purchasePending
+      (state: EmployeeWithEvents)
+      (cmd: PurchasePendingCommand)
+      =
       let em = state.Info
       let info = cmd.Data
 
@@ -299,9 +302,12 @@ module private StateTransition =
                transitionErr
                <| ExceededMonthlyDebit(card.DailyPurchaseLimit, dpa)
             else
-               map DebitRequested state (DebitRequestCommand.toEvent cmd)
+               map PurchasePending state (PurchasePendingCommand.toEvent cmd)
 
-   let approveDebit (state: EmployeeWithEvents) (cmd: ApproveDebitCommand) =
+   let accountConfirmsPurchase
+      (state: EmployeeWithEvents)
+      (cmd: AccountConfirmsPurchaseCommand)
+      =
       let em = state.Info
 
       if em.Status <> EmployeeStatus.Active then
@@ -309,11 +315,17 @@ module private StateTransition =
       elif
          Option.isNone <| Map.tryFind cmd.CorrelationId em.PendingPurchases
       then
-         transitionErr DebitAlreadyProgressedToApprovedOrDeclined
+         transitionErr DebitAlreadyProgressedToCompletedOrFailed
       else
-         map DebitApproved state (ApproveDebitCommand.toEvent cmd)
+         map
+            PurchaseConfirmedByAccount
+            state
+            (AccountConfirmsPurchaseCommand.toEvent cmd)
 
-   let declineDebit (state: EmployeeWithEvents) (cmd: DeclineDebitCommand) =
+   let accountRejectsPurchase
+      (state: EmployeeWithEvents)
+      (cmd: AccountRejectsPurchaseCommand)
+      =
       let em = state.Info
 
       if em.Status <> EmployeeStatus.Active then
@@ -321,9 +333,12 @@ module private StateTransition =
       elif
          Option.isNone <| Map.tryFind cmd.CorrelationId em.PendingPurchases
       then
-         transitionErr DebitAlreadyProgressedToApprovedOrDeclined
+         transitionErr DebitAlreadyProgressedToCompletedOrFailed
       else
-         map DebitDeclined state (DeclineDebitCommand.toEvent cmd)
+         map
+            PurchaseRejectedByAccount
+            state
+            (AccountRejectsPurchaseCommand.toEvent cmd)
 
    let updateRole (state: EmployeeWithEvents) (cmd: UpdateRoleCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
@@ -404,9 +419,12 @@ let stateTransition (state: EmployeeWithEvents) (command: EmployeeCommand) =
       StateTransition.createAccountOwner state cmd
    | EmployeeCommand.CreateEmployee cmd -> StateTransition.create state cmd
    | EmployeeCommand.CreateCard cmd -> StateTransition.createCard state cmd
-   | EmployeeCommand.DebitRequest cmd -> StateTransition.debitRequest state cmd
-   | EmployeeCommand.ApproveDebit cmd -> StateTransition.approveDebit state cmd
-   | EmployeeCommand.DeclineDebit cmd -> StateTransition.declineDebit state cmd
+   | EmployeeCommand.PurchasePending cmd ->
+      StateTransition.purchasePending state cmd
+   | EmployeeCommand.AccountConfirmsPurchase cmd ->
+      StateTransition.accountConfirmsPurchase state cmd
+   | EmployeeCommand.AccountRejectsPurchase cmd ->
+      StateTransition.accountRejectsPurchase state cmd
    | EmployeeCommand.LimitDailyDebits cmd ->
       StateTransition.limitDailyDebits state cmd
    | EmployeeCommand.LimitMonthlyDebits cmd ->

@@ -40,8 +40,8 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
          CreateEmployeeCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.CreateCard cmd ->
          CreateCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.DebitRequest cmd ->
-         DebitRequestCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
+      | EmployeeCommand.PurchasePending cmd ->
+         PurchasePendingCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.LimitDailyDebits cmd ->
          LimitDailyDebitsCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.LimitMonthlyDebits cmd ->
@@ -179,9 +179,9 @@ let filtersToEventNames
               typeof<AccessRestored>.Name
              ]
            | EmployeeEventGroupFilter.Purchase -> [
-              typeof<DebitRequested>.Name
-              typeof<DebitApproved>.Name
-              typeof<DebitDeclined>.Name
+              typeof<PurchasePending>.Name
+              typeof<PurchaseConfirmedByAccount>.Name
+              typeof<PurchaseRejectedByAccount>.Name
              ]
            | EmployeeEventGroupFilter.CreatedCard -> [
               typeof<CreatedCard>.Name

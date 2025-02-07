@@ -56,8 +56,8 @@ let startCardRoutes (app: WebApplication) =
    app
       .MapPost(
          CardPath.Purchase,
-         Func<ActorSystem, DebitRequestCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (EmployeeCommand.DebitRequest cmd)
+         Func<ActorSystem, PurchasePendingCommand, Task<IResult>>(fun sys cmd ->
+            processCommand sys (EmployeeCommand.PurchasePending cmd)
             |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.DebitRequest)

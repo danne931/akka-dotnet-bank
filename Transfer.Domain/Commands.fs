@@ -64,15 +64,15 @@ module InternalTransferWithinOrgCommand =
                }
       }
 
-type ApproveInternalTransferWithinOrgCommand =
-   Command<InternalTransferWithinOrgApproved>
+type CompleteInternalTransferWithinOrgCommand =
+   Command<InternalTransferWithinOrgCompleted>
 
-module ApproveInternalTransferWithinOrgCommand =
+module CompleteInternalTransferWithinOrgCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: InitiatedById)
-      (data: InternalTransferWithinOrgApproved)
+      (data: InternalTransferWithinOrgCompleted)
       =
       Command.create
          (AccountId.toEntityId accountId)
@@ -82,20 +82,20 @@ module ApproveInternalTransferWithinOrgCommand =
          data
 
    let toEvent
-      (cmd: ApproveInternalTransferWithinOrgCommand)
-      : ValidationResult<BankEvent<InternalTransferWithinOrgApproved>>
+      (cmd: CompleteInternalTransferWithinOrgCommand)
+      : ValidationResult<BankEvent<InternalTransferWithinOrgCompleted>>
       =
-      BankEvent.create<InternalTransferWithinOrgApproved> cmd |> Ok
+      BankEvent.create<InternalTransferWithinOrgCompleted> cmd |> Ok
 
-type RejectInternalTransferWithinOrgCommand =
-   Command<InternalTransferWithinOrgRejected>
+type FailInternalTransferWithinOrgCommand =
+   Command<InternalTransferWithinOrgFailed>
 
-module RejectInternalTransferWithinOrgCommand =
+module FailInternalTransferWithinOrgCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: InitiatedById)
-      (data: InternalTransferWithinOrgRejected)
+      (data: InternalTransferWithinOrgFailed)
       =
       Command.create
          (AccountId.toEntityId accountId)
@@ -105,10 +105,10 @@ module RejectInternalTransferWithinOrgCommand =
          data
 
    let toEvent
-      (cmd: RejectInternalTransferWithinOrgCommand)
-      : ValidationResult<BankEvent<InternalTransferWithinOrgRejected>>
+      (cmd: FailInternalTransferWithinOrgCommand)
+      : ValidationResult<BankEvent<InternalTransferWithinOrgFailed>>
       =
-      BankEvent.create<InternalTransferWithinOrgRejected> cmd |> Ok
+      BankEvent.create<InternalTransferWithinOrgFailed> cmd |> Ok
 
 type InternalTransferBetweenOrgsCommand = Command<InternalTransferInput>
 
@@ -225,15 +225,15 @@ module ScheduleInternalTransferBetweenOrgsCommand =
             CorrelationId = info.TransferId |> TransferId.get |> CorrelationId
       }
 
-type ApproveInternalTransferBetweenOrgsCommand =
-   Command<InternalTransferBetweenOrgsApproved>
+type CompleteInternalTransferBetweenOrgsCommand =
+   Command<InternalTransferBetweenOrgsCompleted>
 
-module ApproveInternalTransferBetweenOrgsCommand =
+module CompleteInternalTransferBetweenOrgsCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: InitiatedById)
-      (data: InternalTransferBetweenOrgsApproved)
+      (data: InternalTransferBetweenOrgsCompleted)
       =
       Command.create
          (AccountId.toEntityId accountId)
@@ -243,20 +243,20 @@ module ApproveInternalTransferBetweenOrgsCommand =
          data
 
    let toEvent
-      (cmd: ApproveInternalTransferBetweenOrgsCommand)
-      : ValidationResult<BankEvent<InternalTransferBetweenOrgsApproved>>
+      (cmd: CompleteInternalTransferBetweenOrgsCommand)
+      : ValidationResult<BankEvent<InternalTransferBetweenOrgsCompleted>>
       =
-      BankEvent.create<InternalTransferBetweenOrgsApproved> cmd |> Ok
+      BankEvent.create<InternalTransferBetweenOrgsCompleted> cmd |> Ok
 
-type RejectInternalTransferBetweenOrgsCommand =
-   Command<InternalTransferBetweenOrgsRejected>
+type FailInternalTransferBetweenOrgsCommand =
+   Command<InternalTransferBetweenOrgsFailed>
 
-module RejectInternalTransferBetweenOrgsCommand =
+module FailInternalTransferBetweenOrgsCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: InitiatedById)
-      (data: InternalTransferBetweenOrgsRejected)
+      (data: InternalTransferBetweenOrgsFailed)
       =
       Command.create
          (AccountId.toEntityId accountId)
@@ -266,10 +266,10 @@ module RejectInternalTransferBetweenOrgsCommand =
          data
 
    let toEvent
-      (cmd: RejectInternalTransferBetweenOrgsCommand)
-      : ValidationResult<BankEvent<InternalTransferBetweenOrgsRejected>>
+      (cmd: FailInternalTransferBetweenOrgsCommand)
+      : ValidationResult<BankEvent<InternalTransferBetweenOrgsFailed>>
       =
-      BankEvent.create<InternalTransferBetweenOrgsRejected> cmd |> Ok
+      BankEvent.create<InternalTransferBetweenOrgsFailed> cmd |> Ok
 
 type DepositInternalTransferWithinOrgCommand =
    Command<InternalTransferWithinOrgDeposited>
@@ -627,14 +627,14 @@ module ScheduleDomesticTransferCommand =
             ScheduledDateSeedOverride = None
          }
 
-type ApproveDomesticTransferCommand = Command<DomesticTransferApproved>
+type CompleteDomesticTransferCommand = Command<DomesticTransferCompleted>
 
-module ApproveDomesticTransferCommand =
+module CompleteDomesticTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: InitiatedById)
-      (data: DomesticTransferApproved)
+      (data: DomesticTransferCompleted)
       =
       Command.create
          (AccountId.toEntityId accountId)
@@ -644,19 +644,19 @@ module ApproveDomesticTransferCommand =
          data
 
    let toEvent
-      (cmd: ApproveDomesticTransferCommand)
-      : ValidationResult<BankEvent<DomesticTransferApproved>>
+      (cmd: CompleteDomesticTransferCommand)
+      : ValidationResult<BankEvent<DomesticTransferCompleted>>
       =
-      BankEvent.create<DomesticTransferApproved> cmd |> Ok
+      BankEvent.create<DomesticTransferCompleted> cmd |> Ok
 
-type RejectDomesticTransferCommand = Command<DomesticTransferRejected>
+type FailDomesticTransferCommand = Command<DomesticTransferFailed>
 
-module RejectDomesticTransferCommand =
+module FailDomesticTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: InitiatedById)
-      (data: DomesticTransferRejected)
+      (data: DomesticTransferFailed)
       =
       Command.create
          (AccountId.toEntityId accountId)
@@ -666,10 +666,10 @@ module RejectDomesticTransferCommand =
          data
 
    let toEvent
-      (cmd: RejectDomesticTransferCommand)
-      : ValidationResult<BankEvent<DomesticTransferRejected>>
+      (cmd: FailDomesticTransferCommand)
+      : ValidationResult<BankEvent<DomesticTransferFailed>>
       =
-      BankEvent.create<DomesticTransferRejected> cmd |> Ok
+      BankEvent.create<DomesticTransferFailed> cmd |> Ok
 
 type UpdateDomesticTransferProgressCommand =
    Command<DomesticTransferProgressUpdate>
@@ -715,8 +715,8 @@ module DomesticTransferToCommand =
          }
 
    /// Received a "Complete" progress response from domestic transfer service.
-   let approve (txn: DomesticTransfer) =
-      ApproveDomesticTransferCommand.create
+   let complete (txn: DomesticTransfer) =
+      CompleteDomesticTransferCommand.create
          (txn.Sender.AccountId, txn.Sender.OrgId)
          (txn.TransferId |> TransferId.get |> CorrelationId)
          txn.InitiatedBy
@@ -736,8 +736,8 @@ module DomesticTransferToCommand =
          }
 
    /// Received a "Failed" response from domestic transfer service.
-   let reject (txn: DomesticTransfer) (reason: DomesticTransferDeclinedReason) =
-      RejectDomesticTransferCommand.create
+   let fail (txn: DomesticTransfer) (reason: DomesticTransferFailReason) =
+      FailDomesticTransferCommand.create
          (txn.Sender.AccountId, txn.Sender.OrgId)
          (txn.TransferId |> TransferId.get |> CorrelationId)
          txn.InitiatedBy
@@ -1033,15 +1033,15 @@ module InternalAutoTransferCommand =
                }
       }
 
-type ApproveInternalAutoTransferCommand =
-   Command<InternalAutomatedTransferApproved>
+type CompleteInternalAutoTransferCommand =
+   Command<InternalAutomatedTransferCompleted>
 
-module ApproveInternalAutoTransferCommand =
+module CompleteInternalAutoTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: InitiatedById)
-      (data: InternalAutomatedTransferApproved)
+      (data: InternalAutomatedTransferCompleted)
       =
       Command.create
          (AccountId.toEntityId accountId)
@@ -1051,20 +1051,19 @@ module ApproveInternalAutoTransferCommand =
          data
 
    let toEvent
-      (cmd: ApproveInternalAutoTransferCommand)
-      : ValidationResult<BankEvent<InternalAutomatedTransferApproved>>
+      (cmd: CompleteInternalAutoTransferCommand)
+      : ValidationResult<BankEvent<InternalAutomatedTransferCompleted>>
       =
-      BankEvent.create<InternalAutomatedTransferApproved> cmd |> Ok
+      BankEvent.create<InternalAutomatedTransferCompleted> cmd |> Ok
 
-type RejectInternalAutoTransferCommand =
-   Command<InternalAutomatedTransferRejected>
+type FailInternalAutoTransferCommand = Command<InternalAutomatedTransferFailed>
 
-module RejectInternalAutoTransferCommand =
+module FailInternalAutoTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: InitiatedById)
-      (data: InternalAutomatedTransferRejected)
+      (data: InternalAutomatedTransferFailed)
       =
       Command.create
          (AccountId.toEntityId accountId)
@@ -1074,10 +1073,10 @@ module RejectInternalAutoTransferCommand =
          data
 
    let toEvent
-      (cmd: RejectInternalAutoTransferCommand)
-      : ValidationResult<BankEvent<InternalAutomatedTransferRejected>>
+      (cmd: FailInternalAutoTransferCommand)
+      : ValidationResult<BankEvent<InternalAutomatedTransferFailed>>
       =
-      BankEvent.create<InternalAutomatedTransferRejected> cmd |> Ok
+      BankEvent.create<InternalAutomatedTransferFailed> cmd |> Ok
 
 type DepositInternalAutoTransferCommand =
    Command<InternalAutomatedTransferDeposited>

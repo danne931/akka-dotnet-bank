@@ -6,11 +6,11 @@ open Lib.SharedTypes
 
 type InternalTransferWithinOrgPending = { BaseInfo: BaseInternalTransferInfo }
 
-type InternalTransferWithinOrgApproved = { BaseInfo: BaseInternalTransferInfo }
+type InternalTransferWithinOrgCompleted = { BaseInfo: BaseInternalTransferInfo }
 
-type InternalTransferWithinOrgRejected = {
+type InternalTransferWithinOrgFailed = {
    BaseInfo: BaseInternalTransferInfo
-   Reason: InternalTransferDeclinedReason
+   Reason: InternalTransferFailReason
 }
 
 type InternalTransferBetweenOrgsScheduled = {
@@ -23,13 +23,13 @@ type InternalTransferBetweenOrgsPending = {
    Memo: string option
 }
 
-type InternalTransferBetweenOrgsApproved = {
+type InternalTransferBetweenOrgsCompleted = {
    BaseInfo: BaseInternalTransferInfo
 }
 
-type InternalTransferBetweenOrgsRejected = {
+type InternalTransferBetweenOrgsFailed = {
    BaseInfo: BaseInternalTransferInfo
-   Reason: InternalTransferDeclinedReason
+   Reason: InternalTransferFailReason
 }
 
 type DomesticTransferScheduled = { BaseInfo: BaseDomesticTransferInfo }
@@ -41,16 +41,16 @@ type DomesticTransferProgressUpdate = {
    InProgressInfo: DomesticTransferInProgress
 }
 
-type DomesticTransferApproved = {
+type DomesticTransferCompleted = {
    BaseInfo: BaseDomesticTransferInfo
-   /// Indicates the transfer was approved after previously failing
+   /// Indicates the transfer was completed after previously failing
    /// and then retrying.
-   FromRetry: DomesticTransferDeclinedReason option
+   FromRetry: DomesticTransferFailReason option
 }
 
-type DomesticTransferRejected = {
+type DomesticTransferFailed = {
    BaseInfo: BaseDomesticTransferInfo
-   Reason: DomesticTransferDeclinedReason
+   Reason: DomesticTransferFailReason
 }
 
 type RegisteredDomesticTransferRecipient = {
@@ -58,11 +58,6 @@ type RegisteredDomesticTransferRecipient = {
 }
 
 type EditedDomesticTransferRecipient = { Recipient: DomesticTransferRecipient }
-
-[<RequireQualifiedAccess>]
-type DomesticTransferRecipientFailReason =
-   | InvalidAccountInfo
-   | ClosedAccount
 
 type DomesticTransferRecipientFailed = {
    RecipientId: AccountId
@@ -107,10 +102,7 @@ module TransferEventToDomesticTransfer =
          Status = DomesticTransferProgress.Outgoing
       }
 
-   let fromRejection
-      (evt: BankEvent<DomesticTransferRejected>)
-      : DomesticTransfer
-      =
+   let fromFailure (evt: BankEvent<DomesticTransferFailed>) : DomesticTransfer =
       let info = evt.Data.BaseInfo
 
       {
@@ -225,14 +217,14 @@ type InternalAutomatedTransferPending = {
    Rule: AutomaticTransfer.AutomaticTransferRule
 }
 
-type InternalAutomatedTransferApproved = {
+type InternalAutomatedTransferCompleted = {
    BaseInfo: BaseInternalTransferInfo
    Rule: AutomaticTransfer.AutomaticTransferRule
 }
 
-type InternalAutomatedTransferRejected = {
+type InternalAutomatedTransferFailed = {
    BaseInfo: BaseInternalTransferInfo
-   Reason: InternalTransferDeclinedReason
+   Reason: InternalTransferFailReason
    Rule: AutomaticTransfer.AutomaticTransferRule
 }
 

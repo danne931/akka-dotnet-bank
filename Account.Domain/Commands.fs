@@ -111,7 +111,7 @@ module DebitCommand =
          let input = cmd.Data
          let! _ = amountValidator "Debit amount" input.Amount
          let! _ = dateNotDefaultValidator "Date" input.Date
-         let! _ = originValidator input.Origin
+         let! _ = merchantValidator input.Merchant
 
          return BankEvent.create<DebitedAccount> cmd
       }

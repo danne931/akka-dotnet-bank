@@ -26,26 +26,26 @@ let filtersToEventNames (filters: TransactionGroupFilter list) : string array =
            | TransactionGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
            | TransactionGroupFilter.InternalTransferWithinOrg -> [
               typeof<InternalTransferWithinOrgPending>.Name
-              typeof<InternalTransferWithinOrgApproved>.Name
-              typeof<InternalTransferWithinOrgRejected>.Name
+              typeof<InternalTransferWithinOrgCompleted>.Name
+              typeof<InternalTransferWithinOrgFailed>.Name
               typeof<InternalTransferWithinOrgDeposited>.Name
              ]
            | TransactionGroupFilter.InternalTransferBetweenOrgs -> [
               typeof<InternalTransferBetweenOrgsPending>.Name
-              typeof<InternalTransferBetweenOrgsApproved>.Name
-              typeof<InternalTransferBetweenOrgsRejected>.Name
+              typeof<InternalTransferBetweenOrgsCompleted>.Name
+              typeof<InternalTransferBetweenOrgsFailed>.Name
               typeof<InternalTransferBetweenOrgsDeposited>.Name
              ]
            | TransactionGroupFilter.InternalAutomatedTransfer -> [
               typeof<InternalAutomatedTransferPending>.Name
-              typeof<InternalAutomatedTransferApproved>.Name
-              typeof<InternalAutomatedTransferRejected>.Name
+              typeof<InternalAutomatedTransferCompleted>.Name
+              typeof<InternalAutomatedTransferFailed>.Name
               typeof<InternalAutomatedTransferDeposited>.Name
              ]
            | TransactionGroupFilter.DomesticTransfer -> [
               typeof<DomesticTransferPending>.Name
-              typeof<DomesticTransferApproved>.Name
-              typeof<DomesticTransferRejected>.Name
+              typeof<DomesticTransferCompleted>.Name
+              typeof<DomesticTransferFailed>.Name
               typeof<DomesticTransferProgressUpdate>.Name
              ]
            | TransactionGroupFilter.PlatformPayment -> [

@@ -106,7 +106,8 @@ let sqlParamReducer
 
    match evt with
    | EmployeeEvent.CreatedCard e -> cardReducer e.EntityId e.Data.Card.CardId
-   | EmployeeEvent.DebitApproved e -> cardReducer e.EntityId e.Data.Info.CardId
+   | EmployeeEvent.PurchaseConfirmedByAccount e ->
+      cardReducer e.EntityId e.Data.Info.CardId
    | EmployeeEvent.LockedCard e -> cardReducer e.EntityId e.Data.CardId
    | EmployeeEvent.UnlockedCard e -> cardReducer e.EntityId e.Data.CardId
    | EmployeeEvent.DailyDebitLimitUpdated e ->

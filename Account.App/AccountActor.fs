@@ -76,8 +76,8 @@ let private billingCycle
 let private canProduceAutoTransfer =
    function
    | AccountEvent.InternalAutomatedTransferPending _
-   | AccountEvent.InternalAutomatedTransferApproved _
-   | AccountEvent.InternalAutomatedTransferRejected _
+   | AccountEvent.InternalAutomatedTransferCompleted _
+   | AccountEvent.InternalAutomatedTransferFailed _
    | AccountEvent.InternalAutomatedTransferDeposited _ -> false
    | e ->
       let _, flow, _ = AccountEvent.moneyTransaction e
@@ -103,7 +103,7 @@ let private handleValidationError
       match e with
       // NOOP
       | TransferProgressNoChange
-      | TransferAlreadyProgressedToApprovedOrRejected
+      | TransferAlreadyProgressedToCompletedOrFailed
       | AccountNotReadyToActivate ->
          logDebug mailbox $"AccountTransferActor NOOP msg {e}"
       | InsufficientBalance e ->
@@ -113,25 +113,27 @@ let private handleValidationError
             let employee = cmd.Data.EmployeePurchaseReference
 
             let msg =
-               DeclineDebitCommand.create (employee.EmployeeId, cmd.OrgId) {
-                  Reason =
-                     PurchaseDeclinedReason.InsufficientAccountFunds(
-                        account.Balance,
-                        account.FullName
-                     )
-                  Info = {
-                     AccountId = account.AccountId
-                     CorrelationId = cmd.CorrelationId
-                     EmployeeId = employee.EmployeeId
-                     CardId = employee.CardId
-                     CardNumberLast4 = employee.EmployeeCardNumberLast4
-                     Date = info.Date
-                     Amount = info.Amount
-                     Origin = info.Origin
-                     Reference = info.Reference
+               AccountRejectsPurchaseCommand.create
+                  (employee.EmployeeId, cmd.OrgId)
+                  {
+                     Reason =
+                        PurchaseFailReason.InsufficientAccountFunds(
+                           account.Balance,
+                           account.FullName
+                        )
+                     Info = {
+                        AccountId = account.AccountId
+                        CorrelationId = cmd.CorrelationId
+                        EmployeeId = employee.EmployeeId
+                        CardId = employee.CardId
+                        CardNumberLast4 = employee.EmployeeCardNumberLast4
+                        Date = info.Date
+                        Amount = info.Amount
+                        Merchant = info.Merchant
+                        Reference = info.Reference
+                     }
                   }
-               }
-               |> EmployeeCommand.DeclineDebit
+               |> EmployeeCommand.AccountRejectsPurchase
                |> EmployeeMessage.StateChange
 
             getEmployeeRef employee.EmployeeId <! msg
@@ -180,20 +182,22 @@ let actorProps
                let employee = info.EmployeePurchaseReference
 
                let msg =
-                  ApproveDebitCommand.create (employee.EmployeeId, e.OrgId) {
-                     Info = {
-                        AccountId = account.AccountId
-                        CorrelationId = e.CorrelationId
-                        EmployeeId = employee.EmployeeId
-                        CardId = employee.CardId
-                        CardNumberLast4 = employee.EmployeeCardNumberLast4
-                        Date = info.Date
-                        Amount = info.Amount
-                        Origin = info.Origin
-                        Reference = info.Reference
+                  AccountConfirmsPurchaseCommand.create
+                     (employee.EmployeeId, e.OrgId)
+                     {
+                        Info = {
+                           AccountId = account.AccountId
+                           CorrelationId = e.CorrelationId
+                           EmployeeId = employee.EmployeeId
+                           CardId = employee.CardId
+                           CardNumberLast4 = employee.EmployeeCardNumberLast4
+                           Date = info.Date
+                           Amount = info.Amount
+                           Merchant = info.Merchant
+                           Reference = info.Reference
+                        }
                      }
-                  }
-                  |> EmployeeCommand.ApproveDebit
+                  |> EmployeeCommand.AccountConfirmsPurchase
                   |> EmployeeMessage.StateChange
 
                getEmployeeRef employee.EmployeeId <! msg
@@ -223,14 +227,14 @@ let actorProps
                   )
 
                getDomesticTransferActor mailbox.System <! msg
-            | DomesticTransferRejected e ->
+            | DomesticTransferFailed e ->
                let info = e.Data.BaseInfo
 
                let failDueToRecipient =
                   match e.Data.Reason with
-                  | DomesticTransferDeclinedReason.InvalidAccountInfo ->
+                  | DomesticTransferFailReason.InvalidAccountInfo ->
                      Some DomesticTransferRecipientFailReason.InvalidAccountInfo
-                  | DomesticTransferDeclinedReason.AccountClosed ->
+                  | DomesticTransferFailReason.AccountClosed ->
                      Some DomesticTransferRecipientFailReason.ClosedAccount
                   | _ -> None
 
@@ -249,9 +253,9 @@ let actorProps
 
                   getOrgRef e.OrgId <! OrgMessage.StateChange cmd
                | None -> ()
-            | DomesticTransferApproved e ->
+            | DomesticTransferCompleted e ->
                match e.Data.FromRetry with
-               | Some DomesticTransferDeclinedReason.InvalidAccountInfo ->
+               | Some DomesticTransferFailReason.InvalidAccountInfo ->
                   let info = e.Data.BaseInfo
 
                   let cmd =

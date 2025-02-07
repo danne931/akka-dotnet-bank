@@ -491,7 +491,7 @@ COMMENT ON COLUMN transaction.source IS
 This property is used only for analytics queries.';
 COMMENT ON COLUMN transaction.correlation_id IS
 'Correlation ID allows us to trace the lifecycle of some event
-(ex: DomesticTransferRequested -> DomesticTransferProgressUpdate -> DomesticTransferApproved)
+(ex: DomesticTransferRequested -> DomesticTransferProgressUpdate -> DomesticTransferCompleted)
 is an example where 3 events share the same correlation_id.';
 
 --- ANCILLARY TRANSACTION INFO ---
@@ -576,7 +576,7 @@ COMMENT ON TABLE transfer IS
 CREATE TYPE internal_transfer_status AS ENUM (
    'Scheduled',
    'Pending',
-   'Approved',
+   'Completed',
    'Deposited',
    'Failed'
 );
@@ -634,7 +634,7 @@ CREATE TYPE domestic_transfer_status AS ENUM (
    'Scheduled',
    'Outgoing',
    'InProgress',
-   'Complete',
+   'Completed',
    'Failed'
 );
 
@@ -969,10 +969,10 @@ BEGIN
       -- still fetching internal transfers between orgs.
       AND t.name NOT IN(
          'InternalTransferWithinOrgPending',
-         'InternalTransferWithinOrgRejected',
+         'InternalTransferWithinOrgFailed',
          'InternalTransferWithinOrgDeposited',
          'InternalAutomatedTransferPending',
-         'InternalAutomatedTransferRejected',
+         'InternalAutomatedTransferFailed',
          'InternalAutomatedTransferDeposited'
       )
    GROUP BY ds.day, ids.account_id
@@ -1025,10 +1025,10 @@ BEGIN
          -- still fetching internal transfers between orgs.
          AND t.name NOT IN(
             'InternalTransferWithinOrgPending',
-            'InternalTransferWithinOrgRejected',
+            'InternalTransferWithinOrgFailed',
             'InternalTransferWithinOrgDeposited',
             'InternalAutomatedTransferPending',
-            'InternalAutomatedTransferRejected',
+            'InternalAutomatedTransferFailed',
             'InternalAutomatedTransferDeposited'
          )
    ) t ON true
@@ -1065,10 +1065,10 @@ BEGIN
       -- still fetching internal transfers between orgs.
       AND t.name NOT IN(
          'InternalTransferWithinOrgPending',
-         'InternalTransferWithinOrgRejected', 
+         'InternalTransferWithinOrgFailed', 
          'InternalTransferWithinOrgDeposited',
          'InternalAutomatedTransferPending',
-         'InternalAutomatedTransferRejected',
+         'InternalAutomatedTransferFailed',
          'InternalAutomatedTransferDeposited'
       )
    GROUP BY t.source
@@ -1098,7 +1098,7 @@ BEGIN
    JOIN employee using(employee_id)
    WHERE
       e.org_id = orgId
-      AND e.name = 'DebitApproved'
+      AND e.name = 'PurchaseConfirmedByAccount'
       AND e.timestamp::date
          BETWEEN DATE_TRUNC('month', d)
          AND (DATE_TRUNC('month', d) + INTERVAL '1 month' - INTERVAL '1 day')
@@ -1180,8 +1180,8 @@ BEGIN
            THEN t.amount::numeric
 
            WHEN t.name IN(
-              'InternalTransferWithinOrgRejected',
-              'InternalAutomatedTransferRejected'
+              'InternalTransferWithinOrgFailed',
+              'InternalAutomatedTransferFailed'
            )
            THEN -t.amount::numeric
 
@@ -1197,7 +1197,7 @@ BEGIN
            WHEN t.name = 'InternalTransferBetweenOrgsPending'
            THEN t.amount::numeric
 
-           WHEN t.name = 'InternalTransferBetweenOrgsRejected'
+           WHEN t.name = 'InternalTransferBetweenOrgsFailed'
            THEN -t.amount::numeric
 
            ELSE 0
@@ -1210,7 +1210,7 @@ BEGIN
         SUM(
            CASE
            WHEN t.name = 'DomesticTransferPending' THEN t.amount::numeric
-           WHEN t.name = 'DomesticTransferRejected' THEN -t.amount::numeric
+           WHEN t.name = 'DomesticTransferFailed' THEN -t.amount::numeric
            ELSE 0
            END
         ),
@@ -1236,10 +1236,10 @@ BEGIN
      t.org_id = orgId
      AND t.amount IS NOT NULL
      AND t.name IN (
-        'InternalAutomatedTransferPending', 'InternalAutomatedTransferRejected',
-        'InternalTransferWithinOrgPending', 'InternalTransferWithinOrgRejected',
-        'InternalTransferBetweenOrgsPending', 'InternalTransferBetweenOrgsRejected',
-        'DomesticTransferPending', 'DomesticTransferRejected',
+        'InternalAutomatedTransferPending', 'InternalAutomatedTransferFailed',
+        'InternalTransferWithinOrgPending', 'InternalTransferWithinOrgFailed',
+        'InternalTransferBetweenOrgsPending', 'InternalTransferBetweenOrgsFailed',
+        'DomesticTransferPending', 'DomesticTransferFailed',
         'PlatformPaymentPaid'
      )
      AND (account.last_billing_cycle_at IS NULL OR t.timestamp > account.last_billing_cycle_at)

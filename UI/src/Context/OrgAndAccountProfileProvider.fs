@@ -103,19 +103,19 @@ let update msg state =
                match evt with
                | AccountEvent.InternalTransferWithinOrgPending e ->
                   internalTransferWithinOrg e.Data.BaseInfo.Amount
-               | AccountEvent.InternalTransferWithinOrgRejected e ->
+               | AccountEvent.InternalTransferWithinOrgFailed e ->
                   internalTransferWithinOrg -e.Data.BaseInfo.Amount
                | AccountEvent.InternalAutomatedTransferPending e ->
                   internalTransferWithinOrg e.Data.BaseInfo.Amount
-               | AccountEvent.InternalAutomatedTransferRejected e ->
+               | AccountEvent.InternalAutomatedTransferFailed e ->
                   internalTransferWithinOrg -e.Data.BaseInfo.Amount
                | AccountEvent.DomesticTransferPending e ->
                   domesticTransfer e.Data.BaseInfo.Amount
-               | AccountEvent.DomesticTransferRejected e ->
+               | AccountEvent.DomesticTransferFailed e ->
                   domesticTransfer -e.Data.BaseInfo.Amount
                | AccountEvent.InternalTransferBetweenOrgsPending e ->
                   internalTransferBetweenOrgs e.Data.BaseInfo.Amount
-               | AccountEvent.InternalTransferBetweenOrgsRejected e ->
+               | AccountEvent.InternalTransferBetweenOrgsFailed e ->
                   internalTransferBetweenOrgs -e.Data.BaseInfo.Amount
                | AccountEvent.PlatformPaymentPaid e -> {
                   metrics with
@@ -169,11 +169,11 @@ let update msg state =
                recipientBalanceUpdate
                   e.Data.BaseInfo.Recipient.AccountId
                   e.Data.BaseInfo.Amount
-            | AccountEvent.InternalTransferWithinOrgRejected e ->
+            | AccountEvent.InternalTransferWithinOrgFailed e ->
                recipientBalanceUpdate
                   e.Data.BaseInfo.Recipient.AccountId
                   -e.Data.BaseInfo.Amount
-            | AccountEvent.InternalAutomatedTransferRejected e ->
+            | AccountEvent.InternalAutomatedTransferFailed e ->
                recipientBalanceUpdate
                   e.Data.BaseInfo.Recipient.AccountId
                   -e.Data.BaseInfo.Amount

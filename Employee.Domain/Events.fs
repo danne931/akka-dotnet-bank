@@ -35,13 +35,13 @@ type InvitationCancelled = { Reason: string option }
 
 type CreatedCard = { PersonName: string; Card: Card }
 
-type DebitRequested = { Info: DebitInfo }
+type PurchasePending = { Info: PurchaseInfo }
 
-type DebitApproved = { Info: DebitInfo }
+type PurchaseConfirmedByAccount = { Info: PurchaseInfo }
 
-type DebitDeclined = {
-   Info: DebitInfo
-   Reason: PurchaseDeclinedReason
+type PurchaseRejectedByAccount = {
+   Info: PurchaseInfo
+   Reason: PurchaseFailReason
 }
 
 type DailyDebitLimitUpdated = {

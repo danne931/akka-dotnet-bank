@@ -26,7 +26,7 @@ type EmployeePurchaseReference = {
 type DebitedAccount = {
    Date: DateTime
    Amount: decimal
-   Origin: string
+   Merchant: string
    Reference: string option
    EmployeePurchaseReference: EmployeePurchaseReference
 }

@@ -59,4 +59,4 @@ let transferRecipientIdValidator senderId =
    let msg = sprintf "%s should not equal sender id"
    Check.WithMessage.String.notEquals senderId msg "Recipient Id"
 
-let originValidator = Check.String.greaterThanLen 2 "Origin"
+let merchantValidator = Check.String.greaterThanLen 2 "Merchant"

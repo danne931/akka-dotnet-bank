@@ -273,7 +273,7 @@ type AccountStateTransitionError =
    | ExceededDailyInternalTransferLimit of decimal
    | ExceededDailyDomesticTransferLimit of decimal
    | TransferProgressNoChange
-   | TransferAlreadyProgressedToApprovedOrRejected
+   | TransferAlreadyProgressedToCompletedOrFailed
    | TransferExpectedToOccurWithinOrg
    | OnlyOneAutoTransferRuleMayExistAtATime
    | AutoTransferRuleDoesNotExist
@@ -287,7 +287,7 @@ type EmployeeStateTransitionError =
    | CardExpired
    | ExceededDailyDebit of limit: decimal * accrued: decimal
    | ExceededMonthlyDebit of limit: decimal * accrued: decimal
-   | DebitAlreadyProgressedToApprovedOrDeclined
+   | DebitAlreadyProgressedToCompletedOrFailed
    | EmployeeStatusDisallowsAccessRestore of string
 
 type Err =
@@ -374,8 +374,8 @@ type Err =
             $"Exceeded Daily Internal Transfer Limit ${limit}"
          | AccountStateTransitionError.InsufficientBalance balance ->
             $"Insufficient Balance ${balance}"
-         | AccountStateTransitionError.TransferAlreadyProgressedToApprovedOrRejected ->
-            "Transfer already progressed to approved or rejected"
+         | AccountStateTransitionError.TransferAlreadyProgressedToCompletedOrFailed ->
+            "Transfer already progressed to completed or failed"
          | AccountStateTransitionError.TransferProgressNoChange ->
             "Transfer progress no change"
          | AccountStateTransitionError.TransferExpectedToOccurWithinOrg ->
@@ -386,8 +386,8 @@ type Err =
             "Attempted to update an auto transfer rule which does not exist."
       | EmployeeStateTransitionError e ->
          match e with
-         | EmployeeStateTransitionError.DebitAlreadyProgressedToApprovedOrDeclined ->
-            "Not found in PendingPurchases. Likely already approved or declined."
+         | EmployeeStateTransitionError.DebitAlreadyProgressedToCompletedOrFailed ->
+            "Not found in PendingPurchases. Likely already completed or failed."
          | EmployeeStateTransitionError.EmployeeNotActive ->
             "Employee Not Active"
          | EmployeeStateTransitionError.EmployeeNotReadyToActivate ->

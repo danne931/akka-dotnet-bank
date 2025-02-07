@@ -15,7 +15,7 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 
 module Command = DomesticTransferToCommand
-type private DeclinedReason = DomesticTransferDeclinedReason
+type private FailReason = DomesticTransferFailReason
 
 [<RequireQualifiedAccess>]
 type DomesticTransferMessage =
@@ -32,17 +32,16 @@ module private Msg =
       AccountMessage.StateChange
       << AccountCommand.UpdateDomesticTransferProgress
 
-   let approve =
-      AccountMessage.StateChange << AccountCommand.ApproveDomesticTransfer
+   let complete =
+      AccountMessage.StateChange << AccountCommand.CompleteDomesticTransfer
 
-   let reject =
-      AccountMessage.StateChange << AccountCommand.RejectDomesticTransfer
+   let fail = AccountMessage.StateChange << AccountCommand.FailDomesticTransfer
 
 let private actorName = ActorUtil.ActorMetadata.domesticTransfer.Name
 
 let private progressFromResponse (response: DomesticTransferServiceResponse) =
    match response.Status with
-   | "Complete" -> DomesticTransferProgress.Complete
+   | "Complete" -> DomesticTransferProgress.Completed
    | "ReceivedRequest" ->
       DomesticTransferProgress.InProgress
          DomesticTransferInProgress.InitialHandshakeAck
@@ -51,16 +50,16 @@ let private progressFromResponse (response: DomesticTransferServiceResponse) =
          DomesticTransferInProgress.Other status
       )
 
-let private declinedReasonFromError (err: string) : DeclinedReason =
+let private failReasonFromError (err: string) : FailReason =
    match err with
-   | Contains "CorruptData" -> DeclinedReason.CorruptData
-   | Contains "InvalidAction" -> DeclinedReason.InvalidAction
-   | Contains "InvalidAmount" -> DeclinedReason.InvalidAmount
-   | Contains "InvalidAccountInfo" -> DeclinedReason.InvalidAccountInfo
-   | Contains "InvalidPaymentNetwork" -> DeclinedReason.InvalidPaymentNetwork
-   | Contains "InvalidDepository" -> DeclinedReason.InvalidDepository
-   | Contains "InactiveAccount" -> DeclinedReason.AccountClosed
-   | e -> DeclinedReason.Unknown e
+   | Contains "CorruptData" -> FailReason.CorruptData
+   | Contains "InvalidAction" -> FailReason.InvalidAction
+   | Contains "InvalidAmount" -> FailReason.InvalidAmount
+   | Contains "InvalidAccountInfo" -> FailReason.InvalidAccountInfo
+   | Contains "InvalidPaymentNetwork" -> FailReason.InvalidPaymentNetwork
+   | Contains "InvalidDepository" -> FailReason.InvalidDepository
+   | Contains "InactiveAccount" -> FailReason.AccountClosed
+   | e -> FailReason.Unknown e
 
 let private networkSender
    (sender: DomesticTransferSender)
@@ -181,9 +180,9 @@ let actorProps
                let progress = progressFromResponse res
 
                match progress with
-               | DomesticTransferProgress.Complete ->
-                  let cmd = Command.approve txn
-                  accountRef <! Msg.approve cmd
+               | DomesticTransferProgress.Completed ->
+                  let cmd = Command.complete txn
+                  accountRef <! Msg.complete cmd
                | DomesticTransferProgress.InProgress progress ->
                   let msg = Msg.progress <| Command.progress txn progress
 
@@ -202,13 +201,13 @@ let actorProps
 
                Ignore
             else
-               let err = declinedReasonFromError res.Reason
+               let err = failReasonFromError res.Reason
 
                match err with
-               | DeclinedReason.CorruptData
-               | DeclinedReason.InvalidPaymentNetwork
-               | DeclinedReason.InvalidDepository
-               | DeclinedReason.InvalidAction ->
+               | FailReason.CorruptData
+               | FailReason.InvalidPaymentNetwork
+               | FailReason.InvalidDepository
+               | FailReason.InvalidAction ->
                   logError $"Transfer API requires code update: {err}"
 
                   getEmailActor ()
@@ -218,11 +217,11 @@ let actorProps
                   )
 
                   Unhandled
-               | DeclinedReason.InvalidAmount
-               | DeclinedReason.InvalidAccountInfo
-               | DeclinedReason.AccountClosed
+               | FailReason.InvalidAmount
+               | FailReason.InvalidAccountInfo
+               | FailReason.AccountClosed
                | _ ->
-                  let msg = Msg.reject <| Command.reject txn err
+                  let msg = Msg.fail <| Command.fail txn err
                   accountRef <! msg
                   Ignore
       | :? Status.Failure as e ->
