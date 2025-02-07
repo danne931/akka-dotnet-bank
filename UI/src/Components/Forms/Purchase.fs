@@ -1,4 +1,4 @@
-module Bank.Employee.Forms.DebitForm
+module Bank.Employee.Forms.PurchaseForm
 
 open Feliz
 open Fable.Form.Simple
@@ -12,7 +12,7 @@ open Lib.Validators
 open Lib.SharedTypes
 open FormContainer
 
-type Values = { Amount: string; Origin: string }
+type Values = { Amount: string; Merchant: string }
 
 let form
    (account: Account)
@@ -23,57 +23,57 @@ let form
    let amountField =
       Form.textField {
          Parser =
-            amountValidatorFromString "Debit amount"
+            amountValidatorFromString "Purchase amount"
             >> validationErrorsHumanFriendly
          Value = fun (values: Values) -> values.Amount
          Update = fun newValue values -> { values with Amount = newValue }
          Error = fun _ -> None
          Attributes = {
-            Label = "Debit Amount:"
+            Label = "Purchase Amount:"
             Placeholder = "1"
             HtmlAttributes = []
          }
       }
 
-   let originField =
+   let merchantField =
       Form.textField {
-         Parser = originValidator >> validationErrorsHumanFriendly
-         Value = fun (values: Values) -> values.Origin
-         Update = fun newValue values -> { values with Origin = newValue }
+         Parser = merchantValidator >> validationErrorsHumanFriendly
+         Value = fun (values: Values) -> values.Merchant
+         Update = fun newValue values -> { values with Merchant = newValue }
          Error = fun _ -> None
          Attributes = {
-            Label = "Origin:"
+            Label = "Merchant:"
             Placeholder = "Trader Joe's"
             HtmlAttributes = []
          }
       }
 
-   let onSubmit amount origin =
+   let onSubmit amount merchant =
       let cmd =
-         DebitRequestCommand.create employee.CompositeId {
+         PurchasePendingCommand.create employee.CompositeId {
             CardId = selectedCardId
             CardNumberLast4 = employee.Cards[selectedCardId].CardNumberLast4
             AccountId = account.AccountId
             Amount = amount
-            Origin = origin
+            Merchant = merchant
             Reference = None
             Date = DateTime.UtcNow
          }
-         |> EmployeeCommand.DebitRequest
+         |> EmployeeCommand.PurchasePending
 
       Msg.Submit(employee, cmd, Started)
 
-   Form.succeed onSubmit |> Form.append amountField |> Form.append originField
+   Form.succeed onSubmit |> Form.append amountField |> Form.append merchantField
 
 [<ReactComponent>]
-let DebitFormComponent
+let PurchaseFormComponent
    (onSubmit: EmployeeCommandReceipt -> unit)
    (account: Account)
    (selectedCardId: CardId)
    (employee: Employee)
    =
    EmployeeFormContainer {|
-      InitialValues = { Amount = ""; Origin = "" }
+      InitialValues = { Amount = ""; Merchant = "" }
       Form = form account employee selectedCardId
       Action = None
       OnSubmit = onSubmit

@@ -9,7 +9,7 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Lib.SharedTypes
 
-type private DeclinedReason = InternalTransferDeclinedReason
+type private FailReason = InternalTransferFailReason
 
 [<RequireQualifiedAccess>]
 type InternalTransferMessage =
@@ -17,41 +17,41 @@ type InternalTransferMessage =
    | TransferRequestWithinOrg of BankEvent<InternalTransferWithinOrgPending>
    | TransferRequestBetweenOrgs of BankEvent<InternalTransferBetweenOrgsPending>
 
-let private declineTransferWithinOrgMsg
+let private failTransferWithinOrgMsg
    (evt: BankEvent<InternalTransferWithinOrgPending>)
-   (reason: DeclinedReason)
+   (reason: FailReason)
    =
    let info = evt.Data.BaseInfo
 
-   RejectInternalTransferWithinOrgCommand.create
+   FailInternalTransferWithinOrgCommand.create
       (info.Sender.AccountId, info.Sender.OrgId)
       evt.CorrelationId
       evt.InitiatedById
       { BaseInfo = info; Reason = reason }
-   |> AccountCommand.RejectInternalTransfer
+   |> AccountCommand.FailInternalTransfer
    |> AccountMessage.StateChange
 
-let private declineTransferBetweenOrgsMsg
+let private failTransferBetweenOrgsMsg
    (evt: BankEvent<InternalTransferBetweenOrgsPending>)
-   (reason: DeclinedReason)
+   (reason: FailReason)
    =
    let info = evt.Data.BaseInfo
 
-   RejectInternalTransferBetweenOrgsCommand.create
+   FailInternalTransferBetweenOrgsCommand.create
       (info.Sender.AccountId, evt.OrgId)
       evt.CorrelationId
       evt.InitiatedById
       { BaseInfo = info; Reason = reason }
-   |> AccountCommand.RejectInternalTransferBetweenOrgs
+   |> AccountCommand.FailInternalTransferBetweenOrgs
    |> AccountMessage.StateChange
 
-let private declineAutoTransferMsg
+let private failAutoTransferMsg
    (evt: BankEvent<InternalAutomatedTransferPending>)
-   (reason: DeclinedReason)
+   (reason: FailReason)
    =
    let info = evt.Data.BaseInfo
 
-   RejectInternalAutoTransferCommand.create
+   FailInternalAutoTransferCommand.create
       (info.Sender.AccountId, info.Sender.OrgId)
       evt.CorrelationId
       evt.InitiatedById
@@ -60,41 +60,41 @@ let private declineAutoTransferMsg
          BaseInfo = info
          Reason = reason
       }
-   |> AccountCommand.RejectInternalAutoTransfer
+   |> AccountCommand.FailInternalAutoTransfer
    |> AccountMessage.StateChange
 
-let private approveTransferWithinOrgMsg
+let private completeTransferWithinOrgMsg
    (evt: BankEvent<InternalTransferWithinOrgPending>)
    =
    let info = evt.Data.BaseInfo
 
-   ApproveInternalTransferWithinOrgCommand.create
+   CompleteInternalTransferWithinOrgCommand.create
       (info.Sender.AccountId, evt.OrgId)
       evt.CorrelationId
       evt.InitiatedById
       { BaseInfo = info }
-   |> AccountCommand.ApproveInternalTransfer
+   |> AccountCommand.CompleteInternalTransfer
    |> AccountMessage.StateChange
 
-let private approveTransferBetweenOrgsMsg
+let private completeTransferBetweenOrgsMsg
    (evt: BankEvent<InternalTransferBetweenOrgsPending>)
    =
    let info = evt.Data.BaseInfo
 
-   ApproveInternalTransferBetweenOrgsCommand.create
+   CompleteInternalTransferBetweenOrgsCommand.create
       (info.Sender.AccountId, evt.OrgId)
       evt.CorrelationId
       evt.InitiatedById
       { BaseInfo = info }
-   |> AccountCommand.ApproveInternalTransferBetweenOrgs
+   |> AccountCommand.CompleteInternalTransferBetweenOrgs
    |> AccountMessage.StateChange
 
-let private approveAutoTransferMsg
+let private completeAutoTransferMsg
    (evt: BankEvent<InternalAutomatedTransferPending>)
    =
    let info = evt.Data.BaseInfo
 
-   ApproveInternalAutoTransferCommand.create
+   CompleteInternalAutoTransferCommand.create
       (info.Sender.AccountId, evt.OrgId)
       evt.CorrelationId
       evt.InitiatedById
@@ -102,7 +102,7 @@ let private approveAutoTransferMsg
          Rule = evt.Data.Rule
          BaseInfo = info
       }
-   |> AccountCommand.ApproveInternalAutoTransfer
+   |> AccountCommand.CompleteInternalAutoTransfer
    |> AccountMessage.StateChange
 
 let actorProps
@@ -112,23 +112,23 @@ let actorProps
    let handler (ctx: Actor<_>) (msg: InternalTransferMessage) = actor {
       let logWarning = logWarning ctx
 
-      let declineTransferMsg =
+      let failTransferMsg =
          match msg with
          | InternalTransferMessage.TransferRequestWithinOrg e ->
-            declineTransferWithinOrgMsg e
+            failTransferWithinOrgMsg e
          | InternalTransferMessage.TransferRequestBetweenOrgs e ->
-            declineTransferBetweenOrgsMsg e
+            failTransferBetweenOrgsMsg e
          | InternalTransferMessage.AutomatedTransferRequest e ->
-            declineAutoTransferMsg e
+            failAutoTransferMsg e
 
-      let approveTransferMsg () =
+      let completeTransferMsg () =
          match msg with
          | InternalTransferMessage.TransferRequestWithinOrg e ->
-            approveTransferWithinOrgMsg e
+            completeTransferWithinOrgMsg e
          | InternalTransferMessage.TransferRequestBetweenOrgs e ->
-            approveTransferBetweenOrgsMsg e
+            completeTransferBetweenOrgsMsg e
          | InternalTransferMessage.AutomatedTransferRequest e ->
-            approveAutoTransferMsg e
+            completeAutoTransferMsg e
 
       let info, meta =
          match msg with
@@ -163,15 +163,14 @@ let actorProps
       | None ->
          logWarning $"Transfer recipient not found {recipientId}"
 
-         senderAccountRef
-         <! declineTransferMsg DeclinedReason.InvalidAccountInfo
+         senderAccountRef <! failTransferMsg FailReason.InvalidAccountInfo
       | Some recipientAccount ->
          if recipientAccount.Status = AccountStatus.Closed then
             logWarning $"Transfer recipient account closed"
 
-            senderAccountRef <! declineTransferMsg DeclinedReason.AccountClosed
+            senderAccountRef <! failTransferMsg FailReason.AccountClosed
          else
-            senderAccountRef <! approveTransferMsg ()
+            senderAccountRef <! completeTransferMsg ()
 
             // CorrelationId (here as txn.TransactionId) from sender
             // transfer request traced to receiver's deposit.

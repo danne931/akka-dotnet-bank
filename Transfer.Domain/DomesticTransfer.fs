@@ -83,7 +83,12 @@ type DomesticTransferRecipient = {
 type TransferProgressTrackingMessage = | ProgressCheck
 
 [<RequireQualifiedAccess>]
-type DomesticTransferDeclinedReason =
+type DomesticTransferRecipientFailReason =
+   | InvalidAccountInfo
+   | ClosedAccount
+
+[<RequireQualifiedAccess>]
+type DomesticTransferFailReason =
    | CorruptData
    | InvalidAction
    | InvalidPaymentNetwork
@@ -114,8 +119,8 @@ type DomesticTransferProgress =
    | Scheduled
    | Outgoing
    | InProgress of DomesticTransferInProgress
-   | Complete
-   | Failed of DomesticTransferDeclinedReason
+   | Completed
+   | Failed of DomesticTransferFailReason
 
 type DomesticTransferSender = {
    Name: string
@@ -127,7 +132,7 @@ type DomesticTransferSender = {
 
 // Info received from the initial domestic transfer request will
 // carry over unaltered for all event progressions
-// (ProgressUpdate/Approved/Rejected/Retry).
+// (ProgressUpdate/Completed/Rejected/Retry).
 type BaseDomesticTransferInfo = {
    Sender: DomesticTransferSender
    Recipient: DomesticTransferRecipient

@@ -20,7 +20,7 @@ let private renderMenuButton (account: Account) (view: AccountActionView) =
          | AccountActionView.Deposit ->
             Html.span [ Fa.i [ Fa.Solid.PiggyBank ] [] ]
             Html.span "Deposit"
-         | AccountActionView.Debit ->
+         | AccountActionView.Purchase ->
             Html.span [ Fa.i [ Fa.Solid.CreditCard ] [] ]
             Html.span "Debit Card Purchase"
          | AccountActionView.Transfer _ ->
@@ -29,13 +29,14 @@ let private renderMenuButton (account: Account) (view: AccountActionView) =
          | AccountActionView.RegisterTransferRecipient ->
             Html.span [ Fa.i [ Fa.Solid.UserPlus ] [] ]
             Html.span "Add a Transfer Recipient"
+         | _ -> ()
       ]
    ]
 
 let render (account: Account) =
    classyNode Html.div [ "action-menu" ] [
       classyNode Html.div [ "grid" ] [
-         renderMenuButton account AccountActionView.Debit
+         renderMenuButton account AccountActionView.Purchase
       ]
 
       classyNode Html.div [ "grid" ] [

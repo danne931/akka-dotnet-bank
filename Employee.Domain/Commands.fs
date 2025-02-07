@@ -194,24 +194,27 @@ module CreateCardCommand =
             }
       }
 
-type DebitRequestInput = {
+type PurchasePendingInput = {
    CardId: CardId
    CardNumberLast4: string
    AccountId: AccountId
    Amount: decimal
-   Origin: string
+   Merchant: string
    Reference: string option
    Date: DateTime
 }
 
-type DebitRequestCommand = Command<DebitRequestInput>
+type PurchasePendingCommand = Command<PurchasePendingInput>
 
 // NOTE: CorrelationId traced from
-// EmployeeCommand.DebitRequest
+// EmployeeCommand.PurchasePending
 // -> AccountCommand.Debit
-// -> EmployeeCommand.ApproveDebit/DeclineDebit
-module DebitRequestCommand =
-   let create (employeeId: EmployeeId, orgId: OrgId) (data: DebitRequestInput) =
+// -> EmployeeCommand.AccountConfirmsPurchase/AccountRejectsPurchase
+module PurchasePendingCommand =
+   let create
+      (employeeId: EmployeeId, orgId: OrgId)
+      (data: PurchasePendingInput)
+      =
       Command.create
          (EmployeeId.toEntityId employeeId)
          orgId
@@ -220,17 +223,17 @@ module DebitRequestCommand =
          data
 
    let toEvent
-      (cmd: DebitRequestCommand)
-      : ValidationResult<BankEvent<DebitRequested>>
+      (cmd: PurchasePendingCommand)
+      : ValidationResult<BankEvent<PurchasePending>>
       =
       validate {
          let input = cmd.Data
          let! amount = amountValidator "Debit amount" input.Amount
          let! date = dateNotDefaultValidator "Date" input.Date
-         let! origin = originValidator input.Origin
+         let! merchant = merchantValidator input.Merchant
 
          return
-            BankEvent.create2<DebitRequestInput, DebitRequested> cmd {
+            BankEvent.create2<PurchasePendingInput, PurchasePending> cmd {
                Info = {
                   EmployeeId = EmployeeId.fromEntityId cmd.EntityId
                   CorrelationId = cmd.CorrelationId
@@ -238,17 +241,20 @@ module DebitRequestCommand =
                   CardNumberLast4 = input.CardNumberLast4
                   AccountId = input.AccountId
                   Amount = amount
-                  Origin = origin
+                  Merchant = merchant
                   Reference = cmd.Data.Reference
                   Date = date
                }
             }
       }
 
-type ApproveDebitCommand = Command<DebitApproved>
+type AccountConfirmsPurchaseCommand = Command<PurchaseConfirmedByAccount>
 
-module ApproveDebitCommand =
-   let create (employeeId: EmployeeId, orgId: OrgId) (data: DebitApproved) =
+module AccountConfirmsPurchaseCommand =
+   let create
+      (employeeId: EmployeeId, orgId: OrgId)
+      (data: PurchaseConfirmedByAccount)
+      =
       Command.create
          (EmployeeId.toEntityId employeeId)
          orgId
@@ -257,15 +263,18 @@ module ApproveDebitCommand =
          data
 
    let toEvent
-      (cmd: ApproveDebitCommand)
-      : ValidationResult<BankEvent<DebitApproved>>
+      (cmd: AccountConfirmsPurchaseCommand)
+      : ValidationResult<BankEvent<PurchaseConfirmedByAccount>>
       =
-      BankEvent.create<DebitApproved> cmd |> Ok
+      BankEvent.create<PurchaseConfirmedByAccount> cmd |> Ok
 
-type DeclineDebitCommand = Command<DebitDeclined>
+type AccountRejectsPurchaseCommand = Command<PurchaseRejectedByAccount>
 
-module DeclineDebitCommand =
-   let create (employeeId: EmployeeId, orgId: OrgId) (data: DebitDeclined) =
+module AccountRejectsPurchaseCommand =
+   let create
+      (employeeId: EmployeeId, orgId: OrgId)
+      (data: PurchaseRejectedByAccount)
+      =
       Command.create
          (EmployeeId.toEntityId employeeId)
          orgId
@@ -274,10 +283,10 @@ module DeclineDebitCommand =
          data
 
    let toEvent
-      (cmd: DeclineDebitCommand)
-      : ValidationResult<BankEvent<DebitDeclined>>
+      (cmd: AccountRejectsPurchaseCommand)
+      : ValidationResult<BankEvent<PurchaseRejectedByAccount>>
       =
-      BankEvent.create<DebitDeclined> cmd |> Ok
+      BankEvent.create<PurchaseRejectedByAccount> cmd |> Ok
 
 type LimitDailyDebitsCommand = Command<DailyDebitLimitUpdated>
 

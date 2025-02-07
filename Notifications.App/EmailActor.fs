@@ -33,9 +33,9 @@ type TransferDepositEmailInfo = {
    OrgId: OrgId
 }
 
-type PurchaseDeclinedEmailInfo = {
+type PurchaseFailEmailInfo = {
    Email: Email
-   Reason: PurchaseDeclinedReason
+   Reason: PurchaseFailReason
    OrgId: OrgId
 }
 
@@ -44,7 +44,7 @@ type EmailMessage =
    | AccountOpen of accountName: string * OrgId
    | AccountClose of accountName: string * OrgId
    | BillingStatement of accountName: string * OrgId
-   | PurchaseDeclined of PurchaseDeclinedEmailInfo
+   | PurchaseFailed of PurchaseFailEmailInfo
    | InternalTransferBetweenOrgsDeposited of TransferDepositEmailInfo
    | ApplicationErrorRequiresSupport of error: string * OrgId
    | EmployeeInvite of EmployeeInviteEmailInfo
@@ -103,12 +103,12 @@ let private emailPropsFromMessage
       Email = None
       Data = {| name = accountName |}
      }
-   | EmailMessage.PurchaseDeclined info -> {
+   | EmailMessage.PurchaseFailed info -> {
       OrgId = info.OrgId
       Event = "debit-declined"
       Email = Some(string info.Email)
       Data = {|
-         reason = PurchaseDeclinedReason.display info.Reason
+         reason = PurchaseFailReason.display info.Reason
       |}
      }
    | EmailMessage.InternalTransferBetweenOrgsDeposited info -> {

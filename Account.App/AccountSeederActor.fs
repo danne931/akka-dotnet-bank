@@ -292,7 +292,7 @@ let seedBalanceHistory () = taskResultOption {
       $"""
       SELECT {EmployeeEventFields.timestamp}, {EmployeeEventFields.correlationId}
       FROM {EmployeeEventSqlMapper.table}
-      WHERE {EmployeeEventFields.name} = 'DebitRequested'
+      WHERE {EmployeeEventFields.name} = 'PurchasePending'
 
       UNION ALL
 
@@ -328,7 +328,7 @@ let seedBalanceHistory () = taskResultOption {
          )
       WHERE
          {EmployeeEventFields.correlationId} = @correlationId
-         AND {EmployeeEventFields.name} <> 'DebitRequested';
+         AND {EmployeeEventFields.name} <> 'PurchasePending';
       """,
       sqlParams
 
@@ -1117,7 +1117,7 @@ let seedEmployeeActions
    (employeeRef: IEntityRef<EmployeeMessage>)
    (timestamp: DateTime)
    =
-   let purchaseOrigins = [
+   let purchaseMerchants = [
       [ "Cozy Hotel"; "Trader Joe's"; "In N Out"; "Lyft" ]
       [
          "Barn House BBQ and Beer"
@@ -1154,7 +1154,7 @@ let seedEmployeeActions
 
    for month in [ 1..3 ] do
       let timestamp = timestamp.AddMonths month
-      let purchaseOrigins = purchaseOrigins[month - 1]
+      let purchaseMerchants = purchaseMerchants[month - 1]
 
       let maxPurchases =
          if month = 3 then
@@ -1177,13 +1177,14 @@ let seedEmployeeActions
             | true, _ -> DateTime.UtcNow
 
          let purchaseCmd = {
-            DebitRequestCommand.create compositeId {
+            PurchasePendingCommand.create compositeId {
                AccountId = card.AccountId
                CardId = card.CardId
                CardNumberLast4 = card.CardNumberLast4
                Date = purchaseDate
                Amount = randomAmount 50 333
-               Origin = purchaseOrigins[rnd.Next(0, purchaseOrigins.Length)]
+               Merchant =
+                  purchaseMerchants[rnd.Next(0, purchaseMerchants.Length)]
                Reference = None
             } with
                Timestamp = purchaseDate
@@ -1191,7 +1192,7 @@ let seedEmployeeActions
 
          let msg =
             purchaseCmd
-            |> EmployeeCommand.DebitRequest
+            |> EmployeeCommand.PurchasePending
             |> EmployeeMessage.StateChange
 
          employeeRef <! msg

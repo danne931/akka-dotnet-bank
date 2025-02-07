@@ -187,15 +187,15 @@ let sqlParamReducer
             Transfer = transferParams :: acc.Transfer
             InternalTransfer = internalTransferParams :: acc.InternalTransfer
       }
-   | AccountEvent.InternalTransferWithinOrgRejected e ->
+   | AccountEvent.InternalTransferWithinOrgFailed e ->
       internalTransferStatusReducer
          acc
          (InternalTransferStatus.Failed e.Data.Reason)
          e.Data.BaseInfo
-   | AccountEvent.InternalTransferWithinOrgApproved e ->
+   | AccountEvent.InternalTransferWithinOrgCompleted e ->
       internalTransferStatusReducer
          acc
-         InternalTransferStatus.Approved
+         InternalTransferStatus.Completed
          e.Data.BaseInfo
    | AccountEvent.InternalTransferWithinOrgDeposited e ->
       internalTransferStatusReducer
@@ -228,15 +228,15 @@ let sqlParamReducer
             Transfer = transferParams :: acc.Transfer
             InternalTransfer = internalTransferParams :: acc.InternalTransfer
       }
-   | AccountEvent.InternalAutomatedTransferRejected e ->
+   | AccountEvent.InternalAutomatedTransferFailed e ->
       internalTransferStatusReducer
          acc
          (InternalTransferStatus.Failed e.Data.Reason)
          e.Data.BaseInfo
-   | AccountEvent.InternalAutomatedTransferApproved e ->
+   | AccountEvent.InternalAutomatedTransferCompleted e ->
       internalTransferStatusReducer
          acc
-         InternalTransferStatus.Approved
+         InternalTransferStatus.Completed
          e.Data.BaseInfo
    | AccountEvent.InternalAutomatedTransferDeposited e ->
       internalTransferStatusReducer
@@ -295,15 +295,15 @@ let sqlParamReducer
             Transfer = transferParams :: acc.Transfer
             InternalTransfer = internalTransferParams :: acc.InternalTransfer
       }
-   | AccountEvent.InternalTransferBetweenOrgsRejected e ->
+   | AccountEvent.InternalTransferBetweenOrgsFailed e ->
       internalTransferStatusReducer
          acc
          (InternalTransferStatus.Failed e.Data.Reason)
          e.Data.BaseInfo
-   | AccountEvent.InternalTransferBetweenOrgsApproved e ->
+   | AccountEvent.InternalTransferBetweenOrgsCompleted e ->
       internalTransferStatusReducer
          acc
-         InternalTransferStatus.Approved
+         InternalTransferStatus.Completed
          e.Data.BaseInfo
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       internalTransferStatusReducer
@@ -363,15 +363,15 @@ let sqlParamReducer
          acc
          (DomesticTransferProgress.InProgress e.Data.InProgressInfo)
          e.Data.BaseInfo
-   | AccountEvent.DomesticTransferRejected e ->
+   | AccountEvent.DomesticTransferFailed e ->
       domesticTransferStatusReducer
          acc
          (DomesticTransferProgress.Failed e.Data.Reason)
          e.Data.BaseInfo
-   | AccountEvent.DomesticTransferApproved e ->
+   | AccountEvent.DomesticTransferCompleted e ->
       domesticTransferStatusReducer
          acc
-         DomesticTransferProgress.Complete
+         DomesticTransferProgress.Completed
          e.Data.BaseInfo
    | AccountEvent.PlatformPaymentRequested e ->
       let pInfo = e.Data.BaseInfo

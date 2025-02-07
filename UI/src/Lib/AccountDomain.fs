@@ -41,11 +41,11 @@ let debitWithMerchantAlias
    =
    {
       evt with
-         Data.Origin =
+         Data.Merchant =
             merchants
-            |> Map.tryFind (evt.Data.Origin.ToLower())
+            |> Map.tryFind (evt.Data.Merchant.ToLower())
             |> Option.bind _.Alias
-            |> Option.defaultValue evt.Data.Origin
+            |> Option.defaultValue evt.Data.Merchant
    }
 
 let eventWithMerchantAlias
@@ -112,18 +112,18 @@ let transactionUIFriendly
      }
    | DebitedAccount evt ->
       let employee = evt.Data.EmployeePurchaseReference
-      // TODO: rename Origin field as Merchant
+
       let employee =
          $"{employee.EmployeeName}**{employee.EmployeeCardNumberLast4}"
 
       {
          props with
             Name = "Purchase"
-            Info = $"Purchase from {evt.Data.Origin} by {employee}"
+            Info = $"Purchase from {evt.Data.Merchant} by {employee}"
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
             Source = Some $"{account.FullName} via {employee}"
-            Destination = Some evt.Data.Origin
+            Destination = Some evt.Data.Merchant
       }
    | MaintenanceFeeDebited evt -> {
       props with
@@ -148,24 +148,24 @@ let transactionUIFriendly
             Source = Some account.FullName
             Destination = Some info.Recipient.Name
       }
-   | InternalTransferWithinOrgApproved evt ->
+   | InternalTransferWithinOrgCompleted evt ->
       let info = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Internal Transfer Approved"
+            Name = "Internal Transfer Completed"
             Info =
-               $"Approved money movement from {info.Sender.Name} to {info.Recipient.Name}"
+               $"Completed money movement from {info.Sender.Name} to {info.Recipient.Name}"
             Amount = Some <| Money.format info.Amount
       }
-   | InternalTransferWithinOrgRejected evt ->
+   | InternalTransferWithinOrgFailed evt ->
       let info = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Internal Transfer Rejected"
+            Name = "Internal Transfer Failed"
             Info =
-               $"Declined money movement from {info.Sender.Name} to {info.Recipient.Name} 
+               $"Failed money movement from {info.Sender.Name} to {info.Recipient.Name} 
               - Reason: {evt.Data.Reason} 
               - Account refunded"
             Amount = Some <| Money.format info.Amount
@@ -197,24 +197,24 @@ let transactionUIFriendly
             Source = Some account.FullName
             Destination = Some info.Recipient.Name
       }
-   | InternalTransferBetweenOrgsApproved evt ->
+   | InternalTransferBetweenOrgsCompleted evt ->
       let info = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Transfer Between Orgs Approved"
+            Name = "Transfer Between Orgs Completed"
             Info =
-               $"Approved transfer from {info.Sender.Name} to {info.Recipient.Name}"
+               $"Completed transfer from {info.Sender.Name} to {info.Recipient.Name}"
             Amount = Some <| Money.format info.Amount
       }
-   | InternalTransferBetweenOrgsRejected evt ->
+   | InternalTransferBetweenOrgsFailed evt ->
       let info = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Transfer Between Orgs Rejected"
+            Name = "Transfer Between Orgs Failed"
             Info =
-               $"Declined transfer from {info.Sender.Name} to {info.Recipient.Name} 
+               $"Failed transfer from {info.Sender.Name} to {info.Recipient.Name} 
               - Reason: {evt.Data.Reason} 
               - Account refunded"
             Amount = Some <| Money.format info.Amount
@@ -248,7 +248,7 @@ let transactionUIFriendly
             Source = Some account.FullName
             Destination = Some recipientName
       }
-   | DomesticTransferApproved evt ->
+   | DomesticTransferCompleted evt ->
       let info = evt.Data.BaseInfo
 
       {
@@ -258,7 +258,7 @@ let transactionUIFriendly
                $"Domestic transfer completed to {domesticRecipientName info.Recipient}"
             Amount = Some <| Money.format info.Amount
       }
-   | DomesticTransferRejected evt ->
+   | DomesticTransferFailed evt ->
       let info = evt.Data.BaseInfo
 
       let recipientName = domesticRecipientName info.Recipient
@@ -427,24 +427,24 @@ let transactionUIFriendly
             Source = Some account.FullName
             Destination = Some info.Recipient.Name
       }
-   | InternalAutomatedTransferApproved evt ->
+   | InternalAutomatedTransferCompleted evt ->
       let info = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Internal Automated Transfer Approved"
+            Name = "Internal Automated Transfer Completed"
             Info =
-               $"Auto Balance Management: approve transfer from {info.Sender.Name} to {info.Recipient.Name}"
+               $"Auto Balance Management: completed transfer from {info.Sender.Name} to {info.Recipient.Name}"
             Amount = Some <| Money.format info.Amount
       }
-   | InternalAutomatedTransferRejected evt ->
+   | InternalAutomatedTransferFailed evt ->
       let info = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Internal Automated Transfer Rejected"
+            Name = "Internal Automated Transfer Failed"
             Info =
-               $"Auto Balance Management: declined transfer from {info.Sender.Name} to {info.Recipient.Name} 
+               $"Auto Balance Management: failed transfer from {info.Sender.Name} to {info.Recipient.Name} 
               - Reason: {evt.Data.Reason} 
               - Account refunded"
             Amount = Some <| Money.format info.Amount
@@ -469,7 +469,7 @@ type SelectedCard = { Display: string; CardId: CardId }
 
 [<RequireQualifiedAccess>]
 type AccountActionView =
-   | Debit
+   | Purchase
    | Deposit
    | Transfer of (RecipientAccountEnvironment * AccountId) option
    | RegisterTransferRecipient
@@ -593,7 +593,7 @@ module AccountBrowserQuery =
             Map.tryFind "action" queryParams
             |> Option.bind (function
                | "Deposit" -> Some AccountActionView.Deposit
-               | "Debit" -> Some AccountActionView.Debit
+               | "Purchase" -> Some AccountActionView.Purchase
                | "Transfer" ->
                   let envOpt =
                      Map.tryFind "accountEnvironment" queryParams

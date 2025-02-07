@@ -191,7 +191,7 @@ module TransferSqlWriter =
          function
          | InternalTransferStatus.Scheduled -> "Scheduled"
          | InternalTransferStatus.Pending -> "Pending"
-         | InternalTransferStatus.Approved -> "Approved"
+         | InternalTransferStatus.Completed -> "Completed"
          | InternalTransferStatus.Deposited -> "Deposited"
          | InternalTransferStatus.Failed _ -> "Failed"
          >> Sql.string
@@ -207,7 +207,7 @@ module TransferSqlWriter =
          function
          | DomesticTransferProgress.Scheduled -> "Scheduled"
          | DomesticTransferProgress.Outgoing -> "Outgoing"
-         | DomesticTransferProgress.Complete -> "Complete"
+         | DomesticTransferProgress.Completed -> "Completed"
          | DomesticTransferProgress.InProgress _ -> "InProgress"
          | DomesticTransferProgress.Failed _ -> "Failed"
          >> Sql.string

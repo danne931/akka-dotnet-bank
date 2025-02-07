@@ -154,7 +154,7 @@ type EmployeeStatus =
       | PendingRestoreAccessApproval -> "PendingRestoreAccessApproval"
       | ReadyForDelete -> "ReadyForDelete"
 
-type DebitInfo = {
+type PurchaseInfo = {
    AccountId: AccountId
    EmployeeId: EmployeeId
    CorrelationId: CorrelationId
@@ -162,25 +162,25 @@ type DebitInfo = {
    CardNumberLast4: string
    Date: DateTime
    Amount: decimal
-   Origin: string
+   Merchant: string
    Reference: string option
 }
 
 [<RequireQualifiedAccess>]
-type PurchaseDeclinedReason =
+type PurchaseFailReason =
    | InsufficientAccountFunds of balance: decimal * accountName: string
    | ExceededDailyCardLimit of limit: decimal * accrued: decimal
    | ExceededMonthlyCardLimit of limit: decimal * accrued: decimal
 
-module PurchaseDeclinedReason =
+module PurchaseFailReason =
    let display =
       function
-      | PurchaseDeclinedReason.InsufficientAccountFunds(balance, accountName) ->
+      | PurchaseFailReason.InsufficientAccountFunds(balance, accountName) ->
          $"Account {accountName} has insufficient funds.  The current balance is ${balance}."
-      | PurchaseDeclinedReason.ExceededDailyCardLimit(limit, accrued) ->
+      | PurchaseFailReason.ExceededDailyCardLimit(limit, accrued) ->
          $"You have spent ${accrued} today. 
            Your daily purchase limit is set to ${limit}."
-      | PurchaseDeclinedReason.ExceededMonthlyCardLimit(limit, accrued) ->
+      | PurchaseFailReason.ExceededMonthlyCardLimit(limit, accrued) ->
          $"You have spent ${accrued} this month. 
            Your monthly purchase limit is set to ${limit}."
 

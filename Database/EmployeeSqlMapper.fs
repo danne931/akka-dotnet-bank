@@ -64,7 +64,7 @@ module EmployeeSqlReader =
 
    let pendingPurchases (read: RowReader) =
       read.text EmployeeFields.pendingPurchases
-      |> Serialization.deserializeUnsafe<DebitInfo list>
+      |> Serialization.deserializeUnsafe<PurchaseInfo list>
 
    let onboardingTasks (read: RowReader) =
       read.text EmployeeFields.onboardingTasks
@@ -115,7 +115,7 @@ module EmployeeSqlWriter =
    let statusDetail (status: EmployeeStatus) =
       status |> Serialization.serialize |> Sql.jsonb
 
-   let pendingPurchases (pendingPurchases: Map<CorrelationId, DebitInfo>) =
+   let pendingPurchases (pendingPurchases: Map<CorrelationId, PurchaseInfo>) =
       pendingPurchases.Values
       |> Seq.toList
       |> Serialization.serialize

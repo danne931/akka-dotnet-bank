@@ -52,7 +52,7 @@ let private postJson (command: EmployeeCommand) =
       match command with
       | EmployeeCommand.CreateEmployee cmd ->
          Serialization.serialize cmd, EmployeePath.Base
-      | EmployeeCommand.DebitRequest cmd ->
+      | EmployeeCommand.PurchasePending cmd ->
          Serialization.serialize cmd, CardPath.Purchase
       | EmployeeCommand.LimitDailyDebits cmd ->
          Serialization.serialize cmd, CardPath.DailyPurchaseLimit

@@ -42,26 +42,26 @@ let employeeEventUIFriendly (txn: EmployeeHistory) : EmployeeHistoryUIFriendly =
    }
 
    match txn.Event with
-   | EmployeeEvent.DebitRequested e -> {
+   | EmployeeEvent.PurchasePending e -> {
       props with
-         Name = "Purchase Requested"
+         Name = "Purchase Pending"
          Info =
-            $"Purchase requested by {txn.EmployeeName} at {e.Data.Info.Origin} with card {e.Data.Info.CardNumberLast4}"
+            $"Purchase requested by {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
          Amount = Money.format e.Data.Info.Amount
      }
-   | EmployeeEvent.DebitApproved e -> {
+   | EmployeeEvent.PurchaseConfirmedByAccount e -> {
       props with
-         Name = "Purchase Approved"
+         Name = "Purchase Confirmed by Account"
          Info =
-            $"Purchase approved for {txn.EmployeeName} at {e.Data.Info.Origin} with card {e.Data.Info.CardNumberLast4}"
+            $"Purchase confirmed by account for {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
          Amount = Money.format e.Data.Info.Amount
          MoneyFlow = Some MoneyFlow.Out
      }
-   | EmployeeEvent.DebitDeclined e -> {
+   | EmployeeEvent.PurchaseRejectedByAccount e -> {
       props with
-         Name = "Purchase Declined"
+         Name = "Purchase Rejected by Account"
          Info =
-            $"Purchase declined for {txn.EmployeeName} at {e.Data.Info.Origin} with card {e.Data.Info.CardNumberLast4}"
+            $"Purchase rejected by account for {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
          Amount = Money.format e.Data.Info.Amount
      }
    | EmployeeEvent.CreatedEmployee e -> {

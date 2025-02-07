@@ -15,22 +15,21 @@ type AccountCommand =
    | MaintenanceFee of MaintenanceFeeCommand
    | SkipMaintenanceFee of SkipMaintenanceFeeCommand
    | InternalTransfer of InternalTransferWithinOrgCommand
-   | ApproveInternalTransfer of ApproveInternalTransferWithinOrgCommand
-   | RejectInternalTransfer of RejectInternalTransferWithinOrgCommand
+   | CompleteInternalTransfer of CompleteInternalTransferWithinOrgCommand
+   | FailInternalTransfer of FailInternalTransferWithinOrgCommand
    | ScheduleInternalTransferBetweenOrgs of
       ScheduleInternalTransferBetweenOrgsCommand
    | InternalTransferBetweenOrgs of InternalTransferBetweenOrgsCommand
-   | ApproveInternalTransferBetweenOrgs of
-      ApproveInternalTransferBetweenOrgsCommand
-   | RejectInternalTransferBetweenOrgs of
-      RejectInternalTransferBetweenOrgsCommand
+   | CompleteInternalTransferBetweenOrgs of
+      CompleteInternalTransferBetweenOrgsCommand
+   | FailInternalTransferBetweenOrgs of FailInternalTransferBetweenOrgsCommand
    | DepositTransferWithinOrg of DepositInternalTransferWithinOrgCommand
    | DepositTransferBetweenOrgs of DepositInternalTransferBetweenOrgsCommand
    | ScheduleDomesticTransfer of ScheduleDomesticTransferCommand
    | DomesticTransfer of DomesticTransferCommand
    | UpdateDomesticTransferProgress of UpdateDomesticTransferProgressCommand
-   | ApproveDomesticTransfer of ApproveDomesticTransferCommand
-   | RejectDomesticTransfer of RejectDomesticTransferCommand
+   | CompleteDomesticTransfer of CompleteDomesticTransferCommand
+   | FailDomesticTransfer of FailDomesticTransferCommand
    | RequestPlatformPayment of RequestPlatformPaymentCommand
    | CancelPlatformPayment of CancelPlatformPaymentCommand
    | DeclinePlatformPayment of DeclinePlatformPaymentCommand
@@ -41,8 +40,8 @@ type AccountCommand =
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
    | DeleteAutoTransferRule of DeleteAutoTransferRuleCommand
    | InternalAutoTransfer of InternalAutoTransferCommand
-   | ApproveInternalAutoTransfer of ApproveInternalAutoTransferCommand
-   | RejectInternalAutoTransfer of RejectInternalAutoTransferCommand
+   | CompleteInternalAutoTransfer of CompleteInternalAutoTransferCommand
+   | FailInternalAutoTransfer of FailInternalAutoTransferCommand
    | DepositInternalAutoTransfer of DepositInternalAutoTransferCommand
 
 type AccountEvent =
@@ -53,18 +52,18 @@ type AccountEvent =
    | MaintenanceFeeSkipped of BankEvent<MaintenanceFeeSkipped>
    | InternalTransferWithinOrgPending of
       BankEvent<InternalTransferWithinOrgPending>
-   | InternalTransferWithinOrgApproved of
-      BankEvent<InternalTransferWithinOrgApproved>
-   | InternalTransferWithinOrgRejected of
-      BankEvent<InternalTransferWithinOrgRejected>
+   | InternalTransferWithinOrgCompleted of
+      BankEvent<InternalTransferWithinOrgCompleted>
+   | InternalTransferWithinOrgFailed of
+      BankEvent<InternalTransferWithinOrgFailed>
    | InternalTransferBetweenOrgsScheduled of
       BankEvent<InternalTransferBetweenOrgsScheduled>
    | InternalTransferBetweenOrgsPending of
       BankEvent<InternalTransferBetweenOrgsPending>
-   | InternalTransferBetweenOrgsApproved of
-      BankEvent<InternalTransferBetweenOrgsApproved>
-   | InternalTransferBetweenOrgsRejected of
-      BankEvent<InternalTransferBetweenOrgsRejected>
+   | InternalTransferBetweenOrgsCompleted of
+      BankEvent<InternalTransferBetweenOrgsCompleted>
+   | InternalTransferBetweenOrgsFailed of
+      BankEvent<InternalTransferBetweenOrgsFailed>
    | InternalTransferWithinOrgDeposited of
       BankEvent<InternalTransferWithinOrgDeposited>
    | InternalTransferBetweenOrgsDeposited of
@@ -72,8 +71,8 @@ type AccountEvent =
    | DomesticTransferScheduled of BankEvent<DomesticTransferScheduled>
    | DomesticTransferPending of BankEvent<DomesticTransferPending>
    | DomesticTransferProgress of BankEvent<DomesticTransferProgressUpdate>
-   | DomesticTransferApproved of BankEvent<DomesticTransferApproved>
-   | DomesticTransferRejected of BankEvent<DomesticTransferRejected>
+   | DomesticTransferCompleted of BankEvent<DomesticTransferCompleted>
+   | DomesticTransferFailed of BankEvent<DomesticTransferFailed>
    | PlatformPaymentRequested of BankEvent<PlatformPaymentRequested>
    | PlatformPaymentCancelled of BankEvent<PlatformPaymentCancelled>
    | PlatformPaymentDeclined of BankEvent<PlatformPaymentDeclined>
@@ -85,10 +84,10 @@ type AccountEvent =
    | AutoTransferRuleDeleted of BankEvent<AutomaticTransferRuleDeleted>
    | InternalAutomatedTransferPending of
       BankEvent<InternalAutomatedTransferPending>
-   | InternalAutomatedTransferApproved of
-      BankEvent<InternalAutomatedTransferApproved>
-   | InternalAutomatedTransferRejected of
-      BankEvent<InternalAutomatedTransferRejected>
+   | InternalAutomatedTransferCompleted of
+      BankEvent<InternalAutomatedTransferCompleted>
+   | InternalAutomatedTransferFailed of
+      BankEvent<InternalAutomatedTransferFailed>
    | InternalAutomatedTransferDeposited of
       BankEvent<InternalAutomatedTransferDeposited>
 
@@ -98,16 +97,16 @@ module AccountEvent =
       | AccountEvent.DepositedCash evt ->
          Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Origin
       | AccountEvent.DebitedAccount evt ->
-         Some evt.Data.Amount, Some MoneyFlow.Out, Some evt.Data.Origin
+         Some evt.Data.Amount, Some MoneyFlow.Out, Some evt.Data.Merchant
       | AccountEvent.InternalTransferWithinOrgPending evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
          Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalTransferWithinOrgApproved evt ->
+      | AccountEvent.InternalTransferWithinOrgCompleted evt ->
          Some evt.Data.BaseInfo.Amount,
          None,
          Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalTransferWithinOrgRejected evt ->
+      | AccountEvent.InternalTransferWithinOrgFailed evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.In,
          Some evt.Data.BaseInfo.Recipient.Name
@@ -119,11 +118,11 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
          Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalAutomatedTransferApproved evt ->
+      | AccountEvent.InternalAutomatedTransferCompleted evt ->
          Some evt.Data.BaseInfo.Amount,
          None,
          Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalAutomatedTransferRejected evt ->
+      | AccountEvent.InternalAutomatedTransferFailed evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.In,
          Some evt.Data.BaseInfo.Recipient.Name
@@ -139,11 +138,11 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
          Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalTransferBetweenOrgsApproved evt ->
+      | AccountEvent.InternalTransferBetweenOrgsCompleted evt ->
          Some evt.Data.BaseInfo.Amount,
          None,
          Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalTransferBetweenOrgsRejected evt ->
+      | AccountEvent.InternalTransferBetweenOrgsFailed evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.In,
          Some evt.Data.BaseInfo.Recipient.Name
@@ -159,7 +158,7 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
          Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.DomesticTransferRejected evt ->
+      | AccountEvent.DomesticTransferFailed evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.In,
          Some evt.Data.BaseInfo.Recipient.Name
@@ -196,18 +195,18 @@ module AccountEnvelope =
       | :? BankEvent<MaintenanceFeeSkipped> as evt -> MaintenanceFeeSkipped evt
       | :? BankEvent<InternalTransferWithinOrgPending> as evt ->
          InternalTransferWithinOrgPending evt
-      | :? BankEvent<InternalTransferWithinOrgApproved> as evt ->
-         InternalTransferWithinOrgApproved evt
-      | :? BankEvent<InternalTransferWithinOrgRejected> as evt ->
-         InternalTransferWithinOrgRejected evt
+      | :? BankEvent<InternalTransferWithinOrgCompleted> as evt ->
+         InternalTransferWithinOrgCompleted evt
+      | :? BankEvent<InternalTransferWithinOrgFailed> as evt ->
+         InternalTransferWithinOrgFailed evt
       | :? BankEvent<InternalTransferBetweenOrgsScheduled> as evt ->
          InternalTransferBetweenOrgsScheduled evt
       | :? BankEvent<InternalTransferBetweenOrgsPending> as evt ->
          InternalTransferBetweenOrgsPending evt
-      | :? BankEvent<InternalTransferBetweenOrgsApproved> as evt ->
-         InternalTransferBetweenOrgsApproved evt
-      | :? BankEvent<InternalTransferBetweenOrgsRejected> as evt ->
-         InternalTransferBetweenOrgsRejected evt
+      | :? BankEvent<InternalTransferBetweenOrgsCompleted> as evt ->
+         InternalTransferBetweenOrgsCompleted evt
+      | :? BankEvent<InternalTransferBetweenOrgsFailed> as evt ->
+         InternalTransferBetweenOrgsFailed evt
       | :? BankEvent<InternalTransferWithinOrgDeposited> as evt ->
          InternalTransferWithinOrgDeposited evt
       | :? BankEvent<InternalTransferBetweenOrgsDeposited> as evt ->
@@ -218,10 +217,10 @@ module AccountEnvelope =
          DomesticTransferPending evt
       | :? BankEvent<DomesticTransferProgressUpdate> as evt ->
          DomesticTransferProgress evt
-      | :? BankEvent<DomesticTransferApproved> as evt ->
-         DomesticTransferApproved evt
-      | :? BankEvent<DomesticTransferRejected> as evt ->
-         DomesticTransferRejected evt
+      | :? BankEvent<DomesticTransferCompleted> as evt ->
+         DomesticTransferCompleted evt
+      | :? BankEvent<DomesticTransferFailed> as evt ->
+         DomesticTransferFailed evt
       | :? BankEvent<PlatformPaymentRequested> as evt ->
          PlatformPaymentRequested evt
       | :? BankEvent<PlatformPaymentCancelled> as evt ->
@@ -239,10 +238,10 @@ module AccountEnvelope =
          AutoTransferRuleDeleted evt
       | :? BankEvent<InternalAutomatedTransferPending> as evt ->
          InternalAutomatedTransferPending evt
-      | :? BankEvent<InternalAutomatedTransferApproved> as evt ->
-         InternalAutomatedTransferApproved evt
-      | :? BankEvent<InternalAutomatedTransferRejected> as evt ->
-         InternalAutomatedTransferRejected evt
+      | :? BankEvent<InternalAutomatedTransferCompleted> as evt ->
+         InternalAutomatedTransferCompleted evt
+      | :? BankEvent<InternalAutomatedTransferFailed> as evt ->
+         InternalAutomatedTransferFailed evt
       | :? BankEvent<InternalAutomatedTransferDeposited> as evt ->
          InternalAutomatedTransferDeposited evt
       | _ -> failwith "Missing definition for AccountEvent message"
@@ -255,17 +254,17 @@ module AccountEnvelope =
       | MaintenanceFeeDebited evt -> wrap evt, get evt
       | MaintenanceFeeSkipped evt -> wrap evt, get evt
       | InternalTransferWithinOrgPending evt -> wrap evt, get evt
-      | InternalTransferWithinOrgApproved evt -> wrap evt, get evt
-      | InternalTransferWithinOrgRejected evt -> wrap evt, get evt
+      | InternalTransferWithinOrgCompleted evt -> wrap evt, get evt
+      | InternalTransferWithinOrgFailed evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsScheduled evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsPending evt -> wrap evt, get evt
-      | InternalTransferBetweenOrgsApproved evt -> wrap evt, get evt
-      | InternalTransferBetweenOrgsRejected evt -> wrap evt, get evt
+      | InternalTransferBetweenOrgsCompleted evt -> wrap evt, get evt
+      | InternalTransferBetweenOrgsFailed evt -> wrap evt, get evt
       | DomesticTransferScheduled evt -> wrap evt, get evt
       | DomesticTransferPending evt -> wrap evt, get evt
       | DomesticTransferProgress evt -> wrap evt, get evt
-      | DomesticTransferApproved evt -> wrap evt, get evt
-      | DomesticTransferRejected evt -> wrap evt, get evt
+      | DomesticTransferCompleted evt -> wrap evt, get evt
+      | DomesticTransferFailed evt -> wrap evt, get evt
       | InternalTransferWithinOrgDeposited evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsDeposited evt -> wrap evt, get evt
       | PlatformPaymentRequested evt -> wrap evt, get evt
@@ -278,8 +277,8 @@ module AccountEnvelope =
       | AutoTransferRuleConfigured evt -> wrap evt, get evt
       | AutoTransferRuleDeleted evt -> wrap evt, get evt
       | InternalAutomatedTransferPending evt -> wrap evt, get evt
-      | InternalAutomatedTransferApproved evt -> wrap evt, get evt
-      | InternalAutomatedTransferRejected evt -> wrap evt, get evt
+      | InternalAutomatedTransferCompleted evt -> wrap evt, get evt
+      | InternalAutomatedTransferFailed evt -> wrap evt, get evt
       | InternalAutomatedTransferDeposited evt -> wrap evt, get evt
 
 type Account = {

@@ -171,7 +171,7 @@ let AccountActionsComponent
          | AccountActionView.EditTransferRecipient _ ->
             "Edit Transfer Recipient"
          | AccountActionView.Transfer _ -> "Transfer Money"
-         | AccountActionView.Debit -> "Debit Purchase"
+         | AccountActionView.Purchase -> "Purchase"
          | AccountActionView.Deposit -> "Deposit Cash"
       )
 
@@ -236,13 +236,13 @@ let AccountActionsComponent
                |> orgDispatch
 
                dispatch (Msg.SubmitCommandForApproval "transfer"))
-      | AccountActionView.Debit ->
+      | AccountActionView.Purchase ->
          EmployeeCardSelectSearchComponent {|
             OrgId = account.OrgId
             MakeChildrenOnSelect =
                Some
                <| fun card employee -> [
-                  DebitForm.DebitFormComponent
+                  PurchaseForm.PurchaseFormComponent
                      (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
                      account
                      card.CardId

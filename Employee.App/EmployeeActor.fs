@@ -31,33 +31,27 @@ let handleValidationError
    | EmployeeStateTransitionError e ->
       match e with
       // Noop
-      | DebitAlreadyProgressedToApprovedOrDeclined -> ()
+      | DebitAlreadyProgressedToCompletedOrFailed -> ()
       | ExceededDailyDebit(limit, accrued) ->
          let msg =
-            EmailActor.EmailMessage.PurchaseDeclined(
+            EmailActor.EmailMessage.PurchaseFailed(
                {
                   OrgId = employee.OrgId
                   Email = employee.Email
                   Reason =
-                     PurchaseDeclinedReason.ExceededDailyCardLimit(
-                        limit,
-                        accrued
-                     )
+                     PurchaseFailReason.ExceededDailyCardLimit(limit, accrued)
                }
             )
 
          getEmailActor (mailbox.System) <! msg
       | ExceededMonthlyDebit(limit, accrued) ->
          let msg =
-            EmailActor.EmailMessage.PurchaseDeclined(
+            EmailActor.EmailMessage.PurchaseFailed(
                {
                   OrgId = employee.OrgId
                   Email = employee.Email
                   Reason =
-                     PurchaseDeclinedReason.ExceededMonthlyCardLimit(
-                        limit,
-                        accrued
-                     )
+                     PurchaseFailReason.ExceededMonthlyCardLimit(limit, accrued)
                }
             )
 
@@ -196,7 +190,7 @@ let actorProps
 
                   mailbox.Parent() <! (EmployeeMessage.StateChange cmd)
                | None -> ()
-            | EmployeeEvent.DebitRequested e ->
+            | EmployeeEvent.PurchasePending e ->
                let accountId = e.Data.Info.AccountId
                let info = e.Data.Info
 
@@ -208,7 +202,7 @@ let actorProps
                      {
                         Date = info.Date
                         Amount = info.Amount
-                        Origin = info.Origin
+                        Merchant = info.Merchant
                         Reference = info.Reference
                         EmployeePurchaseReference = {
                            EmployeeName = employee.Name
@@ -223,13 +217,13 @@ let actorProps
                // sending a response to issuing card network.
                getAccountRef accountId
                <! AccountMessage.StateChange(AccountCommand.Debit cmd)
-            | EmployeeEvent.DebitApproved e ->
+            | EmployeeEvent.PurchaseConfirmedByAccount e ->
                // TODO: Notify card network which issued the debit request to our bank.
                ()
-            | EmployeeEvent.DebitDeclined e ->
+            | EmployeeEvent.PurchaseRejectedByAccount e ->
                // TODO: Notify card network which issued the debit request to our bank.
                let msg =
-                  EmailActor.EmailMessage.PurchaseDeclined(
+                  EmailActor.EmailMessage.PurchaseFailed(
                      {
                         Email = employee.Email
                         Reason = e.Data.Reason

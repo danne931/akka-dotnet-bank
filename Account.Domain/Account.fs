@@ -33,13 +33,13 @@ module TransferLimits =
          | AccountEvent.InternalTransferWithinOrgPending e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, info.Amount)
-         | AccountEvent.InternalTransferWithinOrgRejected e ->
+         | AccountEvent.InternalTransferWithinOrgFailed e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, -info.Amount)
          | AccountEvent.InternalTransferBetweenOrgsPending e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, info.Amount)
-         | AccountEvent.InternalTransferBetweenOrgsRejected e ->
+         | AccountEvent.InternalTransferBetweenOrgsFailed e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, -info.Amount)
          | AccountEvent.PlatformPaymentPaid e ->
@@ -47,7 +47,7 @@ module TransferLimits =
          | AccountEvent.InternalAutomatedTransferPending e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, info.Amount)
-         | AccountEvent.InternalAutomatedTransferRejected e ->
+         | AccountEvent.InternalAutomatedTransferFailed e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, -info.Amount)
          | _ -> None)
@@ -57,7 +57,7 @@ module TransferLimits =
          | AccountEvent.DomesticTransferPending e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, info.Amount)
-         | AccountEvent.DomesticTransferRejected e ->
+         | AccountEvent.DomesticTransferFailed e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, -info.Amount)
          | _ -> None)
@@ -100,7 +100,7 @@ let private applyInternalTransferPending
                state.InProgressInternalTransfers
    }
 
-let private applyInternalTransferApproved
+let private applyInternalTransferCompleted
    (info: BaseInternalTransferInfo)
    (state: AccountWithEvents)
    =
@@ -110,7 +110,7 @@ let private applyInternalTransferApproved
             Map.remove info.TransferId state.InProgressInternalTransfers
    }
 
-let private applyInternalTransferRejected
+let private applyInternalTransferFailed
    (info: BaseInternalTransferInfo)
    (state: AccountWithEvents)
    =
@@ -230,7 +230,7 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
                   }))
                   state.InProgressDomesticTransfers
         }
-      | DomesticTransferApproved e -> {
+      | DomesticTransferCompleted e -> {
          state with
             InProgressDomesticTransfers =
                Map.remove
@@ -241,7 +241,7 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
                   e.Data.BaseInfo.TransferId
                   state.FailedDomesticTransfers
         }
-      | DomesticTransferRejected e ->
+      | DomesticTransferFailed e ->
          let info = e.Data.BaseInfo
          let balance = account.Balance + info.Amount
 
@@ -262,22 +262,22 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
                FailedDomesticTransfers =
                   Map.add
                      info.TransferId
-                     (TransferEventToDomesticTransfer.fromRejection e)
+                     (TransferEventToDomesticTransfer.fromFailure e)
                      state.FailedDomesticTransfers
          }
       | InternalTransferWithinOrgPending e ->
          applyInternalTransferPending e.Data.BaseInfo state
-      | InternalTransferWithinOrgApproved e ->
-         applyInternalTransferApproved e.Data.BaseInfo state
-      | InternalTransferWithinOrgRejected e ->
-         applyInternalTransferRejected e.Data.BaseInfo state
+      | InternalTransferWithinOrgCompleted e ->
+         applyInternalTransferCompleted e.Data.BaseInfo state
+      | InternalTransferWithinOrgFailed e ->
+         applyInternalTransferFailed e.Data.BaseInfo state
       | InternalTransferBetweenOrgsScheduled _ -> state
       | InternalTransferBetweenOrgsPending e ->
          applyInternalTransferPending e.Data.BaseInfo state
-      | InternalTransferBetweenOrgsApproved e ->
-         applyInternalTransferApproved e.Data.BaseInfo state
-      | InternalTransferBetweenOrgsRejected e ->
-         applyInternalTransferRejected e.Data.BaseInfo state
+      | InternalTransferBetweenOrgsCompleted e ->
+         applyInternalTransferCompleted e.Data.BaseInfo state
+      | InternalTransferBetweenOrgsFailed e ->
+         applyInternalTransferFailed e.Data.BaseInfo state
       | InternalTransferWithinOrgDeposited e ->
          applyTransferDeposit state e.Data.BaseInfo.Amount
       | InternalTransferBetweenOrgsDeposited e ->
@@ -313,10 +313,10 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
         }
       | InternalAutomatedTransferPending e ->
          applyInternalTransferPending e.Data.BaseInfo state
-      | InternalAutomatedTransferApproved e ->
-         applyInternalTransferApproved e.Data.BaseInfo state
-      | InternalAutomatedTransferRejected e ->
-         applyInternalTransferRejected e.Data.BaseInfo state
+      | InternalAutomatedTransferCompleted e ->
+         applyInternalTransferCompleted e.Data.BaseInfo state
+      | InternalAutomatedTransferFailed e ->
+         applyInternalTransferFailed e.Data.BaseInfo state
       | InternalAutomatedTransferDeposited e ->
          applyTransferDeposit state e.Data.BaseInfo.Amount
 
@@ -434,9 +434,9 @@ module private StateTransition =
             state
             (InternalTransferWithinOrgCommand.toEvent cmd)
 
-   let approveInternalTransfer
+   let completeInternalTransfer
       (state: AccountWithEvents)
-      (cmd: ApproveInternalTransferWithinOrgCommand)
+      (cmd: CompleteInternalTransferWithinOrgCommand)
       =
       let account = state.Info
       let transferId = cmd.Data.BaseInfo.TransferId
@@ -447,16 +447,16 @@ module private StateTransition =
          Option.isNone
          <| Map.tryFind transferId state.InProgressInternalTransfers
       then
-         transitionErr TransferAlreadyProgressedToApprovedOrRejected
+         transitionErr TransferAlreadyProgressedToCompletedOrFailed
       else
          map
-            InternalTransferWithinOrgApproved
+            InternalTransferWithinOrgCompleted
             state
-            (ApproveInternalTransferWithinOrgCommand.toEvent cmd)
+            (CompleteInternalTransferWithinOrgCommand.toEvent cmd)
 
-   let rejectInternalTransfer
+   let failInternalTransfer
       (state: AccountWithEvents)
-      (cmd: RejectInternalTransferWithinOrgCommand)
+      (cmd: FailInternalTransferWithinOrgCommand)
       =
       let account = state.Info
       let transferId = cmd.Data.BaseInfo.TransferId
@@ -467,12 +467,12 @@ module private StateTransition =
          Option.isNone
          <| Map.tryFind transferId state.InProgressInternalTransfers
       then
-         transitionErr TransferAlreadyProgressedToApprovedOrRejected
+         transitionErr TransferAlreadyProgressedToCompletedOrFailed
       else
          map
-            InternalTransferWithinOrgRejected
+            InternalTransferWithinOrgFailed
             state
-            (RejectInternalTransferWithinOrgCommand.toEvent cmd)
+            (FailInternalTransferWithinOrgCommand.toEvent cmd)
 
    let scheduleInternalTransferBetweenOrgs
       (state: AccountWithEvents)
@@ -517,9 +517,9 @@ module private StateTransition =
             state
             (InternalTransferBetweenOrgsCommand.toEvent cmd)
 
-   let approveInternalTransferBetweenOrgs
+   let completeInternalTransferBetweenOrgs
       (state: AccountWithEvents)
-      (cmd: ApproveInternalTransferBetweenOrgsCommand)
+      (cmd: CompleteInternalTransferBetweenOrgsCommand)
       =
       let account = state.Info
       let transferId = cmd.Data.BaseInfo.TransferId
@@ -530,16 +530,16 @@ module private StateTransition =
          Option.isNone
          <| Map.tryFind transferId state.InProgressInternalTransfers
       then
-         transitionErr TransferAlreadyProgressedToApprovedOrRejected
+         transitionErr TransferAlreadyProgressedToCompletedOrFailed
       else
          map
-            InternalTransferBetweenOrgsApproved
+            InternalTransferBetweenOrgsCompleted
             state
-            (ApproveInternalTransferBetweenOrgsCommand.toEvent cmd)
+            (CompleteInternalTransferBetweenOrgsCommand.toEvent cmd)
 
-   let rejectInternalTransferBetweenOrgs
+   let failInternalTransferBetweenOrgs
       (state: AccountWithEvents)
-      (cmd: RejectInternalTransferBetweenOrgsCommand)
+      (cmd: FailInternalTransferBetweenOrgsCommand)
       =
       let account = state.Info
       let transferId = cmd.Data.BaseInfo.TransferId
@@ -550,12 +550,12 @@ module private StateTransition =
          Option.isNone
          <| Map.tryFind transferId state.InProgressInternalTransfers
       then
-         transitionErr TransferAlreadyProgressedToApprovedOrRejected
+         transitionErr TransferAlreadyProgressedToCompletedOrFailed
       else
          map
-            InternalTransferBetweenOrgsRejected
+            InternalTransferBetweenOrgsFailed
             state
-            (RejectInternalTransferBetweenOrgsCommand.toEvent cmd)
+            (FailInternalTransferBetweenOrgsCommand.toEvent cmd)
 
    let scheduleDomesticTransfer
       (state: AccountWithEvents)
@@ -629,9 +629,9 @@ module private StateTransition =
                   state
                   (UpdateDomesticTransferProgressCommand.toEvent cmd)
 
-   let approveDomesticTransfer
+   let completeDomesticTransfer
       (state: AccountWithEvents)
-      (cmd: ApproveDomesticTransferCommand)
+      (cmd: CompleteDomesticTransferCommand)
       =
       let account = state.Info
       let transferId = cmd.Data.BaseInfo.TransferId
@@ -642,7 +642,7 @@ module private StateTransition =
          Option.isNone
          <| Map.tryFind transferId state.InProgressDomesticTransfers
       then
-         transitionErr TransferAlreadyProgressedToApprovedOrRejected
+         transitionErr TransferAlreadyProgressedToCompletedOrFailed
       else
          let retriedDueTo =
             state.FailedDomesticTransfers.TryFind(transferId)
@@ -657,13 +657,13 @@ module private StateTransition =
          }
 
          map
-            DomesticTransferApproved
+            DomesticTransferCompleted
             state
-            (ApproveDomesticTransferCommand.toEvent cmd)
+            (CompleteDomesticTransferCommand.toEvent cmd)
 
-   let rejectDomesticTransfer
+   let failDomesticTransfer
       (state: AccountWithEvents)
-      (cmd: RejectDomesticTransferCommand)
+      (cmd: FailDomesticTransferCommand)
       =
       let account = state.Info
       let transferId = cmd.Data.BaseInfo.TransferId
@@ -674,12 +674,12 @@ module private StateTransition =
          Option.isNone
          <| Map.tryFind transferId state.InProgressDomesticTransfers
       then
-         transitionErr TransferAlreadyProgressedToApprovedOrRejected
+         transitionErr TransferAlreadyProgressedToCompletedOrFailed
       else
          map
-            DomesticTransferRejected
+            DomesticTransferFailed
             state
-            (RejectDomesticTransferCommand.toEvent cmd)
+            (FailDomesticTransferCommand.toEvent cmd)
 
    let depositTransferWithinOrg
       (state: AccountWithEvents)
@@ -849,9 +849,9 @@ module private StateTransition =
             state
             (InternalAutoTransferCommand.toEvent cmd)
 
-   let approveInternalAutoTransfer
+   let completeInternalAutoTransfer
       (state: AccountWithEvents)
-      (cmd: ApproveInternalAutoTransferCommand)
+      (cmd: CompleteInternalAutoTransferCommand)
       =
       let account = state.Info
       let transferId = cmd.Data.BaseInfo.TransferId
@@ -862,16 +862,16 @@ module private StateTransition =
          Option.isNone
          <| Map.tryFind transferId state.InProgressInternalTransfers
       then
-         transitionErr TransferAlreadyProgressedToApprovedOrRejected
+         transitionErr TransferAlreadyProgressedToCompletedOrFailed
       else
          map
-            InternalAutomatedTransferApproved
+            InternalAutomatedTransferCompleted
             state
-            (ApproveInternalAutoTransferCommand.toEvent cmd)
+            (CompleteInternalAutoTransferCommand.toEvent cmd)
 
-   let rejectInternalAutoTransfer
+   let failInternalAutoTransfer
       (state: AccountWithEvents)
-      (cmd: RejectInternalAutoTransferCommand)
+      (cmd: FailInternalAutoTransferCommand)
       =
       let account = state.Info
       let transferId = cmd.Data.BaseInfo.TransferId
@@ -882,12 +882,12 @@ module private StateTransition =
          Option.isNone
          <| Map.tryFind transferId state.InProgressInternalTransfers
       then
-         transitionErr TransferAlreadyProgressedToApprovedOrRejected
+         transitionErr TransferAlreadyProgressedToCompletedOrFailed
       else
          map
-            InternalAutomatedTransferRejected
+            InternalAutomatedTransferFailed
             state
-            (RejectInternalAutoTransferCommand.toEvent cmd)
+            (FailInternalAutoTransferCommand.toEvent cmd)
 
    let depositInternalAutoTransfer
       (state: AccountWithEvents)
@@ -912,18 +912,18 @@ let stateTransition (state: AccountWithEvents) (command: AccountCommand) =
       StateTransition.skipMaintenanceFee state cmd
    | AccountCommand.InternalTransfer cmd ->
       StateTransition.internalTransfer state cmd
-   | AccountCommand.ApproveInternalTransfer cmd ->
-      StateTransition.approveInternalTransfer state cmd
-   | AccountCommand.RejectInternalTransfer cmd ->
-      StateTransition.rejectInternalTransfer state cmd
+   | AccountCommand.CompleteInternalTransfer cmd ->
+      StateTransition.completeInternalTransfer state cmd
+   | AccountCommand.FailInternalTransfer cmd ->
+      StateTransition.failInternalTransfer state cmd
    | AccountCommand.ScheduleInternalTransferBetweenOrgs cmd ->
       StateTransition.scheduleInternalTransferBetweenOrgs state cmd
    | AccountCommand.InternalTransferBetweenOrgs cmd ->
       StateTransition.internalTransferBetweenOrgs state cmd
-   | AccountCommand.ApproveInternalTransferBetweenOrgs cmd ->
-      StateTransition.approveInternalTransferBetweenOrgs state cmd
-   | AccountCommand.RejectInternalTransferBetweenOrgs cmd ->
-      StateTransition.rejectInternalTransferBetweenOrgs state cmd
+   | AccountCommand.CompleteInternalTransferBetweenOrgs cmd ->
+      StateTransition.completeInternalTransferBetweenOrgs state cmd
+   | AccountCommand.FailInternalTransferBetweenOrgs cmd ->
+      StateTransition.failInternalTransferBetweenOrgs state cmd
    | AccountCommand.DepositTransferWithinOrg cmd ->
       StateTransition.depositTransferWithinOrg state cmd
    | AccountCommand.DepositTransferBetweenOrgs cmd ->
@@ -932,10 +932,10 @@ let stateTransition (state: AccountWithEvents) (command: AccountCommand) =
       StateTransition.scheduleDomesticTransfer state cmd
    | AccountCommand.DomesticTransfer cmd ->
       StateTransition.domesticTransfer state cmd
-   | AccountCommand.ApproveDomesticTransfer cmd ->
-      StateTransition.approveDomesticTransfer state cmd
-   | AccountCommand.RejectDomesticTransfer cmd ->
-      StateTransition.rejectDomesticTransfer state cmd
+   | AccountCommand.CompleteDomesticTransfer cmd ->
+      StateTransition.completeDomesticTransfer state cmd
+   | AccountCommand.FailDomesticTransfer cmd ->
+      StateTransition.failDomesticTransfer state cmd
    | AccountCommand.UpdateDomesticTransferProgress cmd ->
       StateTransition.domesticTransferProgress state cmd
    | AccountCommand.CloseAccount cmd -> StateTransition.closeAccount state cmd
@@ -955,9 +955,9 @@ let stateTransition (state: AccountWithEvents) (command: AccountCommand) =
       StateTransition.deleteAutoTransferRule state cmd
    | AccountCommand.InternalAutoTransfer cmd ->
       StateTransition.internalAutoTransfer state cmd
-   | AccountCommand.ApproveInternalAutoTransfer cmd ->
-      StateTransition.approveInternalAutoTransfer state cmd
-   | AccountCommand.RejectInternalAutoTransfer cmd ->
-      StateTransition.rejectInternalAutoTransfer state cmd
+   | AccountCommand.CompleteInternalAutoTransfer cmd ->
+      StateTransition.completeInternalAutoTransfer state cmd
+   | AccountCommand.FailInternalAutoTransfer cmd ->
+      StateTransition.failInternalAutoTransfer state cmd
    | AccountCommand.DepositInternalAutoTransfer cmd ->
       StateTransition.depositInternalAutoTransfer state cmd

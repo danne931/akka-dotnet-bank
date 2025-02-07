@@ -25,7 +25,7 @@ let hasRenderImplementation =
    | AccountEvent.InternalTransferWithinOrgPending _
    | AccountEvent.InternalTransferBetweenOrgsPending _
    | AccountEvent.DomesticTransferPending _
-   | AccountEvent.DomesticTransferRejected _
+   | AccountEvent.DomesticTransferFailed _
    //| OrgEvent.RegisteredDomesticTransferRecipient _
    | AccountEvent.InternalTransferWithinOrgDeposited _
    | AccountEvent.InternalTransferBetweenOrgsDeposited _
@@ -43,7 +43,7 @@ let canEditTransferRecipient
       | AccountEvent.DomesticTransferPending evt ->
          Some evt.Data.BaseInfo.Recipient.AccountId
       //| OrgEvent.RegisteredDomesticTransferRecipient
-      | AccountEvent.DomesticTransferRejected evt ->
+      | AccountEvent.DomesticTransferFailed evt ->
          Some evt.Data.BaseInfo.Recipient.AccountId
       | _ -> None
 
@@ -372,10 +372,10 @@ let MerchantNicknameEditComponent
    (merchants: Map<string, Merchant>)
    dispatch
    =
-   let debitOrigin = debit.Data.Origin
+   let debitMerchant = debit.Data.Merchant
 
    let merchantAlias =
-      merchants |> Map.tryFind (debitOrigin.ToLower()) |> Option.bind _.Alias
+      merchants |> Map.tryFind (debitMerchant.ToLower()) |> Option.bind _.Alias
 
    let pendingNickname, setNickname = React.useState merchantAlias
 
@@ -400,19 +400,19 @@ let MerchantNicknameEditComponent
             |> setNickname)
       ]
 
-      if pendingNickname = (Some debitOrigin) then
-         Html.small $"No change from original name {debitOrigin}."
+      if pendingNickname = (Some debitMerchant) then
+         Html.small $"No change from original name {debitMerchant}."
       elif pendingNickname <> merchantAlias then
          match pendingNickname with
          | None ->
             Html.small
-               $"Transactions will display with the original name {debitOrigin} for past and future transactions."
+               $"Transactions will display with the original name {debitMerchant} for past and future transactions."
          | Some name ->
             Html.small
-               $"Transactions for {debitOrigin} will display as {name} for past and future transactions."
+               $"Transactions for {debitMerchant} will display as {name} for past and future transactions."
 
       classyNode Html.div [ "nickname-controls" ] [
-         if pendingNickname = (Some debitOrigin) then
+         if pendingNickname = (Some debitMerchant) then
             nicknameCancelButton dispatch
          elif pendingNickname <> merchantAlias then
             nicknameCancelButton dispatch
@@ -422,7 +422,7 @@ let MerchantNicknameEditComponent
                   Msg.SaveMerchantNickname(
                      {
                         OrgId = debit.OrgId
-                        Name = debitOrigin.ToLower()
+                        Name = debitMerchant.ToLower()
                         Alias = pendingNickname
                      },
                      Started
@@ -489,7 +489,7 @@ let renderTransactionInfo
             RecipientNicknameEditComponent
                e.Data.BaseInfo.Recipient.AccountId
                RecipientAccountEnvironment.Domestic
-         | AccountEvent.DomesticTransferRejected e when isEditingNickname ->
+         | AccountEvent.DomesticTransferFailed e when isEditingNickname ->
             RecipientNicknameEditComponent
                e.Data.BaseInfo.Recipient.AccountId
                RecipientAccountEnvironment.Domestic
@@ -575,7 +575,7 @@ let renderFooterMenuControls
       | Deferred.Resolved(Ok(Some txnInfo)) ->
          match txnInfo.Event with
          | AccountEvent.DomesticTransferPending _
-         | AccountEvent.DomesticTransferRejected _
+         | AccountEvent.DomesticTransferFailed _
          //| AccountEvent.DomesticTransferRecipient _
          | AccountEvent.InternalTransferWithinOrgDeposited _
          | AccountEvent.InternalTransferBetweenOrgsDeposited _
@@ -602,7 +602,7 @@ let renderFooterMenuControls
                  ]
                | AccountEvent.DomesticTransferPending _
                //| AccountEvent.DomesticTransferRecipient _
-               | AccountEvent.DomesticTransferRejected _ ->
+               | AccountEvent.DomesticTransferFailed _ ->
                   //| AccountEvent.EditedDomesticTransferRecipient _ ->
                   [
                      {

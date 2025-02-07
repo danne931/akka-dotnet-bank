@@ -17,7 +17,7 @@ type InternalTransferSender = {
 }
 
 [<RequireQualifiedAccess>]
-type InternalTransferDeclinedReason =
+type InternalTransferFailReason =
    | AccountClosed
    | InvalidAccountInfo
 
@@ -25,9 +25,9 @@ type InternalTransferDeclinedReason =
 type InternalTransferStatus =
    | Scheduled
    | Pending
-   | Approved
+   | Completed
    | Deposited
-   | Failed of InternalTransferDeclinedReason
+   | Failed of InternalTransferFailReason
 
 type BaseInternalTransferInfo = {
    TransferId: TransferId
