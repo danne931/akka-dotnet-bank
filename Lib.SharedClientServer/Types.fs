@@ -261,6 +261,10 @@ type OrgStateTransitionError =
    | ApprovalProgressWorklowNotActive
    | ApproverUnrecognized of EmployeeId * name: string
    | ApproverAlreadyApprovedCommand of EmployeeId * name: string
+   | RecipientRegistered
+   | RecipientDeactivated
+   | RecipientNotFound
+   | RecipientAlreadyConfirmed
 
 type AccountStateTransitionError =
    | AccountNotReadyToActivate
@@ -268,11 +272,6 @@ type AccountStateTransitionError =
    | InsufficientBalance of decimal
    | ExceededDailyInternalTransferLimit of decimal
    | ExceededDailyDomesticTransferLimit of decimal
-   | RecipientRegistrationRequired
-   | RecipientRegistered
-   | RecipientDeactivated
-   | RecipientNotFound
-   | SenderRegistered
    | TransferProgressNoChange
    | TransferAlreadyProgressedToApprovedOrRejected
    | TransferExpectedToOccurWithinOrg
@@ -358,7 +357,12 @@ type Err =
          | OrgStateTransitionError.ApproverAlreadyApprovedCommand(employeeId,
                                                                   name) ->
             $"Approver already approved command {name}-{employeeId}"
-
+         | OrgStateTransitionError.RecipientRegistered -> "Recipient Registered"
+         | OrgStateTransitionError.RecipientDeactivated ->
+            "Recipient Deactivated"
+         | OrgStateTransitionError.RecipientNotFound -> "Recipient Not Found"
+         | OrgStateTransitionError.RecipientAlreadyConfirmed ->
+            "Recipient Already Confirmed"
       | AccountStateTransitionError e ->
          match e with
          | AccountStateTransitionError.AccountNotActive -> "Account Not Active"
@@ -370,16 +374,6 @@ type Err =
             $"Exceeded Daily Internal Transfer Limit ${limit}"
          | AccountStateTransitionError.InsufficientBalance balance ->
             $"Insufficient Balance ${balance}"
-         | AccountStateTransitionError.SenderRegistered ->
-            "Sender Already Registered"
-         | AccountStateTransitionError.RecipientRegistered ->
-            "Recipient Registered"
-         | AccountStateTransitionError.RecipientDeactivated ->
-            "Recipient Deactivated"
-         | AccountStateTransitionError.RecipientNotFound ->
-            "Recipient Not Found"
-         | AccountStateTransitionError.RecipientRegistrationRequired ->
-            "Recipient Registration Required"
          | AccountStateTransitionError.TransferAlreadyProgressedToApprovedOrRejected ->
             "Transfer already progressed to approved or rejected"
          | AccountStateTransitionError.TransferProgressNoChange ->

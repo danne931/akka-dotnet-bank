@@ -49,8 +49,8 @@ let debitWithMerchantAlias
    }
 
 let eventWithMerchantAlias
-   (evt: AccountEvent)
    (merchants: Map<string, Merchant>)
+   (evt: AccountEvent)
    =
    match evt with
    | AccountEvent.DebitedAccount e ->
@@ -77,6 +77,7 @@ let autoTransferRuleDisplay (rule: AutomaticTransfer.AutomaticTransferRule) =
       $"Maintain a zero balance by distributing it among {rule.DestinationAccounts.Length} accounts."
 
 let transactionUIFriendly
+   (org: Org)
    (account: Account)
    (txn: AccountEvent)
    : TransactionUIFriendly
@@ -95,9 +96,7 @@ let transactionUIFriendly
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      account.DomesticTransferRecipients
-      |> Map.tryFind recipientFromEvt.AccountId
-      |> Option.map _.FullName
+      UIDomain.Org.domesticRecipientName org recipientFromEvt.AccountId
       |> Option.defaultValue recipientFromEvt.FullName
 
    match txn with
@@ -135,17 +134,6 @@ let transactionUIFriendly
    | MaintenanceFeeSkipped _ -> {
       props with
          Info = "Skipped Maintenance Fee"
-     }
-   | DomesticTransferRecipient evt -> {
-      props with
-         Name = "Created Domestic Recipient"
-         Info =
-            $"Created domestic recipient: {domesticRecipientName evt.Data.Recipient}"
-     }
-   | EditedDomesticTransferRecipient evt -> {
-      props with
-         Name = "Edited Domestic Recipient"
-         Info = $"Edited recipient: {domesticRecipientName evt.Data.Recipient}"
      }
    | InternalTransferWithinOrgPending evt ->
       let info = evt.Data.BaseInfo
@@ -265,9 +253,9 @@ let transactionUIFriendly
 
       {
          props with
-            Name = "Domestic Transfer Approved"
+            Name = "Domestic Transfer Completed"
             Info =
-               $"Domestic transfer approved to {domesticRecipientName info.Recipient}"
+               $"Domestic transfer completed to {domesticRecipientName info.Recipient}"
             Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferRejected evt ->
@@ -277,10 +265,10 @@ let transactionUIFriendly
 
       {
          props with
-            Name = "Domestic Transfer Declined"
+            Name = "Domestic Transfer Failed"
             Info =
-               $"Domestic transfer declined to {recipientName} 
-                 - Reason {evt.Data.Reason} 
+               $"Domestic transfer failed to {recipientName} 
+                 - Reason: {evt.Data.Reason.Display} 
                  - Account refunded"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
@@ -332,13 +320,6 @@ let transactionUIFriendly
    | AccountClosed evt -> {
       props with
          Info = $"Closed Account - Reference: {evt.Data.Reference}"
-     }
-   | RecipientNicknamed evt -> {
-      props with
-         Info =
-            match evt.Data.Nickname with
-            | None -> "Removed recipient nickname."
-            | Some name -> $"Updated recipient nickname to {name}"
      }
    | PlatformPaymentRequested evt ->
       let p = evt.Data.BaseInfo

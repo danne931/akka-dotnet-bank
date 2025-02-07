@@ -10,6 +10,7 @@ open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
+open UIDomain.Org
 open Bank.Transfer.Domain
 open Lib.SharedTypes
 open Dropdown
@@ -23,9 +24,9 @@ let hasRenderImplementation =
    | AccountEvent.DepositedCash _
    | AccountEvent.InternalTransferWithinOrgPending _
    | AccountEvent.InternalTransferBetweenOrgsPending _
-   | AccountEvent.DomesticTransferRecipient _
    | AccountEvent.DomesticTransferPending _
    | AccountEvent.DomesticTransferRejected _
+   //| OrgEvent.RegisteredDomesticTransferRecipient _
    | AccountEvent.InternalTransferWithinOrgDeposited _
    | AccountEvent.InternalTransferBetweenOrgsDeposited _
    | AccountEvent.DebitedAccount _ -> true
@@ -33,7 +34,7 @@ let hasRenderImplementation =
 
 /// May edit transfer recipient if domestic and status is not Closed.
 let canEditTransferRecipient
-   (account: Account)
+   (org: Org)
    (evt: AccountEvent)
    : DomesticTransferRecipient option
    =
@@ -41,15 +42,14 @@ let canEditTransferRecipient
       match evt with
       | AccountEvent.DomesticTransferPending evt ->
          Some evt.Data.BaseInfo.Recipient.AccountId
-      | AccountEvent.DomesticTransferRecipient evt ->
-         Some evt.Data.Recipient.AccountId
+      //| OrgEvent.RegisteredDomesticTransferRecipient
       | AccountEvent.DomesticTransferRejected evt ->
          Some evt.Data.BaseInfo.Recipient.AccountId
       | _ -> None
 
    recipientIdOpt
    |> Option.bind (fun recipientId ->
-      Map.tryFind recipientId account.DomesticTransferRecipients)
+      Map.tryFind recipientId org.DomesticTransferRecipients)
    |> Option.filter (fun r -> r.Status <> RecipientRegistrationStatus.Closed)
 
 type State = {
@@ -79,8 +79,8 @@ let private updateTransaction
    }
 
 type RecipientNicknameEditMsg = {
-   CommandInput: RecipientNicknamed
-   Account: Account
+   CommandInput: NicknamedDomesticTransferRecipient
+   Org: Org
    InitiatedBy: InitiatedById
 }
 
@@ -94,7 +94,7 @@ type Msg =
    | ToggleNicknameEdit
    | SaveRecipientNickname of
       RecipientNicknameEditMsg *
-      AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
+      AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | SaveMerchantNickname of Merchant * AsyncOperationStatus<Result<int, Err>>
    | EditTransferRecipient of senderId: AccountId * recipientId: AccountId
 
@@ -195,14 +195,14 @@ let update (merchantDispatch: MerchantProvider.Dispatch) msg state =
       Cmd.none
    | SaveRecipientNickname(edit, Started) ->
       let command =
-         NicknameRecipientCommand.create
-            edit.Account.CompositeId
+         NicknameDomesticTransferRecipientCommand.create
+            edit.Org.OrgId
             edit.InitiatedBy
             edit.CommandInput
-         |> AccountCommand.NicknameRecipient
+         |> OrgCommand.NicknameDomesticTransferRecipient
 
       let submitCommand = async {
-         let! res = AccountService.submitCommand edit.Account command
+         let! res = OrgService.submitCommand edit.Org command
          return Msg.SaveRecipientNickname(edit, Finished res)
       }
 
@@ -295,13 +295,13 @@ let private nicknameSaveButton onClick =
 [<ReactComponent>]
 let RecipientNicknameEditComponent
    (session: UserSession)
-   (account: Account)
+   (org: Org)
    dispatch
    (recipientId: AccountId)
    (recipientEnv: RecipientAccountEnvironment)
    =
    let name, nickname =
-      account.DomesticTransferRecipients
+      org.DomesticTransferRecipients
       |> Map.tryFind recipientId
       |> Option.map (fun r -> r.Name, r.Nickname)
       |> Option.defaultValue ("", None)
@@ -355,7 +355,7 @@ let RecipientNicknameEditComponent
                            RecipientAccountEnvironment = recipientEnv
                            Nickname = pendingNickname
                         }
-                        Account = account
+                        Org = org
                         InitiatedBy = (InitiatedById session.EmployeeId)
 
                      },
@@ -433,6 +433,7 @@ let MerchantNicknameEditComponent
    ]
 
 let renderTransactionInfo
+   (org: Org)
    (account: Account)
    (txnInfo: TransactionWithAncillaryInfo)
    (isEditingNickname: bool)
@@ -440,20 +441,22 @@ let renderTransactionInfo
    (session: UserSession)
    dispatch
    =
-   let txn = transactionUIFriendly account txnInfo.Event
+   let txn = transactionUIFriendly org account txnInfo.Event
 
    let RecipientNicknameEditComponent =
-      RecipientNicknameEditComponent session account dispatch
+      RecipientNicknameEditComponent session org dispatch
 
    React.fragment [
       Html.h6 txn.Name
 
       Html.section [
+         (*
          match txnInfo.Event with
-         | AccountEvent.DomesticTransferRecipient e ->
+         | OrgEvent.RegisteredDomesticTransferRecipient e ->
             let reci = e.Data.Recipient
             Html.h3 $"{reci.Name} **{reci.AccountNumber.Last4}"
          | _ -> ()
+         *)
 
          match txn.Amount with
          | Some amount -> Html.h3 amount
@@ -476,10 +479,12 @@ let renderTransactionInfo
          | None -> ()
 
          match txnInfo.Event with
+         (*
          | AccountEvent.DomesticTransferRecipient e when isEditingNickname ->
             RecipientNicknameEditComponent
                e.Data.Recipient.AccountId
                RecipientAccountEnvironment.Domestic
+         *)
          | AccountEvent.DomesticTransferPending e when isEditingNickname ->
             RecipientNicknameEditComponent
                e.Data.BaseInfo.Recipient.AccountId
@@ -492,8 +497,8 @@ let renderTransactionInfo
             MerchantNicknameEditComponent e merchants dispatch
          | _ ->
             let txn =
-               eventWithMerchantAlias txnInfo.Event merchants
-               |> transactionUIFriendly account
+               eventWithMerchantAlias merchants txnInfo.Event
+               |> transactionUIFriendly org account
 
             match txn.Destination with
             | Some destination ->
@@ -559,6 +564,7 @@ let renderNoteInput (txnInfo: TransactionMaybe) dispatch =
    ]
 
 let renderFooterMenuControls
+   (org: Org)
    (account: Account)
    (txnInfo: TransactionMaybe)
    (isEditingNickname: bool)
@@ -570,7 +576,7 @@ let renderFooterMenuControls
          match txnInfo.Event with
          | AccountEvent.DomesticTransferPending _
          | AccountEvent.DomesticTransferRejected _
-         | AccountEvent.DomesticTransferRecipient _
+         //| AccountEvent.DomesticTransferRecipient _
          | AccountEvent.InternalTransferWithinOrgDeposited _
          | AccountEvent.InternalTransferBetweenOrgsDeposited _
          | AccountEvent.DebitedAccount _ -> Some txnInfo.Event
@@ -595,9 +601,9 @@ let renderFooterMenuControls
                   }
                  ]
                | AccountEvent.DomesticTransferPending _
-               | AccountEvent.DomesticTransferRecipient _
-               | AccountEvent.DomesticTransferRejected _
-               | AccountEvent.EditedDomesticTransferRecipient _ ->
+               //| AccountEvent.DomesticTransferRecipient _
+               | AccountEvent.DomesticTransferRejected _ ->
+                  //| AccountEvent.EditedDomesticTransferRecipient _ ->
                   [
                      {
                         Text = "Nickname recipient"
@@ -606,7 +612,7 @@ let renderFooterMenuControls
                      }
 
                   ]
-                  @ match canEditTransferRecipient account evt with
+                  @ match canEditTransferRecipient org evt with
                     | None -> []
                     | Some recipient -> [
                        {
@@ -629,6 +635,7 @@ let renderFooterMenuControls
 [<ReactComponent>]
 let TransactionDetailComponent
    (session: UserSession)
+   (org: Org)
    (account: Account)
    (txnId: EventId)
    =
@@ -658,6 +665,7 @@ let TransactionDetailComponent
       match state.Transaction with
       | Deferred.Resolved(Ok(Some txn)) ->
          renderTransactionInfo
+            org
             account
             txn
             state.EditingNickname
@@ -671,7 +679,7 @@ let TransactionDetailComponent
       | Deferred.Resolved(Ok(Some txnInfo)) ->
          Html.section [
             match txnInfo.Event with
-            | AccountEvent.DomesticTransferRecipient _ -> ()
+            //| AccountEvent.DomesticTransferRecipient _ -> ()
             | _ -> renderCategorySelect categories txnInfo dispatch
 
             renderNoteInput state.Transaction dispatch
@@ -683,6 +691,7 @@ let TransactionDetailComponent
 
          attr.children [
             renderFooterMenuControls
+               org
                account
                state.Transaction
                state.EditingNickname

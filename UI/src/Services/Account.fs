@@ -3,7 +3,6 @@ module AccountService
 
 open Fable.SimpleHttp
 open FsToolkit.ErrorHandling
-open Feliz.Router
 
 open UIDomain.Account
 open Bank.Account.Domain
@@ -34,12 +33,6 @@ let postJson (command: AccountCommand) =
          Serialization.serialize cmd, TransferPath.Domestic
       | AccountCommand.ScheduleDomesticTransfer cmd ->
          Serialization.serialize cmd, TransferPath.ScheduleDomestic
-      | AccountCommand.RegisterDomesticTransferRecipient cmd ->
-         Serialization.serialize cmd, TransferPath.DomesticTransferRecipient
-      | AccountCommand.EditDomesticTransferRecipient cmd ->
-         Serialization.serialize cmd, TransferPath.DomesticTransferRecipientEdit
-      | AccountCommand.NicknameRecipient cmd ->
-         Serialization.serialize cmd, TransferPath.NicknameRecipient
       | AccountCommand.RequestPlatformPayment cmd ->
          Serialization.serialize cmd, PaymentPath.RequestPayment
       | AccountCommand.CancelPlatformPayment cmd ->
@@ -81,8 +74,12 @@ let submitCommand
       // to the current state (Err.StateTransitionError).
       // This same validation occurs on the server when an actor is
       // processing a command.
-      let! evt, updatedState =
-         Account.stateTransition { Info = account; Events = [] } command
+      let state = {
+         AccountWithEvents.empty with
+            Info = account
+      }
+
+      let! evt, updatedState = Account.stateTransition state command
 
       let! res = postJson command
       let code = res.statusCode
@@ -117,3 +114,25 @@ let getPayments (orgId: OrgId) : Async<Result<PaymentSummary option, Err>> = asy
          |> Serialization.deserialize<PaymentSummary>
          |> Result.map Some
 }
+
+let getDomesticTransfersRetryableUponRecipientEdit
+   (recipientId: AccountId)
+   : Async<Result<DomesticTransfer list option, Err>>
+   =
+   async {
+      let path =
+         TransferPath.retryableDomesticTransfersUponRecipientCorrection
+            recipientId
+
+      let! (code, responseText) = Http.get path
+
+      if code = 404 then
+         return Ok None
+      elif code <> 200 then
+         return Error <| Err.InvalidStatusCodeError(serviceName, code)
+      else
+         return
+            responseText
+            |> Serialization.deserialize<DomesticTransfer list>
+            |> Result.map Some
+   }

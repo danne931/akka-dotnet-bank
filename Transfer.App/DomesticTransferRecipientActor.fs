@@ -101,7 +101,7 @@ let handleTransfer
       // receive those on a recurring basis.
       let reprocessLater (errMsg: string) =
          match action with
-         | DomesticTransferServiceAction.TransferRequest ->
+         | DomesticTransferServiceAction.TransferAck ->
             mailbox.Schedule
             <| TimeSpan.FromSeconds 15.
             <| mailbox.Self
@@ -157,7 +157,7 @@ let actorProps
          | DomesticTransferMessage.TransferRequest(action, txn) ->
             if breaker.IsOpen then
                match action with
-               | DomesticTransferServiceAction.TransferRequest ->
+               | DomesticTransferServiceAction.TransferAck ->
                   logInfo "Domestic transfer breaker Open - stashing message"
                   mailbox.Stash()
                | DomesticTransferServiceAction.ProgressCheck ->
@@ -182,13 +182,13 @@ let actorProps
 
                match progress with
                | DomesticTransferProgress.Complete ->
-                  let msg = Msg.approve <| Command.approve txn
-                  accountRef <! msg
+                  let cmd = Command.approve txn
+                  accountRef <! Msg.approve cmd
                | DomesticTransferProgress.InProgress progress ->
                   let msg = Msg.progress <| Command.progress txn progress
 
                   match action with
-                  | DomesticTransferServiceAction.TransferRequest ->
+                  | DomesticTransferServiceAction.TransferAck ->
                      accountRef <! msg
                   | DomesticTransferServiceAction.ProgressCheck ->
                      let previousProgress = txn.Status
@@ -237,28 +237,36 @@ let actorProps
 
    props <| actorOf2 handler
 
-let transferRequest action (txn: DomesticTransfer) = taskResult {
-   let msg = {|
-      Action = string action
-      Sender = networkSender txn.Sender
-      Recipient = networkRecipient txn.Recipient
-      Amount = txn.Amount
-      Date = txn.ScheduledDate
-      TransactionId = string txn.TransferId
-      PaymentNetwork =
-         match txn.Recipient.PaymentNetwork with
-         | PaymentNetwork.ACH -> "ach"
-   |}
+let private transferRequest
+   (action: DomesticTransferServiceAction)
+   (txn: DomesticTransfer)
+   =
+   taskResult {
+      let msg = {|
+         Action =
+            match action with
+            | DomesticTransferServiceAction.TransferAck -> "TransferRequest"
+            | DomesticTransferServiceAction.ProgressCheck -> "ProgressCheck"
+         Sender = networkSender txn.Sender
+         Recipient = networkRecipient txn.Recipient
+         Amount = txn.Amount
+         Date = txn.ScheduledDate
+         TransactionId = string txn.TransferId
+         PaymentNetwork =
+            match txn.Recipient.PaymentNetwork with
+            | PaymentNetwork.ACH -> "ach"
+      |}
 
-   let! response =
-      TCP.request
-         EnvTransfer.config.MockDomesticTransferProcessor.Host
-         EnvTransfer.config.MockDomesticTransferProcessor.Port
-         Encoding.UTF8
-         (JsonSerializer.SerializeToUtf8Bytes msg)
+      let! response =
+         TCP.request
+            EnvTransfer.config.MockDomesticTransferProcessor.Host
+            EnvTransfer.config.MockDomesticTransferProcessor.Port
+            Encoding.UTF8
+            (JsonSerializer.SerializeToUtf8Bytes msg)
 
-   return! Serialization.deserialize<DomesticTransferServiceResponse> response
-}
+      return!
+         Serialization.deserialize<DomesticTransferServiceResponse> response
+   }
 
 let start
    (system: ActorSystem)

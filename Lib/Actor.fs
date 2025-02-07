@@ -26,8 +26,36 @@ module SystemLog =
    let error (sys: ActorSystem) (err: exn) (msg: string) =
       sys.Log.Log(Akka.Event.LogLevel.ErrorLevel, err, msg)
 
-let registerSelfForPubSub (ctx: Actor<_>) =
-   DistributedPubSub.Get(ctx.System).Mediator.Tell(Put(untyped ctx.Self))
+module PubSub =
+   let get (system: ActorSystem) : DistributedPubSub =
+      DistributedPubSub.Get(system)
+
+   /// Point-to-point mode where one actor ref is subscribed
+   /// to receive messages sent over the mediator.
+   let subscribePointToPoint (pubSub: DistributedPubSub) (aref: IActorRef<_>) =
+      pubSub.Mediator.Tell(Put(untyped aref))
+
+   /// Point-to-point mode where each message is delivered to
+   /// one destination actor ref by actor path.
+   let sendPointToPoint
+      (pubSub: DistributedPubSub)
+      (destinationPath: string)
+      (msg: obj)
+      =
+      pubSub.Mediator.Tell(Send(destinationPath, msg))
+
+   // Subscribe an actor ref to a topic to receive all messages sent
+   // for a particular topic.
+   let subscribeToTopic
+      (pubSub: DistributedPubSub)
+      (mailbox: Actor<_>)
+      (topic: string)
+      =
+      pubSub.Mediator.Tell(Subscribe(topic, untyped mailbox.Self))
+
+   /// Publish a message to all subscribers of a topic.
+   let publishToTopic (pubSub: DistributedPubSub) (topic: string) (msg: obj) =
+      pubSub.Mediator.Tell(Publish(topic, msg))
 
 let getChildActorRef<'t, 'r>
    (actorCtx: Actor<'t>)

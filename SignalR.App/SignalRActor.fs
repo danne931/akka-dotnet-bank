@@ -18,31 +18,32 @@ type Msg =
    | CircuitBreaker of CircuitBreakerEvent
 
 let actorProps (hub: IHubContext<AccountHub, IAccountClient>) =
-   let handler (ctx: Actor<_>) = actor {
-      registerSelfForPubSub ctx
+   let handler (ctx: Actor<_>) =
+      PubSub.subscribePointToPoint (PubSub.get ctx.System) ctx.Self
 
-      let! msg = ctx.Receive()
+      actor {
+         let! msg = ctx.Receive()
 
-      match msg with
-      | Msg.AccountEventPersisted msg ->
-         hub.Clients
-            .Group(string msg.Account.AccountId)
-            .AccountEventPersistenceConfirmation(Serialization.serialize msg)
-         |> ignore
-      | Msg.AccountEventValidationFail msg ->
-         hub.Clients
-            .Group(string msg.AccountId)
-            .AccountEventValidationFail(Serialization.serialize msg)
-         |> ignore
-      | Msg.AccountEventPersistenceFail msg ->
-         hub.Clients
-            .Group(string msg.AccountId)
-            .AccountEventPersistenceFail(Serialization.serialize msg)
-         |> ignore
-      | Msg.CircuitBreaker msg ->
-         hub.Clients.All.CircuitBreakerMessage(Serialization.serialize msg)
-         |> ignore
-   }
+         match msg with
+         | Msg.AccountEventPersisted msg ->
+            hub.Clients
+               .Group(string msg.Account.AccountId)
+               .AccountEventPersistenceConfirmation(Serialization.serialize msg)
+            |> ignore
+         | Msg.AccountEventValidationFail msg ->
+            hub.Clients
+               .Group(string msg.AccountId)
+               .AccountEventValidationFail(Serialization.serialize msg)
+            |> ignore
+         | Msg.AccountEventPersistenceFail msg ->
+            hub.Clients
+               .Group(string msg.AccountId)
+               .AccountEventPersistenceFail(Serialization.serialize msg)
+            |> ignore
+         | Msg.CircuitBreaker msg ->
+            hub.Clients.All.CircuitBreakerMessage(Serialization.serialize msg)
+            |> ignore
+      }
 
    props handler
 

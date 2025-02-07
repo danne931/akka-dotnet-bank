@@ -911,23 +911,21 @@ let configureAutoTransferRules
    socialTransferCandidates |> List.iter initZeroBalanceRule
 
 let seedAccountOwnerActions
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (timestamp: DateTime)
    (account: Account)
    =
    let domesticRecipientCmd =
-      RegisterDomesticTransferRecipientCommand.create
-         (apCheckingAccountId, orgId)
-         mockAccountOwnerId
-         {
-            AccountId = Guid.NewGuid() |> AccountId
-            FirstName = "Microsoft"
-            LastName = "Azure"
-            AccountNumber = AccountNumber.generate ()
-            RoutingNumber = "123456789"
-            Depository = DomesticRecipientAccountDepository.Checking
-            PaymentNetwork = PaymentNetwork.ACH
-         }
+      RegisterDomesticTransferRecipientCommand.create orgId mockAccountOwnerId {
+         AccountId = Guid.NewGuid() |> AccountId
+         FirstName = "Microsoft"
+         LastName = "Azure"
+         AccountNumber = AccountNumber.generate ()
+         RoutingNumber = "123456789"
+         Depository = DomesticRecipientAccountDepository.Checking
+         PaymentNetwork = PaymentNetwork.ACH
+      }
 
    let domesticRecipient =
       domesticRecipientCmd
@@ -936,14 +934,15 @@ let seedAccountOwnerActions
       |> Result.toValueOption
       |> _.Value
 
-   let accountRef = getAccountRef account.AccountId
 
    let msg =
       domesticRecipientCmd
-      |> AccountCommand.RegisterDomesticTransferRecipient
-      |> AccountMessage.StateChange
+      |> OrgCommand.RegisterDomesticTransferRecipient
+      |> OrgMessage.StateChange
 
-   accountRef <! msg
+   getOrgRef orgId <! msg
+
+   let accountRef = getAccountRef account.AccountId
 
    for month in [ 1..3 ] do
       let timestamp =
@@ -1320,6 +1319,7 @@ let getEmployeeCardPair
 
 let seedAccountTransactions
    (mailbox: Actor<AccountSeederMessage>)
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (command: CreateAccountCommand)
@@ -1347,7 +1347,7 @@ let seedAccountTransactions
          accountRef <! msg
       | None -> ()
 
-      if accountId = apCheckingAccountId then
+      if accountId = opsCheckingAccountId then
          createEmployees getEmployeeRef
          do! Task.Delay 10_000
          let cardCreateCmds = createEmployeeCards getEmployeeRef
@@ -1368,7 +1368,7 @@ let seedAccountTransactions
                mailbox
                $"Can not proceed with account owner actions - eId: {accountOwnerId}"
          | Some account ->
-            seedAccountOwnerActions getAccountRef timestamp account
+            seedAccountOwnerActions getOrgRef getAccountRef timestamp account
 
          for cmd in
             cardCreateCmds.AccountOwnerTravelCard :: cardCreateCmds.Employee do
@@ -1511,6 +1511,7 @@ let actorProps
                do!
                   seedAccountTransactions
                      ctx
+                     getOrgRef
                      getAccountRef
                      getEmployeeRef
                      state.AccountsToCreate[acct.AccountId]

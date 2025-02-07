@@ -392,15 +392,12 @@ let renderControlPanel
    |}
 
 let renderTableRow
-   (account: Account)
-   (evt: AccountEvent)
    (selectedTxnId: EventId option)
-   (merchants: Map<string, Merchant>)
+   (evt: AccountEvent)
+   (transactionDisplay: AccountEvent -> TransactionUIFriendly)
    dispatch
    =
-   let txn =
-      eventWithMerchantAlias evt merchants |> transactionUIFriendly account
-
+   let txn = transactionDisplay evt
    let orDefaultValue opt = opt |> Option.defaultValue "-"
    let _, envelope = AccountEnvelope.unwrap evt
 
@@ -448,10 +445,9 @@ let renderTableRow
    ]
 
 let renderTable
-   (account: Account)
-   (txns: AccountEvent list)
+   (evts: AccountEvent list)
    (selectedTxnId: EventId option)
-   (merchants: Map<string, Merchant>)
+   (transactionDisplay: AccountEvent -> TransactionUIFriendly)
    dispatch
    =
    Html.table [
@@ -471,14 +467,18 @@ let renderTable
          ]
 
          Html.tbody [
-            for txn in txns ->
-               renderTableRow account txn selectedTxnId merchants dispatch
+            for evt in evts ->
+               renderTableRow selectedTxnId evt transactionDisplay dispatch
          ]
       ]
    ]
 
 [<ReactComponent>]
-let TransactionTableComponent (account: Account) (session: UserSession) =
+let TransactionTableComponent
+   (org: Org)
+   (account: Account)
+   (session: UserSession)
+   =
    let categories = React.useContext TransactionCategoryProvider.context
    let merchants = React.useContext MerchantProvider.stateContext
    let signalRCtx = React.useContext SignalRAccountEventProvider.context
@@ -541,7 +541,11 @@ let TransactionTableComponent (account: Account) (session: UserSession) =
                else
                   txns
 
-            renderTable account txns browserQuery.Transaction merchants dispatch
+            let txnDisplay evt =
+               eventWithMerchantAlias merchants evt
+               |> transactionUIFriendly org account
+
+            renderTable txns browserQuery.Transaction txnDisplay dispatch
             renderPagination state dispatch
          | _ -> ()
       ]

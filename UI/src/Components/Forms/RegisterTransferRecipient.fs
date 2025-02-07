@@ -1,14 +1,14 @@
-module Bank.Account.Forms.RegisterTransferRecipientForm
+module Bank.Org.Forms.RegisterTransferRecipientForm
 
 open Feliz
 open Fable.Form.Simple
 open System
 
 open Fable.Form.Simple.Pico
-open Bank.Account.Domain
+open Bank.Org.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
-open UIDomain.Account
+open UIDomain.Org
 open Lib.Validators
 open FormContainer
 open Lib.SharedTypes
@@ -24,13 +24,9 @@ type Values = {
    PaymentNetwork: string
 }
 
-type State = {
-   Account: Account
-   EditingDomesticRecipient: DomesticTransferRecipient option
-}
-
 let domesticRecipientForm
-   (state: State)
+   (org: Org)
+   (editingDomesticRecipient: DomesticTransferRecipient option)
    (initiatedBy: InitiatedById)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -148,10 +144,10 @@ let domesticRecipientForm
       let first, last = name
 
       let cmd =
-         match state.EditingDomesticRecipient with
+         match editingDomesticRecipient with
          | None ->
             RegisterDomesticTransferRecipientCommand.create
-               state.Account.CompositeId
+               org.OrgId
                initiatedBy
                {
                   AccountId = AccountId <| Guid.NewGuid()
@@ -162,23 +158,20 @@ let domesticRecipientForm
                   Depository = depository
                   PaymentNetwork = paymentNetwork
                }
-            |> AccountCommand.RegisterDomesticTransferRecipient
+            |> OrgCommand.RegisterDomesticTransferRecipient
          | Some recipient ->
-            EditDomesticTransferRecipientCommand.create
-               state.Account.CompositeId
-               initiatedBy
-               {
-                  LastName = last
-                  FirstName = first
-                  AccountNumber = accountNum
-                  RoutingNumber = routingNum
-                  Depository = depository
-                  PaymentNetwork = paymentNetwork
-                  RecipientWithoutAppliedUpdates = recipient
-               }
-            |> AccountCommand.EditDomesticTransferRecipient
+            EditDomesticTransferRecipientCommand.create org.OrgId initiatedBy {
+               LastName = last
+               FirstName = first
+               AccountNumber = accountNum
+               RoutingNumber = routingNum
+               Depository = depository
+               PaymentNetwork = paymentNetwork
+               RecipientWithoutAppliedUpdates = recipient
+            }
+            |> OrgCommand.EditDomesticTransferRecipient
 
-      Msg.Submit(state.Account, cmd, Started)
+      Msg.Submit(org, cmd, Started)
 
    Form.succeed onSubmit
    |> Form.append fieldPaymentNetwork
@@ -193,7 +186,8 @@ let domesticRecipientForm
    |> Form.append fieldRoutingNumber
 
 let form
-   (state: State)
+   (org: Org)
+   (editingDomesticRecipient: DomesticTransferRecipient option)
    (initiatedBy: InitiatedById)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -223,19 +217,41 @@ let form
       }
 
    fieldAccountEnvironment
-   |> Form.andThen (fun _ -> domesticRecipientForm state initiatedBy)
+   |> Form.andThen (fun _ ->
+      domesticRecipientForm org editingDomesticRecipient initiatedBy)
 
 [<ReactComponent>]
 let RegisterTransferRecipientFormComponent
    (session: UserSession)
-   (account: Account)
+   (org: Org)
    (recipientIdForEdit: AccountId option)
-   (onSubmit: AccountCommandReceipt -> unit)
+   (onSubmit: OrgCommandReceipt -> unit)
    =
+   let transfersToRetry, setTransfersToRetry =
+      React.useState<Deferred<DomesticTransfer list option>> Deferred.Idle
+
    let recipient =
       recipientIdForEdit
       |> Option.bind (fun accountId ->
-         Map.tryFind accountId account.DomesticTransferRecipients)
+         Map.tryFind accountId org.DomesticTransferRecipients)
+
+   React.useEffectOnce (fun () ->
+      match recipient with
+      | Some r ->
+         async {
+            let! res =
+               AccountService.getDomesticTransfersRetryableUponRecipientEdit
+                  r.AccountId
+
+            match res with
+            | Error err ->
+               Log.error $"Error fetching retryable domestic transfers {err}"
+            | Ok transfersOpt ->
+               setTransfersToRetry (Deferred.Resolved transfersOpt)
+         }
+         |> Async.StartImmediate
+      | None -> setTransfersToRetry (Deferred.Resolved None))
+
 
    let formProps: Values = {
       AccountEnvironment = "domestic"
@@ -259,17 +275,38 @@ let RegisterTransferRecipientFormComponent
         }
       | _ -> formProps
 
-   let form =
-      form
-         {
-            Account = account
-            EditingDomesticRecipient = recipient
-         }
-         (InitiatedById session.EmployeeId)
+   React.fragment [
+      match transfersToRetry with
+      | Deferred.Resolved transfersOpt ->
+         match transfersOpt with
+         | None -> ()
+         | Some transfers ->
+            let count = transfers.Length
+            let msg = "will be retried upon editing recipient info."
 
-   AccountFormContainer {|
-      InitialValues = formProps
-      Form = form
-      Action = None
-      OnSubmit = onSubmit
-   |}
+            let msg =
+               match count with
+               | 0 -> None
+               | 1 -> Some $"1 failed transfer {msg}"
+               | count -> Some $"{count} failed transfers {msg}"
+
+            match msg with
+            | Some msg ->
+               Html.div [
+                  Html.ins [
+                     attr.text msg
+                     attr.style [ style.color "var(--primary)" ]
+                  ]
+               ]
+
+               Html.br []
+            | None -> ()
+
+         OrgFormContainer {|
+            InitialValues = formProps
+            Form = form org recipient (InitiatedById session.EmployeeId)
+            Action = None
+            OnSubmit = onSubmit
+         |}
+      | _ -> Html.progress []
+   ]

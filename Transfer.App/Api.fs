@@ -95,3 +95,44 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
 
    return paymentSummary
 }
+
+open TransferSqlMapper
+
+let getFailedDomesticTransfersByRecipient
+   (recipientAccountId: AccountId)
+   : Task<Result<DomesticTransfer list option, Err>>
+   =
+   let query =
+      $"""
+      {Query.domesticTransfer}
+      WHERE
+         {TransferFields.Domestic.recipientAccountId} = @recipientId
+         AND {TransferFields.Domestic.status} = 'Failed'
+      """
+
+   pgQuery<DomesticTransfer>
+      query
+      (Some [
+         "recipientId",
+         TransferSqlWriter.DomesticRecipient.accountId recipientAccountId
+      ])
+      TransferSqlReader.Domestic.transfer
+
+// Get domestic transfers which may be retried if recipient
+// (with InvalidAccountInfo status) info edited via
+// EditDomesticTransferRecipient command.
+// Any recipient with InvalidAccountInfo status will have their failed domestic
+// transfers retried upon editing the recipient data.
+let getDomesticTransfersRetryableUponRecipientCorrection
+   (recipientAccountId: AccountId)
+   : Task<Result<DomesticTransfer list option, Err>>
+   =
+   taskResultOption {
+      let! transfers = getFailedDomesticTransfersByRecipient recipientAccountId
+
+      let retryableStatus =
+         DomesticTransferDeclinedReason.InvalidAccountInfo
+         |> DomesticTransferProgress.Failed
+
+      return transfers |> List.filter (fun t -> t.Status = retryableStatus)
+   }

@@ -80,14 +80,15 @@ module TransferLimits =
 
 let private applyInternalTransferPending
    (info: BaseInternalTransferInfo)
-   (account: Account)
+   (state: AccountWithEvents)
    =
+   let account = state.Info
    let balance = account.Balance - info.Amount
 
    {
-      account with
-         Balance = balance
-         MaintenanceFeeCriteria =
+      state with
+         Info.Balance = balance
+         Info.MaintenanceFeeCriteria =
             MaintenanceFee.fromDebit account.MaintenanceFeeCriteria balance
          InProgressInternalTransfers =
             Map.add
@@ -96,88 +97,81 @@ let private applyInternalTransferPending
                   TransferId = info.TransferId
                   Info = info
                }
-               account.InProgressInternalTransfers
+               state.InProgressInternalTransfers
    }
 
 let private applyInternalTransferApproved
    (info: BaseInternalTransferInfo)
-   (account: Account)
+   (state: AccountWithEvents)
    =
    {
-      account with
+      state with
          InProgressInternalTransfers =
-            Map.remove info.TransferId account.InProgressInternalTransfers
+            Map.remove info.TransferId state.InProgressInternalTransfers
    }
 
 let private applyInternalTransferRejected
    (info: BaseInternalTransferInfo)
-   (account: Account)
+   (state: AccountWithEvents)
    =
+   let account = state.Info
    let balance = account.Balance + info.Amount
 
    {
-      account with
-         Balance = balance
-         MaintenanceFeeCriteria =
+      state with
+         Info.Balance = balance
+         Info.MaintenanceFeeCriteria =
             MaintenanceFee.fromDebitReversal
                account.MaintenanceFeeCriteria
                balance
          InProgressInternalTransfers =
-            Map.remove info.TransferId account.InProgressInternalTransfers
-   (*
-         FailedInternalTransfers =
-            Map.add
-               e.CorrelationId
-               (TransferEventToDomesticTransfer.fromRejection e)
-               account.FailedDomesticTransfers
-         *)
+            Map.remove info.TransferId state.InProgressInternalTransfers
    }
 
-let private applyTransferDeposit (account: Account) (amount: decimal) = {
-   account with
-      Balance = account.Balance + amount
-      MaintenanceFeeCriteria =
-         MaintenanceFee.fromDeposit account.MaintenanceFeeCriteria amount
+let private applyTransferDeposit (state: AccountWithEvents) (amount: decimal) = {
+   state with
+      Info.Balance = state.Info.Balance + amount
+      Info.MaintenanceFeeCriteria =
+         MaintenanceFee.fromDeposit state.Info.MaintenanceFeeCriteria amount
 }
 
 let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
    let account = state.Info
 
-   let updatedAccount =
+   let updatedState: AccountWithEvents =
       match evt with
       | BillingCycleStarted e -> {
-         account with
-            LastBillingCycleDate = Some e.Timestamp
+         state with
+            Info.LastBillingCycleDate = Some e.Timestamp
         }
       | CreatedAccount e -> {
-         AccountId = AccountId.fromEntityId e.EntityId
-         AccountNumber = e.Data.AccountNumber
-         RoutingNumber = e.Data.RoutingNumber
-         OrgId = e.OrgId
-         Name = e.Data.Name
-         Depository = e.Data.Depository
-         Currency = e.Data.Currency
-         Balance = e.Data.Balance
-         Status = AccountStatus.Active
-         LastBillingCycleDate = None
-         InProgressInternalTransfers = Map.empty
-         DomesticTransferRecipients = Map.empty
-         InProgressDomesticTransfers = Map.empty
-         FailedDomesticTransfers = Map.empty
-         MaintenanceFeeCriteria = {
-            QualifyingDepositFound = false
-            DailyBalanceThreshold = false
-         }
-         AutoTransferRule = None
+         state with
+            Info = {
+               AccountId = AccountId.fromEntityId e.EntityId
+               AccountNumber = e.Data.AccountNumber
+               RoutingNumber = e.Data.RoutingNumber
+               OrgId = e.OrgId
+               Name = e.Data.Name
+               Depository = e.Data.Depository
+               Currency = e.Data.Currency
+               Balance = e.Data.Balance
+               Status = AccountStatus.Active
+               LastBillingCycleDate = None
+               MaintenanceFeeCriteria = {
+                  QualifyingDepositFound = false
+                  DailyBalanceThreshold = false
+               }
+               AutoTransferRule = None
+            }
         }
       | AccountEvent.AccountClosed _ -> {
-         account with
-            Status = AccountStatus.Closed
+         state with
+            Info.Status = AccountStatus.Closed
         }
       | DepositedCash e -> {
-         account with
-            Balance = account.Balance + e.Data.Amount
-            MaintenanceFeeCriteria =
+         state with
+            Info.Balance = account.Balance + e.Data.Amount
+            Info.MaintenanceFeeCriteria =
                MaintenanceFee.fromDeposit
                   account.MaintenanceFeeCriteria
                   e.Data.Amount
@@ -186,9 +180,9 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
          let balance = account.Balance - e.Data.Amount
 
          {
-            account with
-               Balance = balance
-               MaintenanceFeeCriteria =
+            state with
+               Info.Balance = balance
+               Info.MaintenanceFeeCriteria =
                   MaintenanceFee.fromDebit
                      account.MaintenanceFeeCriteria
                      balance
@@ -197,38 +191,34 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
          let balance = account.Balance - e.Data.Amount
 
          {
-            account with
-               Balance = balance
-               MaintenanceFeeCriteria = MaintenanceFee.reset balance
+            state with
+               Info.Balance = balance
+               Info.MaintenanceFeeCriteria = MaintenanceFee.reset balance
          }
       | MaintenanceFeeSkipped _ -> {
-         account with
-            MaintenanceFeeCriteria = MaintenanceFee.reset account.Balance
+         state with
+            Info.MaintenanceFeeCriteria = MaintenanceFee.reset account.Balance
         }
-      | DomesticTransferScheduled _ -> account
+      | DomesticTransferScheduled _ -> state
       | DomesticTransferPending e ->
          let info = e.Data.BaseInfo
          let balance = account.Balance - info.Amount
 
          {
-            account with
-               Balance = balance
-               MaintenanceFeeCriteria =
+            state with
+               Info.Balance = balance
+               Info.MaintenanceFeeCriteria =
                   MaintenanceFee.fromDebit
                      account.MaintenanceFeeCriteria
                      balance
-               // When reattempting a failed transfer, the transfer will be
-               // moved from the failed map to the in-progress map.
-               FailedDomesticTransfers =
-                  Map.remove info.TransferId account.FailedDomesticTransfers
                InProgressDomesticTransfers =
                   Map.add
                      info.TransferId
                      (TransferEventToDomesticTransfer.fromPending e)
-                     account.InProgressDomesticTransfers
+                     state.InProgressDomesticTransfers
          }
       | DomesticTransferProgress e -> {
-         account with
+         state with
             InProgressDomesticTransfers =
                Map.change
                   e.Data.BaseInfo.TransferId
@@ -238,94 +228,63 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
                            DomesticTransferProgress.InProgress
                               e.Data.InProgressInfo
                   }))
-                  account.InProgressDomesticTransfers
+                  state.InProgressDomesticTransfers
         }
       | DomesticTransferApproved e -> {
-         account with
+         state with
             InProgressDomesticTransfers =
                Map.remove
                   e.Data.BaseInfo.TransferId
-                  account.InProgressDomesticTransfers
-            // When a domestic transfer is retried & approved after being
-            // rejected due to invalid account details then update the
-            // recipient status to Confirmed.
-            DomesticTransferRecipients =
-               Map.change
-                  e.Data.BaseInfo.Recipient.AccountId
-                  (Option.map (fun recipient ->
-                     if
-                        recipient.Status = RecipientRegistrationStatus.InvalidAccount
-                     then
-                        {
-                           recipient with
-                              Status = RecipientRegistrationStatus.Confirmed
-                        }
-                     else
-                        recipient))
-                  account.DomesticTransferRecipients
+                  state.InProgressDomesticTransfers
+            FailedDomesticTransfers =
+               Map.remove
+                  e.Data.BaseInfo.TransferId
+                  state.FailedDomesticTransfers
         }
       | DomesticTransferRejected e ->
          let info = e.Data.BaseInfo
          let balance = account.Balance + info.Amount
 
-         let updatedRecipientStatus =
-            match e.Data.Reason with
-            | DomesticTransferDeclinedReason.InvalidAccountInfo ->
-               Some RecipientRegistrationStatus.InvalidAccount
-            | DomesticTransferDeclinedReason.AccountClosed ->
-               Some RecipientRegistrationStatus.Closed
-            | _ -> None
-
-         let updatedRecipients =
-            match updatedRecipientStatus with
-            | None -> account.DomesticTransferRecipients
-            | Some status ->
-               Map.change
-                  info.Recipient.AccountId
-                  (Option.map (fun recipient -> {
-                     recipient with
-                        Status = status
-                  }))
-                  account.DomesticTransferRecipients
-
-         {
+         let account = {
             account with
                Balance = balance
                MaintenanceFeeCriteria =
                   MaintenanceFee.fromDebitReversal
                      account.MaintenanceFeeCriteria
                      balance
-               // When a domestic transfer fails it will be moved from the
-               // in-progress map to the failed map.
+         }
+
+         {
+            state with
+               Info = account
                InProgressDomesticTransfers =
-                  Map.remove info.TransferId account.InProgressDomesticTransfers
+                  Map.remove info.TransferId state.InProgressDomesticTransfers
                FailedDomesticTransfers =
                   Map.add
                      info.TransferId
                      (TransferEventToDomesticTransfer.fromRejection e)
-                     account.FailedDomesticTransfers
-               DomesticTransferRecipients = updatedRecipients
+                     state.FailedDomesticTransfers
          }
       | InternalTransferWithinOrgPending e ->
-         applyInternalTransferPending e.Data.BaseInfo account
+         applyInternalTransferPending e.Data.BaseInfo state
       | InternalTransferWithinOrgApproved e ->
-         applyInternalTransferApproved e.Data.BaseInfo account
+         applyInternalTransferApproved e.Data.BaseInfo state
       | InternalTransferWithinOrgRejected e ->
-         applyInternalTransferRejected e.Data.BaseInfo account
-      | InternalTransferBetweenOrgsScheduled _ -> account
+         applyInternalTransferRejected e.Data.BaseInfo state
+      | InternalTransferBetweenOrgsScheduled _ -> state
       | InternalTransferBetweenOrgsPending e ->
-         applyInternalTransferPending e.Data.BaseInfo account
+         applyInternalTransferPending e.Data.BaseInfo state
       | InternalTransferBetweenOrgsApproved e ->
-         applyInternalTransferApproved e.Data.BaseInfo account
+         applyInternalTransferApproved e.Data.BaseInfo state
       | InternalTransferBetweenOrgsRejected e ->
-         applyInternalTransferRejected e.Data.BaseInfo account
+         applyInternalTransferRejected e.Data.BaseInfo state
       | InternalTransferWithinOrgDeposited e ->
-         applyTransferDeposit account e.Data.BaseInfo.Amount
+         applyTransferDeposit state e.Data.BaseInfo.Amount
       | InternalTransferBetweenOrgsDeposited e ->
-         applyTransferDeposit account e.Data.BaseInfo.Amount
-      | PlatformPaymentRequested _ -> account
-      | PlatformPaymentCancelled _ -> account
-      | PlatformPaymentDeclined _ -> account
+         applyTransferDeposit state e.Data.BaseInfo.Amount
+      | PlatformPaymentRequested _ -> state
+      | PlatformPaymentCancelled _ -> state
+      | PlatformPaymentDeclined _ -> state
       | PlatformPaymentPaid e ->
          // If payment fulfilled with account funds then deduct the
          // payment amount from the account.
@@ -334,62 +293,32 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
             let balance = account.Balance - e.Data.BaseInfo.Amount
 
             {
-               account with
-                  Balance = balance
-                  MaintenanceFeeCriteria =
+               state with
+                  Info.Balance = balance
+                  Info.MaintenanceFeeCriteria =
                      MaintenanceFee.fromDebit
                         account.MaintenanceFeeCriteria
                         balance
             }
-         | PaymentMethod.ThirdParty _ -> account
+         | PaymentMethod.ThirdParty _ -> state
       | PlatformPaymentDeposited e ->
-         applyTransferDeposit account e.Data.BaseInfo.Amount
-      | DomesticTransferRecipient e ->
-         let recipient = e.Data.Recipient
-
-         {
-            account with
-               DomesticTransferRecipients =
-                  account.DomesticTransferRecipients.Add(
-                     recipient.AccountId,
-                     recipient
-                  )
-         }
-      | EditedDomesticTransferRecipient e ->
-         let recipient = e.Data.Recipient
-
-         {
-            account with
-               DomesticTransferRecipients =
-                  account.DomesticTransferRecipients.Change(
-                     recipient.AccountId,
-                     Option.map (fun _ -> recipient)
-                  )
-         }
-      | RecipientNicknamed e -> {
-         account with
-            DomesticTransferRecipients =
-               Map.change
-                  e.Data.RecipientId
-                  (Option.map (fun acct -> {
-                     acct with
-                        Nickname = e.Data.Nickname
-                  }))
-                  account.DomesticTransferRecipients
-        }
+         applyTransferDeposit state e.Data.BaseInfo.Amount
       | AutoTransferRuleConfigured e -> {
-         account with
-            AutoTransferRule = Some e.Data.Config
+         state with
+            Info.AutoTransferRule = Some e.Data.Config
         }
-      | AutoTransferRuleDeleted _ -> { account with AutoTransferRule = None }
+      | AutoTransferRuleDeleted _ -> {
+         state with
+            Info.AutoTransferRule = None
+        }
       | InternalAutomatedTransferPending e ->
-         applyInternalTransferPending e.Data.BaseInfo account
+         applyInternalTransferPending e.Data.BaseInfo state
       | InternalAutomatedTransferApproved e ->
-         applyInternalTransferApproved e.Data.BaseInfo account
+         applyInternalTransferApproved e.Data.BaseInfo state
       | InternalAutomatedTransferRejected e ->
-         applyInternalTransferRejected e.Data.BaseInfo account
+         applyInternalTransferRejected e.Data.BaseInfo state
       | InternalAutomatedTransferDeposited e ->
-         applyTransferDeposit account e.Data.BaseInfo.Amount
+         applyTransferDeposit state e.Data.BaseInfo.Amount
 
    let updatedEvents = evt :: state.Events
 
@@ -407,8 +336,7 @@ let applyEvent (state: AccountWithEvents) (evt: AccountEvent) =
       | _ -> updatedEvents
 
    {
-      state with
-         Info = updatedAccount
+      updatedState with
          Events = updatedEvents
    }
 
@@ -517,7 +445,7 @@ module private StateTransition =
          transitionErr AccountNotActive
       else if
          Option.isNone
-         <| Map.tryFind transferId account.InProgressInternalTransfers
+         <| Map.tryFind transferId state.InProgressInternalTransfers
       then
          transitionErr TransferAlreadyProgressedToApprovedOrRejected
       else
@@ -537,7 +465,7 @@ module private StateTransition =
          transitionErr AccountNotActive
       else if
          Option.isNone
-         <| Map.tryFind transferId account.InProgressInternalTransfers
+         <| Map.tryFind transferId state.InProgressInternalTransfers
       then
          transitionErr TransferAlreadyProgressedToApprovedOrRejected
       else
@@ -600,7 +528,7 @@ module private StateTransition =
          transitionErr AccountNotActive
       else if
          Option.isNone
-         <| Map.tryFind transferId account.InProgressInternalTransfers
+         <| Map.tryFind transferId state.InProgressInternalTransfers
       then
          transitionErr TransferAlreadyProgressedToApprovedOrRejected
       else
@@ -620,7 +548,7 @@ module private StateTransition =
          transitionErr AccountNotActive
       else if
          Option.isNone
-         <| Map.tryFind transferId account.InProgressInternalTransfers
+         <| Map.tryFind transferId state.InProgressInternalTransfers
       then
          transitionErr TransferAlreadyProgressedToApprovedOrRejected
       else
@@ -640,12 +568,6 @@ module private StateTransition =
          transitionErr AccountNotActive
       elif account.Balance - input.Amount < 0m then
          transitionErr <| InsufficientBalance account.Balance
-      elif
-         account.DomesticTransferRecipients
-         |> Map.containsKey input.Recipient.AccountId
-         |> not
-      then
-         transitionErr RecipientRegistrationRequired
       else
          map
             DomesticTransferScheduled
@@ -663,12 +585,6 @@ module private StateTransition =
          transitionErr AccountNotActive
       elif account.Balance - input.Amount < 0m then
          transitionErr <| InsufficientBalance account.Balance
-      elif
-         account.DomesticTransferRecipients
-         |> Map.containsKey input.Recipient.AccountId
-         |> not
-      then
-         transitionErr RecipientRegistrationRequired
       elif
          TransferLimits.exceedsDailyDomesticTransferLimit
             state.Events
@@ -691,8 +607,7 @@ module private StateTransition =
       if account.Status <> AccountStatus.Active then
          transitionErr AccountNotActive
       else
-         let existing =
-            Map.tryFind transferId account.InProgressDomesticTransfers
+         let existing = Map.tryFind transferId state.InProgressDomesticTransfers
 
          match existing with
          | None ->
@@ -725,10 +640,22 @@ module private StateTransition =
          transitionErr AccountNotActive
       else if
          Option.isNone
-         <| Map.tryFind transferId account.InProgressDomesticTransfers
+         <| Map.tryFind transferId state.InProgressDomesticTransfers
       then
          transitionErr TransferAlreadyProgressedToApprovedOrRejected
       else
+         let retriedDueTo =
+            state.FailedDomesticTransfers.TryFind(transferId)
+            |> Option.bind (fun transfer ->
+               match transfer.Status with
+               | DomesticTransferProgress.Failed failReason -> Some failReason
+               | _ -> None)
+
+         let cmd = {
+            cmd with
+               Data.FromRetry = retriedDueTo
+         }
+
          map
             DomesticTransferApproved
             state
@@ -745,7 +672,7 @@ module private StateTransition =
          transitionErr AccountNotActive
       else if
          Option.isNone
-         <| Map.tryFind transferId account.InProgressDomesticTransfers
+         <| Map.tryFind transferId state.InProgressDomesticTransfers
       then
          transitionErr TransferAlreadyProgressedToApprovedOrRejected
       else
@@ -753,48 +680,6 @@ module private StateTransition =
             DomesticTransferRejected
             state
             (RejectDomesticTransferCommand.toEvent cmd)
-
-   let registerDomesticTransferRecipient
-      (state: AccountWithEvents)
-      (cmd: RegisterDomesticTransferRecipientCommand)
-      =
-      let account = state.Info
-
-      if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      elif
-         account.DomesticTransferRecipients
-         |> Map.exists (fun _ recipient ->
-            string recipient.AccountNumber = cmd.Data.AccountNumber
-            && string recipient.RoutingNumber = cmd.Data.RoutingNumber)
-      then
-         transitionErr RecipientRegistered
-      else
-         map DomesticTransferRecipient state
-         <| RegisterDomesticTransferRecipientCommand.toEvent cmd
-
-   let editDomesticTransferRecipient
-      (state: AccountWithEvents)
-      (cmd: EditDomesticTransferRecipientCommand)
-      =
-      let account = state.Info
-
-      if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      elif
-         account.DomesticTransferRecipients
-         |> Map.tryFind cmd.Data.RecipientWithoutAppliedUpdates.AccountId
-         |> Option.bind (fun recipient ->
-            if recipient.Status = RecipientRegistrationStatus.Closed then
-               Some recipient
-            else
-               None)
-         |> Option.isSome
-      then
-         transitionErr RecipientDeactivated
-      else
-         map EditedDomesticTransferRecipient state
-         <| EditDomesticTransferRecipientCommand.toEvent cmd
 
    let depositTransferWithinOrg
       (state: AccountWithEvents)
@@ -901,29 +786,6 @@ module private StateTransition =
    let closeAccount (state: AccountWithEvents) (cmd: CloseAccountCommand) =
       map AccountEvent.AccountClosed state (CloseAccountCommand.toEvent cmd)
 
-   let nicknameRecipient
-      (state: AccountWithEvents)
-      (cmd: NicknameRecipientCommand)
-      =
-      let account = state.Info
-
-      let recipientExists, recipientIsActive =
-         match
-            account.DomesticTransferRecipients.TryFind cmd.Data.RecipientId
-         with
-         | None -> false, false
-         | Some recipient ->
-            true, recipient.Status <> RecipientRegistrationStatus.Closed
-
-      if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      elif not recipientExists then
-         transitionErr RecipientNotFound
-      else if not recipientIsActive then
-         transitionErr RecipientDeactivated
-      else
-         map RecipientNicknamed state (NicknameRecipientCommand.toEvent cmd)
-
    let configureAutoTransferRule
       (state: AccountWithEvents)
       (cmd: ConfigureAutoTransferRuleCommand)
@@ -998,7 +860,7 @@ module private StateTransition =
          transitionErr AccountNotActive
       else if
          Option.isNone
-         <| Map.tryFind transferId account.InProgressInternalTransfers
+         <| Map.tryFind transferId state.InProgressInternalTransfers
       then
          transitionErr TransferAlreadyProgressedToApprovedOrRejected
       else
@@ -1018,7 +880,7 @@ module private StateTransition =
          transitionErr AccountNotActive
       else if
          Option.isNone
-         <| Map.tryFind transferId account.InProgressInternalTransfers
+         <| Map.tryFind transferId state.InProgressInternalTransfers
       then
          transitionErr TransferAlreadyProgressedToApprovedOrRejected
       else
@@ -1066,10 +928,6 @@ let stateTransition (state: AccountWithEvents) (command: AccountCommand) =
       StateTransition.depositTransferWithinOrg state cmd
    | AccountCommand.DepositTransferBetweenOrgs cmd ->
       StateTransition.depositTransferBetweenOrgs state cmd
-   | AccountCommand.RegisterDomesticTransferRecipient cmd ->
-      StateTransition.registerDomesticTransferRecipient state cmd
-   | AccountCommand.EditDomesticTransferRecipient cmd ->
-      StateTransition.editDomesticTransferRecipient state cmd
    | AccountCommand.ScheduleDomesticTransfer cmd ->
       StateTransition.scheduleDomesticTransfer state cmd
    | AccountCommand.DomesticTransfer cmd ->
@@ -1080,8 +938,6 @@ let stateTransition (state: AccountWithEvents) (command: AccountCommand) =
       StateTransition.rejectDomesticTransfer state cmd
    | AccountCommand.UpdateDomesticTransferProgress cmd ->
       StateTransition.domesticTransferProgress state cmd
-   | AccountCommand.NicknameRecipient cmd ->
-      StateTransition.nicknameRecipient state cmd
    | AccountCommand.CloseAccount cmd -> StateTransition.closeAccount state cmd
    | AccountCommand.RequestPlatformPayment cmd ->
       StateTransition.platformPaymentRequested state cmd
@@ -1105,25 +961,3 @@ let stateTransition (state: AccountWithEvents) (command: AccountCommand) =
       StateTransition.rejectInternalAutoTransfer state cmd
    | AccountCommand.DepositInternalAutoTransfer cmd ->
       StateTransition.depositInternalAutoTransfer state cmd
-
-let empty: Account = {
-   AccountId = AccountId System.Guid.Empty
-   OrgId = OrgId System.Guid.Empty
-   Name = ""
-   Depository = AccountDepository.Checking
-   Currency = Currency.USD
-   Status = AccountStatus.InitialEmptyState
-   Balance = 0m
-   LastBillingCycleDate = None
-   InProgressInternalTransfers = Map.empty
-   DomesticTransferRecipients = Map.empty
-   InProgressDomesticTransfers = Map.empty
-   FailedDomesticTransfers = Map.empty
-   MaintenanceFeeCriteria = {
-      QualifyingDepositFound = false
-      DailyBalanceThreshold = false
-   }
-   AccountNumber = AccountNumber <| System.Int64.Parse "123456789123456"
-   RoutingNumber = RoutingNumber 123456789
-   AutoTransferRule = None
-}

@@ -7,6 +7,7 @@ open Akka.Persistence.Extras
 open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
+open System.Threading.Tasks
 
 open Lib.SharedTypes
 open Lib.Types
@@ -16,10 +17,30 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
 
-let handleValidationError mailbox (err: Err) (cmd: OrgCommand) =
-   logWarning
-      mailbox
-      $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
+let private handleValidationError mailbox (err: Err) (cmd: OrgCommand) =
+   match cmd, err with
+   | OrgCommand.FailDomesticTransferRecipient cmd,
+     Err.OrgStateTransitionError OrgStateTransitionError.RecipientDeactivated ->
+      let msg =
+         $"""
+            Domestic transfer failed ({cmd.Data.TransferId}).
+            No need to update recipient status.
+            """
+
+      logDebug mailbox msg
+   | OrgCommand.DomesticTransferRetryConfirmsRecipient cmd,
+     Err.OrgStateTransitionError OrgStateTransitionError.RecipientAlreadyConfirmed ->
+      let msg =
+         $"""
+            Domestic transfer retried successfully ({cmd.Data.TransferId}).
+            No need to update recipient status."
+            """
+
+      logDebug mailbox msg
+   | _ ->
+      logWarning
+         mailbox
+         $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
 
 // Sends the ApprovableCommand to the appropriate Account or Employee actor
 // when the approval process is complete or no approval required.
@@ -81,7 +102,8 @@ let private hasAccruableTransaction
 
 // Add an OrgAccrualMetric to the daily tally so we can determine if
 // an incoming ApprovableCommand should enter the approvable workflow
-// due to exceeding the daily limit for a that command type.
+// due to exceeding the daily limit for a particular employee issuing
+// a command.
 let private updateStateWithAccruableTransaction
    (state: OrgWithEvents)
    (metrics: OrgAccrualMetric)
@@ -125,9 +147,55 @@ let private terminateProgressAssociatedWithRule
 
       mailbox <! OrgMessage.StateChange cmd
 
+// Child actor handles retrying domestic transfers which failed
+// due to the mock third party transfer service regarding the
+// Recipient of the Transfer as having invalid account info.
+module private RetryDomesticTransfers =
+   let private actorProps
+      (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+      (getRetryableTransfers:
+         AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+      : Props<AccountId>
+      =
+      let handler (ctx: Actor<_>) (recipientId: AccountId) = actor {
+         let! res = getRetryableTransfers recipientId
+
+         match res with
+         | Error err ->
+            logError ctx $"Error getting retryable transfers {err}"
+            return unhandled ()
+         | Ok None -> return ignored ()
+         | Ok(Some transfers) ->
+            for transfer in transfers do
+               let msg =
+                  DomesticTransferToCommand.retry transfer
+                  |> AccountCommand.DomesticTransfer
+                  |> AccountMessage.StateChange
+
+               getAccountRef transfer.Sender.AccountId <! msg
+
+            return ignored ()
+      }
+
+      props (actorOf2 handler)
+
+   let getOrStart
+      (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+      (getRetryableTransfers:
+         AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+      (mailbox: Actor<_>)
+      =
+      let name = "retry-domestic-transfers"
+
+      getChildActorRef<_, AccountId> mailbox name
+      |> Option.defaultWith (fun _ ->
+         spawn mailbox name <| actorProps getAccountRef getRetryableTransfers)
+
 let actorProps
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getDomesticTransfersRetryableUponRecipientEdit:
+      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
    let sendApprovedCommand = sendApprovedCommand getEmployeeRef getAccountRef
 
@@ -141,9 +209,10 @@ let actorProps
 
          let org = state.Info
 
-         match box msg with
+         match msg with
          | Persisted mailbox e ->
             let (OrgMessage.Event evt) = unbox e
+
             let previousState = state
             let state = Org.applyEvent state evt
 
@@ -231,6 +300,14 @@ let actorProps
 
                   accountRef <! msg
                | _ -> ()
+            | EditedDomesticTransferRecipient e ->
+               let aref =
+                  RetryDomesticTransfers.getOrStart
+                     getAccountRef
+                     getDomesticTransfersRetryableUponRecipientEdit
+                     mailbox
+
+               aref <! e.Data.Recipient.AccountId
             | _ -> ()
 
             let state =
@@ -369,7 +446,7 @@ let actorProps
 let get (sys: ActorSystem) (orgId: OrgId) : IEntityRef<OrgMessage> =
    getEntityRef sys ClusterMetadata.orgShardRegion (OrgId.get orgId)
 
-let isPersistableMessage (msg: obj) =
+let private isPersistableMessage (msg: obj) =
    match msg with
    | :? OrgMessage as msg ->
       match msg with
@@ -383,8 +460,14 @@ let initProps
    (persistenceId: string)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getDomesticTransfersRetryableUponRecipientEdit:
+      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
-   let childProps = actorProps getEmployeeRef getAccountRef
+   let childProps =
+      actorProps
+         getEmployeeRef
+         getAccountRef
+         getDomesticTransfersRetryableUponRecipientEdit
 
    persistenceSupervisor
       supervisorOpts

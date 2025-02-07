@@ -2,6 +2,7 @@ namespace Bank.Org.Domain
 
 open Lib.SharedTypes
 open Bank.Account.Domain
+open Bank.Transfer.Domain
 
 [<RequireQualifiedAccess>]
 type OrgCommand =
@@ -15,6 +16,14 @@ type OrgCommand =
    | DeclineCommandApproval of CommandApprovalProgress.DeclineCommandApproval
    | TerminateCommandApproval of
       CommandApprovalProgress.TerminateCommandApproval
+   | RegisterDomesticTransferRecipient of
+      RegisterDomesticTransferRecipientCommand
+   | EditDomesticTransferRecipient of EditDomesticTransferRecipientCommand
+   | NicknameDomesticTransferRecipient of
+      NicknameDomesticTransferRecipientCommand
+   | FailDomesticTransferRecipient of FailDomesticTransferRecipientCommand
+   | DomesticTransferRetryConfirmsRecipient of
+      DomesticTransferRetryConfirmsRecipientCommand
 
 type OrgEvent =
    | OrgCreated of BankEvent<OrgCreated>
@@ -34,6 +43,16 @@ type OrgEvent =
       BankEvent<CommandApprovalProgress.CommandApprovalDeclined>
    | CommandApprovalTerminated of
       BankEvent<CommandApprovalProgress.CommandApprovalTerminated>
+   | RegisteredDomesticTransferRecipient of
+      BankEvent<RegisteredDomesticTransferRecipient>
+   | EditedDomesticTransferRecipient of
+      BankEvent<EditedDomesticTransferRecipient>
+   | NicknamedDomesticTransferRecipient of
+      BankEvent<NicknamedDomesticTransferRecipient>
+   | DomesticTransferRecipientFailed of
+      BankEvent<DomesticTransferRecipientFailed>
+   | DomesticTransferRetryConfirmsRecipient of
+      BankEvent<DomesticTransferRetryConfirmsRecipient>
 
 type OpenEventEnvelope = OrgEvent * Envelope
 
@@ -68,6 +87,16 @@ module OrgEnvelope =
          CommandApprovalDeclined evt
       | :? BankEvent<CommandApprovalProgress.CommandApprovalTerminated> as evt ->
          CommandApprovalTerminated evt
+      | :? BankEvent<RegisteredDomesticTransferRecipient> as evt ->
+         RegisteredDomesticTransferRecipient evt
+      | :? BankEvent<EditedDomesticTransferRecipient> as evt ->
+         EditedDomesticTransferRecipient evt
+      | :? BankEvent<NicknamedDomesticTransferRecipient> as evt ->
+         NicknamedDomesticTransferRecipient evt
+      | :? BankEvent<DomesticTransferRecipientFailed> as evt ->
+         DomesticTransferRecipientFailed evt
+      | :? BankEvent<DomesticTransferRetryConfirmsRecipient> as evt ->
+         DomesticTransferRetryConfirmsRecipient evt
       | _ -> failwith "Missing definition for OrgEvent message"
 
    let unwrap (o: OrgEvent) : OpenEventEnvelope =
@@ -82,6 +111,11 @@ module OrgEnvelope =
       | CommandApprovalProcessCompleted evt -> wrap evt, get evt
       | CommandApprovalDeclined evt -> wrap evt, get evt
       | CommandApprovalTerminated evt -> wrap evt, get evt
+      | RegisteredDomesticTransferRecipient evt -> wrap evt, get evt
+      | EditedDomesticTransferRecipient evt -> wrap evt, get evt
+      | NicknamedDomesticTransferRecipient evt -> wrap evt, get evt
+      | DomesticTransferRetryConfirmsRecipient evt -> wrap evt, get evt
+      | DomesticTransferRecipientFailed evt -> wrap evt, get evt
 
 type Org = {
    OrgId: OrgId
@@ -91,6 +125,7 @@ type Org = {
    CommandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule.T>
    CommandApprovalProgress:
       Map<CommandApprovalProgressId, CommandApprovalProgress.T>
+   DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
 }
 
 module Org =
@@ -103,6 +138,7 @@ module Org =
       }
       CommandApprovalRules = Map.empty
       CommandApprovalProgress = Map.empty
+      DomesticTransferRecipients = Map.empty
    }
 
 type OrgWithEvents = {
@@ -128,37 +164,35 @@ type OrgWithAccountProfiles = {
       x.AccountProfiles |> Map.map (fun _ profile -> profile.Account)
 
    member x.Metrics: AccountMetrics =
-      x.AccountProfiles.Values
-      |> Seq.fold
-            (fun acc profile -> {
-               DailyInternalTransferWithinOrg =
-                  acc.DailyInternalTransferWithinOrg
-                  + profile.Metrics.DailyInternalTransferWithinOrg
-               DailyInternalTransferBetweenOrgs =
-                  acc.DailyInternalTransferBetweenOrgs
-                  + profile.Metrics.DailyInternalTransferBetweenOrgs
-               DailyDomesticTransfer =
-                  acc.DailyDomesticTransfer
-                  + profile.Metrics.DailyDomesticTransfer
-               DailyPaymentPaid =
-                  acc.DailyPaymentPaid + profile.Metrics.DailyPaymentPaid
-               DailyPurchase =
-                  acc.DailyPurchase + profile.Metrics.DailyPurchase
-               MonthlyInternalTransferWithinOrg =
-                  acc.DailyInternalTransferWithinOrg
-                  + profile.Metrics.DailyInternalTransferWithinOrg
-               MonthlyInternalTransferBetweenOrgs =
-                  acc.DailyInternalTransferBetweenOrgs
-                  + profile.Metrics.DailyInternalTransferBetweenOrgs
-               MonthlyDomesticTransfer =
-                  acc.DailyDomesticTransfer
-                  + profile.Metrics.DailyDomesticTransfer
-               MonthlyPaymentPaid =
-                  acc.DailyPaymentPaid + profile.Metrics.DailyPaymentPaid
-               MonthlyPurchase =
-                  acc.DailyPurchase + profile.Metrics.DailyPurchase
-            })
-            AccountMetrics.empty
+      Seq.fold
+         (fun acc profile -> {
+            DailyInternalTransferWithinOrg =
+               acc.DailyInternalTransferWithinOrg
+               + profile.Metrics.DailyInternalTransferWithinOrg
+            DailyInternalTransferBetweenOrgs =
+               acc.DailyInternalTransferBetweenOrgs
+               + profile.Metrics.DailyInternalTransferBetweenOrgs
+            DailyDomesticTransfer =
+               acc.DailyDomesticTransfer
+               + profile.Metrics.DailyDomesticTransfer
+            DailyPaymentPaid =
+               acc.DailyPaymentPaid + profile.Metrics.DailyPaymentPaid
+            DailyPurchase = acc.DailyPurchase + profile.Metrics.DailyPurchase
+            MonthlyInternalTransferWithinOrg =
+               acc.DailyInternalTransferWithinOrg
+               + profile.Metrics.DailyInternalTransferWithinOrg
+            MonthlyInternalTransferBetweenOrgs =
+               acc.DailyInternalTransferBetweenOrgs
+               + profile.Metrics.DailyInternalTransferBetweenOrgs
+            MonthlyDomesticTransfer =
+               acc.DailyDomesticTransfer
+               + profile.Metrics.DailyDomesticTransfer
+            MonthlyPaymentPaid =
+               acc.DailyPaymentPaid + profile.Metrics.DailyPaymentPaid
+            MonthlyPurchase = acc.DailyPurchase + profile.Metrics.DailyPurchase
+         })
+         AccountMetrics.empty
+         x.AccountProfiles.Values
 
 [<RequireQualifiedAccess>]
 type OrgMessage =

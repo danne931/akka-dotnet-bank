@@ -25,14 +25,12 @@ let pgQuerySingle<'t>
    |> Sql.executeRowAsync mapper
    |> Task.map Some
    |> TaskResult.ofTask
-   |> TaskResult.catch DatabaseError
-   |> TaskResult.orElseWith (fun err ->
-      let (DatabaseError e) = err
-
+   |> TaskResult.catch id
+   |> TaskResult.orElseWith (fun e ->
       if e.Message.Contains("NoResultsException") then
          Task.FromResult(Ok None)
       else
-         Task.FromResult(Error err))
+         Task.FromResult(Error(DatabaseError e)))
 
 let pgQuery<'t>
    (query: string)

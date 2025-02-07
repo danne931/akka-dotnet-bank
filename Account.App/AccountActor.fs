@@ -73,7 +73,7 @@ let private billingCycle
 // Account events with an in/out money flow can produce an
 // automatic transfer.  Automated transfer account events have
 // money flow but they can not generate an auto transfer.
-let canProduceAutoTransfer =
+let private canProduceAutoTransfer =
    function
    | AccountEvent.InternalAutomatedTransferPending _
    | AccountEvent.InternalAutomatedTransferApproved _
@@ -83,7 +83,7 @@ let canProduceAutoTransfer =
       let _, flow, _ = AccountEvent.moneyTransaction e
       flow.IsSome
 
-let handleValidationError
+let private handleValidationError
    (broadcaster: AccountBroadcast)
    mailbox
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
@@ -159,16 +159,14 @@ let actorProps
       let rec loop (stateOpt: AccountWithEvents option) = actor {
          let! msg = mailbox.Receive()
 
-         let state =
-            stateOpt
-            |> Option.defaultValue { Info = Account.empty; Events = [] }
+         let state = stateOpt |> Option.defaultValue AccountWithEvents.empty
 
          let account = state.Info
 
          let handleValidationError =
             handleValidationError broadcaster mailbox getEmployeeRef account
 
-         match box msg with
+         match msg with
          | Persisted mailbox e ->
             let (AccountMessage.Event evt) = unbox e
             let state = Account.applyEvent state evt
@@ -199,25 +197,6 @@ let actorProps
                   |> EmployeeMessage.StateChange
 
                getEmployeeRef employee.EmployeeId <! msg
-            | EditedDomesticTransferRecipient e ->
-               // Retry failed domestic transfers if they were previously
-               // declined due to invalid account info.
-               let recipientId = e.Data.Recipient.AccountId
-
-               let invalidAccount =
-                  DomesticTransferDeclinedReason.InvalidAccountInfo
-                  |> DomesticTransferProgress.Failed
-
-               account.FailedDomesticTransfers
-               |> Map.filter (fun _ transfer ->
-                  transfer.Recipient.AccountId = recipientId
-                  && transfer.Status = invalidAccount)
-               |> Map.iter (fun _ transfer ->
-                  let cmd =
-                     DomesticTransferToCommand.retry transfer
-                     |> AccountCommand.DomesticTransfer
-
-                  mailbox.Parent() <! AccountMessage.StateChange cmd)
             | InternalTransferWithinOrgPending e ->
                getOrStartInternalTransferActor mailbox
                <! InternalTransferMsg.TransferRequestWithinOrg e
@@ -239,11 +218,54 @@ let actorProps
 
                let msg =
                   DomesticTransferMessage.TransferRequest(
-                     DomesticTransferServiceAction.TransferRequest,
+                     DomesticTransferServiceAction.TransferAck,
                      txn
                   )
 
                getDomesticTransferActor mailbox.System <! msg
+            | DomesticTransferRejected e ->
+               let info = e.Data.BaseInfo
+
+               let failDueToRecipient =
+                  match e.Data.Reason with
+                  | DomesticTransferDeclinedReason.InvalidAccountInfo ->
+                     Some DomesticTransferRecipientFailReason.InvalidAccountInfo
+                  | DomesticTransferDeclinedReason.AccountClosed ->
+                     Some DomesticTransferRecipientFailReason.ClosedAccount
+                  | _ -> None
+
+               match failDueToRecipient with
+               | Some failReason ->
+                  let cmd =
+                     FailDomesticTransferRecipientCommand.create
+                        e.OrgId
+                        e.InitiatedById
+                        {
+                           RecipientId = info.Recipient.AccountId
+                           TransferId = info.TransferId
+                           Reason = failReason
+                        }
+                     |> OrgCommand.FailDomesticTransferRecipient
+
+                  getOrgRef e.OrgId <! OrgMessage.StateChange cmd
+               | None -> ()
+            | DomesticTransferApproved e ->
+               match e.Data.FromRetry with
+               | Some DomesticTransferDeclinedReason.InvalidAccountInfo ->
+                  let info = e.Data.BaseInfo
+
+                  let cmd =
+                     DomesticTransferRetryConfirmsRecipientCommand.create
+                        e.OrgId
+                        e.InitiatedById
+                        {
+                           RecipientId = info.Recipient.AccountId
+                           TransferId = info.TransferId
+                        }
+                     |> OrgCommand.DomesticTransferRetryConfirmsRecipient
+
+                  getOrgRef e.OrgId <! OrgMessage.StateChange cmd
+               | _ -> ()
             | InternalTransferBetweenOrgsDeposited e ->
                let msg =
                   EmailActor.EmailMessage.InternalTransferBetweenOrgsDeposited(
@@ -256,7 +278,7 @@ let actorProps
                   )
 
                getEmailActor mailbox.System <! msg
-            | CreatedAccount e ->
+            | CreatedAccount _ ->
                let msg =
                   EmailActor.EmailMessage.AccountOpen(
                      account.FullName,
@@ -264,7 +286,7 @@ let actorProps
                   )
 
                getEmailActor mailbox.System <! msg
-            | AccountEvent.AccountClosed e ->
+            | AccountEvent.AccountClosed _ ->
                getAccountClosureActor mailbox.System
                <! AccountClosureMessage.Register account
             | BillingCycleStarted e ->
@@ -440,7 +462,7 @@ let actorProps
 let get (sys: ActorSystem) (accountId: AccountId) : IEntityRef<AccountMessage> =
    getEntityRef sys ClusterMetadata.accountShardRegion (AccountId.get accountId)
 
-let isPersistableMessage (msg: obj) =
+let private isPersistableMessage (msg: obj) =
    match msg with
    | :? AccountMessage as msg ->
       match msg with
