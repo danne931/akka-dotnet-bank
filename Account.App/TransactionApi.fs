@@ -64,11 +64,21 @@ let transactionQuery (query: TransactionQuery) =
 
    let agg =
       [
+         "orgId", Writer.orgId query.OrgId
+         "offset", Sql.int <| Math.Max(query.Page - 1, 0) * txnLimit
+      ],
+      $"{Fields.orgId} = @orgId",
+      false
+
+   (*
+   let agg =
+      [
          "accountId", Writer.accountId query.AccountId
          "offset", Sql.int <| Math.Max(query.Page - 1, 0) * txnLimit
       ],
       $"{Fields.accountId} = @accountId",
       false
+   *)
 
    let agg =
       let queryParams, where, joinAncillary = agg

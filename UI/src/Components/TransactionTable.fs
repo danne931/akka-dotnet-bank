@@ -103,17 +103,7 @@ let update msg state =
                EventType = filter
            }
 
-      let browserQueryParams =
-         browserQuery
-         |> AccountBrowserQuery.toQueryParams
-         |> Router.encodeQueryString
-
-      state,
-      Cmd.navigate (
-         Routes.TransactionUrl.BasePath,
-         string state.Query.AccountId,
-         browserQueryParams
-      )
+      state, Cmd.navigate (Routes.TransactionsUrl.queryPath browserQuery)
    | ResetPageIndex ->
       let query = {
          state.Query with
@@ -175,21 +165,14 @@ let update msg state =
       },
       Cmd.none
    | ViewTransaction(txnId) ->
-      let queryString =
-         {
+      let path =
+         Routes.TransactionsUrl.queryPath {
             Routes.IndexUrl.accountBrowserQuery () with
                Action = None
                Transaction = Some txnId
          }
-         |> AccountBrowserQuery.toQueryParams
-         |> Router.encodeQueryString
 
-      state,
-      Cmd.navigate (
-         Routes.TransactionUrl.BasePath,
-         string state.Query.AccountId,
-         queryString
-      )
+      state, Cmd.navigate path
 
 let renderPagination state dispatch =
    Pagination.render {|
@@ -475,8 +458,7 @@ let renderTable
 
 [<ReactComponent>]
 let TransactionTableComponent
-   (org: Org)
-   (account: Account)
+   (org: OrgWithAccountProfiles)
    (session: UserSession)
    =
    let categories = React.useContext TransactionCategoryProvider.context
@@ -486,7 +468,7 @@ let TransactionTableComponent
 
    let txnQuery =
       TransactionService.transactionQueryFromAccountBrowserQuery
-         account.AccountId
+         org.Org.OrgId
          browserQuery
 
    let state, dispatch = React.useElmish (init txnQuery, update, [||])
@@ -502,7 +484,7 @@ let TransactionTableComponent
          }
 
          dispatch (Msg.RefreshTransactions txnQuery)
-      , [| box account.AccountId; box browserQuery.ChangeDetection |]
+      , [| box org.Org.OrgId; box browserQuery.ChangeDetection |]
    )
 
    let txns = Map.tryFind state.Query.Page state.Transactions
@@ -542,8 +524,7 @@ let TransactionTableComponent
                   txns
 
             let txnDisplay evt =
-               eventWithMerchantAlias merchants evt
-               |> transactionUIFriendly org account
+               eventWithMerchantAlias merchants evt |> transactionUIFriendly org
 
             renderTable txns browserQuery.Transaction txnDisplay dispatch
             renderPagination state dispatch

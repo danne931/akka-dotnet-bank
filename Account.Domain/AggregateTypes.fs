@@ -408,6 +408,7 @@ type AccountEventPersistedConfirmation = {
 }
 
 type AccountEventRejected = {
+   OrgId: OrgId
    AccountId: AccountId
    Error: Err
    Date: DateTime
@@ -415,8 +416,8 @@ type AccountEventRejected = {
 
 type AccountBroadcast = {
    accountEventPersisted: AccountEvent -> Account -> unit
-   accountEventValidationFail: AccountId -> Err -> unit
-   accountEventPersistenceFail: AccountId -> Err -> unit
+   accountEventValidationFail: OrgId -> AccountId -> Err -> unit
+   accountEventPersistenceFail: OrgId -> AccountId -> Err -> unit
    circuitBreaker: CircuitBreakerEvent -> unit
 }
 

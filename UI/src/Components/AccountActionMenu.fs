@@ -4,16 +4,14 @@ open Feliz
 open Feliz.Router
 open Fable.FontAwesome
 
-open Bank.Account.Domain
 open UIDomain.Account
 
-let private renderMenuButton (account: Account) (view: AccountActionView) =
+let private renderMenuButton (view: AccountActionView) =
    Html.button [
       attr.classes [ "outline"; "grid" ]
 
       attr.onClick (fun _ ->
-         AccountActions.navigation account.AccountId (Some view)
-         |> Router.navigate)
+         AccountActions.navigation (Some view) |> Router.navigate)
 
       attr.children [
          match view with
@@ -33,21 +31,21 @@ let private renderMenuButton (account: Account) (view: AccountActionView) =
       ]
    ]
 
-let render (account: Account) =
+let render () =
    classyNode Html.div [ "action-menu" ] [
       classyNode Html.div [ "grid" ] [
-         renderMenuButton account AccountActionView.Purchase
+         renderMenuButton AccountActionView.Purchase
       ]
 
       classyNode Html.div [ "grid" ] [
-         renderMenuButton account AccountActionView.Deposit
+         renderMenuButton AccountActionView.Deposit
       ]
 
       classyNode Html.div [ "grid" ] [
-         renderMenuButton account (AccountActionView.Transfer None)
+         renderMenuButton (AccountActionView.Transfer None)
       ]
 
       classyNode Html.div [ "grid" ] [
-         renderMenuButton account AccountActionView.RegisterTransferRecipient
+         renderMenuButton AccountActionView.RegisterTransferRecipient
       ]
    ]

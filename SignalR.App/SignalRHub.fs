@@ -15,8 +15,8 @@ type IAccountClient =
 type AccountHub() =
    inherit Hub<IAccountClient>()
 
-   member x.RemoveFromConnectionGroup(accountId: string) =
-      x.Groups.RemoveFromGroupAsync(x.Context.ConnectionId, accountId)
+   member x.RemoveFromConnectionGroup(orgId: string) =
+      x.Groups.RemoveFromGroupAsync(x.Context.ConnectionId, orgId)
 
-   member x.AddToConnectionGroup(accountId: string) =
-      x.Groups.AddToGroupAsync(x.Context.ConnectionId, accountId)
+   member x.AddToConnectionGroup(orgId: string) =
+      x.Groups.AddToGroupAsync(x.Context.ConnectionId, orgId)

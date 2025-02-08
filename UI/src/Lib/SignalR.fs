@@ -12,10 +12,10 @@ type IPromiseConnection =
    abstract stop: unit -> Promise<unit>
 
    [<Emit("$0.invoke('AddToConnectionGroup', $1)")>]
-   abstract addAccountToConnectionGroup: string -> Promise<obj>
+   abstract addOrgToConnectionGroup: string -> Promise<obj>
 
    [<Emit("$0.invoke('RemoveFromConnectionGroup', $1)")>]
-   abstract removeAccountFromConnectionGroup: string -> Promise<obj>
+   abstract removeOrgFromConnectionGroup: string -> Promise<obj>
 
    [<Emit("$0.on($1, $2)")>]
    abstract on: string * (string -> unit) -> unit
@@ -31,23 +31,22 @@ type Connection(conn: IPromiseConnection) =
       |> AsyncUtil.promiseToAsyncResult
       |> AsyncResult.mapError Err.SignalRError
 
-   member x.addAccountToConnectionGroup(accountId: AccountId) =
-      string accountId
-      |> conn.addAccountToConnectionGroup
+   member x.addOrgToConnectionGroup(orgId: OrgId) =
+      string orgId
+      |> conn.addOrgToConnectionGroup
       |> AsyncUtil.promiseToAsyncResult
       |> AsyncResult.tee (fun _ ->
-         Log.info $"Added account to SignalR connection: {accountId}")
+         Log.info $"Added org to SignalR connection: {orgId}")
       |> AsyncResult.teeError (fun err ->
-         Log.error
-            $"Error adding account to SignalR connection: {accountId} {err}")
+         Log.error $"Error adding org to SignalR connection: {orgId} {err}")
       |> AsyncResult.mapError Err.SignalRError
 
-   member x.removeAccountFromConnectionGroup(accountId: AccountId) =
-      string accountId
-      |> conn.removeAccountFromConnectionGroup
+   member x.removeOrgFromConnectionGroup(orgId: OrgId) =
+      string orgId
+      |> conn.removeOrgFromConnectionGroup
       |> AsyncUtil.promiseToAsyncResult
       |> AsyncResult.tee (fun _ ->
-         Log.info $"Removed account from SignalR connection: {accountId}")
+         Log.info $"Removed org from SignalR connection: {orgId}")
       |> AsyncResult.teeError (fun err ->
          if
             not
@@ -56,7 +55,7 @@ type Connection(conn: IPromiseConnection) =
             )
          then
             Log.error
-               $"Error removing account from SignalR connection: {accountId} {err}")
+               $"Error removing org from SignalR connection: {orgId} {err}")
       |> AsyncResult.mapError Err.SignalRError
 
    member x.on(eventName: string, eventHandler: string -> unit) =

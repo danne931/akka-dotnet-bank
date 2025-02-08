@@ -18,6 +18,7 @@ open Bank.UserSession.Middleware
 let withQueryParams<'t> (func: TransactionQuery -> 't) =
    Func<
       Guid,
+      Nullable<Guid>,
       bool,
       int,
       string,
@@ -32,7 +33,8 @@ let withQueryParams<'t> (func: TransactionQuery -> 't) =
       't
     >
       (fun
-           ([<FromRoute>] id: Guid)
+           ([<FromRoute>] orgId: Guid)
+           ([<FromQuery>] accountId: Nullable<Guid>)
            ([<FromQuery>] diagnostic: bool)
            ([<FromQuery>] page: int)
            ([<FromQuery>] moneyFlow: string)
@@ -57,7 +59,12 @@ let withQueryParams<'t> (func: TransactionQuery -> 't) =
                None
 
          func {
-            AccountId = AccountId id
+            OrgId = OrgId orgId
+            AccountId =
+               if accountId.HasValue then
+                  Some(AccountId accountId.Value)
+               else
+                  None
             Diagnostic = diagnostic
             Page = page
             MoneyFlow = moneyFlowOpt
@@ -73,7 +80,7 @@ let withQueryParams<'t> (func: TransactionQuery -> 't) =
 let startTransactionRoutes (app: WebApplication) =
    app
       .MapGet(
-         TransactionPath.AccountTransactions,
+         TransactionPath.Transactions,
          withQueryParams<Task<IResult>> (
             getTransactions >> RouteUtil.unwrapTaskResultOption
          )

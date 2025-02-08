@@ -143,7 +143,8 @@ module TransactionGroupFilter =
          items
 
 type TransactionQuery = {
-   AccountId: AccountId
+   OrgId: OrgId
+   AccountId: AccountId option
    Diagnostic: bool
    Page: int
    MoneyFlow: MoneyFlow option

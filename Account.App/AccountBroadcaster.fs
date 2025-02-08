@@ -43,9 +43,10 @@ let init (system: ActorSystem) : AccountBroadcast =
                PubSub.sendPointToPoint pubSub loadTestPath msg
 
       accountEventValidationFail =
-         fun accountId err ->
+         fun orgId accountId err ->
             let msg =
                SignalRActor.Msg.AccountEventValidationFail {
+                  OrgId = orgId
                   AccountId = accountId
                   Error = err
                   Date = DateTime.UtcNow
@@ -53,9 +54,10 @@ let init (system: ActorSystem) : AccountBroadcast =
 
             sendToSignalR msg
       accountEventPersistenceFail =
-         fun accountId err ->
+         fun orgId accountId err ->
             let msg =
                SignalRActor.Msg.AccountEventPersistenceFail {
+                  OrgId = orgId
                   AccountId = accountId
                   Error = err
                   Date = DateTime.UtcNow

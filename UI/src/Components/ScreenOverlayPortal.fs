@@ -33,9 +33,9 @@ let manageVisibility (url: Routes.IndexUrl) =
                | EmployeeActionView.Create -> OverlaySize.Wide
                | EmployeeActionView.ViewEmployee _ -> OverlaySize.Standard)
          | _ -> None
-      | Routes.IndexUrl.Transaction url ->
+      | Routes.IndexUrl.Transactions url ->
          match url with
-         | Routes.TransactionUrl.AccountSelectedWithQuery(_, browserQuery) ->
+         | Routes.TransactionsUrl.TransactionsWithQuery(browserQuery) ->
             if
                browserQuery.Action.IsSome || browserQuery.Transaction.IsSome
             then

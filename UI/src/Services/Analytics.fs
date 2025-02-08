@@ -122,12 +122,12 @@ let loadTopNPurchasersAnalytics
             |> Result.map Some
    }
 
-let loadMoneyFlowMonthlyTimeSeriesForAccount
-   (accountId: AccountId)
+let loadMoneyFlowMonthlyTimeSeriesForOrg
+   (orgId: OrgId)
    : Async<Result<MoneyFlowMonthlyTimeSeriesAnalytics option, Err>>
    =
    async {
-      let path = AnalyticsPath.moneyFlowMonthlyTimeSeriesForAccount accountId
+      let path = AnalyticsPath.moneyFlowMonthlyTimeSeriesForOrg orgId
 
       let! (code, responseText) = Http.get path
 

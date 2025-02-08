@@ -16,16 +16,12 @@ open Bank.Org.Domain
 open Lib.SharedTypes
 open EmployeeSearch
 
-let navigation (accountId: AccountId) (view: AccountActionView option) =
-   let queryString =
-      {
-         Routes.IndexUrl.accountBrowserQuery () with
-            Action = view
-      }
-      |> AccountBrowserQuery.toQueryParams
-      |> Router.encodeQueryString
-
-   [| Routes.TransactionUrl.BasePath; string accountId; queryString |]
+let navigation (view: AccountActionView option) =
+   {
+      Routes.IndexUrl.accountBrowserQuery () with
+         Action = view
+   }
+   |> Routes.TransactionsUrl.queryPath
 
 type State = { PendingAction: Envelope option }
 
@@ -54,12 +50,9 @@ let networkAck state (envelope: Envelope) =
 
 let update
    (handlePollingConfirmation: AccountEventPersistedConfirmation list -> unit)
-   (accountId: AccountId)
    msg
    (state: State)
    =
-   let navigation = navigation accountId
-
    match msg with
    | Cancel -> state, Cmd.navigate (navigation None)
    | NetworkAckCommand envelope -> networkAck state envelope
@@ -116,7 +109,6 @@ let update
 [<ReactComponent>]
 let AccountActionsComponent
    (session: UserSession)
-   (account: Account)
    (org: OrgWithAccountProfiles)
    (view: AccountActionView)
    =
@@ -138,13 +130,13 @@ let AccountActionsComponent
    let _, dispatch =
       React.useElmish (
          init,
-         update handlePollingConfirmation account.AccountId,
-         [| box account.AccountId |]
+         update handlePollingConfirmation,
+         [| box org.Org.OrgId |]
       )
 
    SignalRAccountEventProvider.useAccountEventSubscription {
       ComponentName = "AccountAction"
-      AccountId = Some account.AccountId
+      OrgId = Some org.Org.OrgId
       OnReceive =
          fun conf ->
             // Update account context so AccountSummary & AccountSelection
@@ -181,7 +173,7 @@ let AccountActionsComponent
       | AccountActionView.Deposit ->
          DepositForm.DepositFormComponent
             session
-            account
+            org
             (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
       | AccountActionView.RegisterTransferRecipient ->
          RegisterTransferRecipientForm.RegisterTransferRecipientFormComponent
@@ -202,7 +194,7 @@ let AccountActionsComponent
                      |> AccountActionView.Transfer
                      |> Some
 
-                  Router.navigate (navigation account.AccountId redirectTo)
+                  Router.navigate (navigation redirectTo)
                | evt ->
                   Log.error
                      $"Unknown evt {evt} in RegisterTransferRecipient submit handler")
@@ -218,14 +210,13 @@ let AccountActionsComponent
                   |> OrgProvider.Msg.OrgCommand
                   |> orgDispatch
 
-                  Router.navigate (navigation account.AccountId None)
+                  Router.navigate (navigation None)
                | evt ->
                   Log.error
                      $"Unknown evt {evt} in EditTransferRecipient submit handler")
       | AccountActionView.Transfer selectedRecipient ->
          TransferForm.TransferFormComponent
             session
-            account
             org
             selectedRecipient
             (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
@@ -238,15 +229,15 @@ let AccountActionsComponent
                dispatch (Msg.SubmitCommandForApproval "transfer"))
       | AccountActionView.Purchase ->
          EmployeeCardSelectSearchComponent {|
-            OrgId = account.OrgId
+            OrgId = org.Org.OrgId
             MakeChildrenOnSelect =
                Some
                <| fun card employee -> [
                   PurchaseForm.PurchaseFormComponent
-                     (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
-                     account
+                     org
                      card.CardId
                      employee
+                     (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
                ]
             OnSelect = None
          |}

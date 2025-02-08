@@ -367,24 +367,19 @@ let CardDetailComponent
                Html.span "Transactions"
             ]
             attr.onClick (fun _ ->
-               let pathArray =
-                  Routes.TransactionUrl.selectedPath card.Card.AccountId
-
-               let queryString =
-                  {
-                     AccountBrowserQuery.empty with
-                        SelectedCards =
-                           Some [
-                              {
-                                 Display = card.Card.Display
-                                 CardId = card.Card.CardId
-                              }
-                           ]
-                  }
-                  |> AccountBrowserQuery.toQueryParams
-                  |> Router.encodeQueryString
-
-               Router.navigate [| yield! pathArray; queryString |])
+               {
+                  AccountBrowserQuery.empty with
+                     Account = Some card.Card.AccountId
+                     SelectedCards =
+                        Some [
+                           {
+                              Display = card.Card.Display
+                              CardId = card.Card.CardId
+                           }
+                        ]
+               }
+               |> Routes.TransactionsUrl.queryPath
+               |> Router.navigate)
          ]
       ]
 

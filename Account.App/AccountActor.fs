@@ -96,7 +96,7 @@ let private handleValidationError
       $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
 
    let signalRBroadcastValidationErr () =
-      broadcaster.accountEventValidationFail account.AccountId err
+      broadcaster.accountEventValidationFail account.OrgId account.AccountId err
 
    match err with
    | AccountStateTransitionError e ->
@@ -443,6 +443,7 @@ let actorProps
                      PersistFailed =
                         fun _ err evt sequenceNr ->
                            broadcaster.accountEventPersistenceFail
+                              account.OrgId
                               account.AccountId
                               (Err.DatabaseError err)
 

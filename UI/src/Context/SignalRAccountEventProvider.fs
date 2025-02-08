@@ -12,36 +12,41 @@ type SignalRAccountEventContext = {
    Subscribers: Map<string, (AccountEventPersistedConfirmation -> unit)>
    RealtimeEvents: AccountEvent list
    Errors: AccountEventRejected list
-   CurrentAccountId: AccountId option
-   QueuedAccountId: AccountId option
+   CurrentOrgId: OrgId option
+   QueuedOrgId: OrgId option
 }
 
 let private initState = {
    Subscribers = Map.empty
    RealtimeEvents = []
    Errors = []
-   CurrentAccountId = None
-   QueuedAccountId = None
+   CurrentOrgId = None
+   QueuedOrgId = None
 }
 
-let private addAccountToConnection
+// NOTE:
+// Why is there a notion of removing an existing org from the connection
+// group and adding a new one?  Once I sign in, wouldn't the org remain static?
+//
+// No. There is an org select in the navigation which, for demonstration/development
+// purposes, allows the user to toggle between orgs.
+// Besides this demonstration use case, in the future, it may be interesting
+// to support business owners who own multiple businesses and thus need to
+// manage all their businesses from the platform.
+let private addOrgToConnection
    (connection: SignalR.Connection)
-   (existingAccountId: AccountId option)
-   (accountIdToAdd: AccountId)
-   : Async<Result<AccountId, Err>>
+   (existingOrgId: OrgId option)
+   (orgIdToAdd: OrgId)
+   : Async<Result<OrgId, Err>>
    =
    asyncResult {
-      if
-         existingAccountId.IsSome && existingAccountId <> Some accountIdToAdd
-      then
-         let! _ =
-            connection.removeAccountFromConnectionGroup existingAccountId.Value
-
+      if existingOrgId.IsSome && existingOrgId <> Some orgIdToAdd then
+         let! _ = connection.removeOrgFromConnectionGroup existingOrgId.Value
          ()
 
-      let! _ = connection.addAccountToConnectionGroup accountIdToAdd
+      let! _ = connection.addOrgToConnectionGroup orgIdToAdd
 
-      return accountIdToAdd
+      return orgIdToAdd
    }
 
 let context =
@@ -54,14 +59,14 @@ type Msg =
    | AccountEventPersisted of AccountEventPersistedConfirmation
    | AddAccountEventSubscriber of
       componentName: string *
-      AccountId *
+      OrgId *
       (AccountEventPersistedConfirmation -> unit)
    | RemoveAccountEventSubscriber of componentName: string
-   | QueueAccountConnectionStart of AccountId
-   | AddAccountToConnection of
+   | QueueOrgConnectionStart of OrgId
+   | AddOrgToConnection of
       SignalR.Connection *
-      AccountId *
-      AsyncOperationStatus<Result<AccountId, Err>>
+      OrgId *
+      AsyncOperationStatus<Result<OrgId, Err>>
    | AccountErrorReceived of AccountEventRejected
 
 let dispatchContext =
@@ -74,39 +79,35 @@ let init () = initState, Cmd.none
 
 let update msg state =
    match msg with
-   | QueueAccountConnectionStart accountId ->
-      {
-         state with
-            QueuedAccountId = Some accountId
-      },
-      Cmd.none
-   | AddAccountToConnection(conn, accountId, Started) ->
+   | QueueOrgConnectionStart orgId ->
+      { state with QueuedOrgId = Some orgId }, Cmd.none
+   | AddOrgToConnection(conn, orgId, Started) ->
       let addToConn = async {
-         let! res = addAccountToConnection conn state.CurrentAccountId accountId
-         return Msg.AddAccountToConnection(conn, accountId, Finished res)
+         let! res = addOrgToConnection conn state.CurrentOrgId orgId
+         return Msg.AddOrgToConnection(conn, orgId, Finished res)
       }
 
       {
          state with
-            CurrentAccountId = Some accountId
-            QueuedAccountId = None
+            CurrentOrgId = Some orgId
+            QueuedOrgId = None
             RealtimeEvents = []
       },
       Cmd.fromAsync addToConn
-   | AddAccountToConnection(_, _, Finished(Error err)) ->
-      { state with CurrentAccountId = None }, Cmd.none
-   | AddAccountToConnection(_, _, Finished(Ok r)) -> state, Cmd.none
-   | AddAccountEventSubscriber(componentName, accountId, callback) ->
+   | AddOrgToConnection(_, _, Finished(Error _)) ->
+      { state with CurrentOrgId = None }, Cmd.none
+   | AddOrgToConnection(_, _, Finished(Ok _)) -> state, Cmd.none
+   | AddAccountEventSubscriber(componentName, orgId, callback) ->
       {
          state with
             Subscribers =
-               match state.CurrentAccountId, state.QueuedAccountId with
-               | Some existingId, _ when existingId = accountId ->
+               match state.CurrentOrgId, state.QueuedOrgId with
+               | Some existingId, _ when existingId = orgId ->
                   Map.add componentName callback state.Subscribers
-               | None, Some queuedId when queuedId = accountId ->
+               | None, Some queuedId when queuedId = orgId ->
                   Map.add componentName callback state.Subscribers
                | _ ->
-                  // Reset subscribers when AccountId changes
+                  // Reset subscribers when OrgId changes
                   Map[componentName, callback]
       },
       Cmd.none
@@ -176,13 +177,13 @@ let SignalRAccountEventProvider (child: Fable.React.ReactElement) =
    React.useEffect (
       fun () ->
          React.createDisposable (fun () ->
-            match connection, state.CurrentAccountId with
-            | Some conn, Some accountId ->
-               conn.removeAccountFromConnectionGroup accountId
+            match connection, state.CurrentOrgId with
+            | Some conn, Some orgId ->
+               conn.removeOrgFromConnectionGroup orgId
                |> Async.Ignore
                |> Async.StartImmediate
             | _ -> ())
-      , [| box connection; box (string state.CurrentAccountId) |]
+      , [| box connection; box (string state.CurrentOrgId) |]
    )
 
    React.contextProvider (
@@ -193,7 +194,7 @@ let SignalRAccountEventProvider (child: Fable.React.ReactElement) =
 
 type AccountEventSubscription = {
    ComponentName: string
-   AccountId: AccountId option
+   OrgId: OrgId option
    OnReceive: AccountEventPersistedConfirmation -> unit
 }
 
@@ -205,31 +206,31 @@ let useAccountEventSubscription (sub: AccountEventSubscription) =
    let dispatch = React.useContext dispatchContext
    let connection = React.useContext SignalRConnectionProvider.context
 
-   let accountIdOpt = sub.AccountId
+   let orgIdOpt = sub.OrgId
 
    React.useEffect (
       fun () ->
-         match accountIdOpt with
-         | Some accountId ->
-            (sub.ComponentName, accountId, sub.OnReceive)
+         match orgIdOpt with
+         | Some orgId ->
+            (sub.ComponentName, orgId, sub.OnReceive)
             |> Msg.AddAccountEventSubscriber
             |> dispatch
          | _ -> ()
 
          React.createDisposable (fun _ ->
             sub.ComponentName |> Msg.RemoveAccountEventSubscriber |> dispatch)
-      , [| box (string accountIdOpt) |]
+      , [| box (string orgIdOpt) |]
    )
 
    React.useEffect (
       fun () ->
-         match connection, accountIdOpt, state.CurrentAccountId with
+         match connection, orgIdOpt, state.CurrentOrgId with
          | Some conn, Some id, None ->
-            dispatch <| Msg.AddAccountToConnection(conn, id, Started)
+            dispatch <| Msg.AddOrgToConnection(conn, id, Started)
          | Some conn, Some id, Some existingId when id <> existingId ->
-            dispatch <| Msg.AddAccountToConnection(conn, id, Started)
-         | None, Some id, _ when (Some id) <> state.QueuedAccountId ->
-            dispatch <| Msg.QueueAccountConnectionStart id
+            dispatch <| Msg.AddOrgToConnection(conn, id, Started)
+         | None, Some id, _ when (Some id) <> state.QueuedOrgId ->
+            dispatch <| Msg.QueueOrgConnectionStart id
          | _ -> ()
-      , [| box (string accountIdOpt); box connection |]
+      , [| box (string orgIdOpt); box connection |]
    )

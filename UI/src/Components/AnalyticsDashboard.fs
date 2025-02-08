@@ -538,19 +538,14 @@ let txnsButton
       attr.children [ Fa.i [ Fa.Solid.History ] []; Html.span "View all" ]
 
       attr.onClick (fun _ ->
-         let pathArr =
-            Routes.TransactionUrl.selectedPath (Seq.head accounts.Keys)
-
-         let queryString =
-            {
-               AccountBrowserQuery.empty with
-                  MoneyFlow = Some flow
-                  Date = Some filter
-            }
-            |> AccountBrowserQuery.toQueryParams
-            |> Router.encodeQueryString
-
-         Router.navigate [| yield! pathArr; queryString |])
+         {
+            AccountBrowserQuery.empty with
+               Account = Seq.tryHead accounts.Keys
+               MoneyFlow = Some flow
+               Date = Some filter
+         }
+         |> Routes.TransactionsUrl.queryPath
+         |> Router.navigate)
    ]
 
 let renderTopMoneyListItems
@@ -630,7 +625,7 @@ let renderTopPurchasers (topN: EmployeePurchaserTopN list) =
       Html.button [
          attr.classes [ "outline" ]
          attr.children [ Fa.i [ Fa.Solid.History ] []; Html.span "View all" ]
-         attr.onClick (fun _ -> Router.navigate Routes.TransactionUrl.BasePath)
+         attr.onClick (fun _ -> Router.navigate Routes.TransactionsUrl.BasePath)
       ]
    ]
 

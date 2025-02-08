@@ -92,8 +92,8 @@ module PaymentPath =
 
 module TransactionPath =
    let Base = $"{API}/transactions"
-   let AccountTransactions = Base + "/{id}"
-   let accountTransactions (id: AccountId) = $"{Base}/{id}"
+   let Transactions = Base + "/{orgId}"
+   let transactions (orgId: OrgId) = $"{Base}/{orgId}"
    let Categories = Base + "/categories"
 
    let TransactionInfo = Base + "/transaction/{txnId}"
@@ -164,8 +164,8 @@ module AnalyticsPath =
    let Get = Base + "/{orgId}"
    let get (orgId: OrgId) = $"{Base}/{orgId}"
 
-   let MoneyFlowMonthlyTimeSeriesForAccount =
-      Base + "/money-flow-monthly-time-series-for-account/{accountId}"
+   let MoneyFlowMonthlyTimeSeriesForOrg =
+      Base + "/money-flow-monthly-time-series-for-org/{orgId}"
 
-   let moneyFlowMonthlyTimeSeriesForAccount (accountId: AccountId) =
-      $"{Base}/money-flow-monthly-time-series-for-account/{accountId}"
+   let moneyFlowMonthlyTimeSeriesForOrg (orgId: OrgId) =
+      $"{Base}/money-flow-monthly-time-series-for-org/{orgId}"

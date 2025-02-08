@@ -4,6 +4,7 @@ open Feliz
 open Fable.Core.JS
 open Feliz.Router
 
+open Bank.Org.Domain
 open Bank.Account.Domain
 
 type private RotatingMetric =
@@ -33,7 +34,7 @@ let private rotatingMetrics = [
 ]
 
 [<ReactComponent>]
-let AccountSummaryComponent (profile: AccountProfile) =
+let AccountSummaryComponent (org: OrgWithAccountProfiles) =
    let isFading, setFading = React.useState false
    let flow, setFlow = React.useState MoneyFlow.Out
 
@@ -48,16 +49,15 @@ let AccountSummaryComponent (profile: AccountProfile) =
    // money flow chart between in/out in this scenario.
    let flowIsDynamic, setFlowIsDynamic = React.useState false
 
-   let account = profile.Account
-   let metrics = profile.Metrics
-   let changeDetection = box (string account.AccountId)
+   let metrics = org.Metrics
+   let changeDetection = box (string org.Org.OrgId)
 
    React.useEffect (
       fun () ->
          async {
             let! res =
-               AnalyticsService.loadMoneyFlowMonthlyTimeSeriesForAccount
-                  account.AccountId
+               AnalyticsService.loadMoneyFlowMonthlyTimeSeriesForOrg
+                  org.Org.OrgId
 
             setMonthlyMoneyFlow (Deferred.Resolved res)
 
@@ -150,11 +150,11 @@ let AccountSummaryComponent (profile: AccountProfile) =
 
       attr.children [
          Html.div [
-            Html.b [ attr.classes [ "account-name" ]; attr.text account.Name ]
+            Html.b [ attr.classes [ "account-name" ]; attr.text org.Org.Name ]
 
             Html.div [
                Html.p "Balance: "
-               Html.ins [ attr.text (Money.format account.Balance) ]
+               Html.ins [ attr.text (Money.format org.Balance) ]
             ]
          ]
 

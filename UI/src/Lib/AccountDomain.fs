@@ -77,8 +77,7 @@ let autoTransferRuleDisplay (rule: AutomaticTransfer.AutomaticTransferRule) =
       $"Maintain a zero balance by distributing it among {rule.DestinationAccounts.Length} accounts."
 
 let transactionUIFriendly
-   (org: Org)
-   (account: Account)
+   (org: OrgWithAccountProfiles)
    (txn: AccountEvent)
    : TransactionUIFriendly
    =
@@ -96,8 +95,15 @@ let transactionUIFriendly
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      UIDomain.Org.domesticRecipientName org recipientFromEvt.RecipientAccountId
+      UIDomain.Org.domesticRecipientName
+         org.Org
+         recipientFromEvt.RecipientAccountId
       |> Option.defaultValue recipientFromEvt.FullName
+
+   let accountName =
+      org.AccountProfiles.TryFind(AccountId.fromEntityId envelope.EntityId)
+      |> Option.map (fun a -> a.Account.FullName)
+      |> Option.defaultValue "Account"
 
    match txn with
    | CreatedAccount _ -> { props with Info = "Created Account" }
@@ -107,7 +113,7 @@ let transactionUIFriendly
          Info = "Deposit Received"
          MoneyFlow = Some MoneyFlow.In
          Source = Some evt.Data.Origin
-         Destination = Some account.FullName
+         Destination = Some accountName
          Amount = Some <| Money.format evt.Data.Amount
      }
    | DebitedAccount evt ->
@@ -122,7 +128,7 @@ let transactionUIFriendly
             Info = $"Purchase from {evt.Data.Merchant} by {employee}"
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
-            Source = Some $"{account.FullName} via {employee}"
+            Source = Some $"{accountName} via {employee}"
             Destination = Some evt.Data.Merchant
       }
    | MaintenanceFeeDebited evt -> {
@@ -145,7 +151,7 @@ let transactionUIFriendly
                $"Moved money from {info.Sender.Name} to {info.Recipient.Name}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
-            Source = Some account.FullName
+            Source = Some accountName
             Destination = Some info.Recipient.Name
       }
    | InternalTransferWithinOrgCompleted evt ->
@@ -181,7 +187,7 @@ let transactionUIFriendly
                $"Transferred from {info.Sender.Name} to {info.Recipient.Name}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
-            Source = Some account.FullName
+            Source = Some accountName
             Destination = Some info.Recipient.Name
       }
    | InternalTransferBetweenOrgsScheduled evt ->
@@ -194,7 +200,7 @@ let transactionUIFriendly
                $"Transfer to {info.Recipient.Name} scheduled for {DateTime.formatShort info.ScheduledDate}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = None
-            Source = Some account.FullName
+            Source = Some accountName
             Destination = Some info.Recipient.Name
       }
    | InternalTransferBetweenOrgsCompleted evt ->
@@ -230,7 +236,7 @@ let transactionUIFriendly
             Info = $"Domestic transfer processing to {recipientName}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
-            Source = Some account.FullName
+            Source = Some accountName
             Destination = Some recipientName
       }
    | DomesticTransferScheduled evt ->
@@ -245,7 +251,7 @@ let transactionUIFriendly
                $"Domestic transfer to {recipientName} scheduled for {DateTime.formatShort info.ScheduledDate}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = None
-            Source = Some account.FullName
+            Source = Some accountName
             Destination = Some recipientName
       }
    | DomesticTransferCompleted evt ->
@@ -272,7 +278,7 @@ let transactionUIFriendly
                  - Account refunded"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
-            Source = Some account.FullName
+            Source = Some accountName
             Destination = Some recipientName
       }
    | DomesticTransferProgress evt ->
@@ -297,7 +303,7 @@ let transactionUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some sender
-            Destination = Some account.FullName
+            Destination = Some accountName
       }
    | InternalTransferBetweenOrgsDeposited evt ->
       let info = evt.Data.BaseInfo
@@ -310,7 +316,7 @@ let transactionUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some sender
-            Destination = Some account.FullName
+            Destination = Some accountName
       }
    | BillingCycleStarted _ -> {
       props with
@@ -331,7 +337,7 @@ let transactionUIFriendly
             Amount = Some <| Money.format p.Amount
             MoneyFlow = None
             Source = Some p.Payer.OrgName
-            Destination = Some account.FullName
+            Destination = Some accountName
       }
    | PlatformPaymentPaid evt ->
       let p = evt.Data.BaseInfo
@@ -342,7 +348,7 @@ let transactionUIFriendly
             Info = $"Sent payment to {p.Payee.OrgName}."
             Amount = Some <| Money.format p.Amount
             MoneyFlow = Some MoneyFlow.Out
-            Source = Some account.FullName
+            Source = Some accountName
             Destination = Some p.Payee.OrgName
       }
    | PlatformPaymentDeposited evt ->
@@ -355,7 +361,7 @@ let transactionUIFriendly
             Amount = Some <| Money.format p.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some p.Payer.OrgName
-            Destination = Some account.FullName
+            Destination = Some accountName
       }
    | PlatformPaymentCancelled evt ->
       let p = evt.Data.BaseInfo
@@ -424,7 +430,7 @@ let transactionUIFriendly
                - Reason: {reason}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
-            Source = Some account.FullName
+            Source = Some accountName
             Destination = Some info.Recipient.Name
       }
    | InternalAutomatedTransferCompleted evt ->
@@ -462,7 +468,7 @@ let transactionUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some sender
-            Destination = Some account.FullName
+            Destination = Some accountName
       }
 
 type SelectedCard = { Display: string; CardId: CardId }
@@ -476,6 +482,7 @@ type AccountActionView =
    | EditTransferRecipient of AccountId
 
 type AccountBrowserQuery = {
+   Account: AccountId option
    MoneyFlow: MoneyFlow option
    Category: CategoryFilter option
    Amount: AmountFilter option
@@ -565,6 +572,11 @@ module AccountBrowserQuery =
          | None -> agg
          | Some filters -> ("events", listToQueryString filters) :: agg
 
+      let agg =
+         match query.Account with
+         | Some accountId -> ("account", string accountId) :: agg
+         | None -> agg
+
       match query.Transaction with
       | Some txnId -> ("transaction", string txnId) :: agg
       | None -> agg
@@ -623,6 +635,9 @@ module AccountBrowserQuery =
                | view ->
                   Log.error $"Account action view not implemented: {view}"
                   None)
+         Account =
+            Map.tryFind "account" queryParams
+            |> Option.bind (Guid.parseOptional >> Option.map AccountId)
          Transaction =
             Map.tryFind "transaction" queryParams
             |> Option.bind (Guid.parseOptional >> Option.map EventId)
@@ -646,6 +661,7 @@ module AccountBrowserQuery =
       Amount = None
       Date = None
       Action = None
+      Account = None
       Transaction = None
       SelectedCards = None
       SelectedInitiatedBy = None
