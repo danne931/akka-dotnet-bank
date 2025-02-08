@@ -113,14 +113,10 @@ let private form
    Form.succeed onSubmit
    |> Form.append selectCardType
    |> Form.append (
-      accountProfileSelect accounts
+      accountSelect (Some "Select an account to link the card to:") accounts
       |> Form.mapValues {
-         Value = fun a -> { LinkedAccountId = a.LinkedAccountId }
-         Update =
-            fun a b -> {
-               b with
-                  LinkedAccountId = a.LinkedAccountId
-            }
+         Value = fun a -> { AccountId = a.LinkedAccountId }
+         Update = fun a b -> { b with LinkedAccountId = a.AccountId }
       }
    )
    |> Form.append fieldNickname
@@ -172,7 +168,7 @@ let CreateCardFormComponent
    | Deferred.Resolved(Ok(Some org)), Deferred.Resolved(Ok session) ->
       EmployeeFormContainer {|
          InitialValues = formProps
-         Form = form session employee org.Accounts
+         Form = form session employee org.CheckingAccounts
          Action =
             Some(
                Form.View.Action.Custom(fun state _ ->

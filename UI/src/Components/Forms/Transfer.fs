@@ -15,9 +15,11 @@ open UIDomain.Org
 open Lib.Validators
 open FormContainer
 open Lib.SharedTypes
+open Bank.Employee.Forms.AccountProfileForm
 
 type Values = {
    Amount: string
+   SenderId: string
    RecipientId: string
    Memo: string
    ScheduledAt: string
@@ -78,36 +80,26 @@ let memoField =
 
 let memoForm = Form.succeed id |> Form.append memoField |> Form.optional
 
+let fieldSenderSelect accounts =
+   accountSelect (Some "Move money from account:") accounts
+   |> Form.mapValues {
+      Value = fun a -> { AccountId = a.SenderId }
+      Update = fun a b -> { b with SenderId = a.AccountId }
+   }
+
+let fieldRecipientSelect accounts =
+   accountSelect (Some "Move money to account:") accounts
+   |> Form.mapValues {
+      Value = fun a -> { AccountId = a.RecipientId }
+      Update = fun a b -> { b with RecipientId = a.AccountId }
+   }
+
 let formInternalWithinOrg
-   (account: Account)
-   (recipients: Map<AccountId, Account>)
+   (accounts: Map<AccountId, Account>)
    (initiatedBy: InitiatedById)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
-   let internalWithinOrgOptions =
-      recipients
-      |> Map.toList
-      |> List.filter (fun (acctId, _) -> acctId <> account.AccountId)
-      |> List.map (fun (acctId, profile) ->
-         string acctId, $"{profile.Name} ({Money.format profile.Balance})")
-      |> List.sortBy snd
-
-   let fieldInternalWithinOrgSelect =
-      Form.selectField {
-         Parser = Ok
-         Value = fun values -> values.RecipientId
-         Update = fun newValue values -> { values with RecipientId = newValue }
-         Error = fun _ -> None
-         Attributes = {
-            Label = "Move money to account:"
-            Placeholder = "No selection"
-            Options = internalWithinOrgOptions
-         }
-      }
-
-   let onSubmit (selectedId: string) (amount: decimal) =
-      let recipient = recipients[selectedId |> Guid.Parse |> AccountId]
-
+   let onSubmit (sender: Account) (recipient: Account) (amount: decimal) =
       let transfer: InternalTransferInput = {
          Memo = None
          ScheduledDateSeedOverride = None
@@ -118,39 +110,52 @@ let formInternalWithinOrg
             Name = recipient.Name
          }
          Sender = {
-            Name = account.Name
-            AccountId = account.AccountId
-            OrgId = account.OrgId
+            Name = sender.Name
+            AccountId = sender.AccountId
+            OrgId = sender.OrgId
          }
       }
 
       let msg =
          InternalTransferWithinOrgCommand.create
-            account.CompositeId
+            sender.CompositeId
             initiatedBy
             transfer
          |> AccountCommand.InternalTransfer
 
-      Msg.Submit(account, msg, Started)
+      Msg.Submit(sender, msg, Started)
 
-   Form.succeed onSubmit
-   |> Form.append fieldInternalWithinOrgSelect
-   |> Form.append (amountField account)
+   Form.meta (fun values ->
+      let senderOptions =
+         accounts
+         |> Map.filter (fun acctId _ -> string acctId <> values.RecipientId)
 
-let formInternalCrossOrg
-   (account: Account)
-   (orgs: Org list)
+      let recipientOptions =
+         accounts
+         |> Map.filter (fun acctId _ -> string acctId <> values.SenderId)
+
+      Form.succeed (fun (props: Account * AccountId * decimal) ->
+         let sender, recipientId, amount = props
+         let recipient = accounts[recipientId]
+         onSubmit sender recipient amount)
+      |> Form.append (
+         (fieldSenderSelect senderOptions)
+         |> Form.andThen (fun senderId ->
+            let sender = accounts[senderId]
+
+            Form.succeed (fun recipientId amount ->
+               sender, recipientId, amount)
+            |> Form.append (fieldRecipientSelect recipientOptions)
+            |> Form.append (amountField sender))
+      ))
+
+let formInternalBetweenOrgs
+   (senderAccounts: Map<AccountId, Account>)
+   (destinationOrgs: Org list)
    (initiatedBy: InitiatedById)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
-   let internalCrossOrgOptions =
-      orgs
-      |> List.choose (fun org ->
-         org.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId
-         |> Option.map (fun id -> string id, org.Name))
-      |> List.sortBy snd
-
-   let fieldInternalCrossOrgSelect =
+   let fieldOrgSelect =
       Form.selectField {
          Parser = Ok
          Value = fun values -> values.RecipientId
@@ -159,12 +164,18 @@ let formInternalCrossOrg
          Attributes = {
             Label = "Transfer to organization:"
             Placeholder = "No organization selected"
-            Options = internalCrossOrgOptions
+            Options =
+               destinationOrgs
+               |> List.choose (fun org ->
+                  org.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId
+                  |> Option.map (fun id -> string id, org.Name))
+               |> List.sortBy snd
          }
       }
 
    let onSubmit
-      (selectedId: string)
+      (recipientId: AccountId)
+      (sender: Account)
       (amount: decimal)
       (memo: string option)
       (scheduledAt: DateTime)
@@ -175,22 +186,24 @@ let formInternalCrossOrg
             if String.IsNullOrWhiteSpace memo then None else Some memo)
 
       let org =
-         orgs
+         destinationOrgs
          |> List.find (fun o ->
-            string o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId = selectedId)
+            match o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId with
+            | Some accountId -> accountId = recipientId
+            | None -> false)
 
       let transfer: InternalTransferInput = {
          ScheduledDateSeedOverride = None
          Amount = amount
          Recipient = {
             OrgId = org.OrgId
-            AccountId = selectedId |> Guid.Parse |> AccountId
+            AccountId = recipientId
             Name = org.Name
          }
          Sender = {
-            Name = account.Name
-            AccountId = account.AccountId
-            OrgId = account.OrgId
+            Name = sender.Name
+            AccountId = sender.AccountId
+            OrgId = sender.OrgId
          }
          Memo = memo
       }
@@ -205,39 +218,42 @@ let formInternalCrossOrg
             scheduledTransfer.ScheduledDate = DateTime.Today.ToUniversalTime()
          then
             InternalTransferBetweenOrgsCommand.create
-               account.CompositeId
+               sender.CompositeId
                initiatedBy
                transfer
             |> AccountCommand.InternalTransferBetweenOrgs
          else
             ScheduleInternalTransferBetweenOrgsCommand.create
-               account.CompositeId
+               sender.CompositeId
                initiatedBy
                scheduledTransfer
             |> AccountCommand.ScheduleInternalTransferBetweenOrgs
 
-      Msg.Submit(account, cmd, Started)
+      Msg.Submit(sender, cmd, Started)
 
-   Form.succeed onSubmit
-   |> Form.append fieldInternalCrossOrgSelect
-   |> Form.append (amountField account)
-   |> Form.append memoForm
-   |> Form.append scheduledAtField
+   Form.succeed (fun (recipientId: string) props ->
+      let senderId, amount, memo, scheduledAt = props
+      let recipientId = recipientId |> Guid.Parse |> AccountId
+      onSubmit recipientId senderId amount memo scheduledAt)
+   |> Form.append fieldOrgSelect
+   |> Form.append (
+      fieldSenderSelect senderAccounts
+      |> Form.andThen (fun senderId ->
+         let sender = senderAccounts[senderId]
+
+         Form.succeed (fun amount memo scheduledAt ->
+            sender, amount, memo, scheduledAt)
+         |> Form.append (amountField sender)
+         |> Form.append memoForm
+         |> Form.append scheduledAtField)
+   )
 
 let formDomestic
    (org: Org)
-   (account: Account)
+   (senderAccounts: Map<AccountId, Account>)
    (initiatedBy: InitiatedById)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
-   let domesticOptions =
-      org.DomesticTransferRecipients
-      |> Map.toList
-      |> List.map (fun (recipientId, recipient) ->
-         let name = recipient.Nickname |> Option.defaultValue recipient.Name
-         string recipientId, $"{name} **{recipient.AccountNumber.Last4}")
-      |> List.sortBy snd
-
    let fieldDomesticSelect =
       Form.selectField {
          Parser = Ok
@@ -245,14 +261,24 @@ let formDomestic
          Update = fun newValue values -> { values with RecipientId = newValue }
          Error = fun _ -> None
          Attributes = {
-            Label = "Domestic transfer recipient:"
+            Label = "Recipient:"
             Placeholder = "No selection"
-            Options = domesticOptions
+            Options =
+               org.DomesticTransferRecipients
+               |> Map.toList
+               |> List.map (fun (recipientId, recipient) ->
+                  let name =
+                     recipient.Nickname |> Option.defaultValue recipient.Name
+
+                  string recipientId,
+                  $"{name} **{recipient.AccountNumber.Last4}")
+               |> List.sortBy snd
          }
       }
 
    let onSubmit
-      (selectedId: string)
+      (recipient: DomesticTransferRecipient)
+      (sender: Account)
       (amount: decimal)
       (memo: string option)
       (scheduledAt: DateTime)
@@ -262,17 +288,14 @@ let formDomestic
          |> Option.bind (fun memo ->
             if String.IsNullOrWhiteSpace memo then None else Some memo)
 
-      let accountId = selectedId |> Guid.Parse |> AccountId
-      let recipient = org.DomesticTransferRecipients[accountId]
-
       let transfer: DomesticTransferInput = {
          Amount = amount
          Sender = {
-            Name = account.Name
-            AccountNumber = account.AccountNumber
-            RoutingNumber = account.RoutingNumber
-            OrgId = account.OrgId
-            AccountId = account.AccountId
+            Name = sender.Name
+            AccountNumber = sender.AccountNumber
+            RoutingNumber = sender.RoutingNumber
+            OrgId = sender.OrgId
+            AccountId = sender.AccountId
          }
          Recipient = recipient
          Memo = memo
@@ -289,31 +312,42 @@ let formDomestic
             scheduledTransfer.ScheduledDate = DateTime.Today.ToUniversalTime()
          then
             DomesticTransferCommand.create
-               account.CompositeId
+               sender.CompositeId
                (Guid.NewGuid() |> CorrelationId)
                initiatedBy
                transfer
             |> AccountCommand.DomesticTransfer
          else
             ScheduleDomesticTransferCommand.create
-               account.CompositeId
+               sender.CompositeId
                initiatedBy
                scheduledTransfer
             |> AccountCommand.ScheduleDomesticTransfer
 
-      Msg.Submit(account, cmd, Started)
+      Msg.Submit(sender, cmd, Started)
 
-   Form.succeed onSubmit
-   |> Form.append fieldDomesticSelect
-   |> Form.append (amountField account)
-   |> Form.append memoForm
-   |> Form.append scheduledAtField
+   Form.succeed (fun props ->
+      let sender, recipient, amount, memo, scheduledAt = props
+      onSubmit recipient sender amount memo scheduledAt)
+   |> Form.append (
+      fieldSenderSelect senderAccounts
+      |> Form.andThen (fun senderId ->
+         let sender = senderAccounts[senderId]
+
+         Form.succeed (fun (recipientId: string) amount memo scheduledAt ->
+            let recipientId = recipientId |> Guid.Parse |> AccountId
+            let recipient = org.DomesticTransferRecipients[recipientId]
+            sender, recipient, amount, memo, scheduledAt)
+         |> Form.append fieldDomesticSelect
+         |> Form.append (amountField sender)
+         |> Form.append memoForm
+         |> Form.append scheduledAtField)
+   )
 
 [<ReactComponent>]
 let TransferInternalWithinOrgComponent
    (session: UserSession)
-   (account: Account)
-   (recipients: Map<AccountId, Account>)
+   (accounts: Map<AccountId, Account>)
    (onSubmit: AccountCommandReceipt -> unit)
    =
    let initiatedBy = InitiatedById session.EmployeeId
@@ -321,11 +355,12 @@ let TransferInternalWithinOrgComponent
    AccountFormContainer {|
       InitialValues = {
          Amount = ""
+         SenderId = ""
          RecipientId = ""
          Memo = ""
          ScheduledAt = "TODAY"
       }
-      Form = formInternalWithinOrg account recipients initiatedBy
+      Form = formInternalWithinOrg accounts initiatedBy
       Action = None
       OnSubmit = onSubmit
    |}
@@ -334,7 +369,7 @@ let TransferInternalWithinOrgComponent
 let TransferInternalBetweenOrgsComponent
    (destinationOrgs: Org list)
    (session: UserSession)
-   (account: Account)
+   (senderAccounts: Map<AccountId, Account>)
    (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
    (employeeAccrual: CommandApprovalDailyAccrual)
    (onSubmit: AccountCommandReceipt -> unit)
@@ -342,6 +377,7 @@ let TransferInternalBetweenOrgsComponent
    =
    let initValues = {
       Amount = ""
+      SenderId = ""
       RecipientId = ""
       Memo = ""
       ScheduledAt = "TODAY"
@@ -361,8 +397,8 @@ let TransferInternalBetweenOrgsComponent
    AccountFormContainer {|
       InitialValues = initValues
       Form =
-         formInternalCrossOrg
-            account
+         formInternalBetweenOrgs
+            senderAccounts
             destinationOrgs
             (InitiatedById session.EmployeeId)
       Action = None
@@ -396,7 +432,7 @@ let TransferInternalBetweenOrgsComponent
 let TransferDomesticFormComponent
    (session: UserSession)
    (org: Org)
-   (account: Account)
+   (senderAccounts: Map<AccountId, Account>)
    (employeeAccrual: CommandApprovalDailyAccrual)
    (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
    (onSubmit: AccountCommandReceipt -> unit)
@@ -417,11 +453,12 @@ let TransferDomesticFormComponent
    AccountFormContainer {|
       InitialValues = {
          Amount = ""
+         SenderId = ""
          RecipientId = defaultRecipientId
          Memo = ""
          ScheduledAt = "TODAY"
       }
-      Form = formDomestic org account initiatedBy
+      Form = formDomestic org senderAccounts initiatedBy
       Action = None
       OnSubmit =
          fun receipt ->
@@ -450,7 +487,6 @@ let TransferDomesticFormComponent
 [<ReactComponent>]
 let TransferFormComponent
    (session: UserSession)
-   (account: Account)
    (org: OrgWithAccountProfiles)
    (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
    (onSubmit: AccountCommandReceipt -> unit)
@@ -475,21 +511,21 @@ let TransferFormComponent
       }
       |> Async.StartImmediate)
 
-   let initialSelectedEnv =
+   let initialDestinationEnv =
       selectedRecipient
       |> Option.map fst
       |> Option.defaultValue RecipientAccountEnvironment.InternalWithinOrg
 
-   let selectedAccountEnv, setSelectedAccountEnv =
-      React.useState initialSelectedEnv
+   let destinationAccountEnv, setDestinationAccountEnv =
+      React.useState initialDestinationEnv
 
    React.fragment [
       Html.select [
          attr.onChange (
             RecipientAccountEnvironment.fromStringUnsafe
-            >> setSelectedAccountEnv
+            >> setDestinationAccountEnv
          )
-         attr.value (string selectedAccountEnv)
+         attr.value (string destinationAccountEnv)
 
          attr.children [
             Html.option [
@@ -511,7 +547,7 @@ let TransferFormComponent
          ]
       ]
 
-      match selectedAccountEnv with
+      match destinationAccountEnv with
       | RecipientAccountEnvironment.InternalBetweenOrgs ->
          OrgSocialTransferDiscovery.OrgSearchComponent
             session.OrgId
@@ -523,7 +559,7 @@ let TransferFormComponent
                      TransferInternalBetweenOrgsComponent
                         destinationOrgs
                         session
-                        account
+                        org.CheckingAccounts
                         org.Org.CommandApprovalRules
                         accrual
                         onSubmit
@@ -533,30 +569,20 @@ let TransferFormComponent
                   Html.p $"No orgs found by search query {searchInput}."
                | _ -> Html.none)
       | RecipientAccountEnvironment.InternalWithinOrg ->
-         TransferInternalWithinOrgComponent
-            session
-            account
-            org.Accounts
-            onSubmit
+         TransferInternalWithinOrgComponent session org.Accounts onSubmit
       | RecipientAccountEnvironment.Domestic ->
          if org.Org.DomesticTransferRecipients.Count = 0 then
             Html.button [
                attr.classes [ "outline" ]
                attr.text "No recipients.  Click here to create."
                attr.onClick (fun _ ->
-                  let pathArr =
-                     Routes.TransactionUrl.selectedPath account.AccountId
-
-                  let queryString =
-                     {
-                        AccountBrowserQuery.empty with
-                           Action =
-                              Some AccountActionView.RegisterTransferRecipient
-                     }
-                     |> AccountBrowserQuery.toQueryParams
-                     |> Router.encodeQueryString
-
-                  Router.navigate [| yield! pathArr; queryString |])
+                  {
+                     AccountBrowserQuery.empty with
+                        Action =
+                           Some AccountActionView.RegisterTransferRecipient
+                  }
+                  |> Routes.TransactionsUrl.queryPath
+                  |> Router.navigate)
             ]
          else
             match dailyAccrual with
@@ -564,7 +590,7 @@ let TransferFormComponent
                TransferDomesticFormComponent
                   session
                   org.Org
-                  account
+                  org.CheckingAccounts
                   accrual
                   selectedRecipient
                   onSubmit

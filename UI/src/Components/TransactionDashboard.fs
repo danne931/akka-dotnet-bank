@@ -1,51 +1,20 @@
 module TransactionDashboard
 
 open Feliz
-open Feliz.Router
 open Fable.Core.JsInterop
 
-open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
 open TransactionDetail
-open AccountSelection
 
 [<ReactComponent>]
 let TransactionDashboardComponent
-   (url: Routes.TransactionUrl)
+   (url: Routes.TransactionsUrl)
    (session: UserSession)
    =
    let orgCtx = React.useContext OrgProvider.context
-   let accountIdOpt = Routes.TransactionUrl.accountIdMaybe url
-
-   // Redirect /account to /account/{first-account-id}
-   React.useEffect (
-      fun () ->
-         match orgCtx, url with
-         | Deferred.Resolved(Ok(Some org)), Routes.TransactionUrl.Account ->
-            org.Accounts
-            |> Map.values
-            |> Seq.head
-            |> _.AccountId
-            |> Routes.TransactionUrl.selectedPath
-            |> Router.navigate
-         | _ -> ()
-      , [| box orgCtx; box (string url) |]
-   )
-
-   let accountOpt =
-      match accountIdOpt, orgCtx with
-      | Some accountId, Deferred.Resolved(Ok(Some org)) ->
-         org.Accounts |> Map.tryFind accountId
-      | _ -> None
 
    classyNode Html.div [ "transaction-dashboard" ] [
-      match orgCtx with
-      | Deferred.Resolved(Ok(Some org)) ->
-         AccountSelectionComponent accountIdOpt org.Accounts
-         |> Navigation.Portal
-      | _ -> ()
-
       ServiceHealth.ServiceHealthComponent()
 
       classyNode Html.main [ "container-fluid" ] [
@@ -53,49 +22,34 @@ let TransactionDashboardComponent
             Html.section [
                Html.h4 "Transactions"
 
-               match orgCtx, accountOpt with
-               | Deferred.Resolved(Ok(Some org)), Some account ->
-                  TransactionTable.TransactionTableComponent
-                     org.Org
-                     account
-                     session
+               match orgCtx with
+               | Deferred.Resolved(Ok(Some org)) ->
+                  TransactionTable.TransactionTableComponent org session
                | _ -> Html.progress []
             ]
 
-            match
-               orgCtx, accountOpt, Routes.IndexUrl.accountBrowserQuery().Action
-            with
-            | Deferred.Resolved(Ok(Some org)), Some account, Some action ->
-               AccountActions.AccountActionsComponent session account org action
+            match orgCtx, Routes.IndexUrl.accountBrowserQuery().Action with
+            | Deferred.Resolved(Ok(Some org)), Some action ->
+               AccountActions.AccountActionsComponent session org action
                |> ScreenOverlay.Portal
-            | _, Some account, _ ->
-               Html.aside [ AccountActionMenu.render account ]
-            | _ -> ()
+            | _ -> Html.aside [ AccountActionMenu.render () ]
 
-            match Routes.TransactionUrl.transactionIdMaybe url with
+            match Routes.TransactionsUrl.transactionIdMaybe url with
             | Some txnId ->
-               match orgCtx, accountOpt with
-               | Deferred.Resolved(Ok(Some org)), Some account ->
-                  TransactionDetailComponent session org.Org account txnId
+               match orgCtx with
+               | Deferred.Resolved(Ok(Some org)) ->
+                  TransactionDetailComponent session org txnId
                | _ -> Html.progress []
                |> ScreenOverlay.Portal
             | None -> ()
          ]
       ]
 
-      match orgCtx, accountIdOpt with
-      | Deferred.Resolved(Ok(Some org)), Some accountId ->
-         match org.AccountProfiles.TryFind accountId with
-         | Some profile ->
-            React.suspense (
-               [
-                  React.lazy' (
-                     fun () -> importDynamic "./AccountSummary"
-                     , profile
-                  )
-               ],
-               Html.progress []
-            )
-         | None -> ()
+      match orgCtx with
+      | Deferred.Resolved(Ok(Some org)) ->
+         React.suspense (
+            [ React.lazy' ((fun () -> importDynamic "./AccountSummary"), org) ],
+            Html.progress []
+         )
       | _ -> ()
    ]

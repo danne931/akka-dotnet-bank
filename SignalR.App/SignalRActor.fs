@@ -27,17 +27,17 @@ let actorProps (hub: IHubContext<AccountHub, IAccountClient>) =
          match msg with
          | Msg.AccountEventPersisted msg ->
             hub.Clients
-               .Group(string msg.Account.AccountId)
+               .Group(string msg.Account.OrgId)
                .AccountEventPersistenceConfirmation(Serialization.serialize msg)
             |> ignore
          | Msg.AccountEventValidationFail msg ->
             hub.Clients
-               .Group(string msg.AccountId)
+               .Group(string msg.OrgId)
                .AccountEventValidationFail(Serialization.serialize msg)
             |> ignore
          | Msg.AccountEventPersistenceFail msg ->
             hub.Clients
-               .Group(string msg.AccountId)
+               .Group(string msg.OrgId)
                .AccountEventPersistenceFail(Serialization.serialize msg)
             |> ignore
          | Msg.CircuitBreaker msg ->

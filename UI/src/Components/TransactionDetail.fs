@@ -96,7 +96,7 @@ type Msg =
       RecipientNicknameEditMsg *
       AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
    | SaveMerchantNickname of Merchant * AsyncOperationStatus<Result<int, Err>>
-   | EditTransferRecipient of senderId: AccountId * recipientId: AccountId
+   | EditTransferRecipient of recipientId: AccountId
 
 let init txnId () =
    {
@@ -251,25 +251,19 @@ let update (merchantDispatch: MerchantProvider.Dispatch) msg state =
             NicknamePersistence = Deferred.Resolved(Error err)
       },
       Alerts.toastCommand err
-   | EditTransferRecipient(senderId, recipientId) ->
+   | EditTransferRecipient recipientId ->
       let browserQuery = Routes.IndexUrl.accountBrowserQuery ()
 
-      let queryString =
+      let path =
          {
             browserQuery with
                Transaction = None
                Action =
                   Some(AccountActionView.EditTransferRecipient recipientId)
          }
-         |> AccountBrowserQuery.toQueryParams
-         |> Router.encodeQueryString
+         |> Routes.TransactionsUrl.queryPath
 
-      state,
-      Cmd.navigate (
-         Routes.TransactionUrl.BasePath,
-         string senderId,
-         queryString
-      )
+      state, Cmd.navigate path
 
 let private nicknameCancelButton dispatch =
    Html.a [
@@ -433,18 +427,17 @@ let MerchantNicknameEditComponent
    ]
 
 let renderTransactionInfo
-   (org: Org)
-   (account: Account)
+   (org: OrgWithAccountProfiles)
    (txnInfo: TransactionWithAncillaryInfo)
    (isEditingNickname: bool)
    (merchants: Map<string, Merchant>)
    (session: UserSession)
    dispatch
    =
-   let txn = transactionUIFriendly org account txnInfo.Event
+   let txn = transactionUIFriendly org txnInfo.Event
 
    let RecipientNicknameEditComponent =
-      RecipientNicknameEditComponent session org dispatch
+      RecipientNicknameEditComponent session org.Org dispatch
 
    React.fragment [
       Html.h6 txn.Name
@@ -472,7 +465,6 @@ let renderTransactionInfo
                Html.small "From:"
                Html.h6 [
                   attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
-                  attr.text account.Name
                   attr.text source
                ]
             ]
@@ -498,7 +490,7 @@ let renderTransactionInfo
          | _ ->
             let txn =
                eventWithMerchantAlias merchants txnInfo.Event
-               |> transactionUIFriendly org account
+               |> transactionUIFriendly org
 
             match txn.Destination with
             | Some destination ->
@@ -565,7 +557,6 @@ let renderNoteInput (txnInfo: TransactionMaybe) dispatch =
 
 let renderFooterMenuControls
    (org: Org)
-   (account: Account)
    (txnInfo: TransactionMaybe)
    (isEditingNickname: bool)
    dispatch
@@ -619,12 +610,9 @@ let renderFooterMenuControls
                           Text = "Edit recipient"
                           OnClick =
                              fun _ ->
-                                dispatch (
-                                   Msg.EditTransferRecipient(
-                                      account.AccountId,
-                                      recipient.RecipientAccountId
-                                   )
-                                )
+                                recipient.RecipientAccountId
+                                |> Msg.EditTransferRecipient
+                                |> dispatch
                           IsSelected = isEditingNickname
                        }
                       ]
@@ -635,8 +623,7 @@ let renderFooterMenuControls
 [<ReactComponent>]
 let TransactionDetailComponent
    (session: UserSession)
-   (org: Org)
-   (account: Account)
+   (org: OrgWithAccountProfiles)
    (txnId: EventId)
    =
    let merchants = React.useContext MerchantProvider.stateContext
@@ -649,24 +636,17 @@ let TransactionDetailComponent
 
    classyNode Html.article [ "transaction-detail" ] [
       CloseButton.render (fun _ ->
-         let browserQuery = Routes.IndexUrl.accountBrowserQuery ()
-
-         let queryString =
-            { browserQuery with Transaction = None }
-            |> AccountBrowserQuery.toQueryParams
-            |> Router.encodeQueryString
-
-         Router.navigate (
-            Routes.TransactionUrl.BasePath,
-            string account.AccountId,
-            queryString
-         ))
+         {
+            Routes.IndexUrl.accountBrowserQuery () with
+               Transaction = None
+         }
+         |> Routes.TransactionsUrl.queryPath
+         |> Router.navigate)
 
       match state.Transaction with
       | Deferred.Resolved(Ok(Some txn)) ->
          renderTransactionInfo
             org
-            account
             txn
             state.EditingNickname
             merchants
@@ -691,8 +671,7 @@ let TransactionDetailComponent
 
          attr.children [
             renderFooterMenuControls
-               org
-               account
+               org.Org
                state.Transaction
                state.EditingNickname
                dispatch

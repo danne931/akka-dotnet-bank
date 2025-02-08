@@ -102,40 +102,33 @@ module ApprovalsUrl =
       | _ -> ApprovalsUrl.NotFound
 
 [<RequireQualifiedAccess>]
-type TransactionUrl =
-   | Account
-   | AccountSelected of AccountId
-   | AccountSelectedWithQuery of AccountId * AccountBrowserQuery
+type TransactionsUrl =
+   | Transactions
+   | TransactionsWithQuery of AccountBrowserQuery
    | NotFound
 
-module TransactionUrl =
+module TransactionsUrl =
    [<Literal>]
    let BasePath = "transactions"
 
-   let selectedPath (accountId: AccountId) = [| BasePath; string accountId |]
+   let queryPath (query: AccountBrowserQuery) = [|
+      BasePath
+      query |> AccountBrowserQuery.toQueryParams |> Router.encodeQueryString
+   |]
 
    let parse =
       function
       // Matches /
-      | [] -> TransactionUrl.Account
-      // Matches /{accountId:Guid}
-      | [ Route.Guid accountId ] ->
-         TransactionUrl.AccountSelected(AccountId accountId)
-      // /{accountId:Guid}?action=deposit&isCategorized=false&date=Last30Days
-      | [ Route.Guid accountId; Route.Query queryParams ] ->
+      | [] -> TransactionsUrl.Transactions
+      // ?action=deposit&isCategorized=false&date=Last30Days
+      | [ Route.Query queryParams ] ->
          let query = AccountBrowserQuery.fromQueryParams queryParams
-         TransactionUrl.AccountSelectedWithQuery(AccountId accountId, query)
-      | _ -> TransactionUrl.NotFound
-
-   let accountIdMaybe =
-      function
-      | TransactionUrl.AccountSelected id -> Some id
-      | TransactionUrl.AccountSelectedWithQuery(id, _) -> Some id
-      | _ -> None
+         TransactionsUrl.TransactionsWithQuery query
+      | _ -> TransactionsUrl.NotFound
 
    let transactionIdMaybe =
       function
-      | TransactionUrl.AccountSelectedWithQuery(_, query) -> query.Transaction
+      | TransactionsUrl.TransactionsWithQuery query -> query.Transaction
       | _ -> None
 
 [<RequireQualifiedAccess>]
@@ -227,7 +220,7 @@ type IndexUrl =
    | Analytics of AnalyticsUrl
    | Account of AccountUrl
    | Approvals of ApprovalsUrl
-   | Transaction of TransactionUrl
+   | Transactions of TransactionsUrl
    | EmployeeHistory of EmployeeHistoryUrl
    | Employees of EmployeeUrl
    | Cards of CardUrl
@@ -249,9 +242,9 @@ module IndexUrl =
          IndexUrl.Account(AccountUrl.parse segments)
       | ApprovalsUrl.BasePath :: segments ->
          IndexUrl.Approvals(ApprovalsUrl.parse segments)
-      // Matches /transactions/{TransactionUrl}
-      | TransactionUrl.BasePath :: segments ->
-         IndexUrl.Transaction(TransactionUrl.parse segments)
+      // Matches /transactions/{TransactionsUrl}
+      | TransactionsUrl.BasePath :: segments ->
+         IndexUrl.Transactions(TransactionsUrl.parse segments)
       // Matches /employee-history/{EmployeeHistoryUrl}
       | EmployeeHistoryUrl.BasePath :: segments ->
          IndexUrl.EmployeeHistory(EmployeeHistoryUrl.parse segments)
@@ -268,9 +261,9 @@ module IndexUrl =
 
    let accountBrowserQuery () =
       match current () with
-      | IndexUrl.Transaction url ->
+      | IndexUrl.Transactions url ->
          match url with
-         | TransactionUrl.AccountSelectedWithQuery(_, query) -> query
+         | TransactionsUrl.TransactionsWithQuery query -> query
          | _ -> AccountBrowserQuery.empty
       | _ -> AccountBrowserQuery.empty
 
@@ -297,8 +290,3 @@ module IndexUrl =
          | CardUrl.CardsWithSearchQuery query -> query
          | _ -> CardBrowserQuery.empty
       | _ -> CardBrowserQuery.empty
-
-   let accountIdMaybe () =
-      match current () with
-      | IndexUrl.Transaction url -> TransactionUrl.accountIdMaybe url
-      | _ -> None

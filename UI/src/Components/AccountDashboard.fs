@@ -100,9 +100,12 @@ let renderAccounts (orgCtx: OrgProvider.State) =
                      ]
 
                      attr.onClick (fun _ ->
-                        Router.navigate (
-                           Routes.TransactionUrl.selectedPath account.AccountId
-                        ))
+                        {
+                           AccountBrowserQuery.empty with
+                              Account = Some account.AccountId
+                        }
+                        |> Routes.TransactionsUrl.queryPath
+                        |> Router.navigate)
                   ]
                ]
          ]

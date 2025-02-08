@@ -163,6 +163,10 @@ type OrgWithAccountProfiles = {
    member x.Accounts: Map<AccountId, Account> =
       x.AccountProfiles |> Map.map (fun _ profile -> profile.Account)
 
+   member x.CheckingAccounts: Map<AccountId, Account> =
+      x.Accounts
+      |> Map.filter (fun _ a -> a.Depository = AccountDepository.Checking)
+
    member x.Metrics: AccountMetrics =
       Seq.fold
          (fun acc profile -> {

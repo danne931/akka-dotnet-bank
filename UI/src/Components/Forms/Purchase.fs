@@ -5,6 +5,7 @@ open Fable.Form.Simple
 open System
 
 open Fable.Form.Simple.Pico
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Employee
@@ -15,11 +16,14 @@ open FormContainer
 type Values = { Amount: string; Merchant: string }
 
 let form
-   (account: Account)
+   (accounts: Map<AccountId, Account>)
    (employee: Employee)
    (selectedCardId: CardId)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
+   let card = employee.Cards[selectedCardId]
+   let account = accounts[card.AccountId]
+
    let amountField =
       Form.textField {
          Parser =
@@ -52,7 +56,7 @@ let form
       let cmd =
          PurchasePendingCommand.create employee.CompositeId {
             CardId = selectedCardId
-            CardNumberLast4 = employee.Cards[selectedCardId].CardNumberLast4
+            CardNumberLast4 = card.CardNumberLast4
             AccountId = account.AccountId
             Amount = amount
             Merchant = merchant
@@ -67,14 +71,15 @@ let form
 
 [<ReactComponent>]
 let PurchaseFormComponent
-   (onSubmit: EmployeeCommandReceipt -> unit)
-   (account: Account)
+   (org: OrgWithAccountProfiles)
    (selectedCardId: CardId)
    (employee: Employee)
+   (onSubmit: EmployeeCommandReceipt -> unit)
    =
+
    EmployeeFormContainer {|
       InitialValues = { Amount = ""; Merchant = "" }
-      Form = form account employee selectedCardId
+      Form = form org.CheckingAccounts employee selectedCardId
       Action = None
       OnSubmit = onSubmit
    |}

@@ -5,7 +5,6 @@ open Fable.SimpleHttp
 open Feliz.Router
 
 open Bank.Account.Domain
-open Bank.Org.Domain
 open UIDomain
 open UIDomain.Account
 open Lib.SharedTypes
@@ -15,12 +14,13 @@ open Lib.NetworkQuery
 let private serviceName = "TransactionService"
 
 let transactionQueryFromAccountBrowserQuery
-   (accountId: AccountId)
+   (orgId: OrgId)
    (query: AccountBrowserQuery)
    : TransactionQuery
    =
    {
-      AccountId = accountId
+      OrgId = orgId
+      AccountId = query.Account
       Diagnostic = false
       Page = 1
       Category = query.Category
@@ -38,6 +38,7 @@ let transactionQueryParams (query: TransactionQuery) : (string * string) list =
    let queryParams =
       [ "diagnostic", string query.Diagnostic; "page", string query.Page ]
       @ AccountBrowserQuery.toQueryParams {
+         Account = query.AccountId
          Amount = query.Amount
          Category = query.Category
          MoneyFlow = query.MoneyFlow
@@ -65,7 +66,7 @@ let transactionQueryParams (query: TransactionQuery) : (string * string) list =
       ("date", DateTime.rangeAsQueryString startDate endDate) :: queryParams
 
 let getTransactions (query: TransactionQuery) : Async<TransactionsMaybe> = async {
-   let basePath = TransactionPath.accountTransactions query.AccountId
+   let basePath = TransactionPath.transactions query.OrgId
 
    let queryParams = Router.encodeQueryString <| transactionQueryParams query
 

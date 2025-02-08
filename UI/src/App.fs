@@ -81,7 +81,7 @@ let App () =
          (EmployeeHistoryDashboard.EmployeeHistoryDashboardComponent url)
    | Routes.IndexUrl.Cards url ->
       appShell None (CardDashboard.CardDashboardComponent url)
-   | Routes.IndexUrl.Transaction url ->
+   | Routes.IndexUrl.Transactions url ->
       let contextProviders =
          SignalRConnectionProvider
          << SignalRAccountEventProvider

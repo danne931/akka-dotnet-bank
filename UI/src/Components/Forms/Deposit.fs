@@ -7,13 +7,29 @@ open Lib.Validators
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Org.Domain
 open UIDomain.Account
 open FormContainer
+open Bank.Employee.Forms.AccountProfileForm
 
-type Values = { Amount: string }
+type Values = {
+   DestinationAccountId: string
+   Amount: string
+}
+
+let fieldDestinationAccount accounts =
+   accountSelect None accounts
+   |> Form.mapValues {
+      Value = fun a -> { AccountId = a.DestinationAccountId }
+      Update =
+         fun a b -> {
+            b with
+               DestinationAccountId = a.AccountId
+         }
+   }
 
 let form
-   (account: Account)
+   (accounts: Map<AccountId, Account>)
    (initiatedBy: InitiatedById)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -32,7 +48,9 @@ let form
          }
       }
 
-   let onSubmit amount =
+   let onSubmit accountId amount =
+      let account = accounts[accountId]
+
       let command =
          DepositCashCommand.create account.CompositeId initiatedBy {
             Amount = amount
@@ -42,17 +60,22 @@ let form
 
       Msg.Submit(account, command, Started)
 
-   Form.succeed onSubmit |> Form.append amountField
+   Form.succeed onSubmit
+   |> Form.append (fieldDestinationAccount accounts)
+   |> Form.append amountField
 
 [<ReactComponent>]
 let DepositFormComponent
    (session: UserSession)
-   (account: Account)
+   (org: OrgWithAccountProfiles)
    (onSubmit: AccountCommandReceipt -> unit)
    =
    AccountFormContainer {|
-      InitialValues = { Amount = "" }
-      Form = form account (InitiatedById session.EmployeeId)
+      InitialValues = {
+         DestinationAccountId = ""
+         Amount = ""
+      }
+      Form = form org.CheckingAccounts (InitiatedById session.EmployeeId)
       Action = None
       OnSubmit = onSubmit
    |}

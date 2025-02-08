@@ -1,12 +1,12 @@
 module AccountSelection
 
 open Feliz
-open Feliz.Router
 
 open Bank.Account.Domain
 open Lib.SharedTypes
 
 let renderAccountListItem
+   (onSelect: Account -> unit)
    (selectedAccountId: AccountId option)
    (account: Account)
    =
@@ -18,10 +18,7 @@ let renderAccountListItem
          attr.value (AccountId.get account.AccountId)
          attr.onClick (fun e ->
             e.preventDefault ()
-
-            Router.navigate (
-               Routes.TransactionUrl.selectedPath account.AccountId
-            ))
+            onSelect account)
 
          match selectedAccountId with
          | Some selectedId when selectedId = account.AccountId ->
@@ -32,6 +29,7 @@ let renderAccountListItem
 
 [<ReactComponent>]
 let AccountSelectionComponent
+   (onSelect: Account -> unit)
    (selectedAccountId: AccountId option)
    (accounts: Map<AccountId, Account>)
    =
@@ -65,7 +63,10 @@ let AccountSelectionComponent
                      attr.role "listbox"
                      attr.children [
                         for account in accounts.Values ->
-                           renderAccountListItem selectedAccountId account
+                           renderAccountListItem
+                              onSelect
+                              selectedAccountId
+                              account
                      ]
                   ]
                ]

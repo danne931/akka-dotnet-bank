@@ -10,7 +10,7 @@ type private MenuUrl =
    | Analytics
    | Account
    | Approvals
-   | Transaction
+   | Transactions
    | EmployeeHistory
    | Employee
    | Card
@@ -30,7 +30,7 @@ let private renderListItem (item: MenuItem) =
       | Analytics, Routes.IndexUrl.Analytics _ -> attr.classes [ "selected" ]
       | Account, Routes.IndexUrl.Account _ -> attr.classes [ "selected" ]
       | Approvals, Routes.IndexUrl.Approvals _ -> attr.classes [ "selected" ]
-      | Transaction, Routes.IndexUrl.Transaction _ ->
+      | Transactions, Routes.IndexUrl.Transactions _ ->
          attr.classes [ "selected" ]
       | EmployeeHistory, Routes.IndexUrl.EmployeeHistory _ ->
          attr.classes [ "selected" ]
@@ -109,10 +109,10 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
             | _ -> ()
 
             renderListItem {
-               Url = Transaction
+               Url = Transactions
                SelectedUrl = currentUrl
                Name = "Transactions"
-               Href = Routes.TransactionUrl.BasePath
+               Href = Routes.TransactionsUrl.BasePath
                CallToActionIndicator = None
             }
 

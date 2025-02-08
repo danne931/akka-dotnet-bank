@@ -87,13 +87,10 @@ let startAnalyticsRoutes (app: WebApplication) =
 
    app
       .MapGet(
-         AnalyticsPath.MoneyFlowMonthlyTimeSeriesForAccount,
-         Func<Guid, Task<IResult>>(fun accountId ->
+         AnalyticsPath.MoneyFlowMonthlyTimeSeriesForOrg,
+         Func<Guid, Task<IResult>>(fun orgId ->
             moneyFlowMonthlyTimeSeriesAnalytics {
-               FilterBy =
-                  MoneyFlowMonthlyTimeSeriesFilterBy.Account(
-                     AccountId accountId
-                  )
+               FilterBy = MoneyFlowMonthlyTimeSeriesFilterBy.Org(OrgId orgId)
                LookbackMonths = 3
             }
             |> RouteUtil.unwrapTaskResultOption)

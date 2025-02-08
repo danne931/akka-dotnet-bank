@@ -125,7 +125,7 @@ let EmployeeSearchComponent
       Html.input [
          attr.type' "search"
          attr.name "search-employees"
-         attr.placeholder "Search by name or email"
+         attr.placeholder "Search by employee name or email"
          attr.ariaLabel "Search employees"
          attr.value (state.SearchInput |> Option.defaultValue "")
          attr.onChange (Msg.SetSearchInput >> dispatch)

@@ -134,14 +134,12 @@ let form
          |> Form.append fieldLastName
          |> Form.append fieldEmail
          |> Form.append (
-            accountProfileSelect accounts
+            accountSelect
+               (Some "Select an account to link the card to:")
+               accounts
             |> Form.mapValues {
-               Value = fun a -> { LinkedAccountId = a.LinkedAccountId }
-               Update =
-                  fun a b -> {
-                     b with
-                        LinkedAccountId = a.LinkedAccountId
-                  }
+               Value = fun a -> { AccountId = a.LinkedAccountId }
+               Update = fun a b -> { b with LinkedAccountId = a.AccountId }
             }
          )
          |> Form.append (
@@ -212,7 +210,11 @@ let EmployeeCreateFormComponent
          EmployeeFormContainer {|
             InitialValues = formProps
             Form =
-               form session org.Accounts employeeInviteRequiresApproval setRole
+               form
+                  session
+                  org.CheckingAccounts
+                  employeeInviteRequiresApproval
+                  setRole
             Action = customAction
             OnSubmit =
                fun receipt ->

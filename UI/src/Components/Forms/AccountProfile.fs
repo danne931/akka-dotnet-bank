@@ -6,24 +6,26 @@ open System
 open Bank.Account.Domain
 open Lib.SharedTypes
 
-type Values = { LinkedAccountId: string }
+type Values = { AccountId: string }
 
-let accountProfileSelect (accounts: Map<AccountId, Account>) =
+let accountSelect
+   (label: string option)
+   (accounts: Map<AccountId, Account>)
+   : Form.Form<Values, AccountId, _>
+   =
    Form.selectField {
       Parser = Guid.Parse >> AccountId >> Ok
-      Value = fun values -> values.LinkedAccountId
-      Update =
-         fun newValue values -> {
-            values with
-               LinkedAccountId = newValue
-         }
+      Value = fun values -> values.AccountId
+      Update = fun newValue values -> { values with AccountId = newValue }
       Error = fun _ -> None
       Attributes = {
-         Label = "Select an account to link the card to:"
+         Label = label |> Option.defaultValue "Select an account:"
          Placeholder = "No account selected"
-         Options = [
-            for a in accounts.Values ->
-               string a.AccountId, $"{a.Name} ({Money.format a.Balance})"
-         ]
+         Options =
+            [
+               for a in accounts.Values ->
+                  string a.AccountId, $"{a.Name} ({Money.format a.Balance})"
+            ]
+            |> List.sortBy snd
       }
    }

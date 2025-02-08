@@ -2,18 +2,11 @@
 module Navigation
 
 open Feliz
-open Browser.Dom
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
 
-let private portalId = "navigation-portal"
-
 type UserSessionMsg = UserSessionProvider.Msg
-
-let Portal (content: ReactElement) =
-   let root = document.getElementById portalId
-   ReactDOM.createPortal (content, root)
 
 [<ReactComponent>]
 let UserSessionSelectionComponent
@@ -106,8 +99,6 @@ let NavigationComponent () =
       ]
 
       classyNode Html.div [ "grid"; "nav-selection-container" ] [
-         Html.div [ attr.id portalId ]
-
          match currentSessionCtx, selectableSessionsCtx with
          | Deferred.Resolved(Ok session), Deferred.Resolved(Ok sessions) ->
             UserSessionSelectionComponent session.EmployeeId sessions
