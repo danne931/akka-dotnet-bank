@@ -109,6 +109,10 @@ module TransactionSqlWriter =
       ids |> List.map CardId.get |> Array.ofList |> Sql.uuidArray
 
    let accountId = AccountSqlWriter.accountId
+
+   let accountIds (ids: AccountId list) =
+      ids |> List.map AccountId.get |> Array.ofList |> Sql.uuidArray
+
    let orgId = OrgSqlWriter.orgId
    let name = Sql.text
    let amount = Sql.moneyOrNone

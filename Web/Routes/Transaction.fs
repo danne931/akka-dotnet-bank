@@ -18,7 +18,7 @@ open Bank.UserSession.Middleware
 let withQueryParams<'t> (func: TransactionQuery -> 't) =
    Func<
       Guid,
-      Nullable<Guid>,
+      string,
       bool,
       int,
       string,
@@ -34,7 +34,7 @@ let withQueryParams<'t> (func: TransactionQuery -> 't) =
     >
       (fun
            ([<FromRoute>] orgId: Guid)
-           ([<FromQuery>] accountId: Nullable<Guid>)
+           ([<FromQuery>] accountIds: string)
            ([<FromQuery>] diagnostic: bool)
            ([<FromQuery>] page: int)
            ([<FromQuery>] moneyFlow: string)
@@ -60,11 +60,7 @@ let withQueryParams<'t> (func: TransactionQuery -> 't) =
 
          func {
             OrgId = OrgId orgId
-            AccountId =
-               if accountId.HasValue then
-                  Some(AccountId accountId.Value)
-               else
-                  None
+            AccountIds = TransactionQuery.accountIdsFromQueryString accountIds
             Diagnostic = diagnostic
             Page = page
             MoneyFlow = moneyFlowOpt

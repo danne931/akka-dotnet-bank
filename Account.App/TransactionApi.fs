@@ -70,40 +70,41 @@ let transactionQuery (query: TransactionQuery) =
       $"{Fields.orgId} = @orgId",
       false
 
-   (*
-   let agg =
-      [
-         "accountId", Writer.accountId query.AccountId
-         "offset", Sql.int <| Math.Max(query.Page - 1, 0) * txnLimit
-      ],
-      $"{Fields.accountId} = @accountId",
-      false
-   *)
-
    let agg =
       let queryParams, where, joinAncillary = agg
 
-      match query.CardIds, query.InitiatedByIds with
-      | Some cardIds, Some initiatedByIds ->
+      let idParams =
          [
-            "cIds", Writer.cardIds cardIds
-            "iIds", Writer.initiatedByIds initiatedByIds
+            query.AccountIds
+            |> Option.map (fun accountIds ->
+               Fields.accountId, "accountIds", Writer.accountIds accountIds)
+
+            query.CardIds
+            |> Option.map (fun cardIds ->
+               Fields.cardId, "cardIds", Writer.cardIds cardIds)
+
+            query.InitiatedByIds
+            |> Option.map (fun initiatedByIds ->
+               Fields.initiatedById,
+               "initiatedByIds",
+               Writer.initiatedByIds initiatedByIds)
          ]
-         @ queryParams,
-         $"{where} AND (
-            {Fields.cardId} = ANY(@cIds)
-            OR {Fields.initiatedById} = ANY(@iIds)
-         )",
+         |> List.choose id
+
+      match idParams with
+      | [] -> agg
+      | idParams ->
+         let idParams, idWhere =
+            List.fold
+               (fun (queryParams, where) (fieldName, paramName, sqlValue) ->
+                  let queryParams = (paramName, sqlValue) :: queryParams
+                  queryParams, $"{where} OR {fieldName} = ANY(@{paramName})")
+               ([], "")
+               idParams
+
+         idParams @ queryParams,
+         $"{where} AND ({idWhere.Substring 4})",
          joinAncillary
-      | Some cardIds, None ->
-         [ "cIds", Writer.cardIds cardIds ] @ queryParams,
-         $"{where} AND {Fields.cardId} = ANY(@cIds)",
-         joinAncillary
-      | None, Some initiatedByIds ->
-         [ "iIds", Writer.initiatedByIds initiatedByIds ] @ queryParams,
-         $"{where} AND {Fields.initiatedById} = ANY(@iIds)",
-         joinAncillary
-      | None, None -> agg
 
    let agg =
       Option.fold

@@ -369,7 +369,6 @@ let CardDetailComponent
             attr.onClick (fun _ ->
                {
                   AccountBrowserQuery.empty with
-                     Account = Some card.Card.AccountId
                      SelectedCards =
                         Some [
                            {

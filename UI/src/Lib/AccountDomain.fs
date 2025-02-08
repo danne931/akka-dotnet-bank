@@ -477,6 +477,11 @@ let transactionUIFriendly
 
 type SelectedCard = { Display: string; CardId: CardId }
 
+type SelectedAccount = {
+   Display: string
+   AccountId: AccountId
+}
+
 [<RequireQualifiedAccess>]
 type AccountActionView =
    | Purchase
@@ -494,7 +499,7 @@ type AccountActionView =
       | EditTransferRecipient _ -> "Edit a Transfer Recipient"
 
 type AccountBrowserQuery = {
-   Account: AccountId option
+   Accounts: (SelectedAccount list) option
    MoneyFlow: MoneyFlow option
    Category: CategoryFilter option
    Amount: AmountFilter option
@@ -512,6 +517,7 @@ type AccountBrowserQuery = {
          Category = x.Category
          Amount = x.Amount
          Date = x.Date
+         AccountIds = x.Accounts
          CardIds = x.SelectedCards
          InitiatedByIds = x.SelectedInitiatedBy
          EventType = x.EventType
@@ -569,6 +575,12 @@ module AccountBrowserQuery =
          | None -> agg
 
       let agg =
+         match query.Accounts with
+         | Some accounts ->
+            ("accounts", Serialization.serialize accounts) :: agg
+         | None -> agg
+
+      let agg =
          match query.SelectedCards with
          | None -> agg
          | Some cards -> ("cards", Serialization.serialize cards) :: agg
@@ -583,11 +595,6 @@ module AccountBrowserQuery =
          match query.EventType with
          | None -> agg
          | Some filters -> ("events", listToQueryString filters) :: agg
-
-      let agg =
-         match query.Account with
-         | Some accountId -> ("account", string accountId) :: agg
-         | None -> agg
 
       match query.Transaction with
       | Some txnId -> ("transaction", string txnId) :: agg
@@ -647,12 +654,15 @@ module AccountBrowserQuery =
                | view ->
                   Log.error $"Account action view not implemented: {view}"
                   None)
-         Account =
-            Map.tryFind "account" queryParams
-            |> Option.bind (Guid.parseOptional >> Option.map AccountId)
          Transaction =
             Map.tryFind "transaction" queryParams
             |> Option.bind (Guid.parseOptional >> Option.map EventId)
+         Accounts =
+            Map.tryFind "accounts" queryParams
+            |> Option.bind (
+               Serialization.deserialize<SelectedAccount list>
+               >> Result.toOption
+            )
          SelectedCards =
             queryParams
             |> Map.tryFind "cards"
@@ -673,7 +683,7 @@ module AccountBrowserQuery =
       Amount = None
       Date = None
       Action = None
-      Account = None
+      Accounts = None
       Transaction = None
       SelectedCards = None
       SelectedInitiatedBy = None

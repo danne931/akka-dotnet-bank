@@ -102,7 +102,13 @@ let renderAccounts (orgCtx: OrgProvider.State) =
                      attr.onClick (fun _ ->
                         {
                            AccountBrowserQuery.empty with
-                              Account = Some account.AccountId
+                              Accounts =
+                                 Some [
+                                    {
+                                       AccountId = account.AccountId
+                                       Display = account.FullName
+                                    }
+                                 ]
                         }
                         |> Routes.TransactionsUrl.queryPath
                         |> Router.navigate)
