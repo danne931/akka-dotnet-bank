@@ -481,6 +481,14 @@ type AccountActionView =
    | RegisterTransferRecipient
    | EditTransferRecipient of AccountId
 
+   member x.Display =
+      match x with
+      | Purchase -> "Purchase"
+      | Deposit -> "Deposit"
+      | Transfer _ -> "Transfer"
+      | RegisterTransferRecipient -> "Add a Transfer Recipient"
+      | EditTransferRecipient _ -> "Edit a Transfer Recipient"
+
 type AccountBrowserQuery = {
    Account: AccountId option
    MoneyFlow: MoneyFlow option
