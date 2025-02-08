@@ -48,7 +48,7 @@ let TransactionDashboardComponent
       match orgCtx with
       | Deferred.Resolved(Ok(Some org)) ->
          React.suspense (
-            [ React.lazy' ((fun () -> importDynamic "./AccountSummary"), org) ],
+            [ React.lazy' ((fun () -> importDynamic "./OrgSummary"), org) ],
             Html.progress []
          )
       | _ -> ()

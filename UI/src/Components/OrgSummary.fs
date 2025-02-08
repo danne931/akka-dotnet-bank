@@ -1,4 +1,4 @@
-module AccountSummary
+module OrgSummary
 
 open Feliz
 open Fable.Core.JS
@@ -19,7 +19,6 @@ type private RotatingMetric =
    | MonthlyPaymentPaid
    | MonthlyPurchaseAccrued
 
-
 let private rotatingMetrics = [
    RotatingMetric.DailyPurchaseAccrued
    RotatingMetric.DailyInternalTransferWithinOrg
@@ -34,7 +33,7 @@ let private rotatingMetrics = [
 ]
 
 [<ReactComponent>]
-let AccountSummaryComponent (org: OrgWithAccountProfiles) =
+let OrgSummaryComponent (org: OrgWithAccountProfiles) =
    let isFading, setFading = React.useState false
    let flow, setFlow = React.useState MoneyFlow.Out
 
@@ -150,7 +149,10 @@ let AccountSummaryComponent (org: OrgWithAccountProfiles) =
 
       attr.children [
          Html.div [
-            Html.b [ attr.classes [ "account-name" ]; attr.text org.Org.Name ]
+            Html.b [
+               attr.style [ style.color "var(--primary)" ]
+               attr.text org.Org.Name
+            ]
 
             Html.div [
                Html.p "Balance: "
@@ -262,4 +264,4 @@ let AccountSummaryComponent (org: OrgWithAccountProfiles) =
 
 // Necessary for dynamic import resolution. (Component lazily loaded so
 // charting library fetched only when necessary.)
-Fable.Core.JsInterop.exportDefault AccountSummaryComponent
+Fable.Core.JsInterop.exportDefault OrgSummaryComponent

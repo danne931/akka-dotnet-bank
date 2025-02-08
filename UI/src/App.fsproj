@@ -81,7 +81,7 @@
     <Compile Include="Components/AccountActionMenu.fs" />
     <Compile Include="Components/CardActionMenu.fs" />
     <Compile Include="Components/AnalyticsDashboard.fs" />
-    <Compile Include="Components/AccountSummary.fs" />
+    <Compile Include="Components/OrgSummary.fs" />
     <Compile Include="Components/PaymentDetail.fs" />
     <Compile Include="Components/PaymentDashboard.fs" />
     <Compile Include="Components/TransactionDashboard.fs" />
