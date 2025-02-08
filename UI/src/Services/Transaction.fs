@@ -20,7 +20,7 @@ let transactionQueryFromAccountBrowserQuery
    =
    {
       OrgId = orgId
-      AccountId = query.Account
+      AccountIds = query.Accounts |> Option.map (List.map _.AccountId)
       Diagnostic = false
       Page = 1
       Category = query.Category
@@ -38,17 +38,23 @@ let transactionQueryParams (query: TransactionQuery) : (string * string) list =
    let queryParams =
       [ "diagnostic", string query.Diagnostic; "page", string query.Page ]
       @ AccountBrowserQuery.toQueryParams {
-         Account = query.AccountId
          Amount = query.Amount
          Category = query.Category
          MoneyFlow = query.MoneyFlow
          EventType = query.EventType
+         Accounts = None
          SelectedCards = None
          SelectedInitiatedBy = None
          Date = None
          Action = None
          Transaction = None
       }
+
+   let queryParams =
+      match query.AccountIds with
+      | None -> queryParams
+      | Some accountIds ->
+         ("accountIds", listToQueryString accountIds) :: queryParams
 
    let queryParams =
       match query.CardIds with

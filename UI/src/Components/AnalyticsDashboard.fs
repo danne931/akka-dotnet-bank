@@ -525,11 +525,7 @@ let renderTopNMonthSelect
       ]
    ]
 
-let txnsButton
-   (flow: MoneyFlow)
-   (accounts: Map<AccountId, Account>)
-   (selectedTopNMonth: DateTime)
-   =
+let txnsButton (flow: MoneyFlow) (selectedTopNMonth: DateTime) =
    let start = DateTime(selectedTopNMonth.Year, selectedTopNMonth.Month, 1)
    let filter = DateFilter.Custom(start, start.AddMonths(1).AddDays(-1))
 
@@ -540,7 +536,6 @@ let txnsButton
       attr.onClick (fun _ ->
          {
             AccountBrowserQuery.empty with
-               Account = Seq.tryHead accounts.Keys
                MoneyFlow = Some flow
                Date = Some filter
          }
@@ -550,7 +545,6 @@ let txnsButton
 
 let renderTopMoneyListItems
    (flow: MoneyFlow)
-   (accounts: Map<AccountId, Account>)
    (topN: MoneyFlowTopNAnalytics)
    (last3MonthTimeSeries: MoneyFlowMonthlyTimeSeriesAnalytics)
    (selectedMonth: DateTime)
@@ -584,7 +578,7 @@ let renderTopMoneyListItems
                Html.div [ Html.b item.Source; renderAmount item.Amount ]
          ]
 
-         txnsButton flow accounts selectedMonth
+         txnsButton flow selectedMonth
 
          Html.hr []
          Html.br []
@@ -712,7 +706,6 @@ let AnalyticsDashboardComponent
                      Html.article [
                         renderTopMoneyListItems
                            MoneyFlow.In
-                           org.Accounts
                            topN
                            timeSeries
                            state.SelectedTopNMonth
@@ -721,7 +714,6 @@ let AnalyticsDashboardComponent
                      Html.article [
                         renderTopMoneyListItems
                            MoneyFlow.Out
-                           org.Accounts
                            topN
                            timeSeries
                            state.SelectedTopNMonth

@@ -144,7 +144,7 @@ module TransactionGroupFilter =
 
 type TransactionQuery = {
    OrgId: OrgId
-   AccountId: AccountId option
+   AccountIds: (AccountId list) option
    Diagnostic: bool
    Page: int
    MoneyFlow: MoneyFlow option
@@ -157,6 +157,9 @@ type TransactionQuery = {
 }
 
 module TransactionQuery =
+   let accountIdsFromQueryString: string -> AccountId list option =
+      listFromQueryString (Guid.parseOptional >> Option.map AccountId)
+
    let cardIdsFromQueryString: string -> CardId list option =
       listFromQueryString (Guid.parseOptional >> Option.map CardId)
 

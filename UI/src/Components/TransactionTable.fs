@@ -24,6 +24,7 @@ type TransactionFilterView =
    | InitiatedBy
    | Cards
    | EventType
+   | Accounts
 
 [<RequireQualifiedAccess>]
 type TransactionFilter =
@@ -34,6 +35,7 @@ type TransactionFilter =
    | Cards of (SelectedCard list) option
    | InitiatedBy of (UIDomain.Employee.SelectedEmployee list) option
    | EventFilter of (TransactionGroupFilter list) option
+   | Accounts of (SelectedAccount list) option
 
 type State = {
    Transactions: Map<int, Deferred<TransactionsMaybe>>
@@ -97,6 +99,10 @@ let update msg state =
          | TransactionFilter.InitiatedBy selected -> {
             browserQuery with
                SelectedInitiatedBy = selected
+           }
+         | TransactionFilter.Accounts accounts -> {
+            browserQuery with
+               Accounts = accounts
            }
          | TransactionFilter.EventFilter filter -> {
             browserQuery with
@@ -188,6 +194,7 @@ let renderPagination state dispatch =
 let renderControlPanel
    state
    dispatch
+   (org: OrgWithAccountProfiles)
    (categories: Map<int, TransactionCategory>)
    (session: UserSession)
    =
@@ -198,6 +205,7 @@ let renderControlPanel
          TransactionFilterView.Date, "Date"
          TransactionFilterView.Amount, "Amount"
          TransactionFilterView.EventType, "Transaction Type"
+         TransactionFilterView.Accounts, "Accounts"
          TransactionFilterView.InitiatedBy, "Initiated By"
          TransactionFilterView.Cards, "Cards"
          TransactionFilterView.Category, "Categories"
@@ -231,6 +239,22 @@ let renderControlPanel
                   TransactionFilter.InitiatedBy >> Msg.UpdateFilter >> dispatch
                Dependencies =
                   Some [| string TransactionFilterView.InitiatedBy |]
+            |}
+         | TransactionFilterView.Accounts ->
+            CheckboxFieldset.render {|
+               Options =
+                  org.Accounts.Values
+                  |> List.ofSeq
+                  |> List.map (fun a -> {
+                     Id = {
+                        AccountId = a.AccountId
+                        Display = a.FullName
+                     }
+                     Display = a.FullName
+                  })
+               SelectedItems = query.Accounts
+               OnChange =
+                  TransactionFilter.Accounts >> Msg.UpdateFilter >> dispatch
             |}
          | TransactionFilterView.Cards ->
             EmployeeCardMultiSelectSearchComponent {|
@@ -306,6 +330,25 @@ let renderControlPanel
             }
          ]
          @ [
+            match query.Accounts with
+            | None -> ()
+            | Some selected ->
+               for account in selected ->
+                  {
+                     View = TransactionFilterView.Accounts
+                     OnDelete =
+                        fun () ->
+                           selected
+                           |> List.filter (fun e ->
+                              e.AccountId <> account.AccountId)
+                           |> fun es ->
+                              (if es.Length = 0 then None else Some es)
+                              |> TransactionFilter.Accounts
+                              |> Msg.UpdateFilter
+                              |> dispatch
+                     Content = Some account.Display
+                  }
+
             match query.SelectedInitiatedBy with
             | None -> ()
             | Some selected ->
@@ -507,7 +550,7 @@ let TransactionTableComponent
       ]
 
       classyNode Html.figure [ "control-panel-and-table-container" ] [
-         renderControlPanel state dispatch categories session
+         renderControlPanel state dispatch org categories session
 
          match txns with
          | Some(Resolved(Ok None)) -> Html.p "No transactions found."
