@@ -102,7 +102,7 @@ let transactionUIFriendly
 
    let accountName =
       org.AccountProfiles.TryFind(AccountId.fromEntityId envelope.EntityId)
-      |> Option.map (fun a -> a.Account.FullName)
+      |> Option.map (fun a -> a.Account.Name)
       |> Option.defaultValue "Account"
 
    match txn with
@@ -110,7 +110,7 @@ let transactionUIFriendly
    | DepositedCash evt -> {
       props with
          Name = "Deposit Received"
-         Info = "Deposit Received"
+         Info = $"Deposited money into {accountName}."
          MoneyFlow = Some MoneyFlow.In
          Source = Some evt.Data.Origin
          Destination = Some accountName
@@ -125,7 +125,8 @@ let transactionUIFriendly
       {
          props with
             Name = "Purchase"
-            Info = $"Purchase from {evt.Data.Merchant} by {employee}"
+            Info =
+               $"Purchase from {evt.Data.Merchant} by {employee} ({accountName})"
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
             Source = Some $"{accountName} via {employee}"
@@ -183,8 +184,7 @@ let transactionUIFriendly
       {
          props with
             Name = "Transfer Between Orgs"
-            Info =
-               $"Transferred from {info.Sender.Name} to {info.Recipient.Name}"
+            Info = $"Transfer from {accountName} to {info.Recipient.Name}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
             Source = Some accountName
@@ -197,7 +197,7 @@ let transactionUIFriendly
          props with
             Name = "Transfer Between Orgs Scheduled"
             Info =
-               $"Transfer to {info.Recipient.Name} scheduled for {DateTime.formatShort info.ScheduledDate}"
+               $"Transfer from {accountName} to {info.Recipient.Name} scheduled for {DateTime.formatShort info.ScheduledDate}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = None
             Source = Some accountName
@@ -210,7 +210,7 @@ let transactionUIFriendly
          props with
             Name = "Transfer Between Orgs Completed"
             Info =
-               $"Completed transfer from {info.Sender.Name} to {info.Recipient.Name}"
+               $"Completed transfer from {accountName} to {info.Recipient.Name}"
             Amount = Some <| Money.format info.Amount
       }
    | InternalTransferBetweenOrgsFailed evt ->
@@ -220,7 +220,7 @@ let transactionUIFriendly
          props with
             Name = "Transfer Between Orgs Failed"
             Info =
-               $"Failed transfer from {info.Sender.Name} to {info.Recipient.Name} 
+               $"Failed transfer from {accountName} to {info.Recipient.Name} 
               - Reason: {evt.Data.Reason} 
               - Account refunded"
             Amount = Some <| Money.format info.Amount
@@ -229,11 +229,13 @@ let transactionUIFriendly
    | DomesticTransferPending evt ->
       let info = evt.Data.BaseInfo
       let recipientName = domesticRecipientName info.Recipient
+      let payNetwork = info.Recipient.PaymentNetwork
 
       {
          props with
             Name = "Domestic Transfer"
-            Info = $"Domestic transfer processing to {recipientName}"
+            Info =
+               $"{payNetwork} transfer processing from {info.Sender.Name} to {recipientName}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
             Source = Some accountName
@@ -241,14 +243,14 @@ let transactionUIFriendly
       }
    | DomesticTransferScheduled evt ->
       let info = evt.Data.BaseInfo
-
       let recipientName = domesticRecipientName info.Recipient
+      let payNetwork = info.Recipient.PaymentNetwork
 
       {
          props with
             Name = "Domestic Transfer"
             Info =
-               $"Domestic transfer to {recipientName} scheduled for {DateTime.formatShort info.ScheduledDate}"
+               $"{payNetwork} transfer from {info.Sender.Name} to {recipientName} scheduled for {DateTime.formatShort info.ScheduledDate}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = None
             Source = Some accountName
@@ -256,26 +258,27 @@ let transactionUIFriendly
       }
    | DomesticTransferCompleted evt ->
       let info = evt.Data.BaseInfo
+      let payNetwork = info.Recipient.PaymentNetwork
 
       {
          props with
             Name = "Domestic Transfer Completed"
             Info =
-               $"Domestic transfer completed to {domesticRecipientName info.Recipient}"
+               $"{payNetwork} transfer completed from {info.Sender.Name} to {domesticRecipientName info.Recipient}"
             Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferFailed evt ->
       let info = evt.Data.BaseInfo
 
       let recipientName = domesticRecipientName info.Recipient
+      let payNetwork = info.Recipient.PaymentNetwork
 
       {
          props with
             Name = "Domestic Transfer Failed"
             Info =
-               $"Domestic transfer failed to {recipientName} 
-                 - Reason: {evt.Data.Reason.Display} 
-                 - Account refunded"
+               $"{payNetwork} transfer from {accountName} to {recipientName} failed
+               - Reason: {evt.Data.Reason.Display}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some accountName
@@ -283,12 +286,13 @@ let transactionUIFriendly
       }
    | DomesticTransferProgress evt ->
       let info = evt.Data.BaseInfo
+      let payNetwork = info.Recipient.PaymentNetwork
 
       {
          props with
             Info =
-               $"Progress update received for domestic transfer 
-                 to {domesticRecipientName info.Recipient}
+               $"Progress update received for {payNetwork} transfer 
+                 to {domesticRecipientName info.Recipient} from {accountName}
                  - {evt.Data.InProgressInfo}"
             Amount = Some <| Money.format info.Amount
       }
@@ -299,7 +303,7 @@ let transactionUIFriendly
       {
          props with
             Name = "Transfer Deposit Within Org"
-            Info = $"Received transfer deposit from {sender}."
+            Info = $"{accountName} received transfer from {sender}."
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some sender
@@ -312,7 +316,7 @@ let transactionUIFriendly
       {
          props with
             Name = "Transfer Deposit Between Orgs"
-            Info = $"Received transfer deposit from {sender}."
+            Info = $"{accountName} received transfer from {sender}."
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some sender
@@ -320,8 +324,7 @@ let transactionUIFriendly
       }
    | BillingCycleStarted _ -> {
       props with
-         Info =
-            "New billing cycle. Transactions consolidated into billing statement."
+         Info = "New billing cycle.."
      }
    | AccountClosed evt -> {
       props with
@@ -333,7 +336,8 @@ let transactionUIFriendly
       {
          props with
             Name = "Payment Requested"
-            Info = $"Requested payment from {p.Payer.OrgName}"
+            Info =
+               $"Requested payment from {p.Payer.OrgName} into {accountName}"
             Amount = Some <| Money.format p.Amount
             MoneyFlow = None
             Source = Some p.Payer.OrgName
@@ -344,8 +348,8 @@ let transactionUIFriendly
 
       {
          props with
-            Name = "Payment Sent"
-            Info = $"Sent payment to {p.Payee.OrgName}."
+            Name = "Payment Fulfilled"
+            Info = $"Fulfilled payment to {p.Payee.OrgName} from {accountName}."
             Amount = Some <| Money.format p.Amount
             MoneyFlow = Some MoneyFlow.Out
             Source = Some accountName
@@ -357,7 +361,7 @@ let transactionUIFriendly
       {
          props with
             Name = "Payment"
-            Info = $"Received payment from {p.Payer.OrgName}."
+            Info = $"{accountName} received payment from {p.Payer.OrgName}."
             Amount = Some <| Money.format p.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some p.Payer.OrgName
@@ -464,7 +468,7 @@ let transactionUIFriendly
          props with
             Name = "Internal Automated Transfer Deposit"
             Info =
-               $"Auto Balance Management: received transfer deposit from {sender}."
+               $"Auto Balance Management: {accountName} received transfer from {sender}."
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
             Source = Some sender
