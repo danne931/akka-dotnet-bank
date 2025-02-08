@@ -77,8 +77,6 @@
     <Compile Include="Components/TransactionDetail.fs" />
     <Compile Include="Components/TransactionCategoryFilter.fs" />
     <Compile Include="Components/TransactionTable.fs" />
-    <Compile Include="Components/AccountActions.fs" />
-    <Compile Include="Components/AccountActionMenu.fs" />
     <Compile Include="Components/CardActionMenu.fs" />
     <Compile Include="Components/AnalyticsDashboard.fs" />
     <Compile Include="Components/OrgSummary.fs" />
