@@ -119,7 +119,7 @@ let sqlParamReducer
    let evt, envelope = AccountEnvelope.unwrap evt
 
    let transactionSqlParams = [
-      "transactionId", TransactionSqlWriter.transactionId envelope.Id
+      "eventId", TransactionSqlWriter.eventId envelope.Id
 
       "accountId",
       envelope.EntityId
@@ -543,7 +543,7 @@ let upsertReadModels
 
       $"""
       INSERT into {TransactionSqlMapper.table}
-         ({TransactionFields.transactionId},
+         ({TransactionFields.eventId},
           {TransactionFields.accountId},
           {TransactionFields.orgId},
           {TransactionFields.correlationId},
@@ -556,7 +556,7 @@ let upsertReadModels
           {TransactionFields.source},
           {TransactionFields.moneyFlow})
       VALUES
-         (@transactionId,
+         (@eventId,
           @accountId,
           @orgId,
           @correlationId,
@@ -568,7 +568,7 @@ let upsertReadModels
           @amount,
           @source,
           @moneyFlow::{TransactionTypeCast.moneyFlow})
-      ON CONFLICT ({TransactionFields.transactionId})
+      ON CONFLICT ({TransactionFields.eventId})
       DO NOTHING;
       """,
       sqlParamsDerivedFromAccountEvents.Transaction

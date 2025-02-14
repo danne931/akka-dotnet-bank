@@ -58,6 +58,36 @@ let filtersToEventNames (filters: TransactionGroupFilter list) : string array =
       []
    |> List.toArray
 
+let filtersToOriginatingEventNames
+   (filters: TransactionGroupFilter list)
+   : string array
+   =
+   filters
+   |> List.fold
+      (fun acc e ->
+         acc
+         @ match e with
+           | TransactionGroupFilter.Purchase -> [ typeof<DebitedAccount>.Name ]
+           | TransactionGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
+           | TransactionGroupFilter.InternalTransferWithinOrg -> [
+              typeof<InternalTransferWithinOrgPending>.Name
+             ]
+           | TransactionGroupFilter.InternalTransferBetweenOrgs -> [
+              typeof<InternalTransferBetweenOrgsPending>.Name
+             ]
+           | TransactionGroupFilter.InternalAutomatedTransfer -> [
+              typeof<InternalAutomatedTransferPending>.Name
+             ]
+           | TransactionGroupFilter.DomesticTransfer -> [
+              typeof<DomesticTransferPending>.Name
+             ]
+           | TransactionGroupFilter.PlatformPayment -> [
+              typeof<PlatformPaymentPaid>.Name // Outgoing payments
+              typeof<PlatformPaymentDeposited>.Name // Incoming payments
+             ])
+      []
+   |> List.toArray
+
 let transactionQuery (query: TransactionQuery) =
    let table = TransactionSqlMapper.table
    let txnLimit = 30
@@ -71,40 +101,32 @@ let transactionQuery (query: TransactionQuery) =
       false
 
    let agg =
-      let queryParams, where, joinAncillary = agg
+      Option.fold
+         (fun (queryParams, where, joinAncillary) accountIds ->
+            [ "accountIds", Writer.accountIds accountIds ] @ queryParams,
+            $"{where} AND {Fields.accountId} = ANY(@accountIds)",
+            joinAncillary)
+         agg
+         query.AccountIds
 
-      let idParams =
-         [
-            query.AccountIds
-            |> Option.map (fun accountIds ->
-               Fields.accountId, "accountIds", Writer.accountIds accountIds)
+   let agg =
+      Option.fold
+         (fun (queryParams, where, joinAncillary) cardIds ->
+            [ "cardIds", Writer.cardIds cardIds ] @ queryParams,
+            $"{where} AND {Fields.cardId} = ANY(@cardIds)",
+            joinAncillary)
+         agg
+         query.CardIds
 
-            query.CardIds
-            |> Option.map (fun cardIds ->
-               Fields.cardId, "cardIds", Writer.cardIds cardIds)
-
-            query.InitiatedByIds
-            |> Option.map (fun initiatedByIds ->
-               Fields.initiatedById,
-               "initiatedByIds",
-               Writer.initiatedByIds initiatedByIds)
-         ]
-         |> List.choose id
-
-      match idParams with
-      | [] -> agg
-      | idParams ->
-         let idParams, idWhere =
-            List.fold
-               (fun (queryParams, where) (fieldName, paramName, sqlValue) ->
-                  let queryParams = (paramName, sqlValue) :: queryParams
-                  queryParams, $"{where} OR {fieldName} = ANY(@{paramName})")
-               ([], "")
-               idParams
-
-         idParams @ queryParams,
-         $"{where} AND ({idWhere.Substring 4})",
-         joinAncillary
+   let agg =
+      Option.fold
+         (fun (queryParams, where, joinAncillary) initiatedByIds ->
+            [ "initiatedByIds", Writer.initiatedByIds initiatedByIds ]
+            @ queryParams,
+            $"{where} AND {Fields.initiatedById} = ANY(@initiatedByIds)",
+            joinAncillary)
+         agg
+         query.InitiatedByIds
 
    let agg =
       Option.fold
@@ -121,37 +143,19 @@ let transactionQuery (query: TransactionQuery) =
          query.DateRange
 
    let agg =
-      match query.Diagnostic, query.MoneyFlow with
-      | true, Some direction ->
-         let queryParams, where, joinAncillary = agg
-
-         let queryParams =
-            ("direction", Writer.moneyFlow (Some direction)) :: queryParams
-
-         let where =
-            where
-            + $"""
-            AND 
-            (
-               {Fields.moneyFlow} = @direction::{TransactionTypeCast.moneyFlow}
-               OR {Fields.moneyFlow} IS NULL
-            )
-            """
-
-         queryParams, where, joinAncillary
-      | false, None ->
+      match query.MoneyFlow with
+      | None ->
          let queryParams, where, joinAncillary = agg
 
          queryParams,
          $"{where} AND {Fields.moneyFlow} IS NOT NULL",
          joinAncillary
-      | false, Some direction ->
+      | Some direction ->
          let queryParams, where, joinAncillary = agg
 
          ("direction", Writer.moneyFlow (Some direction)) :: queryParams,
          $"{where} AND {Fields.moneyFlow} = @direction::{TransactionTypeCast.moneyFlow}",
          joinAncillary
-      | true, None -> agg
 
    let agg =
       Option.fold
@@ -199,48 +203,87 @@ let transactionQuery (query: TransactionQuery) =
          query.Category
 
    let agg =
-      Option.fold
-         (fun (queryParams, where, joinAncillary) filters ->
-            [ "eventTypes", filters |> filtersToEventNames |> Sql.stringArray ]
-            @ queryParams,
-            $"{where} AND {Fields.name} = ANY(@eventTypes)",
-            joinAncillary)
-         agg
-         query.EventType
+      let queryParams, where, joinAncillary = agg
+
+      let filters =
+         query.EventType |> Option.defaultValue TransactionGroupFilter.All
+
+      let queryParams =
+         [
+            "eventTypes",
+            filters |> filtersToOriginatingEventNames |> Sql.stringArray
+         ]
+         @ queryParams
+
+      queryParams,
+      $"{where} AND {Fields.name} = ANY(@eventTypes)",
+      joinAncillary
 
    let queryParams, where, joinAncillaryTransactionTable = agg
 
-   let from =
+   let joinAncillaryTxnInfo =
       if joinAncillaryTransactionTable then
-         $"{table} LEFT JOIN {atiTable} using ({Fields.transactionId})"
+         Some $"LEFT JOIN {atiTable} using ({Fields.eventId})"
       else
-         table
+         None
 
    queryParams,
    $"""
-   SELECT {Fields.event}
-   FROM {from}
-   WHERE {where}
-   ORDER BY timestamp desc
-   LIMIT {txnLimit}
-   OFFSET @offset
+   WITH matching_transactions AS (
+      SELECT
+         {Fields.event},
+         {Fields.timestamp},
+         {Fields.correlationId},
+         {Fields.eventId},
+         {Fields.orgId}
+      FROM {table}
+      {joinAncillaryTxnInfo |> Option.defaultValue ""}
+      WHERE {where}
+      ORDER BY {Fields.timestamp} desc
+      LIMIT {txnLimit}
+      OFFSET @offset
+   ),
+   correlated_transactions AS (
+      SELECT
+         t.{Fields.event},
+         t.{Fields.timestamp},
+         t.{Fields.correlationId},
+         t.{Fields.eventId}
+      FROM {table} t
+      JOIN matching_transactions mt ON
+         t.{Fields.correlationId} = mt.{Fields.correlationId}
+         AND t.{Fields.eventId} != mt.{Fields.eventId}
+   )
+   SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM matching_transactions
+   UNION
+   SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM correlated_transactions
+   ORDER BY {Fields.timestamp}, {Fields.correlationId}
    """
 
-let getTransactions (query: TransactionQuery) =
-   let queryParams, queryString = transactionQuery query
+let getTransactions
+   (query: TransactionQuery)
+   : TaskResultOption<Map<TransactionId, Transaction.T>, Err>
+   =
+   taskResultOption {
+      let queryParams, queryString = transactionQuery query
 
-   pgQuery<AccountEvent> queryString (Some queryParams) (fun read ->
-      read.text Fields.event |> Serialization.deserializeUnsafe<AccountEvent>)
+      let! events =
+         pgQuery<AccountEvent> queryString (Some queryParams) (fun read ->
+            read.text Fields.event
+            |> Serialization.deserializeUnsafe<AccountEvent>)
+
+      return Transaction.fromAccountEvents events
+   }
 
 module Fields = AncillaryTransactionFields
 module Writer = AncillaryTransactionSqlWriter
 module Reader = AncillaryTransactionSqlReader
-let private table = AncillaryTransactionInfoSqlMapper.table
+let private atiTable = AncillaryTransactionInfoSqlMapper.table
 
-let upsertTransactionCategory (transactionId: EventId) (categoryId: int) = taskResult {
+let upsertTransactionCategory (transactionId: TransactionId) (categoryId: int) = taskResult {
    let query =
       $"""
-      INSERT INTO {table}
+      INSERT INTO {atiTable}
          ({Fields.transactionId}, {Fields.categoryId})
       VALUES
          (@transactionId, @categoryId)
@@ -257,20 +300,20 @@ let upsertTransactionCategory (transactionId: EventId) (categoryId: int) = taskR
    return res
 }
 
-let deleteTransactionCategory (transactionId: EventId) =
+let deleteTransactionCategory (transactionId: TransactionId) =
    let query =
       $"""
-      UPDATE {table}
+      UPDATE {atiTable}
       SET {Fields.categoryId} = null
       WHERE {Fields.transactionId} = @txnId
       """
 
    pgPersist query [ "txnId", Writer.transactionId transactionId ]
 
-let upsertTransactionNote (transactionId: EventId) (note: string) =
+let upsertTransactionNote (transactionId: TransactionId) (note: string) =
    let query =
       $"""
-      INSERT INTO {table}
+      INSERT INTO {atiTable}
          ({Fields.transactionId}, {Fields.note}, {Fields.categoryId})
       VALUES
          (@transactionId, @note, @categoryId)
@@ -317,34 +360,51 @@ let getCorrelatedTransactionConfirmations (correlationId: CorrelationId) =
       (Some [ "correlationId", Writer.correlationId correlationId ])
       rowReader
 
-let getTransactionInfo (txnId: EventId) =
-   let query =
-      $"""
-      SELECT
-         {TransactionSqlMapper.table}.{Fields.transactionId},
-         {TransactionSqlMapper.table}.{Fields.event},
-         {table}.{Fields.categoryId},
-         {table}.{Fields.note},
-         {CategorySqlMapper.table}.{CategoryFields.name} as category_name
-      FROM {TransactionSqlMapper.table}
-         LEFT JOIN {table} using({Fields.transactionId})
-         LEFT JOIN {CategorySqlMapper.table} using({Fields.categoryId})
-      WHERE {Fields.transactionId} = @transactionId
-      """
+let getTransactionInfo
+   (txnId: TransactionId)
+   : TaskResultOption<Transaction.TransactionWithAncillaryInfo, Err>
+   =
+   taskResultOption {
+      let fieldCorrelationId =
+         $"{TransactionSqlMapper.table}.{Fields.correlationId}"
 
-   let rowReader (read: RowReader) = {
-      Id = Reader.transactionId read
-      Event = Reader.event read
-      Category =
-         Reader.categoryId read
-         |> Option.map (fun catId -> {
-            Id = catId
-            Name = read.string "category_name"
-         })
-      Note = Reader.note read
+      let fieldTxnId = $"{atiTable}.{Fields.transactionId}"
+
+      let query =
+         $"""
+         SELECT
+            {fieldCorrelationId},
+            {TransactionSqlMapper.table}.{Fields.event},
+            {atiTable}.{Fields.categoryId},
+            {atiTable}.{Fields.note},
+            {CategorySqlMapper.table}.{CategoryFields.name} as category_name
+         FROM {TransactionSqlMapper.table}
+            LEFT JOIN {atiTable} ON {fieldTxnId} = {fieldCorrelationId}
+            LEFT JOIN {CategorySqlMapper.table} using({Fields.categoryId})
+         WHERE {fieldCorrelationId} = @transactionId
+         """
+
+      let! res =
+         pgQuery<AccountEvent * TransactionCategory option * string option>
+            query
+            (Some [ "transactionId", Writer.transactionId txnId ])
+            (fun read ->
+               Reader.event read,
+               Reader.categoryId read
+               |> Option.map (fun catId -> {
+                  Id = catId
+                  Name = read.string "category_name"
+               }),
+               Reader.note read)
+
+      let events = res |> List.map (fun (e, _, _) -> e)
+      let txn = (Transaction.fromAccountEvents events)[txnId]
+      let _, category, note = List.head res
+
+      return {
+         Id = txnId
+         Transaction = txn
+         Category = category
+         Note = note
+      }
    }
-
-   pgQuerySingle<TransactionWithAncillaryInfo>
-      query
-      (Some [ "transactionId", Writer.transactionId txnId ])
-      rowReader

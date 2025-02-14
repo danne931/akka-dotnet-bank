@@ -167,6 +167,13 @@ details
 .transaction-detail
   padding: 1rem
   background-color: var(--card-background-color)
+  font-size: 1rem
+  small
+    font-size: inherit
+  p
+    margin-bottom: 0
+  label
+    color: var(--muted-color)
 
   details
     margin-bottom: 0
@@ -178,6 +185,19 @@ details
     &:hover
       i
         border-color: var(--primary)
+
+  .transaction-detail-history
+    ul
+      padding-left: 0
+    li
+      background-color: var(--background-color)
+      box-shadow: var(--card-box-shadow)
+      border-radius: 1rem
+      p
+        font-size: 90%
+      small
+         font-size: 75%
+         color: var(--primary)
 
   section
     margin-top: 1.5rem

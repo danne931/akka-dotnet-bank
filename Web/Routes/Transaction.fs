@@ -19,7 +19,6 @@ let withQueryParams<'t> (func: TransactionQuery -> 't) =
    Func<
       Guid,
       string,
-      bool,
       int,
       string,
       Nullable<bool>,
@@ -35,7 +34,6 @@ let withQueryParams<'t> (func: TransactionQuery -> 't) =
       (fun
            ([<FromRoute>] orgId: Guid)
            ([<FromQuery>] accountIds: string)
-           ([<FromQuery>] diagnostic: bool)
            ([<FromQuery>] page: int)
            ([<FromQuery>] moneyFlow: string)
            ([<FromQuery>] isCategorized: Nullable<bool>)
@@ -61,7 +59,6 @@ let withQueryParams<'t> (func: TransactionQuery -> 't) =
          func {
             OrgId = OrgId orgId
             AccountIds = TransactionQuery.accountIdsFromQueryString accountIds
-            Diagnostic = diagnostic
             Page = page
             MoneyFlow = moneyFlowOpt
             Category = categoryOpt
@@ -96,7 +93,7 @@ let startTransactionRoutes (app: WebApplication) =
       .MapGet(
          TransactionPath.TransactionInfo,
          Func<Guid, Task<IResult>>(fun txnId ->
-            getTransactionInfo (EventId txnId)
+            getTransactionInfo (TransactionId(CorrelationId txnId))
             |> RouteUtil.unwrapTaskResultOption)
       )
       .RBAC(Permissions.GetTransactionInfo)
@@ -116,7 +113,9 @@ let startTransactionRoutes (app: WebApplication) =
       .MapPost(
          TransactionPath.Category,
          Func<Guid, int, Task<IResult>>(fun txnId categoryId ->
-            upsertTransactionCategory (EventId txnId) categoryId
+            upsertTransactionCategory
+               (TransactionId(CorrelationId txnId))
+               categoryId
             |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransactionCategory)
@@ -126,7 +125,7 @@ let startTransactionRoutes (app: WebApplication) =
       .MapDelete(
          TransactionPath.CategoryDelete,
          Func<Guid, Task<IResult>>(fun txnId ->
-            deleteTransactionCategory (EventId txnId)
+            deleteTransactionCategory (TransactionId(CorrelationId txnId))
             |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransactionCategory)
@@ -141,7 +140,9 @@ let startTransactionRoutes (app: WebApplication) =
                let! note = reader.ReadToEndAsync()
 
                return!
-                  upsertTransactionNote (EventId txnId) note
+                  upsertTransactionNote
+                     (TransactionId(CorrelationId txnId))
+                     note
                   |> RouteUtil.unwrapTaskResult
             with e ->
                return Results.Problem e.Message

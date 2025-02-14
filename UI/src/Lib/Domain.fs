@@ -118,7 +118,3 @@ module DateFilter =
       | "CurrentYear" -> Some DateFilter.CurrentYear
       | "LastYear" -> Some DateFilter.LastYear
       | str -> dateRangeFromQueryString str |> Option.map DateFilter.Custom
-
-let dateUIFriendly (date: DateTime) =
-   let dayAndMonth = date.ToLongDateString().Split(string date.Year)[0]
-   $"{dayAndMonth} {date.ToShortTimeString()}"

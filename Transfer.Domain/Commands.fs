@@ -785,7 +785,7 @@ module RequestPlatformPaymentCommand =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
-         (Guid.NewGuid() |> CorrelationId)
+         (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
 
@@ -914,14 +914,13 @@ type DepositPlatformPaymentCommand = Command<PlatformPaymentDeposited>
 module DepositPlatformPaymentCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      correlationId
       (initiatedBy: InitiatedById)
       (data: PlatformPaymentDeposited)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
-         correlationId
+         (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
 

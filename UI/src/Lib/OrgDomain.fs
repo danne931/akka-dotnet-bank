@@ -97,7 +97,7 @@ let orgHistoryUIFriendly (org: Org) (evt: OrgEvent) : OrgHistoryUIFriendly =
 
    let props = {
       Name = envelope.EventName
-      Date = dateUIFriendly envelope.Timestamp
+      Date = DateTime.dateUIFriendly envelope.Timestamp
       Amount = "-"
       Info = ""
       Initiator = ""

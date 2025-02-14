@@ -306,7 +306,6 @@ let actorProps
                let msg =
                   DepositPlatformPaymentCommand.create
                      (payee.AccountId, payee.OrgId)
-                     e.CorrelationId
                      e.InitiatedById
                      {
                         BaseInfo = e.Data.BaseInfo

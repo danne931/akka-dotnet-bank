@@ -172,7 +172,7 @@ let renderTableRow
 
          Html.td (
             card.Card.LastPurchaseAt
-            |> Option.map dateUIFriendly
+            |> Option.map DateTime.dateUIFriendly
             |> Option.defaultValue "-"
          )
 

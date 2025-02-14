@@ -163,7 +163,7 @@ module TransferSqlReader =
          Name = AccountSqlReader.name read
          AccountNumber = read.int64 AccountFields.accountNumber |> AccountNumber
          RoutingNumber = read.int AccountFields.routingNumber |> RoutingNumber
-         OrgId = AccountSqlReader.orgId read
+         OrgId = senderOrgId read
          AccountId = AccountSqlReader.accountId read
       }
 

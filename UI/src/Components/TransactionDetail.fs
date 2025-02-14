@@ -14,46 +14,13 @@ open UIDomain.Org
 open Bank.Transfer.Domain
 open Lib.SharedTypes
 open Dropdown
+open Transaction
 
 type private TransactionMaybe =
    Deferred<Result<TransactionWithAncillaryInfo option, Err>>
 
-/// Is the transaction detail component implemented for a given AccountEvent
-let hasRenderImplementation =
-   function
-   | AccountEvent.DepositedCash _
-   | AccountEvent.InternalTransferWithinOrgPending _
-   | AccountEvent.InternalTransferBetweenOrgsPending _
-   | AccountEvent.DomesticTransferPending _
-   | AccountEvent.DomesticTransferFailed _
-   //| OrgEvent.RegisteredDomesticTransferRecipient _
-   | AccountEvent.InternalTransferWithinOrgDeposited _
-   | AccountEvent.InternalTransferBetweenOrgsDeposited _
-   | AccountEvent.DebitedAccount _ -> true
-   | _ -> false
-
-/// May edit transfer recipient if domestic and status is not Closed.
-let canEditTransferRecipient
-   (org: Org)
-   (evt: AccountEvent)
-   : DomesticTransferRecipient option
-   =
-   let recipientIdOpt =
-      match evt with
-      | AccountEvent.DomesticTransferPending evt ->
-         Some evt.Data.BaseInfo.Recipient.RecipientAccountId
-      //| OrgEvent.RegisteredDomesticTransferRecipient
-      | AccountEvent.DomesticTransferFailed evt ->
-         Some evt.Data.BaseInfo.Recipient.RecipientAccountId
-      | _ -> None
-
-   recipientIdOpt
-   |> Option.bind (fun recipientId ->
-      Map.tryFind recipientId org.DomesticTransferRecipients)
-   |> Option.filter (fun r -> r.Status <> RecipientRegistrationStatus.Closed)
-
 type State = {
-   TransactionId: EventId
+   TransactionId: TransactionId
    Transaction: TransactionMaybe
    // Nickname may refer to transfer recipient or merchant
    // depending on the AccountEvent rendered.
@@ -362,15 +329,12 @@ let RecipientNicknameEditComponent
 
 [<ReactComponent>]
 let MerchantNicknameEditComponent
-   (debit: BankEvent<DebitedAccount>)
+   (orgId: OrgId)
+   (debitMerchant: string)
    (merchants: Map<string, Merchant>)
    dispatch
    =
-   let debitMerchant = debit.Data.Merchant
-
-   let merchantAlias =
-      merchants |> Map.tryFind (debitMerchant.ToLower()) |> Option.bind _.Alias
-
+   let merchantAlias = getMerchantAlias debitMerchant merchants
    let pendingNickname, setNickname = React.useState merchantAlias
 
    let nicknameInputRef = React.useInputRef ()
@@ -415,7 +379,7 @@ let MerchantNicknameEditComponent
                let msg =
                   Msg.SaveMerchantNickname(
                      {
-                        OrgId = debit.OrgId
+                        OrgId = orgId
                         Name = debitMerchant.ToLower()
                         Alias = pendingNickname
                      },
@@ -426,6 +390,32 @@ let MerchantNicknameEditComponent
       ]
    ]
 
+/// May edit transfer recipient if domestic and status is not Closed.
+let private canEditTransferRecipient
+   (org: Org)
+   (txn: Transaction.T)
+   : DomesticTransferRecipient option
+   =
+   let recipientIdOpt =
+      txn.Events
+      |> List.tryPick (function
+         | AccountEvent.DomesticTransferPending e ->
+            Some e.Data.BaseInfo.Recipient.RecipientAccountId
+         | _ -> None)
+
+   recipientIdOpt
+   |> Option.bind (fun recipientId ->
+      Map.tryFind recipientId org.DomesticTransferRecipients)
+   |> Option.filter (fun r -> r.Status <> RecipientRegistrationStatus.Closed)
+
+let private canAddCategoryAndNotes =
+   function
+   | TransactionType.InternalTransferBetweenOrgs
+   | TransactionType.DomesticTransfer
+   | TransactionType.Payment
+   | TransactionType.Purchase -> true
+   | _ -> false
+
 let renderTransactionInfo
    (org: OrgWithAccountProfiles)
    (txnInfo: TransactionWithAncillaryInfo)
@@ -434,7 +424,7 @@ let renderTransactionInfo
    (session: UserSession)
    dispatch
    =
-   let txn = transactionUIFriendly org txnInfo.Event
+   let txn = transactionUIFriendly org txnInfo.Transaction
 
    let RecipientNicknameEditComponent =
       RecipientNicknameEditComponent session org.Org dispatch
@@ -443,60 +433,69 @@ let renderTransactionInfo
       Html.h6 txn.Name
 
       Html.section [
-         (*
-         match txnInfo.Event with
-         | OrgEvent.RegisteredDomesticTransferRecipient e ->
-            let reci = e.Data.Recipient
-            Html.h3 $"{reci.Name} **{reci.AccountNumber.Last4}"
-         | _ -> ()
-         *)
-
          match txn.Amount with
          | Some amount -> Html.h3 amount
          | None -> ()
 
-         Html.small txn.Date
+         Html.small [
+            attr.text txn.Date
+            attr.style [ style.color "var(--primary)" ]
+         ]
       ]
 
       Html.section [
+         Html.div [
+            Html.small "Status:"
+            Html.p [
+               attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
+               attr.text txnInfo.Transaction.Status.Display
+            ]
+         ]
+
          match txn.Source with
          | Some source ->
             Html.div [
                Html.small "From:"
-               Html.h6 [
+               Html.p [
                   attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
                   attr.text source
                ]
             ]
          | None -> ()
 
-         match txnInfo.Event with
-         (*
-         | AccountEvent.DomesticTransferRecipient e when isEditingNickname ->
-            RecipientNicknameEditComponent
-               e.Data.Recipient.AccountId
-               RecipientAccountEnvironment.Domestic
-         *)
-         | AccountEvent.DomesticTransferPending e when isEditingNickname ->
-            RecipientNicknameEditComponent
-               e.Data.BaseInfo.Recipient.RecipientAccountId
-               RecipientAccountEnvironment.Domestic
-         | AccountEvent.DomesticTransferFailed e when isEditingNickname ->
-            RecipientNicknameEditComponent
-               e.Data.BaseInfo.Recipient.RecipientAccountId
-               RecipientAccountEnvironment.Domestic
-         | AccountEvent.DebitedAccount e when isEditingNickname ->
-            MerchantNicknameEditComponent e merchants dispatch
-         | _ ->
-            let txn =
-               eventWithMerchantAlias merchants txnInfo.Event
-               |> transactionUIFriendly org
+         match txnInfo.Transaction.Type with
+         | TransactionType.DomesticTransfer when isEditingNickname ->
+            match canEditTransferRecipient org.Org txnInfo.Transaction with
+            | Some recipient ->
+               RecipientNicknameEditComponent
+                  recipient.RecipientAccountId
+                  RecipientAccountEnvironment.Domestic
+            | None -> ()
+         | TransactionType.Purchase when isEditingNickname ->
+            let merchant =
+               txnInfo.Transaction.Events
+               |> List.tryLast
+               |> Option.bind (function
+                  | AccountEvent.DebitedAccount e ->
+                     getMerchantAlias e.Data.Merchant merchants
+                     |> Option.defaultValue e.Data.Merchant
+                     |> Some
+                  | _ -> None)
 
+            match merchant with
+            | Some merchant ->
+               MerchantNicknameEditComponent
+                  txnInfo.Transaction.OrgId
+                  merchant
+                  merchants
+                  dispatch
+            | None -> ()
+         | _ ->
             match txn.Destination with
             | Some destination ->
                Html.div [
                   Html.small "To:"
-                  Html.h6 [
+                  Html.p [
                      attr.style [
                         style.display.inlineBlock
                         style.marginLeft 10
@@ -505,6 +504,89 @@ let renderTransactionInfo
                   ]
                ]
             | None -> ()
+
+         classyNode Html.section [ "transaction-detail-history" ] [
+            Html.small "History:"
+            Html.ul [
+               for t in txnInfo.Transaction.Events do
+                  Html.li [
+                     match t with
+                     | AccountEvent.DomesticTransferPending e ->
+                        Html.p
+                           $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
+                     | AccountEvent.DomesticTransferProgress e ->
+                        Html.p $"Progress Update: {e.Data.InProgressInfo}"
+                     | AccountEvent.DomesticTransferFailed e ->
+                        Html.p $"Failed: {e.Data.Reason.Display}"
+
+                        Html.p
+                           $"Refunded account: {e.Data.BaseInfo.Sender.Name}"
+                     | AccountEvent.DomesticTransferCompleted _ ->
+                        Html.p "ACH transfer processor completed transfer"
+                     | AccountEvent.DomesticTransferScheduled e ->
+                        let date =
+                           DateTime.dateUIFriendly e.Data.BaseInfo.ScheduledDate
+
+                        Html.p $"Scheduled for {date}"
+                     | AccountEvent.PlatformPaymentRequested e ->
+                        Html.p (
+                           if e.OrgId = org.Org.OrgId then
+                              $"Payment request sent to {txn.Source}"
+                           else
+                              $"Received payment request from {txn.Destination}"
+                        )
+                     | AccountEvent.PlatformPaymentPaid _ ->
+                        Html.p $"Payment fulfilled by {txn.Source}"
+                     | AccountEvent.PlatformPaymentDeposited _ ->
+                        Html.p $"Deposit received by {txn.Destination}"
+                     | AccountEvent.DepositedCash e ->
+                        Html.p $"Deposited money via {e.Data.Origin}"
+                     | AccountEvent.DebitedAccount e ->
+                        let em = e.Data.EmployeePurchaseReference
+
+                        Html.p
+                           $"Purchase by {em.EmployeeName}'s card **{em.EmployeeCardNumberLast4}"
+                     | AccountEvent.InternalTransferWithinOrgPending e ->
+                        Html.p
+                           $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
+                     | AccountEvent.InternalTransferWithinOrgCompleted _ ->
+                        Html.p "Deduction of funds finalized"
+                     | AccountEvent.InternalTransferWithinOrgDeposited e ->
+                        Html.p
+                           $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                     | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
+                        let date =
+                           DateTime.dateUIFriendly e.Data.BaseInfo.ScheduledDate
+
+                        Html.p $"Scheduled for {date}"
+                     | AccountEvent.InternalTransferBetweenOrgsPending _ ->
+                        Html.p $"Funds deducted from {txn.Source}"
+                     | AccountEvent.InternalTransferBetweenOrgsCompleted _ ->
+                        Html.p "Deduction of funds finalized"
+                     | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
+                        Html.p
+                           $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                     | AccountEvent.InternalTransferBetweenOrgsFailed e ->
+                        Html.p $"Failed: {e.Data.Reason}"
+                     | AccountEvent.InternalAutomatedTransferPending _ ->
+                        Html.p $"Funds deducted from {txn.Source}"
+                     | AccountEvent.InternalAutomatedTransferCompleted _ ->
+                        Html.p "Deduction of funds finalized"
+                     | AccountEvent.InternalAutomatedTransferDeposited e ->
+                        Html.p
+                           $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                     | AccountEvent.InternalAutomatedTransferFailed e ->
+                        Html.p $"Failed: {e.Data.Reason}"
+                     | _ -> Html.p "Unknown"
+
+                     AccountEnvelope.unwrap t
+                     |> snd
+                     |> _.Timestamp
+                     |> DateTime.dateUIFriendlyWithSeconds
+                     |> Html.small
+                  ]
+            ]
+         ]
       ]
    ]
 
@@ -514,7 +596,7 @@ let renderCategorySelect
    dispatch
    =
    React.fragment [
-      Html.label [ Html.text "Category" ]
+      Html.label [ Html.text "Category:" ]
       Html.select [
          attr.onChange (fun (catId: string) ->
             Msg.SaveCategory(Map.tryFind (int catId) categories, Started)
@@ -536,7 +618,7 @@ let renderCategorySelect
 
 let renderNoteInput (txnInfo: TransactionMaybe) dispatch =
    React.fragment [
-      Html.label [ Html.text "Notes" ]
+      Html.label [ Html.text "Notes:" ]
       Html.input [
          attr.type' "text"
          attr.placeholder "Add a note"
@@ -561,62 +643,54 @@ let renderFooterMenuControls
    (isEditingNickname: bool)
    dispatch
    =
-   let evtOpt =
+   let dropdownItems =
       match txnInfo with
-      | Deferred.Resolved(Ok(Some txnInfo)) ->
-         match txnInfo.Event with
-         | AccountEvent.DomesticTransferPending _
-         | AccountEvent.DomesticTransferFailed _
-         //| AccountEvent.DomesticTransferRecipient _
-         | AccountEvent.InternalTransferWithinOrgDeposited _
-         | AccountEvent.InternalTransferBetweenOrgsDeposited _
-         | AccountEvent.DebitedAccount _ -> Some txnInfo.Event
+      | Deferred.Resolved(Ok(Some txn)) ->
+         match txn.Transaction.Type with
+         | TransactionType.DomesticTransfer ->
+            Some(
+               [
+                  {
+                     Text = "Nickname recipient"
+                     OnClick = fun _ -> dispatch ToggleNicknameEdit
+                     IsSelected = isEditingNickname
+                  }
+
+               ]
+               @ match canEditTransferRecipient org txn.Transaction with
+                 | None -> []
+                 | Some recipient -> [
+                    {
+                       Text = "Edit recipient"
+                       OnClick =
+                          fun _ ->
+                             recipient.RecipientAccountId
+                             |> Msg.EditTransferRecipient
+                             |> dispatch
+                       IsSelected = isEditingNickname
+                    }
+                   ]
+            )
+         | TransactionType.Purchase ->
+            Some [
+               {
+                  Text = "Edit merchant nickname"
+                  OnClick = fun _ -> dispatch ToggleNicknameEdit
+                  IsSelected = isEditingNickname
+               }
+            ]
          | _ -> None
       | _ -> None
 
    React.fragment [
-      match evtOpt with
+      match dropdownItems with
       | None -> ()
-      | Some evt ->
+      | Some items ->
          DropdownComponent {|
             Direction = DropdownDirection.RTL
             ShowCaret = false
             Button = None
-            Items =
-               match evt with
-               | AccountEvent.DebitedAccount _ -> [
-                  {
-                     Text = "Edit merchant nickname"
-                     OnClick = fun _ -> dispatch ToggleNicknameEdit
-                     IsSelected = isEditingNickname
-                  }
-                 ]
-               | AccountEvent.DomesticTransferPending _
-               //| AccountEvent.DomesticTransferRecipient _
-               | AccountEvent.DomesticTransferFailed _ ->
-                  //| AccountEvent.EditedDomesticTransferRecipient _ ->
-                  [
-                     {
-                        Text = "Nickname recipient"
-                        OnClick = fun _ -> dispatch ToggleNicknameEdit
-                        IsSelected = isEditingNickname
-                     }
-
-                  ]
-                  @ match canEditTransferRecipient org evt with
-                    | None -> []
-                    | Some recipient -> [
-                       {
-                          Text = "Edit recipient"
-                          OnClick =
-                             fun _ ->
-                                recipient.RecipientAccountId
-                                |> Msg.EditTransferRecipient
-                                |> dispatch
-                          IsSelected = isEditingNickname
-                       }
-                      ]
-               | _ -> []
+            Items = items
          |}
    ]
 
@@ -624,7 +698,7 @@ let renderFooterMenuControls
 let TransactionDetailComponent
    (session: UserSession)
    (org: OrgWithAccountProfiles)
-   (txnId: EventId)
+   (txnId: TransactionId)
    =
    let merchants = React.useContext MerchantProvider.stateContext
    let merchantDispatchCtx = React.useContext MerchantProvider.dispatchContext
@@ -657,13 +731,11 @@ let TransactionDetailComponent
 
       match state.Transaction with
       | Deferred.Resolved(Ok(Some txnInfo)) ->
-         Html.section [
-            match txnInfo.Event with
-            //| AccountEvent.DomesticTransferRecipient _ -> ()
-            | _ -> renderCategorySelect categories txnInfo dispatch
-
-            renderNoteInput state.Transaction dispatch
-         ]
+         if canAddCategoryAndNotes txnInfo.Transaction.Type then
+            Html.section [
+               renderCategorySelect categories txnInfo dispatch
+               renderNoteInput state.Transaction dispatch
+            ]
       | _ -> ()
 
       Html.section [

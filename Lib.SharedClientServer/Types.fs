@@ -44,6 +44,18 @@ type EventId =
       let (EventId id) = x
       string id
 
+type TransactionId =
+   | TransactionId of CorrelationId
+
+   override x.ToString() =
+      let (TransactionId id) = x
+      string id
+
+module TransactionId =
+   let get (txnId: TransactionId) : Guid =
+      let (TransactionId id) = txnId
+      CorrelationId.get id
+
 type OrgId =
    | OrgId of Guid
 
