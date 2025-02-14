@@ -32,7 +32,7 @@ module TransactionViews =
    let monthlyPurchaseAccruedByCard = "monthly_purchase_accrued_by_card"
 
 module TransactionFields =
-   let transactionId = "transaction_id"
+   let eventId = "event_id"
    let accountId = AccountFields.accountId
    let orgId = OrgFields.orgId
    let correlationId = "correlation_id"
@@ -46,8 +46,8 @@ module TransactionFields =
    let event = "event"
 
 module TransactionSqlReader =
-   let transactionId (read: RowReader) =
-      TransactionFields.transactionId |> read.uuid |> EventId
+   let eventId (read: RowReader) =
+      TransactionFields.eventId |> read.uuid |> EventId
 
    let accountId = AccountSqlReader.accountId
 
@@ -82,7 +82,7 @@ module TransactionSqlReader =
       |> Serialization.deserializeUnsafe<AccountEvent>
 
 module TransactionSqlWriter =
-   let transactionId (evtId: EventId) =
+   let eventId (evtId: EventId) =
       let (EventId id) = evtId
       Sql.uuid id
 

@@ -21,6 +21,18 @@ module DateTime =
    let rangeAsQueryString (startDate: DateTime) (endDate: DateTime) : string =
       toISOString startDate + "," + toISOString endDate
 
+   let dateUIFriendly (date: DateTime) =
+      let date = date.ToLocalTime()
+      let dayAndMonth = date.ToLongDateString().Split(string date.Year)[0]
+      $"{dayAndMonth} {date.ToShortTimeString()}"
+
+   let dateUIFriendlyWithSeconds (date: DateTime) =
+      let date = date.ToLocalTime()
+      let dayAndMonth = date.ToLongDateString().Split(string date.Year)[0]
+      let time = date.ToString("h:mm:ss.fff")
+      let isMorning = if date.Hour < 12 then "AM" else "PM"
+      $"{dayAndMonth} {time} {isMorning}"
+
 module Money =
    let private formatDecimal (amount: decimal) : string =
       if amount % 1m = 0m then

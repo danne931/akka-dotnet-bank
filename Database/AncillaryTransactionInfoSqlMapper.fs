@@ -1,17 +1,20 @@
 module AncillaryTransactionInfoSqlMapper
 
-open TransactionSqlMapper
 open CategorySqlMapper
+open Lib.SharedTypes
 
 let table = "ancillarytransactioninfo"
 
 module AncillaryTransactionFields =
-   let transactionId = TransactionFields.transactionId
+   let transactionId = "transaction_id"
    let categoryId = CategoryFields.catId
    let note = "note"
 
 module AncillaryTransactionSqlReader =
-   let transactionId = TransactionSqlReader.transactionId
+   let transactionId (read: RowReader) : TransactionId =
+      read.uuid AncillaryTransactionFields.transactionId
+      |> CorrelationId
+      |> TransactionId
 
    let categoryId (read: RowReader) =
       read.intOrNone AncillaryTransactionFields.categoryId
@@ -20,7 +23,8 @@ module AncillaryTransactionSqlReader =
       read.textOrNone AncillaryTransactionFields.note
 
 module AncillaryTransactionSqlWriter =
-   let transactionId = TransactionSqlWriter.transactionId
+   let transactionId (id: TransactionId) = TransactionId.get id |> Sql.uuid
+
    let categoryId = Sql.intOrNone
 
    let categoryIds (ids: int list option) =

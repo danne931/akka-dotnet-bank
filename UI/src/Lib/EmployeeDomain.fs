@@ -32,7 +32,7 @@ let employeeEventUIFriendly (txn: EmployeeHistory) : EmployeeHistoryUIFriendly =
    let _, envelope = EmployeeEnvelope.unwrap txn.Event
 
    let props = {
-      Date = dateUIFriendly envelope.Timestamp
+      Date = DateTime.dateUIFriendly envelope.Timestamp
       Name = ""
       Amount = "-"
       MoneyFlow = None

@@ -4,7 +4,6 @@ open Feliz
 open Feliz.UseElmish
 open Feliz.Router
 open Elmish
-open Fable.FontAwesome
 
 open Lib.SharedTypes
 open UIDomain
@@ -43,14 +42,13 @@ type State = {
 }
 
 type Msg =
-   | ToggleDiagnosticView
    | UpdateFilter of TransactionFilter
    | ResetPageIndex
    | LoadTransactions of
       TransactionQuery *
       AsyncOperationStatus<TransactionsMaybe>
    | RefreshTransactions of TransactionQuery
-   | ViewTransaction of EventId
+   | ViewTransaction of TransactionId
 
 let init (txnQuery: TransactionQuery) () =
    {
@@ -61,19 +59,6 @@ let init (txnQuery: TransactionQuery) () =
 
 let update msg state =
    match msg with
-   | ToggleDiagnosticView ->
-      let query = {
-         state.Query with
-            Page = 1
-            Diagnostic = not state.Query.Diagnostic
-      }
-
-      {
-         state with
-            Query = query
-            Transactions = Map [ 1, Deferred.Idle ]
-      },
-      Cmd.ofMsg (Msg.LoadTransactions(query, Started))
    | UpdateFilter filter ->
       let browserQuery = Routes.IndexUrl.accountBrowserQuery ()
 
@@ -125,7 +110,7 @@ let update msg state =
 
       {
          state with
-            Query = query
+            Query = { query with Page = 1 }
             Transactions = Map [ 1, Deferred.InProgress ]
       },
       Cmd.fromAsync load
@@ -385,95 +370,50 @@ let renderControlPanel
                      Content = Some card.Display
                   }
          ]
-      SubsequentChildren =
-         Some [
-            renderPagination state dispatch
-
-            Html.a [
-               attr.children [
-                  Fa.i [
-                     if state.Query.Diagnostic then
-                        Fa.Solid.EyeSlash
-                     else
-                        Fa.Solid.Eye
-                  ] []
-               ]
-
-               attr.href ""
-
-               attr.onClick (fun e ->
-                  e.preventDefault ()
-                  dispatch ToggleDiagnosticView)
-
-               attr.custom (
-                  "data-tooltip",
-                  if state.Query.Diagnostic then
-                     "Hide Diagnostic Events"
-                  else
-                     "Show Diagnostic Events"
-               )
-               attr.custom ("data-placement", "left")
-            ]
-         ]
+      SubsequentChildren = Some [ renderPagination state dispatch ]
    |}
 
 let renderTableRow
-   (selectedTxnId: EventId option)
-   (evt: AccountEvent)
-   (transactionDisplay: AccountEvent -> TransactionUIFriendly)
+   (selectedTxnId: TransactionId option)
+   (txn: Transaction.T)
+   (displayTransaction: Transaction.T -> TransactionUIFriendly)
    dispatch
    =
-   let txn = transactionDisplay evt
-   let orDefaultValue opt = opt |> Option.defaultValue "-"
-   let _, envelope = AccountEnvelope.unwrap evt
+   let txnDisplay = displayTransaction txn
 
    Html.tr [
-      attr.key (string envelope.Id)
+      attr.key (string txn.Id)
 
       match selectedTxnId with
-      | Some txnId when txnId = envelope.Id -> attr.classes [ "selected" ]
+      | Some txnId when txnId = txn.Id -> attr.classes [ "selected" ]
       | _ -> ()
 
-      if TransactionDetail.hasRenderImplementation evt then
-         attr.onClick (fun _ -> dispatch (Msg.ViewTransaction envelope.Id))
-      else
-         let paymentIdOpt =
-            match evt with
-            | AccountEvent.PlatformPaymentDeposited e -> Some e.Data.BaseInfo.Id
-            | AccountEvent.PlatformPaymentPaid e -> Some e.Data.BaseInfo.Id
-            | _ -> None
-
-         match paymentIdOpt with
-         | Some paymentId ->
-            attr.onClick (fun _ ->
-               Routes.PaymentUrl.selectedPath paymentId |> Router.navigate)
-         | None ->
-            attr.style [ style.cursor.defaultCursor; style.borderLeftWidth 0 ]
+      attr.onClick (fun _ -> dispatch (Msg.ViewTransaction txn.Id))
 
       attr.children [
          Html.th [ attr.scope "row" ]
 
          Html.td [
             attr.classes [
-               match txn.MoneyFlow with
-               | None -> ""
+               match txnDisplay.MoneyFlow with
+               | None -> ()
                | Some MoneyFlow.In -> "credit"
                | Some MoneyFlow.Out -> "debit"
             ]
 
-            attr.text (txn.Amount |> orDefaultValue)
+            attr.text (txnDisplay.Amount |> Option.defaultValue "-")
          ]
 
-         Html.td txn.Info
+         Html.td txnDisplay.Info
 
-         Html.td txn.Date
+         Html.td txnDisplay.Date
       ]
    ]
 
 let renderTable
-   (evts: AccountEvent list)
-   (selectedTxnId: EventId option)
-   (transactionDisplay: AccountEvent -> TransactionUIFriendly)
+   (evts: Transaction.T seq)
+   (selectedTxnId: TransactionId option)
+   (transactionDisplay: Transaction.T -> TransactionUIFriendly)
    dispatch
    =
    Html.table [
@@ -517,16 +457,7 @@ let TransactionTableComponent
    let state, dispatch = React.useElmish (init txnQuery, update, [||])
 
    React.useEffect (
-      fun () ->
-         // When filter applied, force page reset to 1 but keep selected
-         // diagnostic setting.
-         let txnQuery = {
-            txnQuery with
-               Page = 1
-               Diagnostic = state.Query.Diagnostic
-         }
-
-         dispatch (Msg.RefreshTransactions txnQuery)
+      fun () -> dispatch (Msg.RefreshTransactions txnQuery)
       , [| box org.Org.OrgId; box browserQuery.ChangeDetection |]
    )
 
@@ -538,6 +469,21 @@ let TransactionTableComponent
       match q.Amount, q.Category, q.MoneyFlow, q.DateRange, q.Page with
       | None, None, None, None, 1 -> true
       | _ -> false
+
+   let displayTransaction (txn: Transaction.T) =
+      let txn = {
+         txn with
+            Events =
+               txn.Events
+               |> List.map (function
+                  | AccountEvent.DebitedAccount e ->
+                     AccountEvent.DebitedAccount(
+                        debitWithMerchantAlias e merchants
+                     )
+                  | evt -> evt)
+      }
+
+      transactionUIFriendly org txn
 
    React.fragment [
       Html.progress [
@@ -555,21 +501,21 @@ let TransactionTableComponent
          match txns with
          | Some(Resolved(Ok None)) -> Html.p "No transactions found."
          | Some(Resolved(Ok(Some txns))) ->
-            // Combine txns matching query with txns received in real-time
-            // if no filters applied.
-            // TODO: Display real-time events separately & without regard to
-            //       applied filters.
             let txns =
-               if noFilterSelected then
-                  signalRCtx.RealtimeEvents @ txns
-                  |> List.distinctBy (AccountEnvelope.unwrap >> snd >> _.Id)
-               else
-                  txns
+               (if noFilterSelected then
+                   signalRCtx.RealtimeEvents
+                   |> List.fold Transaction.applyAccountEvent txns
+                else
+                   txns)
+               |> _.Values
+               |> Seq.sortByDescending _.Timestamp
 
-            let txnDisplay evt =
-               eventWithMerchantAlias merchants evt |> transactionUIFriendly org
+            renderTable
+               txns
+               browserQuery.Transaction
+               displayTransaction
+               dispatch
 
-            renderTable txns browserQuery.Transaction txnDisplay dispatch
             renderPagination state dispatch
          | _ -> ()
       ]

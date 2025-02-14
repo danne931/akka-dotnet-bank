@@ -453,9 +453,263 @@ module AccountLoadTestTypes =
       | Lookup
       | AccountEventPersisted of LoadTestEventPersisted
 
-type TransactionWithAncillaryInfo = {
-   Id: EventId
-   Event: AccountEvent
-   Category: TransactionCategory option
-   Note: string option
-}
+module Transaction =
+   [<RequireQualifiedAccess>]
+   type TransactionStatus =
+      | InProgress
+      | Complete
+      | Failed
+
+      member x.Display =
+         match x with
+         | TransactionStatus.Complete -> "Complete"
+         | TransactionStatus.InProgress -> "In Progress"
+         | TransactionStatus.Failed -> "Failed"
+
+   [<RequireQualifiedAccess>]
+   type TransactionType =
+      | Payment
+      | DomesticTransfer
+      | InternalTransferBetweenOrgs
+      | InternalTransferWithinOrg
+      | InternalAutomatedTransfer
+      | Purchase
+      | Deposit
+
+   type T = {
+      Type: TransactionType
+      Status: TransactionStatus
+      Events: AccountEvent list
+      Timestamp: DateTime
+      Amount: decimal
+      Id: TransactionId
+      OrgId: OrgId
+   }
+
+   type TransactionWithAncillaryInfo = {
+      Id: TransactionId
+      Transaction: T
+      Category: TransactionCategory option
+      Note: string option
+   }
+
+   let transactionInfoFromAccountEvent
+      (evt: AccountEvent)
+      : (TransactionType * TransactionStatus * decimal * AccountEvent) option
+      =
+      match evt with
+      | AccountEvent.InternalTransferWithinOrgPending e ->
+         Some(
+            TransactionType.InternalTransferWithinOrg,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalTransferWithinOrgFailed e ->
+         Some(
+            TransactionType.InternalTransferWithinOrg,
+            TransactionStatus.Failed,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalTransferWithinOrgCompleted e ->
+         Some(
+            TransactionType.InternalTransferWithinOrg,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalTransferWithinOrgDeposited e ->
+         Some(
+            TransactionType.InternalTransferWithinOrg,
+            TransactionStatus.Complete,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalTransferBetweenOrgsPending e ->
+         Some(
+            TransactionType.InternalTransferBetweenOrgs,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalTransferBetweenOrgsFailed e ->
+         Some(
+            TransactionType.InternalTransferBetweenOrgs,
+            TransactionStatus.Failed,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalTransferBetweenOrgsCompleted e ->
+         Some(
+            TransactionType.InternalTransferBetweenOrgs,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
+         Some(
+            TransactionType.InternalTransferBetweenOrgs,
+            TransactionStatus.Complete,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalAutomatedTransferPending e ->
+         Some(
+            TransactionType.InternalAutomatedTransfer,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalAutomatedTransferCompleted e ->
+         Some(
+            TransactionType.InternalAutomatedTransfer,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalAutomatedTransferDeposited e ->
+         Some(
+            TransactionType.InternalAutomatedTransfer,
+            TransactionStatus.Complete,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.InternalAutomatedTransferFailed e ->
+         Some(
+            TransactionType.InternalAutomatedTransfer,
+            TransactionStatus.Failed,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.DepositedCash e ->
+         Some(
+            TransactionType.Deposit,
+            TransactionStatus.Complete,
+            e.Data.Amount,
+            evt
+         )
+      | AccountEvent.DebitedAccount e ->
+         Some(
+            TransactionType.Purchase,
+            TransactionStatus.Complete,
+            e.Data.Amount,
+            evt
+         )
+      | AccountEvent.DomesticTransferPending e ->
+         Some(
+            TransactionType.DomesticTransfer,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.DomesticTransferCompleted e ->
+         Some(
+            TransactionType.DomesticTransfer,
+            TransactionStatus.Complete,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.DomesticTransferProgress e ->
+         Some(
+            TransactionType.DomesticTransfer,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.DomesticTransferFailed e ->
+         Some(
+            TransactionType.DomesticTransfer,
+            TransactionStatus.Failed,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.PlatformPaymentRequested e ->
+         Some(
+            TransactionType.Payment,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.PlatformPaymentDeclined e ->
+         Some(
+            TransactionType.Payment,
+            TransactionStatus.Failed,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.PlatformPaymentCancelled e ->
+         Some(
+            TransactionType.Payment,
+            TransactionStatus.Failed,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.PlatformPaymentPaid e ->
+         Some(
+            TransactionType.Payment,
+            TransactionStatus.Complete,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | AccountEvent.PlatformPaymentDeposited e ->
+         Some(
+            TransactionType.Payment,
+            TransactionStatus.Complete,
+            e.Data.BaseInfo.Amount,
+            evt
+         )
+      | _ -> None
+
+   let applyAccountEvent
+      (txns: Map<TransactionId, T>)
+      (evt: AccountEvent)
+      : Map<TransactionId, T>
+      =
+      match transactionInfoFromAccountEvent evt with
+      | Some(txnType, status, amount, evt) ->
+         let _, envelope = AccountEnvelope.unwrap evt
+         let txnId = TransactionId envelope.CorrelationId
+
+         match txns.TryFind txnId with
+         | Some _ ->
+            txns
+            |> Map.change
+                  txnId
+                  (Option.map (fun txn ->
+                     let txn = {
+                        txn with
+                           Status = status
+                           Events = evt :: txn.Events
+                     }
+
+                     // For most transactions the timestamp shown will be the
+                     // timestamp of the start of a transaction's lifecycle.
+                     // (ex: The timestamp of a domestic transfer initiating
+                     //      processing rather than when it finished potentially
+                     //      days later.)
+                     // An exception will be made for payments received.  We will
+                     // show the timestamp of when an incoming payment was received,
+                     // rather than their respective lifecycle start "PaymentRequested"
+                     // timestamps.
+                     match evt with
+                     | AccountEvent.PlatformPaymentDeposited e -> {
+                        txn with
+                           Timestamp = e.Timestamp
+                       }
+                     | _ -> txn))
+         | None ->
+            txns
+            |> Map.add txnId {
+               Type = txnType
+               Status = status
+               Events = [ evt ]
+               Timestamp = envelope.Timestamp
+               Amount = amount
+               Id = TransactionId envelope.CorrelationId
+               OrgId = envelope.OrgId
+            }
+      | None -> txns
+
+   let fromAccountEvents (events: AccountEvent list) : Map<TransactionId, T> =
+      events |> List.fold applyAccountEvent Map.empty

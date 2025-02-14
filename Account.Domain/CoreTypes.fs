@@ -110,8 +110,18 @@ type TransactionGroupFilter =
          "Domestic transfers outside the platform"
       | TransactionGroupFilter.PlatformPayment ->
          "Payments between orgs on the platform"
-//| TransactionGroupFilter.ThirdPartyPayment ->
-//   "Payments outside the platform"
+   //| TransactionGroupFilter.ThirdPartyPayment ->
+   //   "Payments outside the platform"
+
+   static member All = [
+      TransactionGroupFilter.Purchase
+      TransactionGroupFilter.Deposit
+      TransactionGroupFilter.InternalTransferWithinOrg
+      TransactionGroupFilter.InternalTransferBetweenOrgs
+      TransactionGroupFilter.InternalAutomatedTransfer
+      TransactionGroupFilter.DomesticTransfer
+      TransactionGroupFilter.PlatformPayment
+   ]
 
 module TransactionGroupFilter =
    let fromString =
@@ -145,7 +155,6 @@ module TransactionGroupFilter =
 type TransactionQuery = {
    OrgId: OrgId
    AccountIds: (AccountId list) option
-   Diagnostic: bool
    Page: int
    MoneyFlow: MoneyFlow option
    Category: CategoryFilter option

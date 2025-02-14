@@ -464,7 +464,7 @@ CREATE TABLE transaction (
    money_flow money_flow,
    source VARCHAR(100),
    timestamp TIMESTAMPTZ NOT NULL,
-   transaction_id UUID PRIMARY KEY,
+   event_id UUID PRIMARY KEY,
    account_id UUID NOT NULL REFERENCES account ON DELETE CASCADE,
    initiated_by_id UUID NOT NULL REFERENCES employee(employee_id),
    correlation_id UUID NOT NULL,
@@ -483,14 +483,14 @@ CREATE INDEX transaction_org_id_idx ON transaction(org_id);
 CREATE INDEX transaction_accrued_amount_view_query_idx ON transaction(amount, name, timestamp);
 
 COMMENT ON TABLE transaction IS
-'Transaction is the read model representation of Akka event sourced account txns.';
+'Transaction is the read model representation of Akka event sourced account events.';
 COMMENT ON COLUMN transaction.event IS
 'Representation of the transaction in its Akka event sourcing form.';
 COMMENT ON COLUMN transaction.source IS
 'Source may be a merchant name, transfer recipient name, etc. depending on the transaction type.
 This property is used only for analytics queries.';
 COMMENT ON COLUMN transaction.correlation_id IS
-'Correlation ID allows us to trace the lifecycle of some event
+'Correlation ID allows us to trace the lifecycle of some transaction
 (ex: DomesticTransferRequested -> DomesticTransferProgressUpdate -> DomesticTransferCompleted)
 is an example where 3 events share the same correlation_id.';
 
@@ -498,7 +498,7 @@ is an example where 3 events share the same correlation_id.';
 CREATE TABLE ancillarytransactioninfo (
    note TEXT,
    category_id SMALLSERIAL REFERENCES category,
-   transaction_id UUID PRIMARY KEY REFERENCES transaction ON DELETE CASCADE
+   transaction_id UUID PRIMARY KEY
 );
 
 SELECT add_created_at_column('ancillarytransactioninfo');
@@ -517,6 +517,9 @@ Ancillary transaction info is inserted lazily when the user first provides
 this supporting info within the transaction detail component.
 TODO: Consider how we might attempt to automatically categorize incoming transactions so
 organizations would not have to apply these categories by hand.';
+
+COMMENT ON COLUMN ancillarytransactioninfo.transaction_id IS
+'transaction_id refers to the correlation_id of a transaction table record.';
 
 
 --- BALANCE HISTORY ---

@@ -21,7 +21,6 @@ let transactionQueryFromAccountBrowserQuery
    {
       OrgId = orgId
       AccountIds = query.Accounts |> Option.map (List.map _.AccountId)
-      Diagnostic = false
       Page = 1
       Category = query.Category
       MoneyFlow = query.MoneyFlow
@@ -36,8 +35,8 @@ let transactionQueryFromAccountBrowserQuery
 
 let transactionQueryParams (query: TransactionQuery) : (string * string) list =
    let queryParams =
-      [ "diagnostic", string query.Diagnostic; "page", string query.Page ]
-      @ AccountBrowserQuery.toQueryParams {
+      ("page", string query.Page)
+      :: AccountBrowserQuery.toQueryParams {
          Amount = query.Amount
          Category = query.Category
          MoneyFlow = query.MoneyFlow
@@ -71,6 +70,8 @@ let transactionQueryParams (query: TransactionQuery) : (string * string) list =
    | Some(startDate, endDate) ->
       ("date", DateTime.rangeAsQueryString startDate endDate) :: queryParams
 
+open Transaction
+
 let getTransactions (query: TransactionQuery) : Async<TransactionsMaybe> = async {
    let basePath = TransactionPath.transactions query.OrgId
 
@@ -87,7 +88,7 @@ let getTransactions (query: TransactionQuery) : Async<TransactionsMaybe> = async
    else
       return
          responseText
-         |> Serialization.deserialize<AccountEvent list>
+         |> Serialization.deserialize<Map<TransactionId, Transaction.T>>
          |> Result.map Some
 }
 
@@ -104,7 +105,7 @@ let getCategories () : Async<Result<Map<int, TransactionCategory>, Err>> = async
 }
 
 let getTransactionInfo
-   (txnId: EventId)
+   (txnId: TransactionId)
    : Async<Result<TransactionWithAncillaryInfo option, Err>>
    =
    async {
@@ -142,7 +143,7 @@ let getCorrelatedTransactionConfirmations
    }
 
 let updateCategory
-   (txnId: EventId)
+   (txnId: TransactionId)
    (categoryId: int)
    : Async<Result<int, Err>>
    =
@@ -158,7 +159,7 @@ let updateCategory
          return Serialization.deserialize<int> responseText
    }
 
-let deleteCategory (txnId: EventId) : Async<Result<int, Err>> = async {
+let deleteCategory (txnId: TransactionId) : Async<Result<int, Err>> = async {
    let! code, responseText = Http.delete (TransactionPath.categoryDelete txnId)
 
    if code <> 200 then
@@ -167,7 +168,7 @@ let deleteCategory (txnId: EventId) : Async<Result<int, Err>> = async {
       return Serialization.deserialize<int> responseText
 }
 
-let updateNote (txnId: EventId) (note: string) : Async<Result<int, Err>> = async {
+let updateNote (txnId: TransactionId) (note: string) : Async<Result<int, Err>> = async {
    let! code, responseText = Http.post (TransactionPath.note txnId) note
 
    if code <> 200 then

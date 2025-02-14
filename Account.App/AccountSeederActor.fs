@@ -342,7 +342,9 @@ let seedBalanceHistory () = taskResultOption {
             to_jsonb(@timestamp),
             false
          )
-      WHERE {TransactionFields.correlationId} = @correlationId;
+      WHERE
+         {TransactionFields.correlationId} = @CorrelationId
+         AND {TransactionFields.name} <> 'InternalTransferBetweenOrgsPending';
       """,
       sqlParams
    ]
@@ -644,31 +646,35 @@ let mockEmployeesPendingInviteConfirmation =
    })
 
 let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task {
+   let buffer = DateTime.UtcNow.AddDays(-2)
+
    // Payment requests from main demo org to other orgs
    let requestsFromDemoAccount = [
       for payer in paymentPayers ->
-         payer,
-         RequestPlatformPaymentCommand.create
-            (arCheckingAccountId, orgId)
-            mockAccountOwnerId
-            {
-               Memo = "Services rendered..."
-               Expiration = None
-               BaseInfo = {
-                  InitiatedById = mockAccountOwnerId
-                  Id = Guid.NewGuid() |> PaymentId
-                  Amount = randomAmount 3000 5000
-                  Payee = {
-                     OrgId = orgId
-                     OrgName = orgName
-                     AccountId = arCheckingAccountId
-                  }
-                  Payer = {
-                     OrgId = payer.OrgId
-                     OrgName = payer.BusinessName
+         let cmd =
+            RequestPlatformPaymentCommand.create
+               (arCheckingAccountId, orgId)
+               mockAccountOwnerId
+               {
+                  Memo = "Services rendered..."
+                  Expiration = None
+                  BaseInfo = {
+                     InitiatedById = mockAccountOwnerId
+                     Id = Guid.NewGuid() |> PaymentId
+                     Amount = randomAmount 3000 5000
+                     Payee = {
+                        OrgId = orgId
+                        OrgName = orgName
+                        AccountId = arCheckingAccountId
+                     }
+                     Payer = {
+                        OrgId = payer.OrgId
+                        OrgName = payer.BusinessName
+                     }
                   }
                }
-            }
+
+         payer, { cmd with Timestamp = buffer }
    ]
 
    for _, request in requestsFromDemoAccount do
@@ -683,7 +689,6 @@ let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task
    for payer, request in [ List.head requestsFromDemoAccount ] do
       let info = request.Data.BaseInfo
       let accountId = payer.PrimaryAccountId
-      let buffer = DateTime.UtcNow.AddDays(-2)
 
       let msg =
          {
@@ -701,7 +706,7 @@ let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task
                   }
                   PaymentMethod = accountId
                } with
-               Timestamp = buffer
+               Timestamp = buffer.AddHours 2
          }
          |> AccountCommand.FulfillPlatformPayment
          |> AccountMessage.StateChange
@@ -999,7 +1004,7 @@ let seedAccountOwnerActions
                      mockAccountOwnerId
                      {
                         Amount = randomAmount 5000 20_000
-                        Origin = Some "Deposit"
+                        Origin = Some "ATM"
                      } with
                      Timestamp = timestamp.AddDays(float maxDays)
                }
@@ -1338,7 +1343,7 @@ let seedAccountTransactions
             {
                DepositCashCommand.create compositeId mockAccountOwnerId {
                   Amount = depositAmount
-                  Origin = Some "Deposit"
+                  Origin = Some "ATM"
                } with
                   Timestamp = timestamp
             }

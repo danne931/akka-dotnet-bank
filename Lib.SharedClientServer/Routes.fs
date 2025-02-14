@@ -98,7 +98,7 @@ module TransactionPath =
 
    let TransactionInfo = Base + "/transaction/{txnId}"
 
-   let transactionInfo (id: EventId) = $"{Base}/transaction/{id}"
+   let transactionInfo (id: TransactionId) = $"{Base}/transaction/{id}"
 
    let TransactionConfirmation =
       Base + "/transaction-confirmation/{correlationId}"
@@ -109,12 +109,14 @@ module TransactionPath =
    let Category = TransactionInfo + "/category/{categoryId}"
    let CategoryDelete = TransactionInfo + "/category"
 
-   let category (txnId: EventId) (categoryId: int) =
+   let category (txnId: TransactionId) (categoryId: int) =
       transactionInfo txnId + $"/category/{categoryId}"
 
-   let categoryDelete (txnId: EventId) = transactionInfo txnId + "/category"
+   let categoryDelete (txnId: TransactionId) =
+      transactionInfo txnId + "/category"
+
    let Note = TransactionInfo + "/note"
-   let note (txnId: EventId) = transactionInfo txnId + "/note"
+   let note (txnId: TransactionId) = transactionInfo txnId + "/note"
 
 module EmployeePath =
    let Base = $"{API}/employees"
