@@ -376,13 +376,16 @@ let renderControlPanel
 let renderTableRow
    (selectedTxnId: TransactionId option)
    (txn: Transaction.T)
-   (displayTransaction: Transaction.T -> TransactionUIFriendly)
+   (txnDisplay: TransactionUIFriendly)
    dispatch
    =
-   let txnDisplay = displayTransaction txn
-
    Html.tr [
       attr.key (string txn.Id)
+
+      match txn.Status with
+      | Transaction.TransactionStatus.Complete -> ()
+      | Transaction.TransactionStatus.InProgress -> attr.classes [ "warning" ]
+      | Transaction.TransactionStatus.Failed -> attr.classes [ "error" ]
 
       match selectedTxnId with
       | Some txnId when txnId = txn.Id -> attr.classes [ "selected" ]
@@ -411,9 +414,9 @@ let renderTableRow
    ]
 
 let renderTable
-   (evts: Transaction.T seq)
+   (txns: Transaction.T seq)
    (selectedTxnId: TransactionId option)
-   (transactionDisplay: Transaction.T -> TransactionUIFriendly)
+   (displayTransaction: Transaction.T -> TransactionUIFriendly)
    dispatch
    =
    Html.table [
@@ -433,8 +436,12 @@ let renderTable
          ]
 
          Html.tbody [
-            for evt in evts ->
-               renderTableRow selectedTxnId evt transactionDisplay dispatch
+            for txn in txns ->
+               renderTableRow
+                  selectedTxnId
+                  txn
+                  (displayTransaction txn)
+                  dispatch
          ]
       ]
    ]

@@ -575,6 +575,11 @@ table.clickable-table tbody tr
   cursor: pointer
   border-left: solid transparent 0.2rem
 
+  &.warning
+    border-color: var(--secondary)
+  &.error
+    border-color: var(--del-color)
+
   &.selected, &:hover
     border-color: var(--primary)
 
