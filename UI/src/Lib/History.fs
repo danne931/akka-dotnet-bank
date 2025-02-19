@@ -7,6 +7,7 @@ open Bank.Employee.Domain
 open UIDomain.Org
 open Lib.SharedTypes
 open Lib.NetworkQuery
+open CommandApprovalRule
 
 type HistoryMaybe = Result<History list option, Err>
 
@@ -19,6 +20,11 @@ type HistoryUIFriendly = {
    MoneyFlow: MoneyFlow option
    Initiator: string
 }
+
+let amountFromApprovableCommand cmd =
+   match cmd with
+   | ApprovableCommand.AmountBased _ -> Some(Money.format cmd.Amount)
+   | _ -> None
 
 let orgHistoryUIFriendly (org: Org) (history: OrgHistory) : HistoryUIFriendly =
    let _, envelope = OrgEnvelope.unwrap history.Event
@@ -99,26 +105,31 @@ let orgHistoryUIFriendly (org: Org) (history: OrgHistory) : HistoryUIFriendly =
       props with
          Info =
             $"Requested approval for {ApprovableCommand.displayVerbose e.Data.Command}"
+         Amount = amountFromApprovableCommand e.Data.Command
      }
    | OrgEvent.CommandApprovalAcquired e -> {
       props with
          Info =
             $"Approval acquired for {ApprovableCommand.displayVerbose e.Data.Command}"
+         Amount = amountFromApprovableCommand e.Data.Command
      }
    | OrgEvent.CommandApprovalDeclined e -> {
       props with
          Info =
             $"Approval declined for {ApprovableCommand.displayVerbose e.Data.Command}"
+         Amount = amountFromApprovableCommand e.Data.Command
      }
    | OrgEvent.CommandApprovalProcessCompleted e -> {
       props with
          Info =
             $"Approval complete for {ApprovableCommand.displayVerbose e.Data.Command}"
+         Amount = amountFromApprovableCommand e.Data.Command
      }
    | OrgEvent.CommandApprovalTerminated e -> {
       props with
          Info =
             $"Approval terminated early for {ApprovableCommand.displayVerbose e.Data.Command} due to {e.Data.Reason}"
+         Amount = amountFromApprovableCommand e.Data.Command
      }
 
 let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =

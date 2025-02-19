@@ -7,6 +7,7 @@ open Akka.Persistence.Extras
 open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
+open System
 open System.Threading.Tasks
 
 open Lib.SharedTypes
@@ -55,31 +56,47 @@ let private sendApprovedCommand
       | InviteEmployee cmd ->
          let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
 
-         let cmd = EmployeeCommand.ApproveAccess cmd
+         let cmd =
+            { cmd with Timestamp = DateTime.UtcNow }
+            |> EmployeeCommand.ApproveAccess
+
          employeeRef <! EmployeeMessage.StateChange cmd
       | UpdateEmployeeRole cmd ->
          let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
 
-         let cmd = EmployeeCommand.UpdateRole cmd
+         let cmd =
+            { cmd with Timestamp = DateTime.UtcNow }
+            |> EmployeeCommand.UpdateRole
+
          employeeRef <! EmployeeMessage.StateChange cmd
    | ApprovableCommand.AmountBased c ->
       match c with
       | FulfillPlatformPayment cmd ->
          let accountRef = getAccountRef (AccountId.fromEntityId cmd.EntityId)
 
-         let cmd = AccountCommand.FulfillPlatformPayment cmd
+         let cmd =
+            { cmd with Timestamp = DateTime.UtcNow }
+            |> AccountCommand.FulfillPlatformPayment
+
          accountRef <! AccountMessage.StateChange cmd
       | DomesticTransfer cmd ->
          let accountRef = getAccountRef (AccountId.fromEntityId cmd.EntityId)
-         let cmd = AccountCommand.DomesticTransfer cmd
+
+         let cmd =
+            { cmd with Timestamp = DateTime.UtcNow }
+            |> AccountCommand.DomesticTransfer
+
          accountRef <! AccountMessage.StateChange cmd
       | InternalTransferBetweenOrgs cmd ->
          let accountRef = getAccountRef cmd.Data.Sender.AccountId
-         let cmd = AccountCommand.InternalTransferBetweenOrgs cmd
+
+         let cmd =
+            { cmd with Timestamp = DateTime.UtcNow }
+            |> AccountCommand.InternalTransferBetweenOrgs
+
          accountRef <! AccountMessage.StateChange cmd
 
-// Does the approvable command contribute to the OrgAccrualMetric
-// daily tally?
+// Does the approvable command contribute to the OrgAccrualMetric daily tally?
 let private hasAccruableTransaction
    (cmd: ApprovableCommand)
    : OrgAccrualMetric option
