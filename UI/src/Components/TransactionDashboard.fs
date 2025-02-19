@@ -26,7 +26,10 @@ let navigation (view: AccountActionView option) =
    }
    |> Routes.TransactionsUrl.queryPath
 
-type State = { PendingAction: Envelope option }
+type State = {
+   PendingAction: Envelope option
+   EventsReceivedViaSignalRWhenNoPendingAction: Set<CorrelationId>
+}
 
 type Msg =
    | Cancel
@@ -36,34 +39,57 @@ type Msg =
    | SubmitCommandForApproval of action: string
    | Noop
 
-let init () = { PendingAction = None }, Cmd.none
+let init () =
+   {
+      PendingAction = None
+      EventsReceivedViaSignalRWhenNoPendingAction = Set.empty
+   },
+   Cmd.none
+
+let closeForm state =
+   { state with PendingAction = None }, Cmd.navigate (navigation None)
 
 // HTTP request returned 200. Command accepted by network.  Wait
 // for account actor cluster to successfully process the command into
 // an event and send out a confirmation via SignalR.
-let networkAck state (envelope: Envelope) =
-   let state = {
-      state with
-         PendingAction = Some envelope
-   }
+let networkAck (state: State) (envelope: Envelope) =
+   // Fixes SignalR event dispatched from account actor received before network ack
+   let signalREventReceivedBeforeNetworkResponseReceived =
+      state.EventsReceivedViaSignalRWhenNoPendingAction
+      |> Set.contains envelope.CorrelationId
 
-   let delayedMsg = Msg.CheckForEventConfirmation(envelope, 1)
+   if signalREventReceivedBeforeNetworkResponseReceived then
+      closeForm state
+   else
+      let state = {
+         state with
+            PendingAction = Some envelope
+      }
 
-   state, Cmd.fromTimeout 3000 delayedMsg
+      let delayedMsg = Msg.CheckForEventConfirmation(envelope, 1)
+
+      state, Cmd.fromTimeout 3000 delayedMsg
 
 let update
    (handlePollingConfirmation: AccountEventPersistedConfirmation list -> unit)
-   msg
+   (msg: Msg)
    (state: State)
    =
    match msg with
    | Cancel -> state, Cmd.navigate (navigation None)
    | NetworkAckCommand envelope -> networkAck state envelope
-   | AccountEventReceived _ when state.PendingAction.IsNone -> state, Cmd.none
+   | AccountEventReceived correlationId when state.PendingAction.IsNone ->
+      {
+         state with
+            EventsReceivedViaSignalRWhenNoPendingAction =
+               state.EventsReceivedViaSignalRWhenNoPendingAction
+               |> Set.add correlationId
+      },
+      Cmd.none
    | AccountEventReceived correlationId ->
       match state.PendingAction with
       | Some envelope when envelope.CorrelationId = correlationId ->
-         { state with PendingAction = None }, Cmd.navigate (navigation None)
+         closeForm state
       | _ -> state, Cmd.none
    // Verify the PendingAction was persisted.
    // If a SignalR event doesn't dispatch a Msg.AccountEventReceived within
@@ -265,7 +291,7 @@ let TransactionDashboardComponent
       )
 
    SignalRAccountEventProvider.useAccountEventSubscription {
-      ComponentName = "AccountAction"
+      ComponentName = "TransactionDashboard"
       OrgId = Some session.OrgId
       OnReceive =
          fun conf ->
