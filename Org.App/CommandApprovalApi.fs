@@ -1,6 +1,8 @@
 module Bank.CommandApproval.Api
 
+open System
 open Akkling
+open Akka.Actor
 open FsToolkit.ErrorHandling
 open System.Threading.Tasks
 
@@ -163,3 +165,27 @@ let getCommandApprovals
          "terminatedStatus", Sql.string "Terminated"
       ])
       commandApprovalProgressReader
+
+/// Provides employee accrual metrics before a user submits a domestic
+/// transfer, internal transfer between orgs, or payment.
+/// The CommandApprovalDailyAccrual metrics are used in
+/// CommandApprovalRule.requiresCommandApproval to determine if an employee
+/// is attempting to submit a command above the configured daily limit for that
+/// command (as specified in an org's configured command approval rules).
+let getTodaysCommandApprovalDailyAccrualByInitiatedBy
+   (system: ActorSystem)
+   (orgId: OrgId)
+   (initiatedById: InitiatedById)
+   : Task<CommandApprovalDailyAccrual>
+   =
+   task {
+      let ref = OrgActor.get system orgId
+
+      let! accrual =
+         ref.Ask(
+            OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy initiatedById,
+            Some(TimeSpan.FromSeconds 3)
+         )
+
+      return accrual
+   }

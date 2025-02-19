@@ -1,8 +1,13 @@
-begin;
-
 ALTER DATABASE akkabank SET TIMEZONE TO 'UTC';
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements';
+SELECT pg_reload_conf();
+SELECT pg_stat_statements_reset();
+
+begin;
 
 DROP VIEW IF EXISTS daily_purchase_accrued;
 DROP VIEW IF EXISTS monthly_purchase_accrued;
@@ -383,6 +388,7 @@ SELECT add_created_at_column('organization_event');
 SELECT prevent_update('organization_event');
 
 CREATE INDEX organization_event_org_id_idx ON organization_event(org_id);
+CREATE INDEX organization_event_org_id_timestamp_idx ON organization_event(org_id, timestamp desc);
 CREATE INDEX organization_event_initiated_by_id_idx ON organization_event(initiated_by_id);
 
 COMMENT ON TABLE organization_event IS
@@ -406,7 +412,8 @@ CREATE TABLE employee_event (
 SELECT add_created_at_column('employee_event');
 SELECT prevent_update('employee_event');
 
-CREATE INDEX employee_event_org_id_idx ON employee_event(org_id);
+CREATE INDEX employee_event_org_id_timestamp_idx ON employee_event(org_id, timestamp desc);
+CREATE INDEX employee_event_timestamp_brin ON employee_event USING BRIN(timestamp);
 CREATE INDEX employee_event_employee_id_idx ON employee_event(employee_id);
 CREATE INDEX employee_event_initiated_by_id_idx ON employee_event(initiated_by_id);
 
@@ -479,7 +486,8 @@ SELECT prevent_update('transaction');
 CREATE INDEX transaction_account_id_idx ON transaction(account_id);
 CREATE INDEX transaction_initiated_by_id_idx ON transaction(initiated_by_id);
 CREATE INDEX transaction_card_id_idx ON transaction(card_id);
-CREATE INDEX transaction_org_id_idx ON transaction(org_id);
+CREATE INDEX transaction_org_id_timestamp_idx ON transaction(org_id, timestamp desc);
+CREATE INDEX transaction_timestamp_brin ON transaction USING BRIN(timestamp);
 CREATE INDEX transaction_accrued_amount_view_query_idx ON transaction(amount, name, timestamp);
 
 COMMENT ON TABLE transaction IS
@@ -833,6 +841,7 @@ CREATE TABLE command_approval_progress(
 
 SELECT add_created_at_column('command_approval_progress');
 SELECT add_updated_at_column_and_trigger('command_approval_progress');
+
 
 CREATE OR REPLACE PROCEDURE seed_balance_history()
 AS $$

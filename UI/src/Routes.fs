@@ -4,6 +4,7 @@ module Routes
 open System
 open Feliz.Router
 
+open History
 open UIDomain.Account
 open UIDomain.Employee
 open UIDomain.Card
@@ -157,22 +158,22 @@ module EmployeeUrl =
       | _ -> None
 
 [<RequireQualifiedAccess>]
-type EmployeeHistoryUrl =
-   | EmployeeHistory
-   | EmployeeHistoryWithSearchQuery of EmployeeHistoryBrowserQuery
+type HistoryUrl =
+   | History
+   | HistoryWithSearchQuery of HistoryBrowserQuery
    | NotFound
 
-module EmployeeHistoryUrl =
+module HistoryUrl =
    [<Literal>]
-   let BasePath = "employee-history"
+   let BasePath = "history"
 
    let parse =
       function
-      | [] -> EmployeeHistoryUrl.EmployeeHistory
+      | [] -> HistoryUrl.History
       | [ Route.Query queryParams ] ->
-         let query = EmployeeHistoryBrowserQuery.fromQueryParams queryParams
-         EmployeeHistoryUrl.EmployeeHistoryWithSearchQuery query
-      | _ -> EmployeeHistoryUrl.NotFound
+         let query = HistoryBrowserQuery.fromQueryParams queryParams
+         HistoryUrl.HistoryWithSearchQuery query
+      | _ -> HistoryUrl.NotFound
 
 [<RequireQualifiedAccess>]
 type CardUrl =
@@ -220,7 +221,7 @@ type IndexUrl =
    | Account of AccountUrl
    | Approvals of ApprovalsUrl
    | Transactions of TransactionsUrl
-   | EmployeeHistory of EmployeeHistoryUrl
+   | History of HistoryUrl
    | Employees of EmployeeUrl
    | Cards of CardUrl
    | Payments of PaymentUrl
@@ -244,9 +245,9 @@ module IndexUrl =
       // Matches /transactions/{TransactionsUrl}
       | TransactionsUrl.BasePath :: segments ->
          IndexUrl.Transactions(TransactionsUrl.parse segments)
-      // Matches /employee-history/{EmployeeHistoryUrl}
-      | EmployeeHistoryUrl.BasePath :: segments ->
-         IndexUrl.EmployeeHistory(EmployeeHistoryUrl.parse segments)
+      // Matches /history/{HistoryUrl}
+      | HistoryUrl.BasePath :: segments ->
+         IndexUrl.History(HistoryUrl.parse segments)
       // Matches /employees/{EmployeeUrl}
       | EmployeeUrl.BasePath :: segments ->
          IndexUrl.Employees(EmployeeUrl.parse segments)
@@ -274,13 +275,13 @@ module IndexUrl =
          | _ -> EmployeeBrowserQuery.empty
       | _ -> EmployeeBrowserQuery.empty
 
-   let employeeHistoryBrowserQuery () =
+   let historyBrowserQuery () =
       match current () with
-      | IndexUrl.EmployeeHistory url ->
+      | IndexUrl.History url ->
          match url with
-         | EmployeeHistoryUrl.EmployeeHistoryWithSearchQuery query -> query
-         | _ -> EmployeeHistoryBrowserQuery.empty
-      | _ -> EmployeeHistoryBrowserQuery.empty
+         | HistoryUrl.HistoryWithSearchQuery query -> query
+         | _ -> HistoryBrowserQuery.empty
+      | _ -> HistoryBrowserQuery.empty
 
    let cardBrowserQuery () =
       match current () with

@@ -110,12 +110,6 @@ type EmployeeMessage =
    | Event of EmployeeEvent
    | Delete
 
-type EmployeeHistory = {
-   InitiatedByName: string
-   EmployeeName: string
-   Event: EmployeeEvent
-}
-
 type Employee = {
    EmployeeId: EmployeeId
    OrgId: OrgId

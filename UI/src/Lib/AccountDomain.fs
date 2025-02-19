@@ -8,6 +8,7 @@ open Bank.Transfer.Domain
 open Lib.SharedTypes
 open Lib.NetworkQuery
 open Lib.Time
+open Transaction
 
 type AccountProfilesMaybe = Result<Map<AccountId, AccountProfile> option, Err>
 
@@ -309,9 +310,9 @@ let transactionUIFriendlyFromAccountEvent
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      UIDomain.Org.domesticRecipientName
-         org.Org
-         recipientFromEvt.RecipientAccountId
+      org.Org.DomesticTransferRecipients
+      |> Map.tryFind recipientFromEvt.RecipientAccountId
+      |> Option.map _.FullName
       |> Option.defaultValue recipientFromEvt.FullName
 
    let accountName =
@@ -664,8 +665,6 @@ let transactionUIFriendlyFromAccountEvent
             Destination = Some accountName
       }
 
-open Transaction
-
 let transactionUIFriendly
    (org: OrgWithAccountProfiles)
    (txn: Transaction.T)
@@ -682,9 +681,9 @@ let transactionUIFriendly
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      UIDomain.Org.domesticRecipientName
-         org.Org
-         recipientFromEvt.RecipientAccountId
+      org.Org.DomesticTransferRecipients
+      |> Map.tryFind recipientFromEvt.RecipientAccountId
+      |> Option.map _.FullName
       |> Option.defaultValue recipientFromEvt.FullName
 
    let accountName accountId =

@@ -23,6 +23,7 @@ let renderDateFilterSelect
       attr.onChange (fun (dateFilterId: string) ->
          let selected =
             match dateFilterId.ToLower() with
+            | "last7days" -> Some DateFilter.Last7Days
             | "last30days" -> Some DateFilter.Last30Days
             | "currentmonth" -> Some DateFilter.CurrentMonth
             | "lastmonth" -> Some DateFilter.LastMonth
@@ -56,6 +57,11 @@ let renderDateFilterSelect
                attr.text "-- No selection --"
             ]
          | _ -> ()
+
+         Html.option [
+            attr.value (string DateFilter.Last7Days)
+            attr.text "Last 7 days"
+         ]
 
          Html.option [
             attr.value (string DateFilter.Last30Days)

@@ -41,6 +41,9 @@ module OrgPath =
       =
       $"{Base}/command-approval-daily-accrual/{orgId}/{initiatedById}"
 
+   let History = Get + "/history"
+   let history (orgId: OrgId) = get orgId + "/history"
+
 module AccountPath =
    let Base = $"{API}/accounts"
    let account (id: AccountId) = $"{Base}/{id}"
@@ -135,8 +138,6 @@ module EmployeePath =
    let CancelEmployeeInvitation = Base + "/cancel-employee-invitation"
    let ResendInviteNotification = Base + "/resend-invite-notification"
    let RestoreAccess = Base + "/restore-access"
-   let History = Get + "/history"
-   let history (orgId: OrgId) = get orgId + "/history"
 
 module CardPath =
    let Base = $"{API}/cards"

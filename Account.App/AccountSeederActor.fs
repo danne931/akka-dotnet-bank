@@ -18,6 +18,7 @@ open Lib.SharedTypes
 open Lib.Postgres
 open EmployeeEventSqlMapper
 open TransactionSqlMapper
+open OrganizationEventSqlMapper
 open Bank.Account.Api
 open Bank.Org.Domain
 open Bank.Account.Domain
@@ -228,6 +229,7 @@ let disableUpdatePreventionTriggers () =
    pgTransaction [
       "ALTER TABLE employee_event DISABLE TRIGGER prevent_update;", []
       "ALTER TABLE transaction DISABLE TRIGGER prevent_update;", []
+      "ALTER TABLE organization_event DISABLE TRIGGER prevent_update;", []
    ]
 
 // Ensure updates will not occur on employee_event & transaction tables
@@ -236,6 +238,7 @@ let enableUpdatePreventionTriggers () =
    pgTransaction [
       "ALTER TABLE employee_event ENABLE TRIGGER prevent_update;", []
       "ALTER TABLE transaction ENABLE TRIGGER prevent_update;", []
+      "ALTER TABLE organization_event ENABLE TRIGGER prevent_update;", []
    ]
 
 let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
@@ -248,15 +251,20 @@ let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
 
    for orgId, name in orgs do
       let cmd =
-         CreateOrgCommand.create {
-            Name = name
-            OrgId = orgId
-            InitiatedBy = InitiatedById Constants.SYSTEM_USER_ID
+         {
+            CreateOrgCommand.create {
+               Name = name
+               OrgId = orgId
+               InitiatedBy = InitiatedById Constants.SYSTEM_USER_ID
+            } with
+               Timestamp = DateTime.UtcNow.AddMonths -4
          }
          |> OrgCommand.CreateOrg
 
       (getOrgRef orgId) <! OrgMessage.StateChange cmd
 
+// Enable other orgs using the platform to be discoverable for
+// InternalTransferBetweenOrgs.
 let enableOrgSocialTransferDiscovery
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    =
@@ -299,6 +307,12 @@ let seedBalanceHistory () = taskResultOption {
       SELECT {TransactionFields.timestamp}, {TransactionFields.correlationId}
       FROM {TransactionSqlMapper.table}
       WHERE {TransactionFields.name} = 'InternalTransferBetweenOrgsPending'
+
+      UNION ALL
+
+      SELECT {OrgEventFields.timestamp}, {OrgEventFields.correlationId}
+      FROM {OrganizationEventSqlMapper.table}
+      WHERE {OrgEventFields.name} = 'OrgCreated'
       """
 
    let! initialRequestsToModify =
@@ -343,8 +357,24 @@ let seedBalanceHistory () = taskResultOption {
             false
          )
       WHERE
-         {TransactionFields.correlationId} = @CorrelationId
+         {TransactionFields.correlationId} = @correlationId
          AND {TransactionFields.name} <> 'InternalTransferBetweenOrgsPending';
+      """,
+      sqlParams
+
+      $"""
+      UPDATE {OrganizationEventSqlMapper.table}
+      SET
+         {OrgEventFields.timestamp} = @timestamp,
+         {OrgEventFields.event} = jsonb_set(
+            {OrgEventFields.event},
+            '{{1,Timestamp}}',
+            to_jsonb(@timestamp),
+            false
+         )
+      WHERE
+         {OrgEventFields.correlationId} = @correlationId
+         AND {OrgEventFields.name} <> 'OrgCreated';
       """,
       sqlParams
    ]

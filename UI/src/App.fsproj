@@ -13,10 +13,11 @@
     <Compile Include="Lib/FelizExtensions.fs" />
     <Compile Include="Lib/Util.fs" />
     <Compile Include="Lib/Domain.fs" />
-    <Compile Include="Lib/OrgDomain.fs" />
     <Compile Include="Lib/EmployeeDomain.fs" />
     <Compile Include="Lib/AccountDomain.fs" />
+    <Compile Include="Lib/OrgDomain.fs" />
     <Compile Include="Lib/CardDomain.fs" />
+    <Compile Include="Lib/History.fs" />
     <Compile Include="Services/Analytics.fs" />
     <Compile Include="Services/Diagnostics.fs" />
     <Compile Include="Services/Transaction.fs" />
@@ -93,7 +94,7 @@
     <Compile Include="Components/CardDashboard.fs" />
     <Compile Include="Components/EmployeeDetail.fs" />
     <Compile Include="Components/EmployeeDashboard.fs" />
-    <Compile Include="Components/EmployeeHistoryDashboard.fs" />
+    <Compile Include="Components/HistoryDashboard.fs" />
     <Compile Include="Components/SidebarMenu.fs" /> 
     <Compile Include="App.fs" />
   </ItemGroup>

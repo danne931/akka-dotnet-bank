@@ -75,10 +75,8 @@ let App () =
       appShell None (ApprovalDashboard.ApprovalDashboardComponent url)
    | Routes.IndexUrl.Employees url ->
       appShell None (EmployeeDashboard.EmployeeDashboardComponent url)
-   | Routes.IndexUrl.EmployeeHistory url ->
-      appShell
-         None
-         (EmployeeHistoryDashboard.EmployeeHistoryDashboardComponent url)
+   | Routes.IndexUrl.History url ->
+      appShell None (HistoryDashboard.HistoryDashboardComponent url)
    | Routes.IndexUrl.Cards url ->
       appShell None (CardDashboard.CardDashboardComponent url)
    | Routes.IndexUrl.Transactions url ->

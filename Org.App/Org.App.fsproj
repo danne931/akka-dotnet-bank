@@ -9,6 +9,7 @@
     <Compile Include="AnalyticsApi.fs" />
     <Compile Include="CommandApprovalApi.fs" />
     <Compile Include="OrgApi.fs" />
+    <Compile Include="HistoryApi.fs" />
   </ItemGroup>
 
   <ItemGroup>

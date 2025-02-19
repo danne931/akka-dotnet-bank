@@ -7,11 +7,15 @@ open Microsoft.AspNetCore.Builder
 open Akka.Actor
 
 open Bank.Org.Domain
+open Bank.Employee.Domain
+open Bank.Account.Domain
 open Bank.Org.Api
+open Bank.History.Api
 open Bank.CommandApproval.Api
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
+open Lib.NetworkQuery
 
 let startOrgRoutes (app: WebApplication) =
    app
@@ -137,4 +141,36 @@ let startOrgRoutes (app: WebApplication) =
                (InitiatedById(EmployeeId initiatedById))
             |> RouteUtil.unwrapTask)
    )
+   |> ignore
+
+   app
+      .MapGet(
+         OrgPath.History,
+         Func<Guid, int, string, string, string, string, string, Task<IResult>>
+            (fun
+                 orgId
+                 ([<FromQuery>] page)
+                 ([<FromQuery>] date)
+                 ([<FromQuery>] employeeEventFilters)
+                 ([<FromQuery>] accountEventFilters)
+                 ([<FromQuery>] orgEventFilters)
+                 ([<FromQuery>] initiatedByIds) ->
+               let query = {
+                  DateRange = dateRangeFromQueryString date
+                  Page = page
+                  OrgEventType =
+                     OrgEventGroupFilter.fromQueryString orgEventFilters
+                  EmployeeEventType =
+                     EmployeeEventGroupFilter.fromQueryString
+                        employeeEventFilters
+                  AccountEventType =
+                     TransactionGroupFilter.fromQueryString accountEventFilters
+                  InitiatedByIds =
+                     HistoryQuery.initiatedByIdsFromQueryString initiatedByIds
+               }
+
+               getHistory (OrgId orgId) query
+               |> RouteUtil.unwrapTaskResultOption)
+      )
+      .RBAC(Permissions.GetEmployeeHistory)
    |> ignore
