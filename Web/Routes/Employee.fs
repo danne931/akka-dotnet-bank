@@ -14,7 +14,6 @@ open Bank.Org.Domain
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
-open Lib.NetworkQuery
 
 let startEmployeeRoutes (app: WebApplication) =
    app
@@ -64,35 +63,6 @@ let startEmployeeRoutes (app: WebApplication) =
             |> RouteUtil.unwrapTaskResultOption)
       )
       .RBAC(Permissions.GetEmployees)
-   |> ignore
-
-   app
-      .MapGet(
-         EmployeePath.History,
-         Func<Guid, int, string, string, string, string, Task<IResult>>
-            (fun
-                 orgId
-                 ([<FromQuery>] page)
-                 ([<FromQuery>] date)
-                 ([<FromQuery>] events)
-                 ([<FromQuery>] employeeIds)
-                 ([<FromQuery>] initiatedByIds) ->
-               let query = {
-                  DateRange = dateRangeFromQueryString date
-                  Page = page
-                  EventType = EmployeeEventGroupFilter.fromQueryString events
-                  EmployeeIds =
-                     EmployeeHistoryQuery.employeeIdsFromQueryString
-                        employeeIds
-                  InitiatedByIds =
-                     EmployeeHistoryQuery.initiatedByIdsFromQueryString
-                        initiatedByIds
-               }
-
-               getEmployeeHistory (OrgId orgId) query
-               |> RouteUtil.unwrapTaskResultOption)
-      )
-      .RBAC(Permissions.GetEmployeeHistory)
    |> ignore
 
    app

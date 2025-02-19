@@ -1,17 +1,21 @@
 module SidebarMenu
 
 open Feliz
+open Feliz.Router
 
 open Bank.Org.Domain
 open Bank.Employee.Domain
+open Bank.Account.Domain
 open Lib.SharedTypes
+open History
+open UIDomain.Account
 
 type private MenuUrl =
    | Analytics
    | Account
    | Approvals
    | Transactions
-   | EmployeeHistory
+   | History
    | Employee
    | Card
    | Payment
@@ -32,8 +36,7 @@ let private renderListItem (item: MenuItem) =
       | Approvals, Routes.IndexUrl.Approvals _ -> attr.classes [ "selected" ]
       | Transactions, Routes.IndexUrl.Transactions _ ->
          attr.classes [ "selected" ]
-      | EmployeeHistory, Routes.IndexUrl.EmployeeHistory _ ->
-         attr.classes [ "selected" ]
+      | History, Routes.IndexUrl.History _ -> attr.classes [ "selected" ]
       | Employee, Routes.IndexUrl.Employees _ -> attr.classes [ "selected" ]
       | Card, Routes.IndexUrl.Cards _ -> attr.classes [ "selected" ]
       | Payment, Routes.IndexUrl.Payments _ -> attr.classes [ "selected" ]
@@ -112,7 +115,16 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                Url = Transactions
                SelectedUrl = currentUrl
                Name = "Transactions"
-               Href = Routes.TransactionsUrl.BasePath
+               Href =
+                  let query =
+                     {
+                        AccountBrowserQuery.empty with
+                           Date = Some(UIDomain.DateFilter.Last7Days)
+                     }
+                     |> AccountBrowserQuery.toQueryParams
+                     |> Router.encodeQueryString
+
+                  Router.formatPath [| Routes.TransactionsUrl.BasePath; query |]
                CallToActionIndicator = None
             }
 
@@ -125,10 +137,29 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
             }
 
             renderListItem {
-               Url = EmployeeHistory
+               Url = History
                SelectedUrl = currentUrl
-               Name = "Employee History"
-               Href = Routes.EmployeeHistoryUrl.BasePath
+               Name = "History"
+               Href =
+                  let query =
+                     {
+                        HistoryBrowserQuery.empty with
+                           Date = Some(UIDomain.DateFilter.Last7Days)
+                           EmployeeEventType =
+                              Some [ EmployeeEventGroupFilter.Purchase ]
+                           AccountEventType =
+                              Some [
+                                 TransactionGroupFilter.Deposit
+                                 TransactionGroupFilter.Purchase
+                                 TransactionGroupFilter.PlatformPayment
+                                 TransactionGroupFilter.InternalTransferBetweenOrgs
+                                 TransactionGroupFilter.DomesticTransfer
+                              ]
+                     }
+                     |> HistoryBrowserQuery.toQueryParams
+                     |> Router.encodeQueryString
+
+                  Router.formatPath [| Routes.HistoryUrl.BasePath; query |]
                CallToActionIndicator = None
             }
 

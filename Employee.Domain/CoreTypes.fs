@@ -219,6 +219,16 @@ type EmployeeEventGroupFilter =
       | EmployeeEventGroupFilter.UpdatedRole -> "Employee Role Altered"
       | EmployeeEventGroupFilter.AccessRestored -> "Employee Access Restored"
 
+   static member All = [
+      EmployeeEventGroupFilter.Invitation
+      EmployeeEventGroupFilter.Purchase
+      EmployeeEventGroupFilter.CreatedCard
+      EmployeeEventGroupFilter.UpdatedRole
+      EmployeeEventGroupFilter.CardFrozenUnfrozen
+      EmployeeEventGroupFilter.PurchaseLimitUpdated
+      EmployeeEventGroupFilter.AccessRestored
+   ]
+
 module EmployeeEventGroupFilter =
    let fromString =
       function
@@ -245,23 +255,6 @@ module EmployeeEventGroupFilter =
          ""
          items
 
-type EmployeeHistoryQuery = {
-   Page: int
-   DateRange: (DateTime * DateTime) option
-   EventType: (EmployeeEventGroupFilter list) option
-   EmployeeIds: (EmployeeId list) option
-   InitiatedByIds: (InitiatedById list) option
-}
-
-module EmployeeHistoryQuery =
-   let employeeIdsFromQueryString: string -> EmployeeId list option =
-      listFromQueryString (Guid.parseOptional >> Option.map EmployeeId)
-
-   let initiatedByIdsFromQueryString: string -> InitiatedById list option =
-      listFromQueryString (
-         Guid.parseOptional >> Option.map (EmployeeId >> InitiatedById)
-      )
-
 type EmployeeQuery = {
    EmployeeIds: (EmployeeId list) option
    Roles: (Role list) option
@@ -280,8 +273,8 @@ module EmployeeQuery =
                $"{acc}, {filter.Display}")
          ""
 
-   let employeeIdsFromQueryString =
-      EmployeeHistoryQuery.employeeIdsFromQueryString
+   let employeeIdsFromQueryString: string -> EmployeeId list option =
+      listFromQueryString (Guid.parseOptional >> Option.map EmployeeId)
 
 type CardQuery = {
    AccountIds: (AccountId list) option

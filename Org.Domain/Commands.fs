@@ -30,6 +30,7 @@ module CreateOrgCommand =
 
 type FinalizeOrgOnboardingInput = {
    OrgId: OrgId
+   CorrelationId: CorrelationId
    EmployerIdentificationNumber: int
    InitiatedBy: InitiatedById
 }
@@ -41,7 +42,7 @@ module FinalizeOrgOnboardingCommand =
       Command.create
          (OrgId.toEntityId data.OrgId)
          data.OrgId
-         (CorrelationId.create ())
+         data.CorrelationId
          data.InitiatedBy
          data
 

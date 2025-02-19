@@ -16,48 +16,6 @@ module Fields = TransactionFields
 module Writer = TransactionSqlWriter
 module Reader = TransactionSqlReader
 
-let filtersToEventNames (filters: TransactionGroupFilter list) : string array =
-   filters
-   |> List.fold
-      (fun acc e ->
-         acc
-         @ match e with
-           | TransactionGroupFilter.Purchase -> [ typeof<DebitedAccount>.Name ]
-           | TransactionGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
-           | TransactionGroupFilter.InternalTransferWithinOrg -> [
-              typeof<InternalTransferWithinOrgPending>.Name
-              typeof<InternalTransferWithinOrgCompleted>.Name
-              typeof<InternalTransferWithinOrgFailed>.Name
-              typeof<InternalTransferWithinOrgDeposited>.Name
-             ]
-           | TransactionGroupFilter.InternalTransferBetweenOrgs -> [
-              typeof<InternalTransferBetweenOrgsPending>.Name
-              typeof<InternalTransferBetweenOrgsCompleted>.Name
-              typeof<InternalTransferBetweenOrgsFailed>.Name
-              typeof<InternalTransferBetweenOrgsDeposited>.Name
-             ]
-           | TransactionGroupFilter.InternalAutomatedTransfer -> [
-              typeof<InternalAutomatedTransferPending>.Name
-              typeof<InternalAutomatedTransferCompleted>.Name
-              typeof<InternalAutomatedTransferFailed>.Name
-              typeof<InternalAutomatedTransferDeposited>.Name
-             ]
-           | TransactionGroupFilter.DomesticTransfer -> [
-              typeof<DomesticTransferPending>.Name
-              typeof<DomesticTransferCompleted>.Name
-              typeof<DomesticTransferFailed>.Name
-              typeof<DomesticTransferProgressUpdate>.Name
-             ]
-           | TransactionGroupFilter.PlatformPayment -> [
-              typeof<PlatformPaymentRequested>.Name
-              typeof<PlatformPaymentPaid>.Name
-              typeof<PlatformPaymentDeposited>.Name
-              typeof<PlatformPaymentDeclined>.Name
-              typeof<PlatformPaymentCancelled>.Name
-             ])
-      []
-   |> List.toArray
-
 let filtersToOriginatingEventNames
    (filters: TransactionGroupFilter list)
    : string array

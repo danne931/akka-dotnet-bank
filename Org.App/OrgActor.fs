@@ -224,6 +224,7 @@ let actorProps
                let cmd =
                   FinalizeOrgOnboardingCommand.create {
                      OrgId = e.OrgId
+                     CorrelationId = e.CorrelationId
                      InitiatedBy = e.InitiatedById
                      EmployerIdentificationNumber = 123456789
                   }

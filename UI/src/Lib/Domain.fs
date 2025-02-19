@@ -68,6 +68,7 @@ module MoneyFlow =
 [<RequireQualifiedAccess>]
 type DateFilter =
    | Custom of dateStart: DateTime * dateEnd: DateTime
+   | Last7Days
    | Last30Days
    | CurrentMonth
    | LastMonth
@@ -80,6 +81,7 @@ module DateFilter =
 
       match filter with
       | DateFilter.Custom(startDate, endDate) -> startDate, endDate
+      | DateFilter.Last7Days -> DateTime.Today.AddDays(-7), endOfToday
       | DateFilter.Last30Days -> DateTime.Today.AddDays(-30), endOfToday
       | DateFilter.CurrentMonth ->
          DateTime(DateTime.Today.Year, DateTime.Today.Month, 1), endOfToday
@@ -113,6 +115,7 @@ module DateFilter =
    let fromString =
       function
       | "Last30Days" -> Some DateFilter.Last30Days
+      | "Last7Days" -> Some DateFilter.Last7Days
       | "CurrentMonth" -> Some DateFilter.CurrentMonth
       | "LastMonth" -> Some DateFilter.LastMonth
       | "CurrentYear" -> Some DateFilter.CurrentYear

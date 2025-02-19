@@ -1,6 +1,5 @@
 module Bank.Org.Api
 
-open System
 open System.Threading.Tasks
 open Akkling
 open Akka.Actor
@@ -57,7 +56,6 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
    ref <! OrgMessage.StateChange command
    return res
 }
-
 
 let getDomesticTransferRecipients
    (orgId: OrgId)
@@ -294,27 +292,3 @@ let upsertMerchant (merchant: Merchant) =
       "name", Writer.name <| merchant.Name.ToLower()
       "alias", Writer.alias merchant.Alias
    ]
-
-/// Provides employee accrual metrics before a user submits a domestic
-/// transfer, internal transfer between orgs, or payment.
-/// The CommandApprovalDailyAccrual metrics are used in
-/// CommandApprovalRule.requiresCommandApproval to determine if an employee
-/// is attempting to submit a command above the configured daily limit for that
-/// command (as specified in an org's configured command approval rules).
-let getTodaysCommandApprovalDailyAccrualByInitiatedBy
-   (system: ActorSystem)
-   (orgId: OrgId)
-   (initiatedById: InitiatedById)
-   : Task<CommandApprovalDailyAccrual>
-   =
-   task {
-      let ref = OrgActor.get system orgId
-
-      let! accrual =
-         ref.Ask(
-            OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy initiatedById,
-            Some(TimeSpan.FromSeconds 3)
-         )
-
-      return accrual
-   }

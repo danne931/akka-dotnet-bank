@@ -2,6 +2,7 @@ namespace Bank.Org.Domain
 
 open Lib.SharedTypes
 open Bank.Account.Domain
+open Bank.Employee.Domain
 open Bank.Transfer.Domain
 
 [<RequireQualifiedAccess>]
@@ -205,3 +206,25 @@ type OrgMessage =
    | ApprovableRequest of ApprovableCommand
    | StateChange of OrgCommand
    | Event of OrgEvent
+
+type OrgHistory = {
+   InitiatedByName: string
+   Event: OrgEvent
+}
+
+type AccountHistory = {
+   InitiatedByName: string
+   Event: AccountEvent
+}
+
+type EmployeeHistory = {
+   InitiatedByName: string
+   EmployeeName: string
+   Event: EmployeeEvent
+}
+
+[<RequireQualifiedAccess>]
+type History =
+   | Org of OrgHistory
+   | Account of AccountHistory
+   | Employee of EmployeeHistory

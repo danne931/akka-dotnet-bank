@@ -42,6 +42,25 @@ module CommandApprovalProgress =
                      rule
             }
 
+module ApprovableCommand =
+   let displayVerbose (cmd: ApprovableCommand) =
+      match cmd with
+      | ApprovableCommand.PerCommand c ->
+         match c with
+         | InviteEmployee c -> $"Invite employee {c.Data.Name}"
+         | UpdateEmployeeRole c ->
+            $"Update {c.Data.Name}'s role from {c.Data.PriorRole} to {c.Data.Role}"
+      | ApprovableCommand.AmountBased c ->
+         match c with
+         | DomesticTransfer c ->
+            $"{Money.format c.Data.Amount} domestic transfer from
+            {c.Data.Sender.Name} to {c.Data.Recipient.Name}"
+         | FulfillPlatformPayment c ->
+            let pay = c.Data.RequestedPayment.BaseInfo
+            $"{Money.format pay.Amount} payment fulfillment to {pay.Payee.OrgName}"
+         | InternalTransferBetweenOrgs c ->
+            $"{Money.format c.Data.Amount} transfer to {c.Data.Recipient.Name}"
+
 /// Determines if there is a pending command approval for updating an employee
 /// role. If there is then returns that pending role.
 let employeeRolePendingApproval
@@ -77,53 +96,3 @@ let paymentFulfillmentPendingApproval
          else
             None
       | _ -> None)
-
-
-let domesticRecipientName (org: Org) (recipientId: AccountId) : string option =
-   org.DomesticTransferRecipients
-   |> Map.tryFind recipientId
-   |> Option.map _.FullName
-
-type OrgHistoryUIFriendly = {
-   Name: string
-   Date: string
-   Amount: string
-   Info: string
-   Initiator: string
-}
-
-let orgHistoryUIFriendly (org: Org) (evt: OrgEvent) : OrgHistoryUIFriendly =
-   let _, envelope = OrgEnvelope.unwrap evt
-
-   let props = {
-      Name = envelope.EventName
-      Date = DateTime.dateUIFriendly envelope.Timestamp
-      Amount = "-"
-      Info = ""
-      Initiator = ""
-   }
-
-   let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      domesticRecipientName org recipientFromEvt.RecipientAccountId
-      |> Option.defaultValue recipientFromEvt.FullName
-
-   match evt with
-   | RegisteredDomesticTransferRecipient evt -> {
-      props with
-         Name = "Created Domestic Recipient"
-         Info =
-            $"Created domestic recipient: {domesticRecipientName evt.Data.Recipient}"
-     }
-   | EditedDomesticTransferRecipient evt -> {
-      props with
-         Name = "Edited Domestic Recipient"
-         Info = $"Edited recipient: {domesticRecipientName evt.Data.Recipient}"
-     }
-   | NicknamedDomesticTransferRecipient evt -> {
-      props with
-         Info =
-            match evt.Data.Nickname with
-            | None -> "Removed recipient nickname."
-            | Some name -> $"Updated recipient nickname to {name}"
-     }
-   | _ -> props

@@ -13,34 +13,7 @@ open Lib.SharedTypes
 open Lib.NetworkQuery
 open RoutePaths
 
-let networkQueryFromBrowserQuery (query: EmployeeBrowserQuery) : EmployeeQuery = {
-   EmployeeIds = query.SelectedEmployees |> Option.map (List.map _.Id)
-   Roles = query.Roles
-   Status = None
-}
-
-let networkQueryFromHistoryBrowserQuery
-   (query: EmployeeHistoryBrowserQuery)
-   : EmployeeHistoryQuery
-   =
-   {
-      Page = 1
-      DateRange = query.Date |> Option.map DateFilter.toDateRange
-      EventType = query.EventType
-      EmployeeIds = query.SelectedEmployees |> Option.map (List.map _.Id)
-      InitiatedByIds =
-         query.SelectedInitiatedBy
-         |> Option.map (List.map (_.Id >> InitiatedById))
-   }
-
-let networkQueryFromCardBrowserQuery (query: CardBrowserQuery) : CardQuery = {
-   AccountIds = query.SelectedAccounts |> Option.map (List.map _.Id)
-   EmployeeIds = query.SelectedEmployees |> Option.map (List.map _.Id)
-   CreatedAtDateRange = query.CreatedAt |> Option.map DateFilter.toDateRange
-   Amount = query.Amount
-}
-
-let serviceName = "EmployeeService"
+let private serviceName = "EmployeeService"
 
 let private notImplemented (cmd: EmployeeCommand) =
    let msg = $"{serviceName}: Not implemented command: {cmd}"
@@ -75,6 +48,19 @@ let private postJson (command: EmployeeCommand) =
       | other -> notImplemented other
 
    Http.postJson url serialized
+
+let networkQueryFromBrowserQuery (query: EmployeeBrowserQuery) : EmployeeQuery = {
+   EmployeeIds = query.SelectedEmployees |> Option.map (List.map _.Id)
+   Roles = query.Roles
+   Status = None
+}
+
+let networkQueryFromCardBrowserQuery (query: CardBrowserQuery) : CardQuery = {
+   AccountIds = query.SelectedAccounts |> Option.map (List.map _.Id)
+   EmployeeIds = query.SelectedEmployees |> Option.map (List.map _.Id)
+   CreatedAtDateRange = query.CreatedAt |> Option.map DateFilter.toDateRange
+   Amount = query.Amount
+}
 
 let getEmployee (orgId: OrgId) (employeeId: EmployeeId) : Async<EmployeeMaybe> = async {
    let! (code, responseText) =
@@ -169,49 +155,6 @@ let resendEmployeeInvitation (employee: Employee) : Async<Result<unit, Err>> = a
    else
       return Ok()
 }
-
-let getEmployeeHistory
-   (orgId: OrgId)
-   (query: EmployeeHistoryQuery)
-   : Async<EmployeeHistoryMaybe>
-   =
-   async {
-      let queryParams =
-         [
-            "page", string query.Page
-
-            match query.EmployeeIds with
-            | None -> ()
-            | Some ids -> "employeeIds", listToQueryString ids
-
-            match query.InitiatedByIds with
-            | None -> ()
-            | Some ids -> "initiatedByIds", listToQueryString ids
-
-            match query.EventType with
-            | None -> ()
-            | Some filters -> "events", listToQueryString filters
-
-            match query.DateRange with
-            | None -> ()
-            | Some(startDate, endDate) ->
-               "date", DateTime.rangeAsQueryString startDate endDate
-         ]
-         |> Router.encodeQueryString
-
-      let path = EmployeePath.history orgId + queryParams
-      let! (code, responseText) = Http.get path
-
-      if code = 404 then
-         return Ok None
-      elif code <> 200 then
-         return Error <| Err.InvalidStatusCodeError(serviceName, code)
-      else
-         return
-            responseText
-            |> Serialization.deserialize<EmployeeHistory list>
-            |> Result.map Some
-   }
 
 let getCards (orgId: OrgId) (query: CardQuery) : Async<CardsMaybe> = async {
    let queryParams =

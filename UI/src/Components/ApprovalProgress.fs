@@ -220,23 +220,8 @@ let ApprovalProgressComponent
                ]
 
                Html.p (
-                  match progress.CommandToInitiateOnApproval with
-                  | ApprovableCommand.PerCommand c ->
-                     match c with
-                     | InviteEmployee c -> $"Invite employee {c.Data.Name}"
-                     | UpdateEmployeeRole c ->
-                        $"Update {c.Data.Name}'s role from {c.Data.PriorRole} to {c.Data.Role}"
-                  | ApprovableCommand.AmountBased c ->
-                     match c with
-                     | DomesticTransfer c ->
-                        $"{Money.format c.Data.Amount} domestic transfer from
-                        {c.Data.Sender.Name} to {c.Data.Recipient.Name}"
-                     | FulfillPlatformPayment c ->
-                        let pay = c.Data.RequestedPayment.BaseInfo
-                        $"{Money.format pay.Amount} payment fulfillment to {pay.Payee.OrgName}"
-                     | InternalTransferBetweenOrgs c ->
-                        $"{Money.format c.Data.Amount} transfer to {c.Data.Recipient.Name}"
-
+                  ApprovableCommand.displayVerbose
+                     progress.CommandToInitiateOnApproval
                   + $" requested by {progress.RequestedBy.EmployeeName} on
                   {DateTime.formatShort progress.CreatedAt}."
                )
