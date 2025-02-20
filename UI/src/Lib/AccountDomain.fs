@@ -872,3 +872,79 @@ let transactionUIFriendly
             Source = Some sender
             Destination = Some recipient
       }
+
+/// Apply the selected filter logic to events arriving via SignalR.
+/// Events fetched from the network query will be filtered via the
+/// database query but still need to apply an in-browser filter for
+/// events arriving via SignalR.
+let keepRealtimeEventsCorrespondingToSelectedFilter
+   (query: TransactionQuery)
+   (evt: AccountEvent)
+   =
+   let _, envelope = AccountEnvelope.unwrap evt
+
+   let qualifiedDate =
+      match query.DateRange with
+      | None -> true
+      | Some(start, finish) ->
+         let timestamp = envelope.Timestamp.ToLocalTime()
+         timestamp >= start && timestamp <= finish
+
+   let qualifiedAccount =
+      match query.AccountIds with
+      | None -> true
+      | Some accounts ->
+         accounts
+         |> List.exists (fun accountId ->
+            accountId = AccountId.fromEntityId envelope.EntityId)
+
+   let qualifiedCard =
+      match query.CardIds, evt with
+      | Some cards, AccountEvent.DebitedAccount e ->
+         cards
+         |> List.exists (fun cardId ->
+            cardId = e.Data.EmployeePurchaseReference.CardId)
+      | _ -> true
+
+   let qualifiedInitiator =
+      match query.InitiatedByIds with
+      | None -> true
+      | Some initiators ->
+         initiators
+         |> List.exists (fun initiatedById ->
+            initiatedById = envelope.InitiatedById)
+
+   let amount, flow, _ = AccountEvent.moneyTransaction evt
+
+   let qualifiedMoneyFlow =
+      match query.MoneyFlow, flow with
+      | Some queryFlow, Some eventFlow -> queryFlow = eventFlow
+      | _ -> true
+
+   let qualifiedAmount =
+      match query.Amount, amount with
+      | Some amountFilter, Some eventAmount ->
+         AmountFilter.isAmountQualified eventAmount amountFilter
+      | _ -> true
+
+   // NOTE:
+   // A realtime account event may correspond to a transaction
+   // that is indeed categorized.  However, we currently don't have
+   // that data available in the UI outside of the TransactionDetail
+   // component.  It's not worth the effort right now to make it available
+   // outside the TransactionDetail component so we will simply
+   // discard the realtime event if a CategoryFilter is selected.
+   let qualifiedCategory =
+      match query.Category with
+      | None -> true
+      | Some(CategoryFilter.IsCategorized isCat) -> not isCat
+      | Some(CategoryFilter.CategoryIds _) -> false
+
+   query.Page = 1
+   && qualifiedDate
+   && qualifiedAccount
+   && qualifiedInitiator
+   && qualifiedCard
+   && qualifiedMoneyFlow
+   && qualifiedAmount
+   && qualifiedCategory

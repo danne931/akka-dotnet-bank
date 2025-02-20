@@ -67,3 +67,9 @@ module AmountFilter =
       | None, Some max -> Some(AmountFilter.LessThanOrEqualTo max)
       | Some min, Some max -> Some(AmountFilter.Between(min, max))
       | _ -> None
+
+   let isAmountQualified (amount: decimal) (filter: AmountFilter) =
+      match filter with
+      | AmountFilter.LessThanOrEqualTo max -> amount <= max
+      | AmountFilter.GreaterThanOrEqualTo min -> amount >= min
+      | AmountFilter.Between(min, max) -> amount >= min && amount <= max
