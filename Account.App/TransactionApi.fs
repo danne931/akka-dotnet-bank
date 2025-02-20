@@ -139,6 +139,9 @@ let transactionQuery (query: TransactionQuery) =
 
    let atiTable = AncillaryTransactionInfoSqlMapper.table
 
+   let atiTxnId =
+      AncillaryTransactionInfoSqlMapper.AncillaryTransactionFields.transactionId
+
    let agg =
       Option.fold
          (fun (queryParams, where, _) categoryFilter ->
@@ -181,7 +184,8 @@ let transactionQuery (query: TransactionQuery) =
 
    let joinAncillaryTxnInfo =
       if joinAncillaryTransactionTable then
-         Some $"LEFT JOIN {atiTable} using ({Fields.eventId})"
+         Some
+            $"LEFT JOIN {atiTable} ON {atiTable}.{atiTxnId} = {table}.{Fields.correlationId}"
       else
          None
 

@@ -470,13 +470,6 @@ let TransactionTableComponent
 
    let txns = Map.tryFind state.Query.Page state.Transactions
 
-   let q = state.Query
-
-   let noFilterSelected =
-      match q.Amount, q.Category, q.MoneyFlow, q.DateRange, q.Page with
-      | None, None, None, None, 1 -> true
-      | _ -> false
-
    let displayTransaction (txn: Transaction.T) =
       let txn = {
          txn with
@@ -509,11 +502,11 @@ let TransactionTableComponent
          | Some(Resolved(Ok None)) -> Html.p "No transactions found."
          | Some(Resolved(Ok(Some txns))) ->
             let txns =
-               (if noFilterSelected then
-                   signalRCtx.RealtimeEvents
-                   |> List.fold Transaction.applyAccountEvent txns
-                else
-                   txns)
+               signalRCtx.RealtimeEvents
+               |> List.filter (
+                  keepRealtimeEventsCorrespondingToSelectedFilter state.Query
+               )
+               |> List.fold Transaction.applyAccountEvent txns
                |> _.Values
                |> Seq.sortByDescending _.Timestamp
 
