@@ -154,6 +154,9 @@ let renderTableRow
    Html.tr [
       attr.key (string card.Card.CardId)
 
+      if card.Card.Status = CardStatus.Frozen then
+         attr.classes [ "error" ]
+
       match selectedCardId with
       | Some id when id = card.Card.CardId -> attr.classes [ "selected" ]
       | _ -> ()
@@ -395,7 +398,6 @@ let CardDashboardComponent (url: Routes.CardUrl) (session: UserSession) =
                   classyNode Html.article [ "form-wrapper" ] [
                      Html.h6 (
                         match view with
-                        | CardActionView.CardAccess -> "Manage Card Access"
                         | CardActionView.PurchaseLimit ->
                            "Manage Purchase Limits"
                         | CardActionView.Create -> "Add Employee Card"
@@ -419,20 +421,6 @@ let CardDashboardComponent (url: Routes.CardUrl) (session: UserSession) =
                               ]
                            OnSelect = None
                         |}
-                     | CardActionView.CardAccess ->
-                        EmployeeCardSelectSearchComponent {|
-                           OrgId = session.OrgId
-                           MakeChildrenOnSelect =
-                              Some
-                              <| fun card employee -> [
-                                 CardAccess.CardAccessFormComponent
-                                    session
-                                    onSubmit
-                                    card
-                                    employee
-                              ]
-                           OnSelect = None
-                        |}
                      | CardActionView.Create ->
                         EmployeeSelectSearchComponent {|
                            OrgId = session.OrgId
@@ -444,8 +432,9 @@ let CardDashboardComponent (url: Routes.CardUrl) (session: UserSession) =
                            OnSelect = None
                         |}
                      | CardActionView.CardDetail cardId ->
-                        match state.Cards with
-                        | Deferred.Resolved(Ok(Some cards)) ->
+                        match state.Cards, orgCtx with
+                        | Deferred.Resolved(Ok(Some cards)),
+                          Deferred.Resolved(Ok(Some org)) ->
                            match
                               cards
                               |> List.tryFind (fun c -> c.Card.CardId = cardId)
@@ -453,6 +442,7 @@ let CardDashboardComponent (url: Routes.CardUrl) (session: UserSession) =
                            | Some card ->
                               CardDetailComponent
                                  session
+                                 org
                                  card
                                  (Msg.EmployeeCommandProcessing >> dispatch)
                            | None -> Html.p $"Card {cardId} not found."

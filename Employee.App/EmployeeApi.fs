@@ -49,8 +49,6 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
          |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.LockCard cmd ->
          LockCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.UnlockCard cmd ->
-         UnlockCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.EditCardNickname cmd ->
          EditCardNicknameCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.CancelInvitation cmd ->

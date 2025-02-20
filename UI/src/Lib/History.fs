@@ -200,12 +200,14 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
    | EmployeeEvent.LockedCard e -> {
       props with
          Name = "Locked Card"
-         Info = $"Locked card {e.Data.CardNumberLast4} for {txn.EmployeeName}"
+         Info =
+            $"Locked card {e.Data.CardName} **{e.Data.CardNumberLast4} for {txn.EmployeeName}"
      }
    | EmployeeEvent.UnlockedCard e -> {
       props with
          Name = "Unlocked Card"
-         Info = $"Unlocked card {e.Data.CardNumberLast4} for {txn.EmployeeName}"
+         Info =
+            $"Unlocked card {e.Data.CardName} **{e.Data.CardNumberLast4} for {txn.EmployeeName}"
      }
    | EmployeeEvent.AccessRestored e -> {
       props with

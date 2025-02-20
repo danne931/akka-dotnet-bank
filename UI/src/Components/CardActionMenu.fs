@@ -31,19 +31,13 @@ let private renderMenuButton (view: CardActionView) =
          | CardActionView.PurchaseLimit ->
             Html.span [ Fa.i [ Fa.Solid.SlidersH ] [] ]
             Html.span "Purchase Limits"
-         | CardActionView.CardAccess ->
-            Html.span [ Fa.i [ Fa.Solid.Key ] [] ]
-            Html.span "Card Access"
+         | _ -> ()
       ]
    ]
 
 let render () =
    classyNode Html.div [ "action-menu" ] [
       classyNode Html.div [ "grid" ] [ renderMenuButton CardActionView.Create ]
-
-      classyNode Html.div [ "grid" ] [
-         renderMenuButton CardActionView.CardAccess
-      ]
 
       classyNode Html.div [ "grid" ] [
          renderMenuButton CardActionView.PurchaseLimit
