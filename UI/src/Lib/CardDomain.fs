@@ -22,7 +22,6 @@ module SelectedAccount =
 [<RequireQualifiedAccess>]
 type CardActionView =
    | PurchaseLimit
-   | CardAccess
    | Create
    | CardDetail of CardId
 
@@ -102,7 +101,6 @@ module CardBrowserQuery =
             Map.tryFind "action" queryParams
             |> Option.bind (function
                | "Create" -> Some CardActionView.Create
-               | "CardAccess" -> Some CardActionView.CardAccess
                | "PurchaseLimit" -> Some CardActionView.PurchaseLimit
                | CardDetail id -> Some(CardActionView.CardDetail id)
                | view ->

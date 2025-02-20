@@ -69,6 +69,14 @@ let private sendApprovedCommand
             |> EmployeeCommand.UpdateRole
 
          employeeRef <! EmployeeMessage.StateChange cmd
+      | UnlockCard cmd ->
+         let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
+
+         let cmd =
+            { cmd with Timestamp = DateTime.UtcNow }
+            |> EmployeeCommand.UnlockCard
+
+         employeeRef <! EmployeeMessage.StateChange cmd
    | ApprovableCommand.AmountBased c ->
       match c with
       | FulfillPlatformPayment cmd ->

@@ -322,8 +322,10 @@ let ApprovalRuleManagementDashboardComponent
                   2
                | ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType ->
                   3
+               | ApprovableCommandType.ApprovablePerCommand UnlockCardCommandType ->
+                  4
                | ApprovableCommandType.ApprovablePerCommand UpdateEmployeeRoleCommandType ->
-                  4)
+                  5)
 
          for rule in rules do
             classyNode Html.article [ "approval-rule" ] [

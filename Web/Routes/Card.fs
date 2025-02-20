@@ -5,7 +5,10 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
 open Akka.Actor
+open Akkling
+open FsToolkit.ErrorHandling
 
+open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Employee.Api
 open RoutePaths
@@ -99,7 +102,23 @@ let startCardRoutes (app: WebApplication) =
       .MapPost(
          CardPath.UnlockCard,
          Func<ActorSystem, UnlockCardCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (EmployeeCommand.UnlockCard cmd)
+            taskResult {
+               let validation =
+                  cmd
+                  |> UnlockCardCommand.toEvent
+                  |> Result.map EmployeeEnvelope.get
+
+               let! res = validation |> Result.mapError Err.ValidationError
+
+               let msg =
+                  cmd
+                  |> UnlockCard
+                  |> ApprovableCommand.PerCommand
+                  |> OrgMessage.ApprovableRequest
+
+               (OrgActor.get sys cmd.OrgId) <! msg
+               return res
+            }
             |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.UnlockCard)

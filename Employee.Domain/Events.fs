@@ -60,13 +60,17 @@ type MonthlyDebitLimitUpdated = {
 
 type LockedCard = {
    CardId: CardId
+   CardName: string
    CardNumberLast4: string
+   EmployeeName: string
    Reference: string option
 }
 
 type UnlockedCard = {
    CardId: CardId
+   CardName: string
    CardNumberLast4: string
+   EmployeeName: string
    Reference: string option
 }
 

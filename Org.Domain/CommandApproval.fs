@@ -18,6 +18,7 @@ type CommandApprovalDailyAccrual = {
 type ApprovablePerCommand =
    | InviteEmployeeCommandType
    | UpdateEmployeeRoleCommandType
+   | UnlockCardCommandType
 
 type ApprovableAmountBased =
    | FulfillPlatformPaymentCommandType
@@ -35,6 +36,7 @@ type ApprovableCommandType =
          match x with
          | InviteEmployeeCommandType -> "InviteEmployee"
          | UpdateEmployeeRoleCommandType -> "UpdateEmployeeRole"
+         | UnlockCardCommandType -> "UnlockCard"
       | ApprovableAmountBased x ->
          match x with
          | FulfillPlatformPaymentCommandType -> "SendPayment"
@@ -48,6 +50,7 @@ type ApprovableCommandType =
          match x with
          | InviteEmployeeCommandType -> "Invite Employee"
          | UpdateEmployeeRoleCommandType -> "Update Employee Role"
+         | UnlockCardCommandType -> "Unlock Card"
       | ApprovableAmountBased x ->
          match x with
          | FulfillPlatformPaymentCommandType -> "Fulfill Platform Payment"
@@ -64,6 +67,7 @@ type ApprovableCommandType =
             Some(ApprovablePerCommand InviteEmployeeCommandType)
          | "UpdateEmployeeRole" ->
             Some(ApprovablePerCommand UpdateEmployeeRoleCommandType)
+         | "UnlockCard" -> Some(ApprovablePerCommand UnlockCardCommandType)
          | "SendPayment" ->
             Some(ApprovableAmountBased FulfillPlatformPaymentCommandType)
          | "SendInternalTransferBetweenOrgs" ->
@@ -81,6 +85,7 @@ type ApprovableCommandType =
 type ApprovableCommandPerCommand =
    | InviteEmployee of ApproveAccessCommand
    | UpdateEmployeeRole of UpdateRoleCommand
+   | UnlockCard of UnlockCardCommand
 
 type ApprovableCommandAmountBased =
    | FulfillPlatformPayment of FulfillPlatformPaymentCommand
@@ -98,6 +103,7 @@ type ApprovableCommand =
          match c with
          | InviteEmployee o -> Command.envelope o
          | UpdateEmployeeRole o -> Command.envelope o
+         | UnlockCard o -> Command.envelope o
       | ApprovableCommand.AmountBased c ->
          match c with
          | FulfillPlatformPayment o -> Command.envelope o
@@ -130,6 +136,8 @@ type ApprovableCommand =
          | UpdateEmployeeRole _ ->
             ApprovableCommandType.ApprovablePerCommand
                UpdateEmployeeRoleCommandType
+         | UnlockCard _ ->
+            ApprovableCommandType.ApprovablePerCommand UnlockCardCommandType
       | ApprovableCommand.AmountBased c ->
          match c with
          | FulfillPlatformPayment _ ->

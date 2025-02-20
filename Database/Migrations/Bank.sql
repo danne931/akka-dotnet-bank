@@ -774,6 +774,7 @@ This table is currently not in use.';
 CREATE TYPE approvable_command AS ENUM (
    'InviteEmployee',
    'UpdateEmployeeRole',
+   'UnlockCard',
    'SendPayment',
    'SendInternalTransferBetweenOrgs',
    'SendDomesticTransfer'

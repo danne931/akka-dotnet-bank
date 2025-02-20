@@ -9,6 +9,8 @@ open Fable.FontAwesome
 open Elmish.SweetAlert
 
 open Bank.Account.Domain
+open Bank.Org.Domain
+open UIDomain.Org
 open UIDomain.Account
 open UIDomain.Employee
 open Bank.Employee.Domain
@@ -36,6 +38,8 @@ type CardLockMsg = {
    Employee: Employee
    Card: Card
    InitiatedBy: InitiatedById
+   UserSession: UserSession
+   UnlockRequiresApproval: CommandApprovalRule.T option
 }
 
 type Msg =
@@ -61,7 +65,12 @@ let init () =
    },
    Cmd.none
 
-let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
+let update
+   (onCardUpdate: EmployeeCommandReceipt -> unit)
+   (orgDispatch: OrgProvider.Msg -> unit)
+   msg
+   state
+   =
    match msg with
    | ToggleNicknameEdit ->
       {
@@ -103,7 +112,7 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
       },
       Cmd.fromAsync submitCommand
    | SaveNickname(_, Finished(Ok receipt)) ->
-      notifyParentOnUpdate receipt
+      onCardUpdate receipt
 
       {
          state with
@@ -120,9 +129,18 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
    | ShowCardLockConfirmation msg ->
       let lockOrUnlock = if msg.WillLock then "lock" else "unlock"
 
+      let title =
+         let title =
+            $"{lockOrUnlock} {msg.Card.Display} for {msg.Employee.Name}"
+
+         if (not msg.WillLock) && msg.UnlockRequiresApproval.IsSome then
+            $"Request approval to {title}"
+         else
+            $"This will {title}"
+
       let confirm =
          ConfirmAlert(
-            $"This will {lockOrUnlock} {msg.Card.Display} for {msg.Employee.Name}",
+            title,
             function
             | ConfirmAlertResult.Confirmed ->
                Msg.ConfirmUpdateLock(msg, Started)
@@ -139,6 +157,8 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
          if msg.WillLock then
             LockCardCommand.create msg.Employee.CompositeId msg.InitiatedBy {
                CardId = msg.Card.CardId
+               CardName = msg.Card.CardNickname |> Option.defaultValue ""
+               EmployeeName = msg.Employee.Name
                CardNumberLast4 = msg.Card.CardNumberLast4
                Reference = None
             }
@@ -146,6 +166,8 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
          else
             UnlockCardCommand.create msg.Employee.CompositeId msg.InitiatedBy {
                CardId = msg.Card.CardId
+               CardName = msg.Card.CardNickname |> Option.defaultValue ""
+               EmployeeName = msg.Employee.Name
                CardNumberLast4 = msg.Card.CardNumberLast4
                Reference = None
             }
@@ -161,8 +183,19 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
             LockPersistence = Deferred.InProgress
       },
       Cmd.fromAsync submitCommand
-   | ConfirmUpdateLock(_, Finished(Ok receipt)) ->
-      notifyParentOnUpdate receipt
+   | ConfirmUpdateLock(msg, Finished(Ok receipt)) ->
+      match
+         msg.WillLock, msg.UnlockRequiresApproval, receipt.PendingCommand
+      with
+      | false, Some rule, EmployeeCommand.UnlockCard cmd ->
+         CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
+            msg.UserSession
+            rule
+            (cmd |> UnlockCard |> ApprovableCommand.PerCommand)
+         |> OrgCommand.RequestCommandApproval
+         |> OrgProvider.Msg.OrgCommand
+         |> orgDispatch
+      | _ -> onCardUpdate receipt
 
       {
          state with
@@ -177,14 +210,6 @@ let update (notifyParentOnUpdate: EmployeeCommandReceipt -> unit) msg state =
             LockPersistence = Deferred.Resolved(Error err)
       },
       Alerts.toastCommand err
-
-let private menuButton (onClick: _ -> unit) (children: ReactElement list) =
-   Html.div [
-      attr.role "button"
-      attr.classes [ "outline" ]
-      attr.children children
-      attr.onClick onClick
-   ]
 
 let private nicknameCancelButton dispatch =
    Html.a [
@@ -273,24 +298,44 @@ let CardNicknameComponent
 [<ReactComponent>]
 let CardDetailComponent
    (userSession: UserSession)
+   (org: OrgWithAccountProfiles)
    (card: CardWithMetrics)
-   (notifyParentOnUpdate: EmployeeCommandReceipt -> unit)
+   (onCardUpdate: EmployeeCommandReceipt -> unit)
    =
-   let state, dispatch =
-      React.useElmish (init, update notifyParentOnUpdate, [||])
+   let orgDispatch = React.useContext OrgProvider.dispatchContext
 
-   let orgCtx = React.useContext OrgProvider.context
+   let state, dispatch =
+      React.useElmish (init, update onCardUpdate orgDispatch, [||])
 
    let lockCardMsg = {
       InitiatedBy = InitiatedById userSession.EmployeeId
       Employee = card.Employee
       Card = card.Card
       WillLock = true
+      UserSession = userSession
+      UnlockRequiresApproval =
+         CommandApprovalRule.commandTypeRequiresApproval
+            (ApprovableCommandType.ApprovablePerCommand UnlockCardCommandType)
+            (InitiatedById userSession.EmployeeId)
+            org.Org.CommandApprovalRules
    }
 
    classyNode Html.div [ "card-detail" ] [
       Html.small card.Employee.Name
-      Html.p card.Card.Display
+      Html.div [
+         Html.p [
+            attr.style [ style.display.inlineBlock ]
+            attr.text card.Card.Display
+         ]
+         Html.small " "
+         Html.small [
+            attr.text $"({card.Card.Status})"
+            match card.Card.Status with
+            | CardStatus.Frozen
+            | CardStatus.Closed -> attr.style [ style.color "var(--del-color)" ]
+            | CardStatus.Active -> attr.style [ style.color "var(--primary)" ]
+         ]
+      ]
 
       if state.IsEditingNickname then
          CardNicknameComponent userSession card dispatch
@@ -311,7 +356,7 @@ let CardDetailComponent
             DailyPurchaseLimitFormComponent
                userSession
                (fun receipt ->
-                  notifyParentOnUpdate receipt
+                  onCardUpdate receipt
                   dispatch Msg.ToggleDailyPurchaseLimitEdit)
                card.Card
                card.Employee
@@ -333,7 +378,7 @@ let CardDetailComponent
             MonthlyPurchaseLimitFormComponent
                userSession
                (fun receipt ->
-                  notifyParentOnUpdate receipt
+                  onCardUpdate receipt
                   dispatch Msg.ToggleMonthlyPurchaseLimitEdit)
                card.Card
                card.Employee
@@ -342,21 +387,47 @@ let CardDetailComponent
       classyNode Html.div [ "grid"; "card-detail-menu" ] [
          match card.Card.Status with
          | CardStatus.Active ->
-            menuButton
-               (fun _ -> dispatch <| Msg.ShowCardLockConfirmation lockCardMsg)
-               [ Html.span [ Fa.i [ Fa.Solid.Key ] [] ]; Html.span "Lock Card" ]
+            Html.div [
+               attr.role "button"
+               attr.classes [ "outline" ]
+               attr.children [
+                  Html.span [ Fa.i [ Fa.Solid.Key ] [] ]
+                  Html.span "Lock Card"
+               ]
+               attr.onClick (fun _ ->
+                  dispatch <| Msg.ShowCardLockConfirmation lockCardMsg)
+            ]
          | CardStatus.Frozen ->
-            menuButton
-               (fun _ ->
+            let cardUnlockInProgress =
+               org.Org.CommandApprovalProgress
+               |> Map.exists (fun _ p ->
+                  match p.Status, p.CommandToInitiateOnApproval with
+                  | CommandApprovalProgress.Status.Pending,
+                    ApprovableCommand.PerCommand(UnlockCard c) ->
+                     c.Data.CardId = card.Card.CardId
+                  | _ -> false)
+
+            Html.div [
+               attr.role "button"
+               attr.classes [ "outline" ]
+               if cardUnlockInProgress then
+                  attr.disabled true
+               attr.children [
+                  Html.span [ Fa.i [ Fa.Solid.Key ] [] ]
+                  Html.span (
+                     if cardUnlockInProgress then
+                        "Pending approval"
+                     else
+                        "Unlock Card"
+                  )
+               ]
+               attr.onClick (fun _ ->
                   dispatch
                   <| Msg.ShowCardLockConfirmation {
                      lockCardMsg with
                         WillLock = false
                   })
-               [
-                  Html.span [ Fa.i [ Fa.Solid.Key ] [] ]
-                  Html.span "Unlock Card"
-               ]
+            ]
          | CardStatus.Closed -> ()
 
          Html.div [
@@ -369,6 +440,7 @@ let CardDetailComponent
             attr.onClick (fun _ ->
                {
                   AccountBrowserQuery.empty with
+                     Date = Some UIDomain.DateFilter.Last30Days
                      SelectedCards =
                         Some [
                            {
@@ -416,12 +488,9 @@ let CardDetailComponent
          classyNode Html.div [ "grid" ] [
             Html.small "Account"
             Html.p (
-               match orgCtx with
-               | Deferred.Resolved(Ok(Some org)) ->
-                  org.Accounts.TryFind card.Card.AccountId
-                  |> Option.map _.Name
-                  |> Option.defaultValue "-"
-               | _ -> "-"
+               org.Accounts.TryFind card.Card.AccountId
+               |> Option.map _.Name
+               |> Option.defaultValue "-"
             )
          ]
 
