@@ -19,6 +19,7 @@ type ApprovablePerCommand =
    | InviteEmployeeCommandType
    | UpdateEmployeeRoleCommandType
    | UnlockCardCommandType
+   | ManageApprovalRuleCommandType
 
 type ApprovableAmountBased =
    | FulfillPlatformPaymentCommandType
@@ -37,6 +38,7 @@ type ApprovableCommandType =
          | InviteEmployeeCommandType -> "InviteEmployee"
          | UpdateEmployeeRoleCommandType -> "UpdateEmployeeRole"
          | UnlockCardCommandType -> "UnlockCard"
+         | ManageApprovalRuleCommandType -> "ManageApprovalRule"
       | ApprovableAmountBased x ->
          match x with
          | FulfillPlatformPaymentCommandType -> "SendPayment"
@@ -51,6 +53,7 @@ type ApprovableCommandType =
          | InviteEmployeeCommandType -> "Invite Employee"
          | UpdateEmployeeRoleCommandType -> "Update Employee Role"
          | UnlockCardCommandType -> "Unlock Card"
+         | ManageApprovalRuleCommandType -> "Manage Approval Rules"
       | ApprovableAmountBased x ->
          match x with
          | FulfillPlatformPaymentCommandType -> "Fulfill Platform Payment"
@@ -68,6 +71,8 @@ type ApprovableCommandType =
          | "UpdateEmployeeRole" ->
             Some(ApprovablePerCommand UpdateEmployeeRoleCommandType)
          | "UnlockCard" -> Some(ApprovablePerCommand UnlockCardCommandType)
+         | "ManageApprovalRule" ->
+            Some(ApprovablePerCommand ManageApprovalRuleCommandType)
          | "SendPayment" ->
             Some(ApprovableAmountBased FulfillPlatformPaymentCommandType)
          | "SendInternalTransferBetweenOrgs" ->
@@ -82,10 +87,248 @@ type ApprovableCommandType =
          failwith "Error attempting to cast string to ApprovableCommandType"
       | Some o -> o
 
+[<RequireQualifiedAccess>]
+type Approver =
+   /// Any admin is considered a suitable approver.
+   | AnyAdmin
+   /// A particular admin is considered a suitable approver.
+   | Admin of EmployeeReference
+
+   member x.DisplayName =
+      match x with
+      | Approver.AnyAdmin -> "Any Admin"
+      | Approver.Admin a -> a.EmployeeName
+
+type AmountPerCommandRange = {
+   LowerBound: decimal option
+   UpperBound: decimal option
+}
+
+[<RequireQualifiedAccess>]
+type GapDirection =
+   | Precedes
+   | Follows
+
+   override x.ToString() =
+      match x with
+      | Precedes -> "previous"
+      | Follows -> "next"
+
+type RangeGap = {
+   Gap: decimal
+   SetToAmountToCloseGap: decimal
+   Direction: GapDirection
+}
+
+module RangeGap =
+   let toError (gap: RangeGap) : OrgStateTransitionError =
+      OrgStateTransitionError.ApprovalRuleHasGapInCriteria(
+         gap.Gap,
+         gap.SetToAmountToCloseGap,
+         string gap.Direction
+      )
+
+module AmountPerCommandRange =
+   let sortBy (range: AmountPerCommandRange) =
+      match range.LowerBound, range.UpperBound with
+      | None, Some high -> 0, None, Some high
+      | Some low, Some high -> 1, Some low, Some high
+      | Some low, None -> 2, Some low, None
+      // NOTE: Case should not occur.
+      // Consider making a type which enforces either
+      // lower or upper being Some.
+      | None, None -> 3, None, None
+
+   let hasOverlap
+      (existingRange: AmountPerCommandRange)
+      (range: AmountPerCommandRange)
+      =
+      match
+         existingRange.LowerBound,
+         existingRange.UpperBound,
+         range.LowerBound,
+         range.UpperBound
+      with
+      | None, None, _, _ -> true
+      | _, _, None, None -> true
+      | Some eLow, Some eHigh, Some low, Some high ->
+         not (high <= eLow || low >= eHigh)
+      | Some eLow, Some _, None, Some high -> high > eLow
+      | Some _, Some eHigh, Some low, None -> low < eHigh
+      | None, Some eHigh, Some low, Some _ -> low < eHigh
+      | None, Some _, None, Some _ -> true
+      | None, Some eHigh, Some low, None -> low < eHigh
+      | Some eLow, None, Some _, Some high -> high > eLow
+      | Some eLow, None, None, Some high -> high > eLow
+      | Some _, None, Some _, None -> true
+
+   /// Check whether a new AmountPerCommandRange has gaps with
+   /// other AmountPerCommand ranges.
+   /// Ex: existing: [{ high = Some 100; low = None }; { low = Some 100; high = 500 }]
+   ///     new: { low = 605; high = none }
+   ///     gap detected: 105 between new lower bound and preceding upper bound
+   let hasGap
+      (existingRanges: AmountPerCommandRange list)
+      (range: AmountPerCommandRange)
+      : RangeGap option
+      =
+      if existingRanges.Length = 0 then
+         None
+      else
+         let ranges = range :: existingRanges |> List.sortBy sortBy
+
+         ranges
+         |> List.tryFindIndex (fun r -> r = range)
+         |> Option.bind (function
+            | 0 ->
+               // New range is at front of list
+
+               let rangeUpperBound =
+                  ranges |> List.tryItem 0 |> Option.bind _.UpperBound
+
+               let followingRangeLowerBound =
+                  ranges |> List.tryItem 1 |> Option.bind _.LowerBound
+
+               match rangeUpperBound, followingRangeLowerBound with
+               | Some up, Some lowFollowing ->
+                  let diff = lowFollowing - up
+
+                  if diff > 0m then
+                     Some {
+                        Gap = diff
+                        SetToAmountToCloseGap = lowFollowing
+                        Direction = GapDirection.Follows
+                     }
+                  else
+                     None
+               | _ -> None
+            | index when index = ranges.Length - 1 ->
+               // New range is at end of list
+
+               let rangeLowerBound =
+                  ranges |> List.tryItem index |> Option.bind _.LowerBound
+
+               let precedingRangeUpperBound =
+                  ranges |> List.tryItem (index - 1) |> Option.bind _.UpperBound
+
+               match rangeLowerBound, precedingRangeUpperBound with
+               | Some low, Some upPreceding ->
+                  let diff = low - upPreceding
+
+                  if diff > 0m then
+                     Some {
+                        Gap = diff
+                        SetToAmountToCloseGap = upPreceding
+                        Direction = GapDirection.Precedes
+                     }
+                  else
+                     None
+               | _ -> None
+            | index ->
+               // New range is somewhere in the middle
+
+               let range = ranges |> List.tryItem index
+               let rangeLowerBound = range |> Option.bind _.LowerBound
+               let rangeUpperBound = range |> Option.bind _.UpperBound
+
+               let precedingRangeUpperBound =
+                  ranges |> List.tryItem (index - 1) |> Option.bind _.UpperBound
+
+               let followingRangeLowerBound =
+                  ranges |> List.tryItem (index + 1) |> Option.bind _.LowerBound
+
+               match
+                  rangeLowerBound,
+                  rangeUpperBound,
+                  precedingRangeUpperBound,
+                  followingRangeLowerBound
+               with
+               | Some low, Some up, Some upPreceding, Some lowFollowing ->
+                  let diffBetweenPreceding = low - upPreceding
+                  let diffBetweenFollowing = lowFollowing - up
+
+                  if diffBetweenPreceding > 0m then
+                     Some {
+                        Gap = diffBetweenPreceding
+                        SetToAmountToCloseGap = upPreceding
+                        Direction = GapDirection.Precedes
+                     }
+                  elif diffBetweenFollowing > 0m then
+                     Some {
+                        Gap = diffBetweenFollowing
+                        SetToAmountToCloseGap = lowFollowing
+                        Direction = GapDirection.Follows
+                     }
+                  else
+                     None
+               | _ -> None)
+
+[<RequireQualifiedAccess>]
+type Criteria =
+   | AmountDailyLimit of limit: decimal
+   | AmountPerCommand of AmountPerCommandRange
+   | PerCommand
+
+   override x.ToString() =
+      match x with
+      | AmountDailyLimit _ -> "AmountDailyLimit"
+      | AmountPerCommand _ -> "AmountPerCommand"
+      | PerCommand -> "PerCommand"
+
+   static member validate
+      (criteria: Criteria)
+      : Result<Criteria, ValidationErrors> =
+      match criteria with
+      | Criteria.AmountPerCommand range ->
+         match range.LowerBound, range.UpperBound with
+         | None, None ->
+            ValidationErrors.create "amount per command criteria" [
+               "Expecting lower bound, upper bound, or both."
+            ]
+            |> Error
+         | _ -> Ok criteria
+      | Criteria.AmountDailyLimit limit ->
+         Lib.Validators.amountValidator "daily limit criteria" limit
+         |> Result.map (fun _ -> criteria)
+      | Criteria.PerCommand -> Ok criteria
+
+   static member sortBy(criteria: Criteria) =
+      match criteria with
+      | Criteria.AmountPerCommand range -> AmountPerCommandRange.sortBy range
+      | Criteria.AmountDailyLimit _ -> 4, None, None
+      | Criteria.PerCommand -> 5, None, None
+
+type CommandApprovalRule = {
+   RuleId: CommandApprovalRuleId
+   OrgId: OrgId
+   CommandType: ApprovableCommandType
+   Criteria: Criteria
+   Approvers: Approver list
+}
+
+type ManageApprovalRuleInput = {
+   Rule: CommandApprovalRule
+   /// User intends to delete a rule rather than create/edit one.
+   IsDeletion: bool
+   Initiator: EmployeeReference
+}
+
+type ManageApprovalRuleCommand = Command<ManageApprovalRuleInput>
+
+module ManageApprovalRuleCommand =
+   let create (data: ManageApprovalRuleInput) =
+      Command.create
+         (OrgId.toEntityId data.Rule.OrgId)
+         data.Rule.OrgId
+         (CorrelationId.create ())
+         (InitiatedById data.Initiator.EmployeeId)
+         data
+
 type ApprovableCommandPerCommand =
    | InviteEmployee of ApproveAccessCommand
    | UpdateEmployeeRole of UpdateRoleCommand
    | UnlockCard of UnlockCardCommand
+   | ManageApprovalRule of ManageApprovalRuleCommand
 
 type ApprovableCommandAmountBased =
    | FulfillPlatformPayment of FulfillPlatformPaymentCommand
@@ -104,6 +347,7 @@ type ApprovableCommand =
          | InviteEmployee o -> Command.envelope o
          | UpdateEmployeeRole o -> Command.envelope o
          | UnlockCard o -> Command.envelope o
+         | ManageApprovalRule o -> Command.envelope o
       | ApprovableCommand.AmountBased c ->
          match c with
          | FulfillPlatformPayment o -> Command.envelope o
@@ -138,6 +382,9 @@ type ApprovableCommand =
                UpdateEmployeeRoleCommandType
          | UnlockCard _ ->
             ApprovableCommandType.ApprovablePerCommand UnlockCardCommandType
+         | ManageApprovalRule _ ->
+            ApprovableCommandType.ApprovablePerCommand
+               ManageApprovalRuleCommandType
       | ApprovableCommand.AmountBased c ->
          match c with
          | FulfillPlatformPayment _ ->
@@ -150,234 +397,16 @@ type ApprovableCommand =
             ApprovableCommandType.ApprovableAmountBased
                DomesticTransferCommandType
 
-   member x.Display = x.CommandType.Display
+   member x.Display =
+      match x with
+      | ApprovableCommand.PerCommand(ManageApprovalRule cmd) ->
+         if cmd.Data.IsDeletion then
+            $"Delete {cmd.Data.Rule.CommandType.Display} Rule"
+         else
+            $"Configure {cmd.Data.Rule.CommandType.Display} Rule"
+      | _ -> x.CommandType.Display
 
 module CommandApprovalRule =
-   type AmountPerCommandRange = {
-      LowerBound: decimal option
-      UpperBound: decimal option
-   }
-
-   [<RequireQualifiedAccess>]
-   type GapDirection =
-      | Precedes
-      | Follows
-
-      override x.ToString() =
-         match x with
-         | Precedes -> "previous"
-         | Follows -> "next"
-
-   type RangeGap = {
-      Gap: decimal
-      SetToAmountToCloseGap: decimal
-      Direction: GapDirection
-   }
-
-   module RangeGap =
-      let toError (gap: RangeGap) : OrgStateTransitionError =
-         OrgStateTransitionError.ApprovalRuleHasGapInCriteria(
-            gap.Gap,
-            gap.SetToAmountToCloseGap,
-            string gap.Direction
-         )
-
-   module AmountPerCommandRange =
-      let sortBy (range: AmountPerCommandRange) =
-         match range.LowerBound, range.UpperBound with
-         | None, Some high -> 0, None, Some high
-         | Some low, Some high -> 1, Some low, Some high
-         | Some low, None -> 2, Some low, None
-         // NOTE: Case should not occur.
-         // Consider making a type which enforces either
-         // lower or upper being Some.
-         | None, None -> 3, None, None
-
-      let hasOverlap
-         (existingRange: AmountPerCommandRange)
-         (range: AmountPerCommandRange)
-         =
-         match
-            existingRange.LowerBound,
-            existingRange.UpperBound,
-            range.LowerBound,
-            range.UpperBound
-         with
-         | None, None, _, _ -> true
-         | _, _, None, None -> true
-         | Some eLow, Some eHigh, Some low, Some high ->
-            not (high <= eLow || low >= eHigh)
-         | Some eLow, Some _, None, Some high -> high > eLow
-         | Some _, Some eHigh, Some low, None -> low < eHigh
-         | None, Some eHigh, Some low, Some _ -> low < eHigh
-         | None, Some _, None, Some _ -> true
-         | None, Some eHigh, Some low, None -> low < eHigh
-         | Some eLow, None, Some _, Some high -> high > eLow
-         | Some eLow, None, None, Some high -> high > eLow
-         | Some _, None, Some _, None -> true
-
-      /// Check whether a new AmountPerCommandRange has gaps with
-      /// other AmountPerCommand ranges.
-      /// Ex: existing: [{ high = Some 100; low = None }; { low = Some 100; high = 500 }]
-      ///     new: { low = 605; high = none }
-      ///     gap detected: 105 between new lower bound and preceding upper bound
-      let hasGap
-         (existingRanges: AmountPerCommandRange list)
-         (range: AmountPerCommandRange)
-         : RangeGap option
-         =
-         if existingRanges.Length = 0 then
-            None
-         else
-            let ranges = range :: existingRanges |> List.sortBy sortBy
-
-            ranges
-            |> List.tryFindIndex (fun r -> r = range)
-            |> Option.bind (function
-               | 0 ->
-                  // New range is at front of list
-
-                  let rangeUpperBound =
-                     ranges |> List.tryItem 0 |> Option.bind _.UpperBound
-
-                  let followingRangeLowerBound =
-                     ranges |> List.tryItem 1 |> Option.bind _.LowerBound
-
-                  match rangeUpperBound, followingRangeLowerBound with
-                  | Some up, Some lowFollowing ->
-                     let diff = lowFollowing - up
-
-                     if diff > 0m then
-                        Some {
-                           Gap = diff
-                           SetToAmountToCloseGap = lowFollowing
-                           Direction = GapDirection.Follows
-                        }
-                     else
-                        None
-                  | _ -> None
-               | index when index = ranges.Length - 1 ->
-                  // New range is at end of list
-
-                  let rangeLowerBound =
-                     ranges |> List.tryItem index |> Option.bind _.LowerBound
-
-                  let precedingRangeUpperBound =
-                     ranges
-                     |> List.tryItem (index - 1)
-                     |> Option.bind _.UpperBound
-
-                  match rangeLowerBound, precedingRangeUpperBound with
-                  | Some low, Some upPreceding ->
-                     let diff = low - upPreceding
-
-                     if diff > 0m then
-                        Some {
-                           Gap = diff
-                           SetToAmountToCloseGap = upPreceding
-                           Direction = GapDirection.Precedes
-                        }
-                     else
-                        None
-                  | _ -> None
-               | index ->
-                  // New range is somewhere in the middle
-
-                  let range = ranges |> List.tryItem index
-                  let rangeLowerBound = range |> Option.bind _.LowerBound
-                  let rangeUpperBound = range |> Option.bind _.UpperBound
-
-                  let precedingRangeUpperBound =
-                     ranges
-                     |> List.tryItem (index - 1)
-                     |> Option.bind _.UpperBound
-
-                  let followingRangeLowerBound =
-                     ranges
-                     |> List.tryItem (index + 1)
-                     |> Option.bind _.LowerBound
-
-                  match
-                     rangeLowerBound,
-                     rangeUpperBound,
-                     precedingRangeUpperBound,
-                     followingRangeLowerBound
-                  with
-                  | Some low, Some up, Some upPreceding, Some lowFollowing ->
-                     let diffBetweenPreceding = low - upPreceding
-                     let diffBetweenFollowing = lowFollowing - up
-
-                     if diffBetweenPreceding > 0m then
-                        Some {
-                           Gap = diffBetweenPreceding
-                           SetToAmountToCloseGap = upPreceding
-                           Direction = GapDirection.Precedes
-                        }
-                     elif diffBetweenFollowing > 0m then
-                        Some {
-                           Gap = diffBetweenFollowing
-                           SetToAmountToCloseGap = lowFollowing
-                           Direction = GapDirection.Follows
-                        }
-                     else
-                        None
-                  | _ -> None)
-
-   [<RequireQualifiedAccess>]
-   type Criteria =
-      | AmountDailyLimit of limit: decimal
-      | AmountPerCommand of AmountPerCommandRange
-      | PerCommand
-
-      override x.ToString() =
-         match x with
-         | AmountDailyLimit _ -> "AmountDailyLimit"
-         | AmountPerCommand _ -> "AmountPerCommand"
-         | PerCommand -> "PerCommand"
-
-      static member validate
-         (criteria: Criteria)
-         : Result<Criteria, ValidationErrors> =
-         match criteria with
-         | Criteria.AmountPerCommand range ->
-            match range.LowerBound, range.UpperBound with
-            | None, None ->
-               ValidationErrors.create "amount per command criteria" [
-                  "Expecting lower bound, upper bound, or both."
-               ]
-               |> Error
-            | _ -> Ok criteria
-         | Criteria.AmountDailyLimit limit ->
-            Lib.Validators.amountValidator "daily limit criteria" limit
-            |> Result.map (fun _ -> criteria)
-         | Criteria.PerCommand -> Ok criteria
-
-      static member sortBy(criteria: Criteria) =
-         match criteria with
-         | Criteria.AmountPerCommand range -> AmountPerCommandRange.sortBy range
-         | Criteria.AmountDailyLimit _ -> 4, None, None
-         | Criteria.PerCommand -> 5, None, None
-
-   [<RequireQualifiedAccess>]
-   type Approver =
-      /// Any admin is considered a suitable approver.
-      | AnyAdmin
-      /// A particular admin is considered a suitable approver.
-      | Admin of EmployeeReference
-
-      member x.DisplayName =
-         match x with
-         | Approver.AnyAdmin -> "Any Admin"
-         | Approver.Admin a -> a.EmployeeName
-
-   type T = {
-      RuleId: CommandApprovalRuleId
-      OrgId: OrgId
-      CommandType: ApprovableCommandType
-      Criteria: Criteria
-      Approvers: Approver list
-   }
-
    let private isEmployeeAnApprover (id: InitiatedById) (approver: Approver) =
       match approver with
       | Approver.AnyAdmin -> true
@@ -385,12 +414,16 @@ module CommandApprovalRule =
 
    /// Is the command approver configured as an approver in the
    /// rule or is there an AnyAdmin approver configured for the rule
-   let isValidApprover (approvedBy: InitiatedById) (rule: T) : bool =
+   let isValidApprover
+      (approvedBy: InitiatedById)
+      (rule: CommandApprovalRule)
+      : bool
+      =
       rule.Approvers |> List.exists (isEmployeeAnApprover approvedBy)
 
    let isRequesterOneOfManyApprovers
       (requester: InitiatedById)
-      (rule: T)
+      (rule: CommandApprovalRule)
       : bool
       =
       rule.Approvers.Length > 1 && isValidApprover requester rule
@@ -399,7 +432,7 @@ module CommandApprovalRule =
    /// & the person requesting the command is the configured approver.
    let isRequesterTheOnlyConfiguredApprover
       (requester: InitiatedById)
-      (rule: T)
+      (rule: CommandApprovalRule)
       : bool
       =
       match rule.Approvers with
@@ -407,8 +440,8 @@ module CommandApprovalRule =
       | _ -> false
 
    let newRuleCommandTypeConflictsWithExistingRule
-      (existingRules: T seq)
-      (rule: T)
+      (existingRules: CommandApprovalRule seq)
+      (rule: CommandApprovalRule)
       =
       let existingRuleOfGivenType =
          existingRules
@@ -447,12 +480,12 @@ module CommandApprovalRule =
    /// with AmountDailyLimit rules or if AmountPerCommand
    /// rules conflict with other AmountPerCommand rules.
    let newRuleCriteriaConflictsWithExistingRule
-      (existingRules: T seq)
-      (rule: T)
+      (existingRules: CommandApprovalRule seq)
+      (rule: CommandApprovalRule)
       =
       // Keep rules with AmountPerCommand or AmountDailyLimit criteria,
       // ignoring an existing rule if we are editing it's configuration.
-      let keepAmountBasedCommandRules (existing: T) =
+      let keepAmountBasedCommandRules (existing: CommandApprovalRule) =
          existing.CommandType = rule.CommandType
          && existing.RuleId <> rule.RuleId // Editing existing rule
          && match existing.Criteria with
@@ -484,8 +517,8 @@ module CommandApprovalRule =
    /// Check whether a new rule contains gaps with other AmountPerCommand
    /// rules for the same command type.
    let newRuleContainsAmountGapWithExistingRule
-      (existingRules: T seq)
-      (rule: T)
+      (existingRules: CommandApprovalRule seq)
+      (rule: CommandApprovalRule)
       : RangeGap option
       =
       match rule.Criteria with
@@ -512,7 +545,7 @@ module CommandApprovalRule =
    // given an AmountPerCommand criteria with range
    // { LowerBound = Some; UpperBound = None }).
    // In such cases the AmountDailyLimit rule will be applied.
-   let selectOneOfAssociatedRules (rules: T list) =
+   let selectOneOfAssociatedRules (rules: CommandApprovalRule list) =
       rules
       |> List.sortBy (fun r ->
          match r.Criteria with
@@ -525,7 +558,7 @@ module CommandApprovalRule =
    let ruleDemandsApprovalForCommandType
       (commandType: ApprovableCommandType)
       (requester: InitiatedById)
-      (rule: T)
+      (rule: CommandApprovalRule)
       : bool
       =
       let onlyApprover = isRequesterTheOnlyConfiguredApprover requester rule
@@ -534,7 +567,7 @@ module CommandApprovalRule =
    let ruleDemandsApprovalForCriteria
       (command: ApprovableCommand)
       (accrual: CommandApprovalDailyAccrual)
-      (rule: T)
+      (rule: CommandApprovalRule)
       : bool
       =
       match rule.Criteria with
@@ -576,21 +609,33 @@ module CommandApprovalRule =
    let commandTypeRequiresApproval
       (commandType: ApprovableCommandType)
       (requester: InitiatedById)
-      (rules: Map<CommandApprovalRuleId, T>)
-      : T option
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
+      : CommandApprovalRule option
       =
       rules.Values
       |> Seq.toList
       |> List.filter (ruleDemandsApprovalForCommandType commandType requester)
       |> selectOneOfAssociatedRules
 
+   /// Create/Edit/Delete of a rule requires approval
+   let ruleManagementRequiresApproval
+      (requester: InitiatedById)
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
+      : CommandApprovalRule option
+      =
+      commandTypeRequiresApproval
+         (ApprovableCommandType.ApprovablePerCommand
+            ManageApprovalRuleCommandType)
+         requester
+         rules
+
    /// Get all relevant command approval rules applying
    /// to a given command.
    let associatedCommandApprovalRulesForCommand
       (command: ApprovableCommand)
       (accrual: CommandApprovalDailyAccrual)
-      (rules: Map<CommandApprovalRuleId, T>)
-      : T list
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
+      : CommandApprovalRule list
       =
       rules.Values
       |> Seq.toList
@@ -610,8 +655,8 @@ module CommandApprovalRule =
    let commandRequiresApproval
       (command: ApprovableCommand)
       (accrual: CommandApprovalDailyAccrual)
-      (rules: Map<CommandApprovalRuleId, T>)
-      : T option
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
+      : CommandApprovalRule option
       =
       associatedCommandApprovalRulesForCommand command accrual rules
       |> selectOneOfAssociatedRules
@@ -640,14 +685,14 @@ module CommandApprovalRule =
          =
          BankEvent.create<ApprovalRuleDeleted> cmd |> Ok
 
-   type ConfigureApprovalRule = { Rule: T }
+   type ConfigureApprovalRule = { Rule: CommandApprovalRule }
    type ConfigureApprovalRuleCommand = Command<ConfigureApprovalRule>
 
    module ConfigureApprovalRuleCommand =
       let create
          (orgId: OrgId)
          (initiatedBy: InitiatedById)
-         (data: T)
+         (data: CommandApprovalRule)
          : ConfigureApprovalRuleCommand
          =
          Command.create
@@ -705,6 +750,18 @@ module CommandApprovalProgress =
       LastUpdate: DateTime
    }
 
+   // Edit or deletion of a rule is currently pending approval.
+   let managementOfRuleIsPendingApproval
+      (progress: Map<CommandApprovalProgressId, T>)
+      (commandType: ApprovableCommandType)
+      =
+      progress
+      |> Map.exists (fun _ p ->
+         match p.Status, p.CommandToInitiateOnApproval with
+         | Status.Pending, ApprovableCommand.PerCommand(ManageApprovalRule c) ->
+            c.Data.Rule.CommandType = commandType
+         | _ -> false)
+
    /// Has the person approving the command already approved the
    /// command or is this a new approval?
    let isNewApproval (approvedBy: EmployeeId) (progress: T) : bool =
@@ -715,7 +772,7 @@ module CommandApprovalProgress =
    /// Employee can approve or deny the command if they are a PermittedApprover
    /// for a given command type & they haven't already approved the command.
    let canManageProgress
-      (rule: CommandApprovalRule.T)
+      (rule: CommandApprovalRule)
       (progress: T)
       (eId: EmployeeId)
       : bool
@@ -727,25 +784,24 @@ module CommandApprovalProgress =
    /// Returns configured CommandApprovalRule Approvers which have
    /// not yet approved the command.
    let remainingApprovalRequiredBy
-      (rule: CommandApprovalRule.T)
+      (rule: CommandApprovalRule)
       (progress: T)
-      : CommandApprovalRule.Approver list
+      : Approver list
       =
       List.fold
          (fun approversRequired (approvedBy: EmployeeReference) ->
             let adminFoundAtIndex =
                approversRequired
                |> List.tryFindIndex (function
-                  | CommandApprovalRule.Approver.Admin a ->
-                     a.EmployeeId = approvedBy.EmployeeId
-                  | CommandApprovalRule.Approver.AnyAdmin -> false)
+                  | Approver.Admin a -> a.EmployeeId = approvedBy.EmployeeId
+                  | Approver.AnyAdmin -> false)
                // If approvedBy not found as one of the Approver.Admin items
                // then check for the existence of an Approver.AnyAdmin option.
                |> Option.orElse (
                   approversRequired
                   |> List.tryFindIndex (function
-                     | CommandApprovalRule.Approver.Admin _ -> false
-                     | CommandApprovalRule.Approver.AnyAdmin -> true)
+                     | Approver.Admin _ -> false
+                     | Approver.AnyAdmin -> true)
                )
 
             // Remove the approversRequired item corresponding to approvedBy.
@@ -759,10 +815,10 @@ module CommandApprovalProgress =
    /// initiation into the approval workflow before issuing the command.
    let commandRequiresApproval
       (command: ApprovableCommand)
-      (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
       (progress: Map<CommandApprovalProgressId, T>)
       (accrual: CommandApprovalDailyAccrual)
-      : CommandApprovalRule.T option
+      : CommandApprovalRule option
       =
       let p =
          Map.tryFind (CommandApprovalProgressId command.CorrelationId) progress
@@ -772,7 +828,7 @@ module CommandApprovalProgress =
       | _ -> CommandApprovalRule.commandRequiresApproval command accrual rules
 
    let numberOfApprovalsUserCanManage
-      (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+      (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
       (progress: Map<CommandApprovalProgressId, T>)
       (employeeId: EmployeeId)
       : int

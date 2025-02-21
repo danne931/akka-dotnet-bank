@@ -370,7 +370,7 @@ let TransferInternalBetweenOrgsComponent
    (destinationOrgs: Org list)
    (session: UserSession)
    (senderAccounts: Map<AccountId, Account>)
-   (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+   (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
    (employeeAccrual: CommandApprovalDailyAccrual)
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)

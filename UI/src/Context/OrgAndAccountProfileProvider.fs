@@ -26,7 +26,7 @@ type Msg =
    | AccountUpdated of AccountEventPersistedConfirmation
    | OrgUpdated of Org
    | OrgCommand of OrgCommand
-   | CommandApprovalRulesLoaded of CommandApprovalRule.T list
+   | CommandApprovalRulesLoaded of CommandApprovalRule list
 
 let private initState = Deferred.Idle
 

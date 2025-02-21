@@ -11,7 +11,6 @@ let ApprovalDashboardComponent
    (session: UserSession)
    =
    let orgCtx = React.useContext OrgProvider.context
-   let orgDispatch = React.useContext OrgProvider.dispatchContext
 
    classyNode Html.div [ "approval-dashboard" ] [
       classyNode Html.main [ "container-fluid" ] [
@@ -48,10 +47,7 @@ let ApprovalDashboardComponent
          | Routes.ApprovalsUrl.Approvals ->
             match orgCtx with
             | Deferred.Resolved(Ok(Some org)) ->
-               ApprovalProgress.ApprovalProgressComponent
-                  session
-                  org.Org
-                  (_.PendingState >> OrgProvider.Msg.OrgUpdated >> orgDispatch)
+               ApprovalProgress.ApprovalProgressComponent session org.Org
             | _ -> Html.progress []
          | Routes.ApprovalsUrl.ApprovalRuleManagement ->
             match orgCtx with
@@ -59,7 +55,6 @@ let ApprovalDashboardComponent
                ApprovalRuleManagement.ApprovalRuleManagementDashboardComponent
                   session
                   org.Org
-                  (_.PendingState >> OrgProvider.Msg.OrgUpdated >> orgDispatch)
             | _ -> Html.progress []
          | Routes.ApprovalsUrl.NotFound -> Html.p "Uh oh! Unknown URL."
       ]

@@ -134,7 +134,7 @@ let setupApprovalRequest
    (orgActor: IActorRef<OrgMessage>)
    (cmdType: ApprovableCommandType)
    : ConfigureApprovalRuleCommand *
-     CommandApprovalRule.T *
+     CommandApprovalRule *
      CommandApprovalProgress.T
    =
    let rule = {

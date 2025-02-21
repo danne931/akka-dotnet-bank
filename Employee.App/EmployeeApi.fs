@@ -15,6 +15,7 @@ module AccountFields = AccountSqlMapper.AccountFields
 module Fields = EmployeeSqlMapper.EmployeeFields
 module Reader = EmployeeSqlMapper.EmployeeSqlReader
 module Writer = EmployeeSqlMapper.EmployeeSqlWriter
+module Typecast = EmployeeSqlMapper.EmployeeTypeCast
 let table = EmployeeSqlMapper.table
 
 let searchEmployees (orgId: OrgId) (searchQuery: string) =
@@ -130,7 +131,7 @@ let getEmployees (orgId: OrgId) (query: EmployeeQuery) =
       Option.fold
          (fun (queryParams, where) roles ->
             [ "roles", Writer.roles roles ] @ queryParams,
-            $"{where} AND {Fields.role} = ANY(SELECT UNNEST(@roles)::{EmployeeSqlMapper.EmployeeTypeCast.role})")
+            $"{where} AND {Fields.role} = ANY(SELECT UNNEST(@roles)::{Typecast.role})")
          agg
          query.Roles
 
@@ -138,7 +139,7 @@ let getEmployees (orgId: OrgId) (query: EmployeeQuery) =
       Option.fold
          (fun (queryParams, where) status ->
             [ "status", Writer.status status ] @ queryParams,
-            $"{where} AND {Fields.status} = @status::{EmployeeSqlMapper.EmployeeTypeCast.status}")
+            $"{where} AND {Fields.status} = @status::{Typecast.status}")
          agg
          query.Status
 
@@ -150,6 +151,37 @@ let getEmployees (orgId: OrgId) (query: EmployeeQuery) =
         ORDER BY {Fields.firstName} || {Fields.lastName}"
 
    pgQuery<Employee> query (Some queryParams) Reader.employee
+
+let getDemoUserSessions (orgId: OrgId) =
+   let query =
+      $"SELECT
+           {Fields.employeeId},
+           {Fields.orgId},
+           {Fields.firstName},
+           {Fields.lastName},
+           {Fields.email},
+           {Fields.role},
+           {Fields.status}
+        FROM {table}
+        WHERE
+           {Fields.orgId} = @orgId
+           AND {Fields.status} = @activeStatus::{Typecast.status}
+        ORDER BY {Fields.firstName} || {Fields.lastName}"
+
+   pgQuery<UserSession>
+      query
+      (Some [
+         "orgId", Writer.orgId orgId
+         "activeStatus", Writer.status EmployeeStatus.Active
+      ])
+      (fun read -> {
+         EmployeeId = Reader.employeeId read
+         OrgId = Reader.orgId read
+         FirstName = Reader.firstName read
+         LastName = Reader.lastName read
+         Email = Reader.email read
+         Role = Reader.role read
+      })
 
 module Fields = CardSqlMapper.CardFields
 module Reader = CardSqlMapper.CardSqlReader
@@ -250,28 +282,3 @@ let getCards (orgId: OrgId) (query: CardQuery) =
          read.decimalOrNone "mpa" |> Option.defaultValue 0m
       Employee = Reader.employee read
    })
-
-let getDemoUserSessions (orgId: OrgId) =
-   let query =
-      $"SELECT
-           {Fields.employeeId},
-           {Fields.orgId},
-           {Fields.firstName},
-           {Fields.lastName},
-           {Fields.email},
-           {Fields.role}
-        FROM {table}
-        WHERE {Fields.orgId} = @orgId
-        ORDER BY {Fields.firstName} || {Fields.lastName}"
-
-   pgQuery<UserSession>
-      query
-      (Some [ "orgId", Writer.orgId orgId ])
-      (fun read -> {
-         EmployeeId = Reader.employeeId read
-         OrgId = Reader.orgId read
-         FirstName = Reader.firstName read
-         LastName = Reader.lastName read
-         Email = Reader.email read
-         Role = Reader.role read
-      })

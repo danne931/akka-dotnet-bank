@@ -39,7 +39,7 @@ type CardLockMsg = {
    Card: Card
    InitiatedBy: InitiatedById
    UserSession: UserSession
-   UnlockRequiresApproval: CommandApprovalRule.T option
+   UnlockRequiresApproval: CommandApprovalRule option
 }
 
 type Msg =

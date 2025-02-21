@@ -106,18 +106,17 @@ let update (onOrgUpdate: OrgCommandReceipt -> unit) msg state =
       state, Alerts.toastCommand err
    | DismissConfirmation -> state, Cmd.none
 
-let approversMsg (approvers: CommandApprovalRule.Approver list) =
+let approversMsg (approvers: Approver list) =
    approvers
    |> List.fold (fun acc approver -> $"{acc}{approver.DisplayName}, ") ""
    |> _.TrimEnd()
    |> _.TrimEnd(',')
 
 [<ReactComponent>]
-let ApprovalProgressComponent
-   (session: UserSession)
-   (org: Org)
-   (onOrgUpdate: OrgCommandReceipt -> unit)
-   =
+let ApprovalProgressComponent (session: UserSession) (org: Org) =
+   let orgDispatch = React.useContext OrgProvider.dispatchContext
+   let onOrgUpdate = _.PendingState >> OrgProvider.Msg.OrgUpdated >> orgDispatch
+
    let _, dispatch =
       React.useElmish (init, update onOrgUpdate, [| box session.OrgId |])
 
@@ -128,7 +127,8 @@ let ApprovalProgressComponent
             |> Seq.choose (fun progress ->
                org.CommandApprovalRules
                |> Map.tryFind progress.RuleId
-               |> Option.map (fun rule -> rule, progress))
+               |> Option.map (fun rule -> Some rule, progress)
+               |> Option.orElse (Some(None, progress)))
             |> Seq.sortByDescending (fun (_, progress) -> progress.CreatedAt)
             |> Seq.sortBy (fun (_, progress) ->
                match progress.Status with
@@ -145,25 +145,31 @@ let ApprovalProgressComponent
       React.fragment [
          for rule, progress in approvals do
             let approvalsRemaining =
-               CommandApprovalProgress.remainingApprovalRequiredBy rule progress
+               match rule with
+               | Some rule ->
+                  CommandApprovalProgress.remainingApprovalRequiredBy
+                     rule
+                     progress
+               | None -> []
 
             let canManageProgress =
-               CommandApprovalProgress.canManageProgress
-                  rule
-                  progress
-                  session.EmployeeId
+               match rule with
+               | Some rule ->
+                  CommandApprovalProgress.canManageProgress
+                     rule
+                     progress
+                     session.EmployeeId
+               | None -> false
 
-            let approvedBy =
-               progress.ApprovedBy
-               |> List.map CommandApprovalRule.Approver.Admin
+            let approvedBy = progress.ApprovedBy |> List.map Approver.Admin
 
             classyNode Html.article [ "command-pending-approval" ] [
                Html.header [
                   classyNode Html.div [ "grid" ] [
                      Html.p progress.CommandToInitiateOnApproval.Display
 
-                     match progress.Status with
-                     | CommandApprovalProgress.Status.Pending ->
+                     match rule, progress.Status with
+                     | Some rule, CommandApprovalProgress.Status.Pending ->
                         Html.small
                            $"{approvedBy.Length} of {rule.Approvers.Length} approvals acquired"
                      | _ -> Html.small ""
@@ -222,9 +228,13 @@ let ApprovalProgressComponent
                Html.p (
                   ApprovableCommand.displayVerbose
                      progress.CommandToInitiateOnApproval
-                  + $" requested by {progress.RequestedBy.EmployeeName} on
-                  {DateTime.formatShort progress.CreatedAt}."
                )
+
+               classyNode Html.div [ "approval-info-inline" ] [
+                  Html.small "Requested by:"
+                  Html.p
+                     $"{progress.RequestedBy.EmployeeName} on {DateTime.formatShort progress.CreatedAt}"
+               ]
 
                match progress.Status with
                | CommandApprovalProgress.Status.Approved ->
@@ -239,7 +249,7 @@ let ApprovalProgressComponent
                      |> Option.map _.EmployeeName
                      |> Option.defaultValue "Unknown"
 
-                  classyNode Html.div [ "approval-count" ] [
+                  classyNode Html.div [ "approval-info-inline" ] [
                      Html.small [
                         attr.classes [ "debit" ]
                         attr.text
@@ -247,12 +257,12 @@ let ApprovalProgressComponent
                      ]
                   ]
                | CommandApprovalProgress.Status.Pending ->
-                  classyNode Html.div [ "approval-count" ] [
+                  classyNode Html.div [ "approval-info-inline" ] [
                      Html.small "Approvals remaining:"
                      Html.p (approversMsg approvalsRemaining)
                   ]
 
-                  classyNode Html.div [ "approval-count" ] [
+                  classyNode Html.div [ "approval-info-inline" ] [
                      Html.small "Approvals acquired:"
 
                      match approvedBy with
