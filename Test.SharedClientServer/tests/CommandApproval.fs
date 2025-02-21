@@ -84,7 +84,7 @@ let tests =
 
       test
          "AmountPerCommandRange detects between existing ranges & a new range
-            when new range is at start of sorted ranges" {
+          when new range is at start of sorted ranges" {
          let ranges = [
             {
                LowerBound = Some 3m
@@ -135,7 +135,7 @@ let tests =
 
       test
          "AmountPerCommandRange detects between existing ranges & a new range
-            when new range is somewhere in the middle of sorted ranges" {
+          when new range is somewhere in the middle of sorted ranges" {
          let ranges = [
             {
                LowerBound = None
@@ -1948,63 +1948,48 @@ let tests =
          ]
 
          let conflictingCriteria = [
-            [
-               ApprovalCriteria.AmountDailyLimit 10m
+            ApprovalCriteria.AmountDailyLimit 10m,
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 15m
+               UpperBound = None
+            }
 
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 15m
-                  UpperBound = None
-               }
-            ]
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = None
+               UpperBound = Some 15m
+            },
+            ApprovalCriteria.AmountDailyLimit 10m
 
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = None
-                  UpperBound = Some 15m
-               }
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 10m
+               UpperBound = None
+            },
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 15m
+               UpperBound = None
+            }
 
-               ApprovalCriteria.AmountDailyLimit 10m
-            ]
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 10m
+               UpperBound = Some 20m
+            },
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 15m
+               UpperBound = None
+            }
 
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 10m
-                  UpperBound = None
-               }
-
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 15m
-                  UpperBound = None
-               }
-            ]
-
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 10m
-                  UpperBound = Some 20m
-               }
-
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 15m
-                  UpperBound = None
-               }
-            ]
-
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = None
-                  UpperBound = Some 15m
-               }
-
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 10m
-                  UpperBound = Some 20m
-               }
-            ]
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = None
+               UpperBound = Some 15m
+            },
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 10m
+               UpperBound = Some 20m
+            }
          ]
 
          for cmdType in commandTypes do
-            for [ criteriaOfFirst; criteriaOfSecond ] in conflictingCriteria do
+            for criteriaOfFirst, criteriaOfSecond in conflictingCriteria do
                let rule = {
                   RuleId = Stub.ruleId ()
                   OrgId = Stub.orgId
@@ -2077,87 +2062,66 @@ let tests =
          ]
 
          let criteria = [
-            [
-               ApprovalCriteria.AmountDailyLimit 10m
+            ApprovalCriteria.AmountDailyLimit 10m,
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 5m
+               UpperBound = None
+            }
 
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 5m
-                  UpperBound = None
-               }
-            ]
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = None
+               UpperBound = Some 5m
+            },
+            ApprovalCriteria.AmountDailyLimit 10m
 
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = None
-                  UpperBound = Some 5m
-               }
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = None
+               UpperBound = Some 14m
+            },
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 14m
+               UpperBound = None
+            }
 
-               ApprovalCriteria.AmountDailyLimit 10m
-            ]
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 10m
+               UpperBound = Some 20m
+            },
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 20m
+               UpperBound = None
+            }
 
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = None
-                  UpperBound = Some 14m
-               }
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = None
+               UpperBound = Some 9m
+            },
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 9m
+               UpperBound = Some 20m
+            }
 
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 14m
-                  UpperBound = None
-               }
-            ]
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = None
+               UpperBound = Some 10m
+            },
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 10m
+               UpperBound = Some 20m
+            }
 
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 10m
-                  UpperBound = Some 20m
-               }
-
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 20m
-                  UpperBound = None
-               }
-            ]
-
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = None
-                  UpperBound = Some 9m
-               }
-
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 9m
-                  UpperBound = Some 20m
-               }
-            ]
-
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = None
-                  UpperBound = Some 10m
-               }
-
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 10m
-                  UpperBound = Some 20m
-               }
-            ]
-
-            [
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = None
-                  UpperBound = Some 10m
-               }
-
-               ApprovalCriteria.AmountPerCommand {
-                  LowerBound = Some 10m
-                  UpperBound = None
-               }
-            ]
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = None
+               UpperBound = Some 10m
+            },
+            ApprovalCriteria.AmountPerCommand {
+               LowerBound = Some 10m
+               UpperBound = None
+            }
          ]
 
          for cmdType in commandTypes do
-            for [ criteriaOfFirst; criteriaOfSecond ] in criteria do
+            for criteriaOfFirst, criteriaOfSecond in criteria do
                let rule = {
                   RuleId = Stub.ruleId ()
                   OrgId = Stub.orgId
@@ -2360,5 +2324,292 @@ let tests =
                false
                "Should not be able to acquire additional
                approvals once progress item is no longer active"
+      }
+
+      test
+         "Creating a ManageApprovalRule requires approval for future creation/editing of rules" {
+         let admin = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let otherAdmin = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let ruleIdForManagingApproval = Stub.ruleId ()
+
+         let cmdToMakeManagingRulesRequireDualAdminApproval =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  OrgId = Stub.orgId
+                  CommandType =
+                     ApprovableCommandType.ApprovablePerCommand
+                        ManageApprovalRuleCommandType
+                  Criteria = ApprovalCriteria.PerCommand
+                  Approvers = [
+                     CommandApprover.Admin admin
+                     CommandApprover.Admin otherAdmin
+                  ]
+               }
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res =
+            update
+               Stub.orgStateWithEvents
+               cmdToMakeManagingRulesRequireDualAdminApproval
+
+         let _, org = Expect.wantOk res ""
+
+         let ruleToInviteEmployee = {
+            RuleId = Stub.ruleId ()
+            OrgId = org.Info.OrgId
+            CommandType = Stub.commandTypes.InviteEmployee
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
+         }
+
+         let approvalRequest: CommandApprovalRequested = {
+            RuleId = ruleIdForManagingApproval
+            Requester = admin
+            RequesterIsConfiguredAsAnApprover = true
+            Command =
+               {
+                  Rule = ruleToInviteEmployee
+                  IsDeletion = false
+                  Initiator = admin
+               }
+               |> ManageApprovalRuleCommand.create
+               |> ManageApprovalRule
+               |> ApprovableCommand.PerCommand
+         }
+
+         let cmdRequestingApprovalToManageRule =
+            RequestCommandApproval.create
+               org.Info.OrgId
+               (InitiatedById admin.EmployeeId)
+               (Guid.NewGuid() |> CorrelationId)
+               approvalRequest
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmdRequestingApprovalToManageRule
+         let _, org = Expect.wantOk res ""
+
+         let progress = Seq.head org.Info.CommandApprovalProgress.Values
+         Expect.equal progress.Status CommandApprovalProgress.Status.Pending ""
+
+         Expect.isFalse
+            (org.Info.CommandApprovalRules.ContainsKey
+               ruleToInviteEmployee.RuleId)
+            "Invite Employee rule should not exist in org rules when approval pending"
+
+         let cmd =
+            AcquireCommandApproval.create org.Info.OrgId {
+               RuleId = progress.RuleId
+               ApprovedBy = otherAdmin
+               ProgressId = progress.ProgressId
+               Command = progress.CommandToInitiateOnApproval
+            }
+            |> OrgCommand.AcquireCommandApproval
+
+         let res = update org cmd
+         let _, org = Expect.wantOk res ""
+
+         let progress = Seq.head org.Info.CommandApprovalProgress.Values
+         Expect.equal progress.Status CommandApprovalProgress.Status.Approved ""
+
+         Expect.isTrue
+            (org.Info.CommandApprovalRules.ContainsKey
+               ruleToInviteEmployee.RuleId)
+            "Invite Employee rule should be present in org rules after approval completion"
+
+         let ruleToInviteEmployeeEdited = {
+            ruleToInviteEmployee with
+               Approvers = [
+                  CommandApprover.Admin admin
+                  CommandApprover.Admin otherAdmin
+               ]
+         }
+
+         let approvalRequest: CommandApprovalRequested = {
+            RuleId = ruleIdForManagingApproval
+            Requester = admin
+            RequesterIsConfiguredAsAnApprover = true
+            Command =
+               {
+                  Rule = ruleToInviteEmployeeEdited
+                  IsDeletion = false
+                  Initiator = admin
+               }
+               |> ManageApprovalRuleCommand.create
+               |> ManageApprovalRule
+               |> ApprovableCommand.PerCommand
+         }
+
+         let cmdRequestingApprovalToManageRule =
+            RequestCommandApproval.create
+               org.Info.OrgId
+               (InitiatedById admin.EmployeeId)
+               (Guid.NewGuid() |> CorrelationId)
+               approvalRequest
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmdRequestingApprovalToManageRule
+         let _, org = Expect.wantOk res ""
+
+         let progress = Seq.head org.Info.CommandApprovalProgress.Values
+         Expect.equal progress.Status CommandApprovalProgress.Status.Pending ""
+
+         Expect.notEqual
+            org.Info.CommandApprovalRules[ruleToInviteEmployee.RuleId].Approvers
+            ruleToInviteEmployeeEdited.Approvers
+            "Existing invite employee rule should not yet have updated Approvers
+            since approval for editing the invite employee rule is in progress"
+
+         let cmd =
+            AcquireCommandApproval.create org.Info.OrgId {
+               RuleId = progress.RuleId
+               ApprovedBy = otherAdmin
+               ProgressId = progress.ProgressId
+               Command = progress.CommandToInitiateOnApproval
+            }
+            |> OrgCommand.AcquireCommandApproval
+
+         let res = update org cmd
+         let _, org = Expect.wantOk res ""
+
+         Expect.equal
+            org.Info.CommandApprovalRules[ruleToInviteEmployee.RuleId].Approvers
+            ruleToInviteEmployeeEdited.Approvers
+            "Existing invite employee rule should have updated Approvers upon approval of
+            editing the invite employee rule"
+      }
+
+      test
+         "Creating a ManageApprovalRule requires approval for future deletion of rules" {
+         let admin = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let otherAdmin = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let ruleToInviteEmployee = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.InviteEmployee
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
+         }
+
+         let configureInviteEmployeeApprovalRuleCmd =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               {
+                  RuleId = ruleToInviteEmployee.RuleId
+                  OrgId = Stub.orgId
+                  CommandType =
+                     ApprovableCommandType.ApprovablePerCommand
+                        ManageApprovalRuleCommandType
+                  Criteria = ApprovalCriteria.PerCommand
+                  Approvers = [
+                     CommandApprover.Admin admin
+                     CommandApprover.Admin otherAdmin
+                  ]
+               }
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res =
+            update
+               Stub.orgStateWithEvents
+               configureInviteEmployeeApprovalRuleCmd
+
+         let _, org = Expect.wantOk res ""
+
+         Expect.isTrue
+            (org.Info.CommandApprovalRules.ContainsKey
+               ruleToInviteEmployee.RuleId)
+            ""
+
+         let ruleIdForManagingApproval = Stub.ruleId ()
+
+         let cmdToMakeManagingRulesRequireDualAdminApproval =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  OrgId = Stub.orgId
+                  CommandType =
+                     ApprovableCommandType.ApprovablePerCommand
+                        ManageApprovalRuleCommandType
+                  Criteria = ApprovalCriteria.PerCommand
+                  Approvers = [
+                     CommandApprover.Admin admin
+                     CommandApprover.Admin otherAdmin
+                  ]
+               }
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res =
+            update
+               Stub.orgStateWithEvents
+               cmdToMakeManagingRulesRequireDualAdminApproval
+
+         let _, org = Expect.wantOk res ""
+
+         let cmdRequestingApprovalToDeleteRule =
+            RequestCommandApproval.create
+               org.Info.OrgId
+               (InitiatedById admin.EmployeeId)
+               (Guid.NewGuid() |> CorrelationId)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  Requester = admin
+                  RequesterIsConfiguredAsAnApprover = true
+                  Command =
+                     {
+                        Rule = ruleToInviteEmployee
+                        IsDeletion = true
+                        Initiator = admin
+                     }
+                     |> ManageApprovalRuleCommand.create
+                     |> ManageApprovalRule
+                     |> ApprovableCommand.PerCommand
+               }
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmdRequestingApprovalToDeleteRule
+         let _, org = Expect.wantOk res ""
+
+         let progress = Seq.head org.Info.CommandApprovalProgress.Values
+         Expect.equal progress.Status CommandApprovalProgress.Status.Pending ""
+
+         let cmd =
+            AcquireCommandApproval.create Stub.orgId {
+               RuleId = progress.RuleId
+               ApprovedBy = otherAdmin
+               ProgressId = progress.ProgressId
+               Command = progress.CommandToInitiateOnApproval
+            }
+            |> OrgCommand.AcquireCommandApproval
+
+         let res = update org cmd
+         let _, org = Expect.wantOk res ""
+         let progress = Seq.head org.Info.CommandApprovalProgress.Values
+         Expect.equal progress.Status CommandApprovalProgress.Status.Approved ""
+
+         Expect.isFalse
+            (org.Info.CommandApprovalRules.ContainsKey
+               ruleToInviteEmployee.RuleId)
+            "Rule should be removed from org after approval completion"
       }
    ]
