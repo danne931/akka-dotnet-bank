@@ -13,6 +13,7 @@ open ActorUtil
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open CommandApproval
 open CommandApprovalRule
 open CommandApprovalProgress
 open Lib.SharedTypes
@@ -141,8 +142,8 @@ let setupApprovalRequest
       RuleId = Stub.ruleId ()
       OrgId = Stub.orgId
       CommandType = cmdType
-      Criteria = Criteria.PerCommand
-      Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+      Criteria = ApprovalCriteria.PerCommand
+      Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
    }
 
    let configureApprovalRuleCmd =
@@ -326,7 +327,7 @@ let tests =
          let cmd =
             {
                configureApprovalRuleCmd with
-                  Data.Rule.Approvers = [ Approver.AnyAdmin ]
+                  Data.Rule.Approvers = [ CommandApprover.AnyAdmin ]
             }
             |> OrgCommand.ConfigureApprovalRule
 
@@ -557,8 +558,8 @@ let tests =
             CommandType =
                ApprovableCommandType.ApprovableAmountBased
                   DomesticTransferCommandType
-            Criteria = Criteria.AmountDailyLimit 550m
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.AmountDailyLimit 550m
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let configureApprovalRuleCmd =
@@ -613,8 +614,8 @@ let tests =
             CommandType =
                ApprovableCommandType.ApprovableAmountBased
                   DomesticTransferCommandType
-            Criteria = Criteria.AmountDailyLimit 550m
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.AmountDailyLimit 550m
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let configureApprovalRuleCmd =

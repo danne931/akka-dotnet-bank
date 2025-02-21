@@ -12,8 +12,8 @@ let billingStatement =
 
 let accountBroadcast: AccountBroadcast = {
    accountEventPersisted = fun evt accountState -> ()
-   accountEventValidationFail = fun accountId msg -> ()
-   accountEventPersistenceFail = fun accountId msg -> ()
+   accountEventValidationFail = fun orgId accountId msg -> ()
+   accountEventPersistenceFail = fun orgId accountId msg -> ()
    circuitBreaker = fun msg -> ()
 }
 

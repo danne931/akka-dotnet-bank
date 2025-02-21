@@ -16,6 +16,7 @@ open Lib.Validators
 open FormContainer
 open Lib.SharedTypes
 open Bank.Employee.Forms.AccountProfileForm
+open CommandApproval
 
 type Values = {
    Amount: string

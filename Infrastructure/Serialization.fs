@@ -15,6 +15,7 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open BillingStatement
 open Lib.SharedTypes
+open CommandApproval
 
 type OrganizationEventPersistenceAdapter() =
    let envelopeFromJournal (entry: obj) : Envelope =

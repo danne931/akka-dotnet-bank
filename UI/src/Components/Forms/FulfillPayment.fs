@@ -8,11 +8,11 @@ open Fable.Form.Simple.Pico
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
-open Bank.Org.Domain
 open UIDomain.Org
 open UIDomain.Account
 open FormContainer
 open Lib.SharedTypes
+open CommandApproval
 
 type Values = { AccountIdSourceOfFunds: string }
 

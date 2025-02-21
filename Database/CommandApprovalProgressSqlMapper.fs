@@ -1,7 +1,7 @@
 module CommandApprovalProgressSqlMapper
 
 open Lib.SharedTypes
-open Bank.Org.Domain
+open CommandApproval
 
 let table = "command_approval_progress"
 

@@ -10,6 +10,7 @@ open Expecto
 
 open Bank.Org.Domain
 open Bank.Employee.Domain
+open CommandApproval
 open CommandApprovalRule
 open CommandApprovalProgress
 open Lib.SharedTypes
@@ -226,15 +227,12 @@ let tests =
             UpperBound = None
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(3, infinity) should overlap with (2, 5)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   LowerBound = Some 1m
             }
@@ -242,7 +240,7 @@ let tests =
          Expect.isTrue overlap "(1, infinity) should overlap with (2, 5)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   LowerBound = Some 6m
             }
@@ -252,7 +250,7 @@ let tests =
             "(6, infinity) is outside of range (2, 5) so should not overlap"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   LowerBound = Some 5m
             }
@@ -273,15 +271,12 @@ let tests =
             UpperBound = Some 3m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(0, 3) overlaps with (2, 5)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   UpperBound = Some 1m
             }
@@ -291,7 +286,7 @@ let tests =
             "(0, 1) is outside of range (2, 5) so should not overlap"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   UpperBound = Some 6m
             }
@@ -299,7 +294,7 @@ let tests =
          Expect.isTrue overlap "(0, 6) should overlap with (2, 5)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   UpperBound = Some 2m
             }
@@ -320,10 +315,7 @@ let tests =
             UpperBound = Some 4m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(2, 4) overlaps with (0, 5)"
 
@@ -332,10 +324,7 @@ let tests =
             UpperBound = Some 8m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isFalse
             overlap
@@ -347,10 +336,7 @@ let tests =
             UpperBound = Some 8m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isFalse
             overlap
@@ -368,10 +354,7 @@ let tests =
             UpperBound = Some 4m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(0, 4) overlaps with (0, 5)"
 
@@ -385,10 +368,7 @@ let tests =
             UpperBound = Some 5m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(0, 5) overlaps with (0, 1)"
       }
@@ -404,15 +384,12 @@ let tests =
             UpperBound = None
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(4, infinity) overlaps with (0, 5)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   LowerBound = Some 6m
             }
@@ -420,7 +397,7 @@ let tests =
          Expect.isFalse overlap "(6, infinity) does not overlap with (0, 5)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   LowerBound = Some 5m
             }
@@ -439,15 +416,12 @@ let tests =
             UpperBound = Some 5m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(3, 5) should overlap with (2, infinity)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
+            AmountPerCommandRange.hasOverlap
                {
                   existingRange with
                      LowerBound = Some 6m
@@ -457,7 +431,7 @@ let tests =
          Expect.isFalse overlap "(3, 5) should not overlap with (6, infinity)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
+            AmountPerCommandRange.hasOverlap
                {
                   LowerBound = Some 5m
                   UpperBound = None
@@ -481,15 +455,12 @@ let tests =
             UpperBound = Some 5m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(0, 5) should overlap with (2, infinity)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   UpperBound = Some 1m
             }
@@ -497,7 +468,7 @@ let tests =
          Expect.isFalse overlap "(0, 1) should not overlap with (2, infinity)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   UpperBound = Some 2m
             }
@@ -516,10 +487,7 @@ let tests =
             UpperBound = None
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(5, infinity) should overlap with (2, infinity)"
 
@@ -533,10 +501,7 @@ let tests =
             UpperBound = None
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isTrue overlap "(2, infinity) should overlap with (5, infinity)"
       }
@@ -552,15 +517,12 @@ let tests =
             UpperBound = Some 10m
          }
 
-         let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
-               existingRange
-               range
+         let overlap = AmountPerCommandRange.hasOverlap existingRange range
 
          Expect.isFalse overlap "(6, 10) should not overlap with (2, 5)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap existingRange {
+            AmountPerCommandRange.hasOverlap existingRange {
                range with
                   LowerBound = Some 4m
             }
@@ -568,7 +530,7 @@ let tests =
          Expect.isTrue overlap "(4, 10) should overlap with (2, 5)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
+            AmountPerCommandRange.hasOverlap
                {
                   LowerBound = Some 7m
                   UpperBound = Some 9m
@@ -578,7 +540,7 @@ let tests =
          Expect.isTrue overlap "(6, 10) should overlap with (7, 9)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
+            AmountPerCommandRange.hasOverlap
                {
                   LowerBound = Some 7m
                   UpperBound = Some 15m
@@ -588,7 +550,7 @@ let tests =
          Expect.isTrue overlap "(6, 10) should overlap with (7, 15)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
+            AmountPerCommandRange.hasOverlap
                {
                   LowerBound = Some 1m
                   UpperBound = Some 15m
@@ -598,7 +560,7 @@ let tests =
          Expect.isTrue overlap "(6, 10) should overlap with (1, 15)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
+            AmountPerCommandRange.hasOverlap
                {
                   LowerBound = Some 1m
                   UpperBound = Some 7m
@@ -608,7 +570,7 @@ let tests =
          Expect.isTrue overlap "(6, 10) should overlap with (1, 7)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
+            AmountPerCommandRange.hasOverlap
                {
                   LowerBound = Some 11m
                   UpperBound = Some 20m
@@ -618,7 +580,7 @@ let tests =
          Expect.isFalse overlap "(6, 10) should not overlap with (11, 20)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap
+            AmountPerCommandRange.hasOverlap
                {
                   LowerBound = Some 10m
                   UpperBound = Some 20m
@@ -628,7 +590,7 @@ let tests =
          Expect.isFalse overlap "(6, 10) should not overlap with (10, 20)"
 
          let overlap =
-            CommandApprovalRule.AmountPerCommandRange.hasOverlap range {
+            AmountPerCommandRange.hasOverlap range {
                LowerBound = Some 10m
                UpperBound = Some 20m
             }
@@ -645,19 +607,19 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.Payment
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 50m
                }
-            Approvers = [ Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin ]
          }
 
          let newRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.Payment
-            Criteria = Criteria.AmountDailyLimit 60m
-            Approvers = [ Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.AmountDailyLimit 60m
+            Approvers = [ CommandApprover.AnyAdmin ]
          }
 
          let conflicts =
@@ -671,7 +633,7 @@ let tests =
 
          let newRule = {
             newRule with
-               Criteria = Criteria.AmountDailyLimit 40m
+               Criteria = ApprovalCriteria.AmountDailyLimit 40m
          }
 
          let conflicts =
@@ -686,7 +648,7 @@ let tests =
          let existingRule = {
             existingRule with
                Criteria =
-                  Criteria.AmountPerCommand {
+                  ApprovalCriteria.AmountPerCommand {
                      LowerBound = Some 10m
                      UpperBound = None
                   }
@@ -704,7 +666,7 @@ let tests =
          let existingRule = {
             existingRule with
                Criteria =
-                  Criteria.AmountPerCommand {
+                  ApprovalCriteria.AmountPerCommand {
                      LowerBound = Some 50m
                      UpperBound = None
                   }
@@ -722,7 +684,7 @@ let tests =
          let existingRule = {
             existingRule with
                Criteria =
-                  Criteria.AmountPerCommand {
+                  ApprovalCriteria.AmountPerCommand {
                      LowerBound = Some 10m
                      UpperBound = Some 30m
                   }
@@ -730,7 +692,7 @@ let tests =
 
          let newRule = {
             newRule with
-               Criteria = Criteria.AmountDailyLimit 20m
+               Criteria = ApprovalCriteria.AmountDailyLimit 20m
          }
 
          let conflicts =
@@ -744,7 +706,7 @@ let tests =
 
          let newRule = {
             newRule with
-               Criteria = Criteria.AmountDailyLimit 40m
+               Criteria = ApprovalCriteria.AmountDailyLimit 40m
          }
 
          let conflicts =
@@ -763,8 +725,8 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.Payment
-            Criteria = Criteria.AmountDailyLimit 60m
-            Approvers = [ Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.AmountDailyLimit 60m
+            Approvers = [ CommandApprover.AnyAdmin ]
          }
 
          let newRule = {
@@ -772,11 +734,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.Payment
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 50m
                }
-            Approvers = [ Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin ]
          }
 
          let conflicts =
@@ -791,7 +753,7 @@ let tests =
          let newRule = {
             newRule with
                Criteria =
-                  Criteria.AmountPerCommand {
+                  ApprovalCriteria.AmountPerCommand {
                      LowerBound = None
                      UpperBound = Some 70m
                   }
@@ -809,7 +771,7 @@ let tests =
          let newRule = {
             newRule with
                Criteria =
-                  Criteria.AmountPerCommand {
+                  ApprovalCriteria.AmountPerCommand {
                      LowerBound = Some 50m
                      UpperBound = Some 70m
                   }
@@ -827,7 +789,7 @@ let tests =
          let newRule = {
             newRule with
                Criteria =
-                  Criteria.AmountPerCommand {
+                  ApprovalCriteria.AmountPerCommand {
                      LowerBound = Some 80m
                      UpperBound = None
                   }
@@ -855,11 +817,11 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.InviteEmployee
-            Criteria = Criteria.PerCommand
+            Criteria = ApprovalCriteria.PerCommand
             Approvers = [
-               Approver.Admin approver
+               CommandApprover.Admin approver
 
-               Approver.Admin {
+               CommandApprover.Admin {
                   EmployeeName = "B"
                   EmployeeId = Guid.NewGuid() |> EmployeeId
                }
@@ -873,7 +835,7 @@ let tests =
          let rule = {
             rule with
                Approvers = [
-                  Approver.Admin {
+                  CommandApprover.Admin {
                      EmployeeName = "B"
                      EmployeeId = Guid.NewGuid() |> EmployeeId
                   }
@@ -886,7 +848,10 @@ let tests =
 
          let rule = {
             rule with
-               Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+               Approvers = [
+                  CommandApprover.AnyAdmin
+                  CommandApprover.AnyAdmin
+               ]
          }
 
          Expect.isTrue
@@ -896,7 +861,7 @@ let tests =
 
       test
          "newRuleCommandTypeConflictsWithExistingRule should check for
-          duplicate rules by (ApprovableCommandType, Criteria.PerCommand)" {
+          duplicate rules by (ApprovableCommandType, ApprovalCriteria.PerCommand)" {
          let cmdTypes = [
             Stub.commandTypes.InviteEmployee
             Stub.commandTypes.UpdateEmployeeRole
@@ -907,17 +872,17 @@ let tests =
                RuleId = Stub.ruleId ()
                OrgId = Stub.orgId
                CommandType = cmdType
-               Criteria = Criteria.PerCommand
-               Approvers = [ Approver.AnyAdmin ]
+               Criteria = ApprovalCriteria.PerCommand
+               Approvers = [ CommandApprover.AnyAdmin ]
             }
 
             let ruleB = {
                RuleId = Stub.ruleId ()
                OrgId = Stub.orgId
                CommandType = cmdType
-               Criteria = Criteria.PerCommand
+               Criteria = ApprovalCriteria.PerCommand
                Approvers = [
-                  Approver.Admin {
+                  CommandApprover.Admin {
                      EmployeeName = "A"
                      EmployeeId = Guid.NewGuid() |> EmployeeId
                   }
@@ -950,7 +915,7 @@ let tests =
 
       test
          "newRuleCommandTypeConflictsWithExistingRule should check for
-          duplicate rules by (ApprovableCommandType, Criteria.AmountDailyLimit)" {
+          duplicate rules by (ApprovableCommandType, ApprovalCriteria.AmountDailyLimit)" {
          let cmdTypes = [
             Stub.commandTypes.InternalTransfer
             Stub.commandTypes.DomesticTransfer
@@ -962,17 +927,17 @@ let tests =
                RuleId = Stub.ruleId ()
                OrgId = Stub.orgId
                CommandType = cmdType
-               Criteria = Criteria.AmountDailyLimit 15000m
-               Approvers = [ Approver.AnyAdmin ]
+               Criteria = ApprovalCriteria.AmountDailyLimit 15000m
+               Approvers = [ CommandApprover.AnyAdmin ]
             }
 
             let ruleB = {
                RuleId = Stub.ruleId ()
                OrgId = Stub.orgId
                CommandType = cmdType
-               Criteria = Criteria.AmountDailyLimit 25000m
+               Criteria = ApprovalCriteria.AmountDailyLimit 25000m
                Approvers = [
-                  Approver.Admin {
+                  CommandApprover.Admin {
                      EmployeeName = "A"
                      EmployeeId = Guid.NewGuid() |> EmployeeId
                   }
@@ -1007,7 +972,7 @@ let tests =
 
       test
          "newRuleCommandTypeConflictsWithExistingRule should not conflict when
-          duplicate rules by (ApprovableCommandType, Criteria.AmountPerCommand)" {
+          duplicate rules by (ApprovableCommandType, ApprovalCriteria.AmountPerCommand)" {
          let cmdTypes = [
             Stub.commandTypes.InternalTransfer
             Stub.commandTypes.DomesticTransfer
@@ -1020,11 +985,11 @@ let tests =
                OrgId = Stub.orgId
                CommandType = cmdType
                Criteria =
-                  Criteria.AmountPerCommand {
+                  ApprovalCriteria.AmountPerCommand {
                      LowerBound = Some 2000m
                      UpperBound = Some 5000m
                   }
-               Approvers = [ Approver.AnyAdmin ]
+               Approvers = [ CommandApprover.AnyAdmin ]
             }
 
             let ruleB = {
@@ -1032,12 +997,12 @@ let tests =
                OrgId = Stub.orgId
                CommandType = cmdType
                Criteria =
-                  Criteria.AmountPerCommand {
+                  ApprovalCriteria.AmountPerCommand {
                      LowerBound = Some 6000m
                      UpperBound = None
                   }
                Approvers = [
-                  Approver.Admin {
+                  CommandApprover.Admin {
                      EmployeeName = "A"
                      EmployeeId = Guid.NewGuid() |> EmployeeId
                   }
@@ -1084,11 +1049,11 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.InviteEmployee
-            Criteria = Criteria.PerCommand
+            Criteria = ApprovalCriteria.PerCommand
             Approvers = [
-               Approver.Admin approver
+               CommandApprover.Admin approver
 
-               Approver.Admin {
+               CommandApprover.Admin {
                   EmployeeName = "B"
                   EmployeeId = Guid.NewGuid() |> EmployeeId
                }
@@ -1101,7 +1066,7 @@ let tests =
 
          let rule = {
             rule with
-               Approvers = [ Approver.Admin approver ]
+               Approvers = [ CommandApprover.Admin approver ]
          }
 
          Expect.isFalse
@@ -1110,7 +1075,10 @@ let tests =
 
          let rule = {
             rule with
-               Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+               Approvers = [
+                  CommandApprover.AnyAdmin
+                  CommandApprover.AnyAdmin
+               ]
          }
 
          Expect.isTrue
@@ -1133,8 +1101,11 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.InviteEmployee
-            Criteria = Criteria.PerCommand
-            Approvers = [ Approver.Admin approver; Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [
+               CommandApprover.Admin approver
+               CommandApprover.AnyAdmin
+            ]
          }
 
          Expect.isFalse
@@ -1143,7 +1114,7 @@ let tests =
 
          let rule = {
             rule with
-               Approvers = [ Approver.Admin approver ]
+               Approvers = [ CommandApprover.Admin approver ]
          }
 
          Expect.isTrue
@@ -1152,7 +1123,7 @@ let tests =
 
          let rule = {
             rule with
-               Approvers = [ Approver.AnyAdmin ]
+               Approvers = [ CommandApprover.AnyAdmin ]
          }
 
          Expect.isTrue
@@ -1196,8 +1167,8 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.InviteEmployee
-            Criteria = Criteria.PerCommand
-            Approvers = [ Approver.Admin approver ]
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [ CommandApprover.Admin approver ]
          }
 
          let progress = {
@@ -1212,7 +1183,7 @@ let tests =
 
          let rule2 = {
             rule with
-               Approvers = [ Approver.AnyAdmin ]
+               Approvers = [ CommandApprover.AnyAdmin ]
          }
 
          Expect.isFalse
@@ -1262,8 +1233,11 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.InviteEmployee
-            Criteria = Criteria.PerCommand
-            Approvers = [ Approver.Admin approver; Approver.Admin approverB ]
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [
+               CommandApprover.Admin approver
+               CommandApprover.Admin approverB
+            ]
          }
 
          let progress = {
@@ -1284,7 +1258,7 @@ let tests =
 
          Expect.equal
             (remainingApprovalRequiredBy rule progress)
-            [ Approver.Admin approver ]
+            [ CommandApprover.Admin approver ]
             "should be 1 equivalent to one of the 2 approvers configured for the rule"
 
          let progress = {
@@ -1300,16 +1274,16 @@ let tests =
          let rule = {
             rule with
                Approvers = [
-                  Approver.AnyAdmin
-                  Approver.Admin approver
-                  Approver.Admin approverB
-                  Approver.AnyAdmin
+                  CommandApprover.AnyAdmin
+                  CommandApprover.Admin approver
+                  CommandApprover.Admin approverB
+                  CommandApprover.AnyAdmin
                ]
          }
 
          Expect.equal
             (remainingApprovalRequiredBy rule progress)
-            [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
             "should have 2 approvals required (AnyAdmin)"
       }
 
@@ -1328,19 +1302,19 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.UpdateEmployeeRole
-            Criteria = Criteria.PerCommand
-            Approvers = [ Approver.Admin approverA ]
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [ CommandApprover.Admin approverA ]
          }
 
          let rule2 = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.InviteEmployee
-            Criteria = Criteria.PerCommand
+            Criteria = ApprovalCriteria.PerCommand
             Approvers = [
-               Approver.AnyAdmin
-               Approver.AnyAdmin
-               Approver.AnyAdmin
+               CommandApprover.AnyAdmin
+               CommandApprover.AnyAdmin
+               CommandApprover.AnyAdmin
             ]
          }
 
@@ -1407,16 +1381,16 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.UpdateEmployeeRole
-            Criteria = Criteria.PerCommand
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rule2 = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.InviteEmployee
-            Criteria = Criteria.PerCommand
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
@@ -1435,7 +1409,7 @@ let tests =
 
          let rule = {
             rule with
-               Approvers = [ Approver.AnyAdmin ]
+               Approvers = [ CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
@@ -1468,8 +1442,8 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
-            Criteria = Criteria.AmountDailyLimit 10_000m
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.AmountDailyLimit 10_000m
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule ]
@@ -1516,11 +1490,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 3000m
                   UpperBound = None
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule ]
@@ -1558,27 +1532,27 @@ let tests =
       test
          "commandRequiresApproval detects if an incoming command meets
           multiple rule criteria, and returns the rule with
-          Criteria.AmountDailyLimit rather than
-          Criteria.AmountPerCommand { LowerBound = Some; UpperBound = None }
+          ApprovalCriteria.AmountDailyLimit rather than
+          ApprovalCriteria.AmountPerCommand { LowerBound = Some; UpperBound = None }
           if both rules exist" {
          let rule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 3000m
                   UpperBound = None
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rule2 = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
-            Criteria = Criteria.AmountDailyLimit 10_000m
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Criteria = ApprovalCriteria.AmountDailyLimit 10_000m
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
@@ -1637,11 +1611,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 2m
                   UpperBound = Some 4m
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rule2 = {
@@ -1649,11 +1623,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 4m
                   UpperBound = Some 7m
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
@@ -1701,11 +1675,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 4m
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rule2 = {
@@ -1713,11 +1687,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 4m
                   UpperBound = None
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
@@ -1765,11 +1739,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 4m
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rule2 = {
@@ -1777,11 +1751,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 4m
                   UpperBound = Some 7m
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule; rule2.RuleId, rule2 ]
@@ -1834,11 +1808,11 @@ let tests =
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 3000m
                   UpperBound = None
                }
-            Approvers = [ Approver.AnyAdmin; Approver.AnyAdmin ]
+            Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
          let rules = Map [ rule.RuleId, rule ]
@@ -1901,13 +1875,15 @@ let tests =
          }
 
          let commandTypes = [
-            Stub.commandTypes.InviteEmployee, Criteria.PerCommand
-            Stub.commandTypes.UpdateEmployeeRole, Criteria.PerCommand
-            Stub.commandTypes.DomesticTransfer, Criteria.AmountDailyLimit 10m
+            Stub.commandTypes.InviteEmployee, ApprovalCriteria.PerCommand
+            Stub.commandTypes.UpdateEmployeeRole, ApprovalCriteria.PerCommand
+            Stub.commandTypes.DomesticTransfer,
+            ApprovalCriteria.AmountDailyLimit 10m
 
-            Stub.commandTypes.Payment, Criteria.AmountDailyLimit 10m
+            Stub.commandTypes.Payment, ApprovalCriteria.AmountDailyLimit 10m
 
-            Stub.commandTypes.InternalTransfer, Criteria.AmountDailyLimit 10m
+            Stub.commandTypes.InternalTransfer,
+            ApprovalCriteria.AmountDailyLimit 10m
          ]
 
          for cmdType, criteria in commandTypes do
@@ -1917,8 +1893,8 @@ let tests =
                CommandType = cmdType
                Criteria = criteria
                Approvers = [
-                  Approver.Admin approverA
-                  Approver.Admin approverB
+                  CommandApprover.Admin approverA
+                  CommandApprover.Admin approverB
                ]
             }
 
@@ -1973,54 +1949,54 @@ let tests =
 
          let conflictingCriteria = [
             [
-               Criteria.AmountDailyLimit 10m
+               ApprovalCriteria.AmountDailyLimit 10m
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 15m
                   UpperBound = None
                }
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 15m
                }
 
-               Criteria.AmountDailyLimit 10m
+               ApprovalCriteria.AmountDailyLimit 10m
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 10m
                   UpperBound = None
                }
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 15m
                   UpperBound = None
                }
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 10m
                   UpperBound = Some 20m
                }
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 15m
                   UpperBound = None
                }
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 15m
                }
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 10m
                   UpperBound = Some 20m
                }
@@ -2035,8 +2011,8 @@ let tests =
                   CommandType = cmdType
                   Criteria = criteriaOfFirst
                   Approvers = [
-                     Approver.Admin approverA
-                     Approver.Admin approverB
+                     CommandApprover.Admin approverA
+                     CommandApprover.Admin approverB
                   ]
                }
 
@@ -2058,8 +2034,8 @@ let tests =
                   CommandType = cmdType
                   Criteria = criteriaOfSecond
                   Approvers = [
-                     Approver.Admin approverA
-                     Approver.Admin approverB
+                     CommandApprover.Admin approverA
+                     CommandApprover.Admin approverB
                   ]
                }
 
@@ -2102,78 +2078,78 @@ let tests =
 
          let criteria = [
             [
-               Criteria.AmountDailyLimit 10m
+               ApprovalCriteria.AmountDailyLimit 10m
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 5m
                   UpperBound = None
                }
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 5m
                }
 
-               Criteria.AmountDailyLimit 10m
+               ApprovalCriteria.AmountDailyLimit 10m
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 14m
                }
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 14m
                   UpperBound = None
                }
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 10m
                   UpperBound = Some 20m
                }
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 20m
                   UpperBound = None
                }
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 9m
                }
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 9m
                   UpperBound = Some 20m
                }
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 10m
                }
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 10m
                   UpperBound = Some 20m
                }
             ]
 
             [
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
                   UpperBound = Some 10m
                }
 
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 10m
                   UpperBound = None
                }
@@ -2188,8 +2164,8 @@ let tests =
                   CommandType = cmdType
                   Criteria = criteriaOfFirst
                   Approvers = [
-                     Approver.Admin approverA
-                     Approver.Admin approverB
+                     CommandApprover.Admin approverA
+                     CommandApprover.Admin approverB
                   ]
                }
 
@@ -2211,8 +2187,8 @@ let tests =
                   CommandType = cmdType
                   Criteria = criteriaOfSecond
                   Approvers = [
-                     Approver.Admin approverA
-                     Approver.Admin approverB
+                     CommandApprover.Admin approverA
+                     CommandApprover.Admin approverB
                   ]
                }
 
@@ -2247,8 +2223,11 @@ let tests =
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
             CommandType = Stub.commandTypes.UpdateEmployeeRole
-            Criteria = Criteria.PerCommand
-            Approvers = [ Approver.Admin approverA; Approver.Admin approverB ]
+            Criteria = ApprovalCriteria.PerCommand
+            Approvers = [
+               CommandApprover.Admin approverA
+               CommandApprover.Admin approverB
+            ]
          }
 
          let initiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById

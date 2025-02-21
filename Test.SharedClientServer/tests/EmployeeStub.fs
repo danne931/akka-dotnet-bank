@@ -124,12 +124,16 @@ let command =
             }
       lockCard =
          LockCardCommand.create compositeId initiatedById {
+            CardName = ""
+            EmployeeName = ""
             CardId = cardId
             Reference = None
             CardNumberLast4 = cardNumberLast4
          }
       unlockCard =
          UnlockCardCommand.create compositeId initiatedById {
+            CardName = ""
+            EmployeeName = ""
             CardId = cardId
             Reference = None
             CardNumberLast4 = cardNumberLast4

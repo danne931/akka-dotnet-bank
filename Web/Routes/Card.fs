@@ -11,6 +11,7 @@ open FsToolkit.ErrorHandling
 open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Employee.Api
+open CommandApproval
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware

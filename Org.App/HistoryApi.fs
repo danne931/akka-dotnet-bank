@@ -8,6 +8,7 @@ open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open CommandApproval
 
 module Fields = EmployeeEventSqlMapper.EmployeeEventFields
 module Reader = EmployeeEventSqlMapper.EmployeeEventSqlReader

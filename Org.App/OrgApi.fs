@@ -12,6 +12,7 @@ open Bank.Account.Domain
 open Bank.Org.Domain
 open Bank.Transfer.Domain
 open TransactionMerchantSqlMapper
+open CommandApproval
 
 module Fields = OrganizationSqlMapper.OrgFields
 module Reader = OrganizationSqlMapper.OrgSqlReader

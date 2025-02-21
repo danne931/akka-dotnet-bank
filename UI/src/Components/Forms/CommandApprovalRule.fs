@@ -12,6 +12,7 @@ open Lib.Validators
 open UIDomain.Org
 open Fable.Form.Simple.Pico
 open Bank.Org.Forms
+open CommandApproval
 
 open FormContainer
 
@@ -235,17 +236,17 @@ let private approverItemForm
 
 let private approverListForm
    (employees: Map<EmployeeId, Employee>)
-   : Form.Form<Values, Approver list, IReactProperty>
+   : Form.Form<Values, CommandApprover list, IReactProperty>
    =
    Form.succeed (
       List.map (fun (emId: string) ->
          if emId = ANY_ADMIN_APPROVER.EmployeeId then
-            Approver.AnyAdmin
+            CommandApprover.AnyAdmin
          else
             let emId = EmployeeId(Guid.Parse emId)
             let em = Map.find emId employees
 
-            Approver.Admin {
+            CommandApprover.Admin {
                EmployeeId = emId
                EmployeeName = em.Name
             })
@@ -281,7 +282,7 @@ let private amountBasedCriteriaForm (criteriaType: AmountBasedCriteriaType) =
       Form.meta (fun values ->
          Form.succeed (fun lowerBound upperBound ->
             let criteria =
-               Criteria.AmountPerCommand {
+               ApprovalCriteria.AmountPerCommand {
                   LowerBound = lowerBound
                   UpperBound = upperBound
                }
@@ -291,7 +292,8 @@ let private amountBasedCriteriaForm (criteriaType: AmountBasedCriteriaType) =
          |> Form.append (Form.optional rangeUpperField))
       |> Form.group
    | AmountBasedCriteriaType.AmountDailyLimit ->
-      Form.succeed Criteria.AmountDailyLimit |> Form.append fieldDailyLimit
+      Form.succeed ApprovalCriteria.AmountDailyLimit
+      |> Form.append fieldDailyLimit
 
 // Create/Edit a command approval rule or request approval
 // for creating/editing a command approval rule.
@@ -355,7 +357,7 @@ let private ruleCreateForm
          match cmdType with
          | ApprovableCommandType.ApprovablePerCommand _ ->
             Form.succeed (fun approvers ->
-               cmdType, Criteria.PerCommand, approvers)
+               cmdType, ApprovalCriteria.PerCommand, approvers)
             |> Form.append (approverListForm employees)
          | ApprovableCommandType.ApprovableAmountBased _ ->
             fieldAmountBasedCriteria
@@ -373,17 +375,18 @@ let private ruleEditForm
    (rule: CommandApprovalRule)
    : Form.Form<Values, Msg<_>, IReactProperty>
    =
-   Form.succeed (fun (criteria: Criteria, approvers: Approver list) ->
-      let cmd =
-         ruleConfigureOrRequestApproval session org {
-            RuleId = rule.RuleId
-            OrgId = rule.OrgId
-            CommandType = rule.CommandType
-            Criteria = criteria
-            Approvers = approvers
-         }
+   Form.succeed
+      (fun (criteria: ApprovalCriteria, approvers: CommandApprover list) ->
+         let cmd =
+            ruleConfigureOrRequestApproval session org {
+               RuleId = rule.RuleId
+               OrgId = rule.OrgId
+               CommandType = rule.CommandType
+               Criteria = criteria
+               Approvers = approvers
+            }
 
-      Msg.Submit(org, cmd, Started))
+         Msg.Submit(org, cmd, Started))
    |> Form.append (
       match rule.CommandType with
       | ApprovableCommandType.ApprovablePerCommand _ ->
@@ -392,7 +395,7 @@ let private ruleEditForm
       | ApprovableCommandType.ApprovableAmountBased _ ->
          let amountBasedCriteriaType =
             match rule.Criteria with
-            | Criteria.AmountDailyLimit _ ->
+            | ApprovalCriteria.AmountDailyLimit _ ->
                AmountBasedCriteriaType.AmountDailyLimit
             | _ -> AmountBasedCriteriaType.AmountPerCommand
 
@@ -419,8 +422,8 @@ let CommandApprovalRuleEditFormComponent
       Approvers =
          rule.Approvers
          |> List.map (function
-            | Approver.AnyAdmin -> ANY_ADMIN_APPROVER
-            | Approver.Admin a -> {
+            | CommandApprover.AnyAdmin -> ANY_ADMIN_APPROVER
+            | CommandApprover.Admin a -> {
                EmployeeId = string a.EmployeeId
                Name = a.EmployeeName
               })
@@ -432,13 +435,13 @@ let CommandApprovalRuleEditFormComponent
 
    let initValues =
       match rule.Criteria with
-      | Criteria.AmountDailyLimit limit -> {
+      | ApprovalCriteria.AmountDailyLimit limit -> {
          initValues with
             AmountBasedCriteriaType =
                string AmountBasedCriteriaType.AmountDailyLimit
             DailyLimit = string limit
         }
-      | Criteria.AmountPerCommand range -> {
+      | ApprovalCriteria.AmountPerCommand range -> {
          initValues with
             AmountBasedCriteriaType =
                string AmountBasedCriteriaType.AmountPerCommand
@@ -447,7 +450,7 @@ let CommandApprovalRuleEditFormComponent
             RangeUpperBound =
                range.UpperBound |> Option.map string |> Option.defaultValue ""
         }
-      | Criteria.PerCommand -> initValues
+      | ApprovalCriteria.PerCommand -> initValues
 
    OrgFormContainer {|
       InitialValues = initValues
@@ -471,7 +474,7 @@ let CommandApprovalRuleCreateFormComponent
             |> ApprovableCommandType.ApprovablePerCommand
             |> string
          Approvers = [ { EmployeeId = ""; Name = "" } ]
-         AmountBasedCriteriaType = string Criteria.PerCommand
+         AmountBasedCriteriaType = string ApprovalCriteria.PerCommand
          DailyLimit = ""
          RangeLowerBound = ""
          RangeUpperBound = ""

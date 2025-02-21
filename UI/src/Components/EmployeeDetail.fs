@@ -7,6 +7,7 @@ open Elmish.SweetAlert
 
 open Bank.Employee.Domain
 open Bank.Org.Domain
+open CommandApproval
 open UIDomain.Employee
 open UIDomain.Org
 open Dropdown

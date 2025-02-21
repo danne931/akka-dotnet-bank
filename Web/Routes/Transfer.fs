@@ -14,6 +14,7 @@ open Bank.Transfer.Api
 open Bank.Transfer.Domain
 open Bank.Org.Domain
 open Bank.Account.Domain
+open CommandApproval
 open RoutePaths
 open Bank.UserSession.Middleware
 

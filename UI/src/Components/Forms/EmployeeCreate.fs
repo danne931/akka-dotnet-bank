@@ -16,6 +16,7 @@ open DailyPurchaseLimitForm
 open MonthlyPurchaseLimitForm
 open AccountProfileForm
 open Lib.SharedTypes
+open CommandApproval
 
 type Values = {
    FirstName: string

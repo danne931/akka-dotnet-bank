@@ -10,6 +10,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
 open Bank.Org.Domain
+open CommandApproval
 open UIDomain.Account
 open UIDomain.Org
 open Lib.Time

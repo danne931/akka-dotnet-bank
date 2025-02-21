@@ -3,7 +3,7 @@ module SidebarMenu
 open Feliz
 open Feliz.Router
 
-open Bank.Org.Domain
+open CommandApproval
 open Bank.Employee.Domain
 open Bank.Account.Domain
 open Lib.SharedTypes

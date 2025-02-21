@@ -3,9 +3,8 @@ module CommandApprovalRuleSqlMapper
 open System
 
 open Lib.SharedTypes
-open Bank.Org.Domain
 open OrganizationSqlMapper
-open CommandApprovalRule
+open CommandApproval
 
 let table = "command_approval_rule"
 let dailyLimitTable = "command_approval_rule_amount_daily_limit"
@@ -34,10 +33,10 @@ module Reader =
 
    let orgId = OrgSqlReader.orgId
 
-   let criteriaDetail (read: RowReader) : Criteria =
+   let criteriaDetail (read: RowReader) : ApprovalCriteria =
       Fields.criteriaDetail
       |> read.text
-      |> Serialization.deserializeUnsafe<Criteria>
+      |> Serialization.deserializeUnsafe<ApprovalCriteria>
 
    let approvableCommandType (read: RowReader) : ApprovableCommandType =
       Fields.approvableCommandType
@@ -68,17 +67,17 @@ module Writer =
    let approvableCommandTypeFromCommand (c: ApprovableCommand) =
       c.CommandType |> string |> Sql.string
 
-   let criteria (criteria: Criteria) = criteria |> string |> Sql.string
+   let criteria (criteria: ApprovalCriteria) = criteria |> string |> Sql.string
 
-   let criteriaDetail (criteria: Criteria) =
+   let criteriaDetail (criteria: ApprovalCriteria) =
       criteria |> Serialization.serialize |> Sql.jsonb
 
-   let permittedApprovers (approvers: Approver list) =
+   let permittedApprovers (approvers: CommandApprover list) =
       approvers
       |> List.map (function
          // NOTE: SYSTEM_USER_ID used in the DB to indicate "AnyAdmin".
-         | Approver.AnyAdmin -> EmployeeId.get Constants.SYSTEM_USER_ID
-         | Approver.Admin a -> EmployeeId.get a.EmployeeId)
+         | CommandApprover.AnyAdmin -> EmployeeId.get Constants.SYSTEM_USER_ID
+         | CommandApprover.Admin a -> EmployeeId.get a.EmployeeId)
       |> Array.ofList
       |> Sql.uuidArray
 
