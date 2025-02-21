@@ -19,7 +19,7 @@ module CommandApprovalProgress =
    module RequestCommandApproval =
       let fromApprovableCommand
          (session: UserSession)
-         (rule: CommandApprovalRule.T)
+         (rule: CommandApprovalRule)
          (command: ApprovableCommand)
          : CommandApprovalProgress.RequestCommandApproval
          =
@@ -42,6 +42,30 @@ module CommandApprovalProgress =
                      rule
             }
 
+module CommandApprovalRule =
+   /// Get list of approvers and detailed criteria details if any.
+   let displayVerbose (rule: CommandApprovalRule) =
+      let approvers =
+         String.concat ", " (rule.Approvers |> List.map _.DisplayName)
+
+      let approverMsg = $"requires approval from {approvers}"
+
+      match rule.Criteria with
+      | Criteria.PerCommand -> approverMsg
+      | Criteria.AmountDailyLimit limit ->
+         "Daily limit (per employee) of "
+         + Money.format limit
+         + $" {approverMsg}"
+      | Criteria.AmountPerCommand range ->
+         "Amount "
+         + match range.LowerBound, range.UpperBound with
+           | Some low, Some high ->
+              $">= {Money.format low} and < {Money.format high}"
+           | Some low, None -> $">= {Money.format low}"
+           | None, Some high -> $"< {Money.format high}"
+           | None, None -> ""
+         + $" {approverMsg}"
+
 module ApprovableCommand =
    let displayVerbose (cmd: ApprovableCommand) =
       match cmd with
@@ -52,6 +76,12 @@ module ApprovableCommand =
             $"Update {c.Data.Name}'s role from {c.Data.PriorRole} to {c.Data.Role}"
          | UnlockCard c ->
             $"Unlock {c.Data.EmployeeName}'s {c.Data.CardName} **{c.Data.CardNumberLast4} card"
+         | ManageApprovalRule c ->
+            if c.Data.IsDeletion then
+               $"Delete {c.Data.Rule.CommandType.Display} command approval rule"
+            else
+               $"Configure {c.Data.Rule.CommandType.Display} command approval rule:"
+               + $" {CommandApprovalRule.displayVerbose c.Data.Rule}"
       | ApprovableCommand.AmountBased c ->
          match c with
          | DomesticTransfer c ->

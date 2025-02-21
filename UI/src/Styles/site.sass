@@ -474,6 +474,8 @@ p[role='employee-tag']
     button
       width: 40%
   .command-pending-approval
+    &:first-of-type
+      margin-top: 0
     header
       margin-bottom: 1rem
     p
@@ -484,7 +486,7 @@ p[role='employee-tag']
       text-align: center
     small
       align-content: end
-    .approval-count
+    .approval-info-inline
       > *
         display: inline
       > small

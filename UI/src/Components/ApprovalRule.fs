@@ -4,6 +4,7 @@ open Feliz
 open Elmish
 open Feliz.UseElmish
 open Elmish.SweetAlert
+open Feliz.Router
 
 open Bank.Employee.Domain
 open Bank.Org.Domain
@@ -17,18 +18,31 @@ type State = {
    IsCreateRuleOpen: bool
 }
 
+type DeleteRuleMessage = {
+   Session: UserSession
+   Org: Org
+   Rule: CommandApprovalRule
+   DeletionRequiresApproval: CommandApprovalRule option
+}
+
+type ConfigureRuleSubmittedMessage = {
+   Session: UserSession
+   Receipt: OrgCommandReceipt
+   OriginatedFromRuleEdit: bool
+}
+
 type Msg =
    | GetAdmins of
       OrgId *
       AsyncOperationStatus<Result<Employee list option, Err>>
    | ToggleCreateRuleOpen
-   | ShowDeleteRuleConfirmation of UserSession * Org * CommandApprovalRule.T
+   | ShowDeleteRuleConfirmation of DeleteRuleMessage
    | DismissDeleteRuleConfirmation
    | ConfirmDeleteRule of
-      UserSession *
-      Org *
-      CommandApprovalRule.T *
+      DeleteRuleMessage *
       AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
+   | ManageRuleNotAllowed of ApprovableCommandType
+   | ConfigureRuleSubmitted of ConfigureRuleSubmittedMessage
 
 let init () =
    {
@@ -74,65 +88,129 @@ let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
             IsCreateRuleOpen = not state.IsCreateRuleOpen
       },
       Cmd.none
-   | ShowDeleteRuleConfirmation(session, org, rule) ->
+   | ShowDeleteRuleConfirmation msg ->
       let associatedApprovalCnt =
-         org.CommandApprovalProgress
+         msg.Org.CommandApprovalProgress
          |> Map.filter (fun _ p ->
-            p.CommandToInitiateOnApproval.CommandType = rule.CommandType)
+            p.CommandToInitiateOnApproval.CommandType = msg.Rule.CommandType)
          |> Map.count
+
+
+      let info =
+         $"There is currently {associatedApprovalCnt} {msg.Rule.CommandType.Display}
+         commands which will initiate "
+
+      let title, info =
+         if msg.DeletionRequiresApproval.IsSome then
+            "Deletion of this rule requires approval. Continue?",
+            info + "upon approval."
+         else
+            "Are you sure you want to delete this rule?", info + "immediately."
 
       let confirm =
          ConfirmAlert(
-            (if associatedApprovalCnt > 0 then
-                $"There is currently {associatedApprovalCnt} {rule.CommandType.Display}
-               commands pending approval which will initiate immediately."
-             else
-                ""),
+            (if associatedApprovalCnt > 0 then info else ""),
             function
             | ConfirmAlertResult.Confirmed ->
-               Msg.ConfirmDeleteRule(session, org, rule, Started)
+               Msg.ConfirmDeleteRule(msg, Started)
             | ConfirmAlertResult.Dismissed _ ->
                Msg.DismissDeleteRuleConfirmation
          )
-            .Title("Are you sure you want to delete this rule?")
+            .Title(title)
             .Type(AlertType.Question)
             .ShowCloseButton(true)
 
       state, SweetAlert.Run confirm
    | DismissDeleteRuleConfirmation -> state, Cmd.none
-   | ConfirmDeleteRule(session, org, rule, Started) ->
+   | ConfirmDeleteRule(msg, Started) ->
       let delete = async {
-         let cmd =
-            CommandApprovalRule.DeleteApprovalRuleCommand.create {
-               RuleId = rule.RuleId
-               OrgId = rule.OrgId
-               CommandType = rule.CommandType
-               DeletedBy = {
-                  EmployeeId = session.EmployeeId
-                  EmployeeName = session.Name
-               }
-            }
-            |> OrgCommand.DeleteApprovalRule
+         let initiator = {
+            EmployeeId = msg.Session.EmployeeId
+            EmployeeName = msg.Session.Name
+         }
 
-         let! res = OrgService.submitCommand org cmd
-         return ConfirmDeleteRule(session, org, rule, Finished res)
+         let cmd =
+            match msg.DeletionRequiresApproval with
+            | Some ruleForEditingApprovalRules ->
+               let approvableCommand =
+                  {
+                     Rule = msg.Rule
+                     IsDeletion = true
+                     Initiator = initiator
+                  }
+                  |> ManageApprovalRuleCommand.create
+                  |> ManageApprovalRule
+                  |> ApprovableCommand.PerCommand
+
+               CommandApprovalProgress.RequestCommandApproval.fromApprovableCommand
+                  msg.Session
+                  ruleForEditingApprovalRules
+                  approvableCommand
+               |> OrgCommand.RequestCommandApproval
+            | None ->
+               CommandApprovalRule.DeleteApprovalRuleCommand.create {
+                  RuleId = msg.Rule.RuleId
+                  OrgId = msg.Rule.OrgId
+                  CommandType = msg.Rule.CommandType
+                  DeletedBy = initiator
+               }
+               |> OrgCommand.DeleteApprovalRule
+
+         let! res = OrgService.submitCommand msg.Org cmd
+         return ConfirmDeleteRule(msg, Finished res)
       }
 
       state, Cmd.fromAsync delete
-   | ConfirmDeleteRule(_, _, rule, Finished(Ok receipt)) ->
+   | ConfirmDeleteRule(msg, Finished(Ok receipt)) ->
       orgDispatch (OrgProvider.Msg.OrgUpdated receipt.PendingState)
 
-      state,
-      Alerts.toastSuccessCommand $"Deleted {rule.CommandType.Display} rule."
-   | ConfirmDeleteRule(_, _, rule, Finished(Error err)) ->
+      let info =
+         if msg.DeletionRequiresApproval.IsSome then
+            $"Deletion of {msg.Rule.CommandType.Display} rule pending approval."
+         else
+            $"Deleted {msg.Rule.CommandType.Display} rule."
+
+      state, Alerts.toastSuccessCommand info
+   | ConfirmDeleteRule(msg, Finished(Error err)) ->
       Log.error (string err)
 
       state,
       Alerts.toastCommand
       <| Err.NetworkError(
-         exn $"Issue deleting rule for {rule.CommandType.Display}"
+         exn $"Issue deleting rule for {msg.Rule.CommandType.Display}"
       )
+   | ManageRuleNotAllowed cmdType ->
+      let alert =
+         $"You may not edit or delete {cmdType.Display} rule since management of this rule is pending approval."
+         |> Err.UnexpectedError
+         |> Alerts.toastCommand
 
+      state, Cmd.batch [ alert; Cmd.navigate Routes.ApprovalsUrl.BasePath ]
+   | ConfigureRuleSubmitted msg ->
+      let ruleConfigRequiresApproval =
+         CommandApprovalRule.ruleManagementRequiresApproval
+            (InitiatedById msg.Session.EmployeeId)
+            msg.Receipt.PendingState.CommandApprovalRules
+         |> _.IsSome
+
+      orgDispatch (OrgProvider.Msg.OrgUpdated msg.Receipt.PendingState)
+
+      let cmd =
+         if ruleConfigRequiresApproval then
+            Alerts.toastSuccessCommand
+               "Rule configuration submitted for approval."
+         else
+            Alerts.toastSuccessCommand "Rule configured."
+
+      let state =
+         if msg.OriginatedFromRuleEdit then
+            state
+         else
+            { state with IsCreateRuleOpen = false }
+
+      state, cmd
+
+// Fetches admins which are used for selecting rule approvers.
 let fetchAdminsIfNecessary (state: State) dispatch orgId =
    match state.Admins with
    | Deferred.Resolved(Ok(Some _)) -> ()
@@ -144,7 +222,7 @@ let renderMoney (amount: decimal) =
       attr.text $" {Money.format amount} "
    ]
 
-let formatApprovers (approvers: CommandApprovalRule.Approver list) =
+let formatApprovers (approvers: Approver list) =
    approvers
    |> List.fold (fun acc approver -> $"{acc}{approver.DisplayName}, ") ""
    |> _.Remove(-2)
@@ -154,12 +232,26 @@ let EditApprovalRuleComponent
    (state: State)
    dispatch
    (session: UserSession)
-   (rule: CommandApprovalRule.T)
+   (rule: CommandApprovalRule)
    (org: Org)
-   (onOrgUpdate: OrgCommandReceipt -> unit)
    =
    let ruleToEdit, setRuleToEdit =
-      React.useState<CommandApprovalRule.T option> None
+      React.useState<CommandApprovalRule option> None
+
+   let deleteMsg = {
+      Session = session
+      Org = org
+      Rule = rule
+      DeletionRequiresApproval =
+         CommandApprovalRule.ruleManagementRequiresApproval
+            (InitiatedById session.EmployeeId)
+            org.CommandApprovalRules
+   }
+
+   let isManageRuleNotAllowed =
+      CommandApprovalProgress.managementOfRuleIsPendingApproval
+         org.CommandApprovalProgress
+         rule.CommandType
 
    React.fragment [
       Html.a [ attr.href "" ]
@@ -174,7 +266,13 @@ let EditApprovalRuleComponent
                (fun () -> setRuleToEdit None)
                (fun receipt ->
                   setRuleToEdit None
-                  onOrgUpdate receipt)
+
+                  dispatch
+                  <| Msg.ConfigureRuleSubmitted {
+                     Session = session
+                     Receipt = receipt
+                     OriginatedFromRuleEdit = true
+                  })
                session
                org
                (admins |> List.map (fun a -> a.EmployeeId, a) |> Map.ofList)
@@ -197,25 +295,28 @@ let EditApprovalRuleComponent
                         Text = "Edit"
                         OnClick =
                            fun _ ->
-                              setRuleToEdit (Some rule)
+                              if isManageRuleNotAllowed then
+                                 Msg.ManageRuleNotAllowed rule.CommandType
+                                 |> dispatch
+                              else
+                                 setRuleToEdit (Some rule)
 
-                              fetchAdminsIfNecessary
-                                 state
-                                 dispatch
-                                 session.OrgId
+                                 fetchAdminsIfNecessary
+                                    state
+                                    dispatch
+                                    session.OrgId
                         IsSelected = ruleToEdit.IsSome
                      }
                      {
                         Text = "Delete"
                         OnClick =
                            fun _ ->
-                              dispatch (
-                                 Msg.ShowDeleteRuleConfirmation(
-                                    session,
-                                    org,
-                                    rule
-                                 )
-                              )
+                              if isManageRuleNotAllowed then
+                                 Msg.ManageRuleNotAllowed rule.CommandType
+                                 |> dispatch
+                              else
+                                 Msg.ShowDeleteRuleConfirmation deleteMsg
+                                 |> dispatch
                         IsSelected = false
                      }
                   ]
@@ -224,15 +325,15 @@ let EditApprovalRuleComponent
          ]
 
          match rule.Criteria with
-         | CommandApprovalRule.Criteria.PerCommand ->
+         | Criteria.PerCommand ->
             Html.small "For every request require approval from:"
-         | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
+         | Criteria.AmountDailyLimit limit ->
             Html.small
                "If transaction amount plus the daily accrued amount (per employee) is >="
 
             renderMoney limit
             Html.small "require approval from:"
-         | CommandApprovalRule.Criteria.AmountPerCommand range ->
+         | Criteria.AmountPerCommand range ->
             Html.small $"If amount "
 
             match range.LowerBound, range.UpperBound with
@@ -254,13 +355,7 @@ let EditApprovalRuleComponent
          Html.p (formatApprovers rule.Approvers)
    ]
 
-let renderCreateRule
-   (state: State)
-   dispatch
-   (session: UserSession)
-   (org: Org)
-   (onOrgUpdate: OrgCommandReceipt -> unit)
-   =
+let renderCreateRule (state: State) dispatch (session: UserSession) (org: Org) =
    classyNode Html.article [ "approval-rule" ] [
       if state.IsCreateRuleOpen then
          Html.h6 $"Configure Approval Rule:"
@@ -270,8 +365,12 @@ let renderCreateRule
             CommandApprovalRuleCreateFormComponent
                (fun () -> dispatch Msg.ToggleCreateRuleOpen)
                (fun receipt ->
-                  dispatch Msg.ToggleCreateRuleOpen
-                  onOrgUpdate receipt)
+                  dispatch
+                  <| Msg.ConfigureRuleSubmitted {
+                     Session = session
+                     Receipt = receipt
+                     OriginatedFromRuleEdit = false
+                  })
                session
                org
                (admins |> List.map (fun a -> a.EmployeeId, a) |> Map.ofList)
@@ -291,11 +390,7 @@ let renderCreateRule
    ]
 
 [<ReactComponent>]
-let ApprovalRuleManagementDashboardComponent
-   (session: UserSession)
-   (org: Org)
-   (onOrgUpdate: OrgCommandReceipt -> unit)
-   =
+let ApprovalRuleManagementDashboardComponent (session: UserSession) (org: Org) =
    let orgId = session.OrgId
    let orgDispatch = React.useContext OrgProvider.dispatchContext
 
@@ -307,11 +402,11 @@ let ApprovalRuleManagementDashboardComponent
    React.fragment [
       if rules.IsEmpty then
          Html.p "No approval rules configured."
-         renderCreateRule state dispatch session org onOrgUpdate
+         renderCreateRule state dispatch session org
       else
          let rules =
             rules.Values
-            |> Seq.sortBy (_.Criteria >> CommandApprovalRule.Criteria.sortBy)
+            |> Seq.sortBy (_.Criteria >> Criteria.sortBy)
             |> Seq.sortBy (fun r ->
                match r.CommandType with
                | ApprovableCommandType.ApprovableAmountBased FulfillPlatformPaymentCommandType ->
@@ -325,18 +420,14 @@ let ApprovalRuleManagementDashboardComponent
                | ApprovableCommandType.ApprovablePerCommand UnlockCardCommandType ->
                   4
                | ApprovableCommandType.ApprovablePerCommand UpdateEmployeeRoleCommandType ->
-                  5)
+                  5
+               | ApprovableCommandType.ApprovablePerCommand ManageApprovalRuleCommandType ->
+                  6)
 
          for rule in rules do
             classyNode Html.article [ "approval-rule" ] [
-               EditApprovalRuleComponent
-                  state
-                  dispatch
-                  session
-                  rule
-                  org
-                  onOrgUpdate
+               EditApprovalRuleComponent state dispatch session rule org
             ]
 
-         renderCreateRule state dispatch session org onOrgUpdate
+         renderCreateRule state dispatch session org
    ]

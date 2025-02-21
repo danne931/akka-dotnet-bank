@@ -24,18 +24,18 @@ let private handleValidationError mailbox (err: Err) (cmd: OrgCommand) =
      Err.OrgStateTransitionError OrgStateTransitionError.RecipientDeactivated ->
       let msg =
          $"""
-            Domestic transfer failed ({cmd.Data.TransferId}).
-            No need to update recipient status.
-            """
+         Domestic transfer failed ({cmd.Data.TransferId}).
+         No need to update recipient status.
+         """
 
       logDebug mailbox msg
    | OrgCommand.DomesticTransferRetryConfirmsRecipient cmd,
      Err.OrgStateTransitionError OrgStateTransitionError.RecipientAlreadyConfirmed ->
       let msg =
          $"""
-            Domestic transfer retried successfully ({cmd.Data.TransferId}).
-            No need to update recipient status."
-            """
+         Domestic transfer retried successfully ({cmd.Data.TransferId}).
+         No need to update recipient status."
+         """
 
       logDebug mailbox msg
    | _ ->
@@ -48,6 +48,7 @@ let private handleValidationError mailbox (err: Err) (cmd: OrgCommand) =
 let private sendApprovedCommand
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (orgRef: IActorRef<OrgMessage>)
    (cmd: ApprovableCommand)
    =
    match cmd with
@@ -77,6 +78,26 @@ let private sendApprovedCommand
             |> EmployeeCommand.UnlockCard
 
          employeeRef <! EmployeeMessage.StateChange cmd
+      | ManageApprovalRule cmd ->
+         let info = cmd.Data
+
+         let cmd =
+            if info.IsDeletion then
+               CommandApprovalRule.DeleteApprovalRuleCommand.create {
+                  RuleId = info.Rule.RuleId
+                  OrgId = info.Rule.OrgId
+                  CommandType = info.Rule.CommandType
+                  DeletedBy = info.Initiator
+               }
+               |> OrgCommand.DeleteApprovalRule
+            else
+               CommandApprovalRule.ConfigureApprovalRuleCommand.create
+                  cmd.OrgId
+                  cmd.InitiatedBy
+                  info.Rule
+               |> OrgCommand.ConfigureApprovalRule
+
+         orgRef <! OrgMessage.StateChange cmd
    | ApprovableCommand.AmountBased c ->
       match c with
       | FulfillPlatformPayment cmd ->
@@ -222,10 +243,11 @@ let actorProps
    (getDomesticTransfersRetryableUponRecipientEdit:
       AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
-   let sendApprovedCommand = sendApprovedCommand getEmployeeRef getAccountRef
-
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
+
+      let sendApprovedCommand =
+         sendApprovedCommand getEmployeeRef getAccountRef (mailbox.Parent())
 
       let rec loop (stateOpt: OrgSnapshot option) = actor {
          let! msg = mailbox.Receive()

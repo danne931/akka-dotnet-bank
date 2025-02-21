@@ -24,6 +24,8 @@ module OrgPath =
    let getCommandApprovalRules (orgId: OrgId) =
       get orgId + "/command-approval-rule"
 
+   let RequestCommandApproval = Base + "/request-command-approval"
+
    let AcquireCommandApproval = Base + "/acquire-command-approval"
 
    let DeclineCommandApproval = Base + "/decline-command-approval"

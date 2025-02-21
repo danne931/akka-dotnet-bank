@@ -68,7 +68,7 @@ let formFulfillPlatformPayment
 let PaymentFulfillmentFormComponent
    (session: UserSession)
    (payerAccounts: Map<AccountId, Account>)
-   (rules: Map<CommandApprovalRuleId, CommandApprovalRule.T>)
+   (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
    (payment: Payment)
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)

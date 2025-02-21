@@ -30,6 +30,9 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
       | OrgCommand.DeleteApprovalRule cmd ->
          CommandApprovalRule.DeleteApprovalRuleCommand.toEvent cmd
          |> Result.map OrgEnvelope.get
+      | OrgCommand.RequestCommandApproval cmd ->
+         CommandApprovalProgress.RequestCommandApproval.toEvent cmd
+         |> Result.map OrgEnvelope.get
       | OrgCommand.AcquireCommandApproval cmd ->
          CommandApprovalProgress.AcquireCommandApproval.toEvent cmd
          |> Result.map OrgEnvelope.get
@@ -74,7 +77,7 @@ let getDomesticTransferRecipients
 
 type private OrgDBResult =
    | AccountProfilesWithOrg of (Org * AccountProfile) list option
-   | CommandApprovalRules of CommandApprovalRule.T list option
+   | CommandApprovalRules of CommandApprovalRule list option
    | CommandApprovalProgress of CommandApprovalProgress.T list option
    | DomesticTransferRecipients of DomesticTransferRecipient list option
 

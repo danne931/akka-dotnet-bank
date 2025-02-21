@@ -95,7 +95,8 @@ let orgHistoryUIFriendly (org: Org) (history: OrgHistory) : HistoryUIFriendly =
    | OrgEvent.CommandApprovalRuleConfigured e -> {
       props with
          Info =
-            $"Configured command approval rule for {e.Data.Rule.CommandType.Display}"
+            $"Configured command approval rule for {e.Data.Rule.CommandType.Display}: "
+            + $" {CommandApprovalRule.displayVerbose e.Data.Rule}"
      }
    | OrgEvent.CommandApprovalRuleDeleted e -> {
       props with

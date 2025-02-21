@@ -135,7 +135,7 @@ let sqlParamReducer
 
       let dailyLimitQParams =
          match rule.Criteria with
-         | CommandApprovalRule.Criteria.AmountDailyLimit limit ->
+         | Criteria.AmountDailyLimit limit ->
             Some [
                "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId rule.RuleId
                "orgId", CommandApprovalRuleSqlMapper.Writer.orgId rule.OrgId
@@ -146,7 +146,7 @@ let sqlParamReducer
 
       let amountPerCommandQParams =
          match rule.Criteria with
-         | CommandApprovalRule.Criteria.AmountPerCommand range ->
+         | Criteria.AmountPerCommand range ->
             Some [
                "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId rule.RuleId
                "orgId", CommandApprovalRuleSqlMapper.Writer.orgId rule.OrgId

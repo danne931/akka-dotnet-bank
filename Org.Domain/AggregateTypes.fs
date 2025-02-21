@@ -123,7 +123,7 @@ type Org = {
    Name: string
    Status: OrgStatus
    FeatureFlags: FeatureFlagOrgSettings
-   CommandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule.T>
+   CommandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule>
    CommandApprovalProgress:
       Map<CommandApprovalProgressId, CommandApprovalProgress.T>
    DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>

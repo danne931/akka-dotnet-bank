@@ -26,6 +26,8 @@ let private postJson (command: OrgCommand) =
          Serialization.serialize cmd, OrgPath.ConfigureCommandApprovalRule
       | OrgCommand.DeleteApprovalRule cmd ->
          Serialization.serialize cmd, OrgPath.DeleteCommandApprovalRule
+      | OrgCommand.RequestCommandApproval cmd ->
+         Serialization.serialize cmd, OrgPath.RequestCommandApproval
       | OrgCommand.AcquireCommandApproval cmd ->
          Serialization.serialize cmd, OrgPath.AcquireCommandApproval
       | OrgCommand.DeclineCommandApproval cmd ->
@@ -204,7 +206,7 @@ let updateMerchant (merchant: Merchant) : Async<Result<int, Err>> = async {
 
 let getCommandApprovalRules
    (orgId: OrgId)
-   : Async<Result<CommandApprovalRule.T list option, Err>>
+   : Async<Result<CommandApprovalRule list option, Err>>
    =
    async {
       let path = OrgPath.getCommandApprovalRules orgId
@@ -218,7 +220,7 @@ let getCommandApprovalRules
       else
          return
             responseText
-            |> Serialization.deserialize<CommandApprovalRule.T list>
+            |> Serialization.deserialize<CommandApprovalRule list>
             |> Result.map Some
    }
 

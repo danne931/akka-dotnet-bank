@@ -20,7 +20,7 @@ type private ApproverDB = {
 
 let getApprovalRules
    (orgId: OrgId)
-   : Task<Result<CommandApprovalRule.T list option, Err>>
+   : Task<Result<CommandApprovalRule list option, Err>>
    =
    let query =
       $"""
@@ -43,7 +43,7 @@ let getApprovalRules
       GROUP BY {Fields.ruleId}
       """
 
-   pgQuery<CommandApprovalRule.T>
+   pgQuery<CommandApprovalRule>
       query
       (Some [ "orgId", Writer.orgId orgId ])
       (fun reader -> {
@@ -59,9 +59,9 @@ let getApprovalRules
                let eId = EmployeeId o.EmployeeId
 
                if eId = Constants.SYSTEM_USER_ID then
-                  CommandApprovalRule.Approver.AnyAdmin
+                  Approver.AnyAdmin
                else
-                  CommandApprovalRule.Approver.Admin {
+                  Approver.Admin {
                      EmployeeName = o.Name
                      EmployeeId = eId
                   })

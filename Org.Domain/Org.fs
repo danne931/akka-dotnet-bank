@@ -215,6 +215,20 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
         }
       | CommandApprovalProcessCompleted e -> {
          org with
+            // If command approval workflow completed for
+            // managing (create/edit/delete) an approval rule then
+            // update the org's CommandApprovalRules accordingly.
+            CommandApprovalRules =
+               match e.Data.Command with
+               | ApprovableCommand.PerCommand(ManageApprovalRule cmd) ->
+                  let info = cmd.Data
+
+                  if info.IsDeletion then
+                     org.CommandApprovalRules |> Map.remove info.Rule.RuleId
+                  else
+                     org.CommandApprovalRules
+                     |> Map.add info.Rule.RuleId info.Rule
+               | _ -> org.CommandApprovalRules
             CommandApprovalProgress =
                org.CommandApprovalProgress
                |> Map.change
@@ -402,7 +416,7 @@ module private StateTransition =
                rule
 
          match containsAmountBasedGaps with
-         | Some gap -> transitionErr (CommandApprovalRule.RangeGap.toError gap)
+         | Some gap -> transitionErr (RangeGap.toError gap)
          | None ->
             map
                CommandApprovalRuleConfigured

@@ -775,6 +775,7 @@ CREATE TYPE approvable_command AS ENUM (
    'InviteEmployee',
    'UpdateEmployeeRole',
    'UnlockCard',
+   'ManageApprovalRule',
    'SendPayment',
    'SendInternalTransferBetweenOrgs',
    'SendDomesticTransfer'

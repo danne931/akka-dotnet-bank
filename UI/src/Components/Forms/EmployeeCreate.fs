@@ -30,7 +30,7 @@ type Values = {
 let form
    (initiatedBy: UserSession)
    (accounts: Map<AccountId, Account>)
-   (employeeInviteRuleOpt: CommandApprovalRule.T option)
+   (employeeInviteRuleOpt: CommandApprovalRule option)
    (onRoleSelect: Role -> unit)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =

@@ -103,6 +103,21 @@ let startOrgRoutes (app: WebApplication) =
 
    app
       .MapPost(
+         OrgPath.RequestCommandApproval,
+         Func<
+            ActorSystem,
+            CommandApprovalProgress.RequestCommandApproval,
+            Task<IResult>
+          >
+            (fun sys cmd ->
+               processCommand sys (OrgCommand.RequestCommandApproval cmd)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.ManageCommandApprovalProgress)
+   |> ignore
+
+   app
+      .MapPost(
          OrgPath.AcquireCommandApproval,
          Func<
             ActorSystem,
