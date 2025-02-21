@@ -6,6 +6,7 @@ open FsToolkit.ErrorHandling
 open Feliz.Router
 
 open Bank.Org.Domain
+open CommandApproval
 open UIDomain.Org
 open History
 open Lib.SharedTypes

@@ -9,6 +9,7 @@ open Bank.Employee.Domain
 open Bank.Transfer.Domain
 open Lib.SharedTypes
 open Lib.Time
+open CommandApproval
 
 let private hasActiveProgressWorkflow
    (org: Org)

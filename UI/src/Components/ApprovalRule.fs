@@ -12,6 +12,7 @@ open UIDomain.Org
 open Lib.SharedTypes
 open Dropdown
 open Bank.Employee.Forms.CommandApprovalRule
+open CommandApproval
 
 type State = {
    Admins: Deferred<Result<Employee list option, Err>>
@@ -222,11 +223,6 @@ let renderMoney (amount: decimal) =
       attr.text $" {Money.format amount} "
    ]
 
-let formatApprovers (approvers: Approver list) =
-   approvers
-   |> List.fold (fun acc approver -> $"{acc}{approver.DisplayName}, ") ""
-   |> _.Remove(-2)
-
 [<ReactComponent>]
 let EditApprovalRuleComponent
    (state: State)
@@ -325,15 +321,15 @@ let EditApprovalRuleComponent
          ]
 
          match rule.Criteria with
-         | Criteria.PerCommand ->
+         | ApprovalCriteria.PerCommand ->
             Html.small "For every request require approval from:"
-         | Criteria.AmountDailyLimit limit ->
+         | ApprovalCriteria.AmountDailyLimit limit ->
             Html.small
                "If transaction amount plus the daily accrued amount (per employee) is >="
 
             renderMoney limit
             Html.small "require approval from:"
-         | Criteria.AmountPerCommand range ->
+         | ApprovalCriteria.AmountPerCommand range ->
             Html.small $"If amount "
 
             match range.LowerBound, range.UpperBound with
@@ -352,7 +348,7 @@ let EditApprovalRuleComponent
 
             Html.small "require approval from:"
 
-         Html.p (formatApprovers rule.Approvers)
+         Html.p (displayApprovers rule.Approvers)
    ]
 
 let renderCreateRule (state: State) dispatch (session: UserSession) (org: Org) =
@@ -406,7 +402,7 @@ let ApprovalRuleManagementDashboardComponent (session: UserSession) (org: Org) =
       else
          let rules =
             rules.Values
-            |> Seq.sortBy (_.Criteria >> Criteria.sortBy)
+            |> Seq.sortBy (_.Criteria >> ApprovalCriteria.sortBy)
             |> Seq.sortBy (fun r ->
                match r.CommandType with
                | ApprovableCommandType.ApprovableAmountBased FulfillPlatformPaymentCommandType ->

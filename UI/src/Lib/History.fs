@@ -7,7 +7,7 @@ open Bank.Employee.Domain
 open UIDomain.Org
 open Lib.SharedTypes
 open Lib.NetworkQuery
-open CommandApprovalRule
+open CommandApproval
 
 type HistoryMaybe = Result<History list option, Err>
 

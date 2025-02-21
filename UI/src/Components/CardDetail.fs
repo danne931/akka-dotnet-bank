@@ -18,6 +18,7 @@ open Lib.SharedTypes
 open Dropdown
 open Bank.Employee.Forms.DailyPurchaseLimitForm
 open Bank.Employee.Forms.MonthlyPurchaseLimitForm
+open CommandApproval
 
 type State = {
    NicknamePersistence: Deferred<Result<EmployeeCommandReceipt, Err>>

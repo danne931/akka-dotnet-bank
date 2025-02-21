@@ -10,6 +10,7 @@ open Lib.Postgres
 open Lib.SharedTypes
 open Bank.Org.Domain
 open Bank.Employee.Domain
+open CommandApproval
 
 open CommandApprovalRuleSqlMapper
 
@@ -59,9 +60,9 @@ let getApprovalRules
                let eId = EmployeeId o.EmployeeId
 
                if eId = Constants.SYSTEM_USER_ID then
-                  Approver.AnyAdmin
+                  CommandApprover.AnyAdmin
                else
-                  Approver.Admin {
+                  CommandApprover.Admin {
                      EmployeeName = o.Name
                      EmployeeId = eId
                   })

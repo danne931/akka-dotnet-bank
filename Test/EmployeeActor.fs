@@ -13,6 +13,7 @@ open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Lib.SharedTypes
+open CommandApproval
 
 module Stub = EmployeeStub
 

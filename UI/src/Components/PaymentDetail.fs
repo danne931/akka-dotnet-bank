@@ -11,6 +11,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
 open Bank.Org.Domain
+open CommandApproval
 open Bank.Account.Forms.PaymentFulfillment
 open UIDomain.Account
 open UIDomain.Org

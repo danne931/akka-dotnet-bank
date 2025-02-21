@@ -4,6 +4,7 @@ open Bank.Org.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open Lib.SharedTypes
+open CommandApproval
 
 type OrgCommandReceipt = {
    PendingCommand: OrgCommand
@@ -42,21 +43,22 @@ module CommandApprovalProgress =
                      rule
             }
 
+let displayApprovers (approvers: CommandApprover list) =
+   approvers |> List.map _.DisplayName |> String.concat ", "
+
 module CommandApprovalRule =
    /// Get list of approvers and detailed criteria details if any.
    let displayVerbose (rule: CommandApprovalRule) =
-      let approvers =
-         String.concat ", " (rule.Approvers |> List.map _.DisplayName)
-
+      let approvers = displayApprovers rule.Approvers
       let approverMsg = $"requires approval from {approvers}"
 
       match rule.Criteria with
-      | Criteria.PerCommand -> approverMsg
-      | Criteria.AmountDailyLimit limit ->
+      | ApprovalCriteria.PerCommand -> approverMsg
+      | ApprovalCriteria.AmountDailyLimit limit ->
          "Daily limit (per employee) of "
          + Money.format limit
          + $" {approverMsg}"
-      | Criteria.AmountPerCommand range ->
+      | ApprovalCriteria.AmountPerCommand range ->
          "Amount "
          + match range.LowerBound, range.UpperBound with
            | Some low, Some high ->

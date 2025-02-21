@@ -11,6 +11,7 @@ open Bank.Org.Domain
 open UIDomain.Org
 open Lib.SharedTypes
 open Lib.Time
+open CommandApproval
 
 // NOTE: This Feliz Elmish component does not manage state.
 //       The Feliz Elmish update handler is just being used for
@@ -106,12 +107,6 @@ let update (onOrgUpdate: OrgCommandReceipt -> unit) msg state =
       state, Alerts.toastCommand err
    | DismissConfirmation -> state, Cmd.none
 
-let approversMsg (approvers: Approver list) =
-   approvers
-   |> List.fold (fun acc approver -> $"{acc}{approver.DisplayName}, ") ""
-   |> _.TrimEnd()
-   |> _.TrimEnd(',')
-
 [<ReactComponent>]
 let ApprovalProgressComponent (session: UserSession) (org: Org) =
    let orgDispatch = React.useContext OrgProvider.dispatchContext
@@ -161,7 +156,8 @@ let ApprovalProgressComponent (session: UserSession) (org: Org) =
                      session.EmployeeId
                | None -> false
 
-            let approvedBy = progress.ApprovedBy |> List.map Approver.Admin
+            let approvedBy =
+               progress.ApprovedBy |> List.map CommandApprover.Admin
 
             classyNode Html.article [ "command-pending-approval" ] [
                Html.header [
@@ -259,7 +255,7 @@ let ApprovalProgressComponent (session: UserSession) (org: Org) =
                | CommandApprovalProgress.Status.Pending ->
                   classyNode Html.div [ "approval-info-inline" ] [
                      Html.small "Approvals remaining:"
-                     Html.p (approversMsg approvalsRemaining)
+                     Html.p (displayApprovers approvalsRemaining)
                   ]
 
                   classyNode Html.div [ "approval-info-inline" ] [
@@ -267,7 +263,7 @@ let ApprovalProgressComponent (session: UserSession) (org: Org) =
 
                      match approvedBy with
                      | [] -> Html.p "None"
-                     | approvers -> Html.p (approversMsg approvers)
+                     | approvers -> Html.p (displayApprovers approvers)
                   ]
                | CommandApprovalProgress.Status.Terminated reason ->
                   Html.small

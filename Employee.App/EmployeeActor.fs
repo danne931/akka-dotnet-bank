@@ -15,6 +15,7 @@ open ActorUtil
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Org.Domain
+open CommandApproval
 
 let handleValidationError
    mailbox

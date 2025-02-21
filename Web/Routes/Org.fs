@@ -9,6 +9,7 @@ open Akka.Actor
 open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Account.Domain
+open CommandApproval
 open Bank.Org.Api
 open Bank.History.Api
 open Bank.CommandApproval.Api

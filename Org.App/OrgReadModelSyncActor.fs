@@ -14,6 +14,7 @@ open Lib.ReadModelSyncActor
 open OrganizationSqlMapper
 open OrganizationEventSqlMapper
 open TransferSqlMapper
+open CommandApproval
 
 type SqlParamsDerivedFromOrgEvents = {
    OrgEvent: (string * SqlValue) list list
@@ -135,7 +136,7 @@ let sqlParamReducer
 
       let dailyLimitQParams =
          match rule.Criteria with
-         | Criteria.AmountDailyLimit limit ->
+         | ApprovalCriteria.AmountDailyLimit limit ->
             Some [
                "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId rule.RuleId
                "orgId", CommandApprovalRuleSqlMapper.Writer.orgId rule.OrgId
@@ -146,7 +147,7 @@ let sqlParamReducer
 
       let amountPerCommandQParams =
          match rule.Criteria with
-         | Criteria.AmountPerCommand range ->
+         | ApprovalCriteria.AmountPerCommand range ->
             Some [
                "ruleId", CommandApprovalRuleSqlMapper.Writer.ruleId rule.RuleId
                "orgId", CommandApprovalRuleSqlMapper.Writer.orgId rule.OrgId

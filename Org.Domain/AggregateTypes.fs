@@ -4,6 +4,7 @@ open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
+open CommandApproval
 
 [<RequireQualifiedAccess>]
 type OrgCommand =

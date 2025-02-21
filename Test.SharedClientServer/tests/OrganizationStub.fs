@@ -7,6 +7,7 @@ open Lib.SharedTypes
 open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
+open CommandApproval
 
 let orgId = Guid.NewGuid() |> OrgId
 let ruleId () = Guid.NewGuid() |> CommandApprovalRuleId

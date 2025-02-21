@@ -1,4 +1,4 @@
-namespace Bank.Org.Domain
+module CommandApproval
 
 open System
 open Validus
@@ -88,7 +88,7 @@ type ApprovableCommandType =
       | Some o -> o
 
 [<RequireQualifiedAccess>]
-type Approver =
+type CommandApprover =
    /// Any admin is considered a suitable approver.
    | AnyAdmin
    /// A particular admin is considered a suitable approver.
@@ -96,8 +96,8 @@ type Approver =
 
    member x.DisplayName =
       match x with
-      | Approver.AnyAdmin -> "Any Admin"
-      | Approver.Admin a -> a.EmployeeName
+      | CommandApprover.AnyAdmin -> "Any Admin"
+      | CommandApprover.Admin a -> a.EmployeeName
 
 type AmountPerCommandRange = {
    LowerBound: decimal option
@@ -264,7 +264,7 @@ module AmountPerCommandRange =
                | _ -> None)
 
 [<RequireQualifiedAccess>]
-type Criteria =
+type ApprovalCriteria =
    | AmountDailyLimit of limit: decimal
    | AmountPerCommand of AmountPerCommandRange
    | PerCommand
@@ -276,10 +276,10 @@ type Criteria =
       | PerCommand -> "PerCommand"
 
    static member validate
-      (criteria: Criteria)
-      : Result<Criteria, ValidationErrors> =
+      (criteria: ApprovalCriteria)
+      : Result<ApprovalCriteria, ValidationErrors> =
       match criteria with
-      | Criteria.AmountPerCommand range ->
+      | ApprovalCriteria.AmountPerCommand range ->
          match range.LowerBound, range.UpperBound with
          | None, None ->
             ValidationErrors.create "amount per command criteria" [
@@ -287,23 +287,24 @@ type Criteria =
             ]
             |> Error
          | _ -> Ok criteria
-      | Criteria.AmountDailyLimit limit ->
+      | ApprovalCriteria.AmountDailyLimit limit ->
          Lib.Validators.amountValidator "daily limit criteria" limit
          |> Result.map (fun _ -> criteria)
-      | Criteria.PerCommand -> Ok criteria
+      | ApprovalCriteria.PerCommand -> Ok criteria
 
-   static member sortBy(criteria: Criteria) =
+   static member sortBy(criteria: ApprovalCriteria) =
       match criteria with
-      | Criteria.AmountPerCommand range -> AmountPerCommandRange.sortBy range
-      | Criteria.AmountDailyLimit _ -> 4, None, None
-      | Criteria.PerCommand -> 5, None, None
+      | ApprovalCriteria.AmountPerCommand range ->
+         AmountPerCommandRange.sortBy range
+      | ApprovalCriteria.AmountDailyLimit _ -> 4, None, None
+      | ApprovalCriteria.PerCommand -> 5, None, None
 
 type CommandApprovalRule = {
    RuleId: CommandApprovalRuleId
    OrgId: OrgId
    CommandType: ApprovableCommandType
-   Criteria: Criteria
-   Approvers: Approver list
+   Criteria: ApprovalCriteria
+   Approvers: CommandApprover list
 }
 
 type ManageApprovalRuleInput = {
@@ -407,10 +408,13 @@ type ApprovableCommand =
       | _ -> x.CommandType.Display
 
 module CommandApprovalRule =
-   let private isEmployeeAnApprover (id: InitiatedById) (approver: Approver) =
+   let private isEmployeeAnApprover
+      (id: InitiatedById)
+      (approver: CommandApprover)
+      =
       match approver with
-      | Approver.AnyAdmin -> true
-      | Approver.Admin a -> InitiatedById a.EmployeeId = id
+      | CommandApprover.AnyAdmin -> true
+      | CommandApprover.Admin a -> InitiatedById a.EmployeeId = id
 
    /// Is the command approver configured as an approver in the
    /// rule or is there an AnyAdmin approver configured for the rule
@@ -460,9 +464,11 @@ module CommandApprovalRule =
             false
          else
             match existingRule.Criteria, rule.Criteria with
-            | Criteria.AmountDailyLimit _, Criteria.AmountDailyLimit _
-            | Criteria.PerCommand, Criteria.PerCommand -> true
-            | Criteria.AmountPerCommand _, Criteria.AmountPerCommand _ -> false
+            | ApprovalCriteria.AmountDailyLimit _,
+              ApprovalCriteria.AmountDailyLimit _
+            | ApprovalCriteria.PerCommand, ApprovalCriteria.PerCommand -> true
+            | ApprovalCriteria.AmountPerCommand _,
+              ApprovalCriteria.AmountPerCommand _ -> false
             | _ -> false
 
    let private rangeConflictsWithDailyLimit
@@ -489,28 +495,28 @@ module CommandApprovalRule =
          existing.CommandType = rule.CommandType
          && existing.RuleId <> rule.RuleId // Editing existing rule
          && match existing.Criteria with
-            | Criteria.AmountPerCommand _ -> true
-            | Criteria.AmountDailyLimit _ -> true
+            | ApprovalCriteria.AmountPerCommand _ -> true
+            | ApprovalCriteria.AmountDailyLimit _ -> true
             | _ -> false
 
       match rule.Criteria with
-      | Criteria.PerCommand -> false
-      | Criteria.AmountPerCommand range ->
+      | ApprovalCriteria.PerCommand -> false
+      | ApprovalCriteria.AmountPerCommand range ->
          existingRules
          |> Seq.filter keepAmountBasedCommandRules
          |> Seq.exists (fun existing ->
             match existing.Criteria with
-            | Criteria.AmountPerCommand existingRange ->
+            | ApprovalCriteria.AmountPerCommand existingRange ->
                AmountPerCommandRange.hasOverlap existingRange range
-            | Criteria.AmountDailyLimit limit ->
+            | ApprovalCriteria.AmountDailyLimit limit ->
                rangeConflictsWithDailyLimit limit range
             | _ -> false)
-      | Criteria.AmountDailyLimit limit ->
+      | ApprovalCriteria.AmountDailyLimit limit ->
          existingRules
          |> Seq.filter keepAmountBasedCommandRules
          |> Seq.exists (fun existing ->
             match existing.Criteria with
-            | Criteria.AmountPerCommand range ->
+            | ApprovalCriteria.AmountPerCommand range ->
                rangeConflictsWithDailyLimit limit range
             | _ -> false)
 
@@ -522,7 +528,7 @@ module CommandApprovalRule =
       : RangeGap option
       =
       match rule.Criteria with
-      | Criteria.AmountPerCommand range ->
+      | ApprovalCriteria.AmountPerCommand range ->
          let existingRanges =
             existingRules
             |> Seq.fold
@@ -532,7 +538,8 @@ module CommandApprovalRule =
                      r.CommandType = rule.CommandType,
                      r.Criteria
                   with
-                  | true, true, Criteria.AmountPerCommand range -> range :: acc
+                  | true, true, ApprovalCriteria.AmountPerCommand range ->
+                     range :: acc
                   | _ -> acc)
                []
 
@@ -549,7 +556,7 @@ module CommandApprovalRule =
       rules
       |> List.sortBy (fun r ->
          match r.Criteria with
-         | Criteria.AmountDailyLimit _ -> 0
+         | ApprovalCriteria.AmountDailyLimit _ -> 0
          | _ -> 1)
       |> List.tryHead
 
@@ -571,17 +578,17 @@ module CommandApprovalRule =
       : bool
       =
       match rule.Criteria with
-      | Criteria.PerCommand ->
+      | ApprovalCriteria.PerCommand ->
          match command with
          | ApprovableCommand.PerCommand _ -> true
          | ApprovableCommand.AmountBased _ -> false
-      | Criteria.AmountPerCommand range ->
+      | ApprovalCriteria.AmountPerCommand range ->
          match range.LowerBound, range.UpperBound with
          | None, None -> false // This case should not be reached
          | Some low, None -> command.Amount >= low
          | None, Some high -> command.Amount < high
          | Some low, Some high -> command.Amount >= low && command.Amount < high
-      | Criteria.AmountDailyLimit limit ->
+      | ApprovalCriteria.AmountDailyLimit limit ->
          match command with
          | ApprovableCommand.PerCommand _ -> false
          | ApprovableCommand.AmountBased c ->
@@ -707,7 +714,7 @@ module CommandApprovalRule =
          : ValidationResult<BankEvent<ConfigureApprovalRule>>
          =
          validate {
-            let! _ = Criteria.validate cmd.Data.Rule.Criteria
+            let! _ = ApprovalCriteria.validate cmd.Data.Rule.Criteria
             return BankEvent.create<ConfigureApprovalRule> cmd
          }
 
@@ -786,22 +793,23 @@ module CommandApprovalProgress =
    let remainingApprovalRequiredBy
       (rule: CommandApprovalRule)
       (progress: T)
-      : Approver list
+      : CommandApprover list
       =
       List.fold
          (fun approversRequired (approvedBy: EmployeeReference) ->
             let adminFoundAtIndex =
                approversRequired
                |> List.tryFindIndex (function
-                  | Approver.Admin a -> a.EmployeeId = approvedBy.EmployeeId
-                  | Approver.AnyAdmin -> false)
-               // If approvedBy not found as one of the Approver.Admin items
-               // then check for the existence of an Approver.AnyAdmin option.
+                  | CommandApprover.Admin a ->
+                     a.EmployeeId = approvedBy.EmployeeId
+                  | CommandApprover.AnyAdmin -> false)
+               // If approvedBy not found as one of the CommandApprover.Admin items
+               // then check for the existence of an CommandApprover.AnyAdmin option.
                |> Option.orElse (
                   approversRequired
                   |> List.tryFindIndex (function
-                     | Approver.Admin _ -> false
-                     | Approver.AnyAdmin -> true)
+                     | CommandApprover.Admin _ -> false
+                     | CommandApprover.AnyAdmin -> true)
                )
 
             // Remove the approversRequired item corresponding to approvedBy.
