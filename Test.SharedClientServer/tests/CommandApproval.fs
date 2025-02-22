@@ -2461,8 +2461,12 @@ let tests =
          let res = update org cmdRequestingApprovalToManageRule
          let _, org = Expect.wantOk res ""
 
-         let progress = Seq.head org.Info.CommandApprovalProgress.Values
-         Expect.equal progress.Status CommandApprovalProgress.Status.Pending ""
+         let progress =
+            org.Info.CommandApprovalProgress.Values
+            |> Seq.tryFind (fun p ->
+               p.Status = CommandApprovalProgress.Status.Pending)
+
+         let progress = Expect.wantSome progress ""
 
          Expect.notEqual
             org.Info.CommandApprovalRules[ruleToInviteEmployee.RuleId].Approvers
@@ -2611,5 +2615,383 @@ let tests =
             (org.Info.CommandApprovalRules.ContainsKey
                ruleToInviteEmployee.RuleId)
             "Rule should be removed from org after approval completion"
+      }
+
+      test
+         "requestCommandApproval validates ManageApprovalRule commands with conflicting criteria detection" {
+         let admin = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let otherAdmin = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let existingPaymentRule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.Payment
+            Criteria =
+               ApprovalCriteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = Some 20m
+               }
+            Approvers = [ CommandApprover.AnyAdmin ]
+         }
+
+         let cmdToAddPaymentRule =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               existingPaymentRule
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update Stub.orgStateWithEvents cmdToAddPaymentRule
+         let _, org = Expect.wantOk res ""
+
+         let ruleIdForManagingApproval = Stub.ruleId ()
+
+         let cmdToMakeManagingRulesRequireDualAdminApproval =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  OrgId = Stub.orgId
+                  CommandType =
+                     ApprovableCommandType.ApprovablePerCommand
+                        ManageApprovalRuleCommandType
+                  Criteria = ApprovalCriteria.PerCommand
+                  Approvers = [
+                     CommandApprover.Admin admin
+                     CommandApprover.Admin otherAdmin
+                  ]
+               }
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update org cmdToMakeManagingRulesRequireDualAdminApproval
+         let _, org = Expect.wantOk res ""
+
+         let conflictingPaymentRule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.Payment
+            Criteria =
+               ApprovalCriteria.AmountPerCommand {
+                  LowerBound = Some 19m
+                  UpperBound = None
+               }
+            Approvers = [ CommandApprover.AnyAdmin ]
+         }
+
+         let cmdRequestingApprovalForConflictingRule =
+            RequestCommandApproval.create
+               org.Info.OrgId
+               (InitiatedById admin.EmployeeId)
+               (Guid.NewGuid() |> CorrelationId)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  Requester = admin
+                  RequesterIsConfiguredAsAnApprover = true
+                  Command =
+                     {
+                        Rule = conflictingPaymentRule
+                        IsDeletion = false
+                        Initiator = admin
+                     }
+                     |> ManageApprovalRuleCommand.create
+                     |> ManageApprovalRule
+                     |> ApprovableCommand.PerCommand
+               }
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmdRequestingApprovalForConflictingRule
+         let err = Expect.wantError res ""
+
+         match err with
+         | Err.OrgStateTransitionError OrgStateTransitionError.ApprovalRuleHasConflictingCriteria ->
+            Expect.isTrue true ""
+         | _ -> Expect.isTrue false "Should have detected conflicting criteria"
+      }
+
+      test
+         "requestCommandApproval validates ManageApprovalRule commands with RangeGap detection" {
+         let admin = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let otherAdmin = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let existingPaymentRule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.Payment
+            Criteria =
+               ApprovalCriteria.AmountPerCommand {
+                  LowerBound = Some 10m
+                  UpperBound = Some 20m
+               }
+            Approvers = [ CommandApprover.AnyAdmin ]
+         }
+
+         let cmdToAddPaymentRule =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               existingPaymentRule
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update Stub.orgStateWithEvents cmdToAddPaymentRule
+         let _, org = Expect.wantOk res ""
+
+         let ruleIdForManagingApproval = Stub.ruleId ()
+
+         let cmdToMakeManagingRulesRequireDualAdminApproval =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  OrgId = Stub.orgId
+                  CommandType =
+                     ApprovableCommandType.ApprovablePerCommand
+                        ManageApprovalRuleCommandType
+                  Criteria = ApprovalCriteria.PerCommand
+                  Approvers = [
+                     CommandApprover.Admin admin
+                     CommandApprover.Admin otherAdmin
+                  ]
+               }
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update org cmdToMakeManagingRulesRequireDualAdminApproval
+         let _, org = Expect.wantOk res ""
+
+         let ruleWithAmountGap = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.Payment
+            Criteria =
+               ApprovalCriteria.AmountPerCommand {
+                  LowerBound = Some 25m
+                  UpperBound = None
+               }
+            Approvers = [ CommandApprover.AnyAdmin ]
+         }
+
+         let cmdRequestingApprovalForRuleWithGap =
+            RequestCommandApproval.create
+               org.Info.OrgId
+               (InitiatedById admin.EmployeeId)
+               (Guid.NewGuid() |> CorrelationId)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  Requester = admin
+                  RequesterIsConfiguredAsAnApprover = true
+                  Command =
+                     {
+                        Rule = ruleWithAmountGap
+                        IsDeletion = false
+                        Initiator = admin
+                     }
+                     |> ManageApprovalRuleCommand.create
+                     |> ManageApprovalRule
+                     |> ApprovableCommand.PerCommand
+               }
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmdRequestingApprovalForRuleWithGap
+         let err = Expect.wantError res ""
+
+         match err with
+         | Err.OrgStateTransitionError(OrgStateTransitionError.ApprovalRuleHasGapInCriteria _) ->
+            Expect.isTrue true ""
+         | _ -> Expect.isTrue false "Should have detected amount gap"
+      }
+
+      test
+         "requestCommandApproval validates ManageApprovalRule commands with
+         detection of inner rule duplicates" {
+         let admin = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let otherAdmin = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let existingPaymentRule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.Payment
+            Criteria = ApprovalCriteria.AmountDailyLimit 100m
+            Approvers = [ CommandApprover.AnyAdmin ]
+         }
+
+         let cmdToAddPaymentRule =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               existingPaymentRule
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update Stub.orgStateWithEvents cmdToAddPaymentRule
+         let _, org = Expect.wantOk res ""
+
+         let ruleIdForManagingApproval = Stub.ruleId ()
+
+         let cmdToMakeManagingRulesRequireDualAdminApproval =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  OrgId = Stub.orgId
+                  CommandType =
+                     ApprovableCommandType.ApprovablePerCommand
+                        ManageApprovalRuleCommandType
+                  Criteria = ApprovalCriteria.PerCommand
+                  Approvers = [
+                     CommandApprover.Admin admin
+                     CommandApprover.Admin otherAdmin
+                  ]
+               }
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update org cmdToMakeManagingRulesRequireDualAdminApproval
+         let _, org = Expect.wantOk res ""
+
+         let duplicateCommandTypeRule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.Payment
+            Criteria = ApprovalCriteria.AmountDailyLimit 10m
+            Approvers = [ CommandApprover.AnyAdmin ]
+         }
+
+         let cmdRequestingApprovalForDuplicateType =
+            RequestCommandApproval.create
+               org.Info.OrgId
+               (InitiatedById admin.EmployeeId)
+               (Guid.NewGuid() |> CorrelationId)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  Requester = admin
+                  RequesterIsConfiguredAsAnApprover = true
+                  Command =
+                     {
+                        Rule = duplicateCommandTypeRule
+                        IsDeletion = false
+                        Initiator = admin
+                     }
+                     |> ManageApprovalRuleCommand.create
+                     |> ManageApprovalRule
+                     |> ApprovableCommand.PerCommand
+               }
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmdRequestingApprovalForDuplicateType
+         let err = Expect.wantError res ""
+
+         match err with
+         | Err.OrgStateTransitionError(OrgStateTransitionError.ApprovalRuleMultipleOfType _) ->
+            Expect.isTrue true ""
+         | _ ->
+            Expect.isTrue false "Should have detected duplicate command type"
+      }
+
+      test
+         "requestCommandApproval of ManageApprovalRule commands passes validation when intending to delete rule" {
+         let admin = {
+            EmployeeName = "A"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let otherAdmin = {
+            EmployeeName = "B"
+            EmployeeId = Guid.NewGuid() |> EmployeeId
+         }
+
+         let existingPaymentRule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.Payment
+            Criteria = ApprovalCriteria.AmountDailyLimit 100m
+            Approvers = [ CommandApprover.AnyAdmin ]
+         }
+
+         let cmdToAddPaymentRule =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               existingPaymentRule
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update Stub.orgStateWithEvents cmdToAddPaymentRule
+         let _, org = Expect.wantOk res ""
+
+         let ruleIdForManagingApproval = Stub.ruleId ()
+
+         let cmdToMakeManagingRulesRequireDualAdminApproval =
+            ConfigureApprovalRuleCommand.create
+               Stub.orgId
+               (admin.EmployeeId |> InitiatedById)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  OrgId = Stub.orgId
+                  CommandType =
+                     ApprovableCommandType.ApprovablePerCommand
+                        ManageApprovalRuleCommandType
+                  Criteria = ApprovalCriteria.PerCommand
+                  Approvers = [
+                     CommandApprover.Admin admin
+                     CommandApprover.Admin otherAdmin
+                  ]
+               }
+            |> OrgCommand.ConfigureApprovalRule
+
+         let res = update org cmdToMakeManagingRulesRequireDualAdminApproval
+         let _, org = Expect.wantOk res ""
+
+         let duplicateCommandTypeRule = {
+            RuleId = Stub.ruleId ()
+            OrgId = Stub.orgId
+            CommandType = Stub.commandTypes.Payment
+            Criteria = ApprovalCriteria.AmountDailyLimit 10m
+            Approvers = [ CommandApprover.AnyAdmin ]
+         }
+
+         let cmdRequestingApprovalForDuplicateType =
+            RequestCommandApproval.create
+               org.Info.OrgId
+               (InitiatedById admin.EmployeeId)
+               (Guid.NewGuid() |> CorrelationId)
+               {
+                  RuleId = ruleIdForManagingApproval
+                  Requester = admin
+                  RequesterIsConfiguredAsAnApprover = true
+                  Command =
+                     {
+                        Rule = duplicateCommandTypeRule
+                        // NOTE: DELETION bypasses validation
+                        IsDeletion = true
+                        Initiator = admin
+                     }
+                     |> ManageApprovalRuleCommand.create
+                     |> ManageApprovalRule
+                     |> ApprovableCommand.PerCommand
+               }
+            |> OrgCommand.RequestCommandApproval
+
+         let res = update org cmdRequestingApprovalForDuplicateType
+         Expect.isOk res "expect deletion to bypass validation"
       }
    ]

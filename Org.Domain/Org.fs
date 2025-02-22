@@ -46,6 +46,34 @@ let private canManageApprovalProgress
          )
          |> Error
 
+let private validateApprovalRuleAgainstExistingRules
+   (existingRules: CommandApprovalRule seq)
+   (rule: CommandApprovalRule)
+   =
+   if
+      CommandApprovalRule.newRuleCommandTypeConflictsWithExistingRule
+         existingRules
+         rule
+   then
+      rule.CommandType.Display
+      |> OrgStateTransitionError.ApprovalRuleMultipleOfType
+      |> Error
+   elif
+      CommandApprovalRule.newRuleCriteriaConflictsWithExistingRule
+         existingRules
+         rule
+   then
+      Error OrgStateTransitionError.ApprovalRuleHasConflictingCriteria
+   else
+      let containsAmountBasedGaps =
+         CommandApprovalRule.newRuleContainsAmountGapWithExistingRule
+            existingRules
+            rule
+
+      match containsAmountBasedGaps with
+      | Some gap -> Error(RangeGap.toError gap)
+      | None -> Ok()
+
 let dailyAccrual
    (initiatedBy: InitiatedById)
    (metrics: Map<CorrelationId, OrgAccrualMetric>)
@@ -395,30 +423,10 @@ module private StateTransition =
 
       if org.Status <> OrgStatus.Active then
          transitionErr OrgStateTransitionError.OrgNotActive
-      elif
-         CommandApprovalRule.newRuleCommandTypeConflictsWithExistingRule
-            existingRules
-            rule
-      then
-         rule.CommandType.Display
-         |> OrgStateTransitionError.ApprovalRuleMultipleOfType
-         |> transitionErr
-      elif
-         CommandApprovalRule.newRuleCriteriaConflictsWithExistingRule
-            existingRules
-            rule
-      then
-         transitionErr
-            OrgStateTransitionError.ApprovalRuleHasConflictingCriteria
       else
-         let containsAmountBasedGaps =
-            CommandApprovalRule.newRuleContainsAmountGapWithExistingRule
-               existingRules
-               rule
-
-         match containsAmountBasedGaps with
-         | Some gap -> transitionErr (RangeGap.toError gap)
-         | None ->
+         match validateApprovalRuleAgainstExistingRules existingRules rule with
+         | Error err -> transitionErr err
+         | Ok() ->
             map
                CommandApprovalRuleConfigured
                state
@@ -448,16 +456,32 @@ module private StateTransition =
       =
       let org = state.Info
 
+      let validated () =
+         map
+            CommandApprovalRequested
+            state
+            (CommandApprovalProgress.RequestCommandApproval.toEvent cmd)
+
       if org.Status <> OrgStatus.Active then
          transitionErr OrgStateTransitionError.OrgNotActive
       else
          match Map.tryFind cmd.Data.RuleId org.CommandApprovalRules with
          | None -> transitionErr OrgStateTransitionError.ApprovalRuleNotFound
          | Some _ ->
-            map
-               CommandApprovalRequested
-               state
-               (CommandApprovalProgress.RequestCommandApproval.toEvent cmd)
+            // Check for rule conflicts when command is ManageApprovalRule
+            match cmd.Data.Command with
+            | ApprovableCommand.PerCommand(ManageApprovalRule manageCmd) when
+               (not manageCmd.Data.IsDeletion)
+               ->
+               let existingRules = org.CommandApprovalRules.Values
+               let rule = manageCmd.Data.Rule
+
+               match
+                  validateApprovalRuleAgainstExistingRules existingRules rule
+               with
+               | Error err -> transitionErr err
+               | Ok() -> validated ()
+            | _ -> validated ()
 
    let acquireCommandApproval
       (state: OrgSnapshot)
