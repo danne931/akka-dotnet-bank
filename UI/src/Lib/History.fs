@@ -284,6 +284,187 @@ let historyUIFriendly
    | History.Employee h -> employeeHistoryUIFriendly h
    | History.Account h -> accountHistoryUIFriendly org h
 
+let private matchesOrgEventFilter
+   (event: OrgEvent)
+   (filter: OrgEventGroupFilter)
+   =
+   match filter with
+   | OrgEventGroupFilter.Onboarding ->
+      match event with
+      | OrgEvent.OrgCreated _
+      | OrgEvent.OrgOnboardingFinished _ -> true
+      | _ -> false
+   | OrgEventGroupFilter.FeatureFlagConfigured ->
+      match event with
+      | OrgEvent.FeatureFlagConfigured _ -> true
+      | _ -> false
+   | OrgEventGroupFilter.CommandApprovalRule ->
+      match event with
+      | OrgEvent.CommandApprovalRuleConfigured _
+      | OrgEvent.CommandApprovalRuleDeleted _ -> true
+      | _ -> false
+   | OrgEventGroupFilter.CommandApprovalProgress ->
+      match event with
+      | OrgEvent.CommandApprovalRequested _
+      | OrgEvent.CommandApprovalAcquired _
+      | OrgEvent.CommandApprovalDeclined _
+      | OrgEvent.CommandApprovalTerminated _
+      | OrgEvent.CommandApprovalProcessCompleted _ -> true
+      | _ -> false
+   | OrgEventGroupFilter.DomesticTransferRecipient ->
+      match event with
+      | OrgEvent.RegisteredDomesticTransferRecipient _
+      | OrgEvent.EditedDomesticTransferRecipient _
+      | OrgEvent.NicknamedDomesticTransferRecipient _
+      | OrgEvent.DomesticTransferRetryConfirmsRecipient _
+      | OrgEvent.DomesticTransferRecipientFailed _ -> true
+      | _ -> false
+
+let private matchesAccountEventFilter
+   (event: AccountEvent)
+   (filter: TransactionGroupFilter)
+   =
+   match filter with
+   | TransactionGroupFilter.Purchase ->
+      match event with
+      | AccountEvent.DebitedAccount _ -> true
+      | _ -> false
+   | TransactionGroupFilter.Deposit ->
+      match event with
+      | AccountEvent.DepositedCash _ -> true
+      | _ -> false
+   | TransactionGroupFilter.InternalTransferWithinOrg ->
+      match event with
+      | AccountEvent.InternalTransferWithinOrgPending _
+      | AccountEvent.InternalTransferWithinOrgCompleted _
+      | AccountEvent.InternalTransferWithinOrgFailed _
+      | AccountEvent.InternalTransferWithinOrgDeposited _ -> true
+      | _ -> false
+   | TransactionGroupFilter.InternalTransferBetweenOrgs ->
+      match event with
+      | AccountEvent.InternalTransferBetweenOrgsPending _
+      | AccountEvent.InternalTransferBetweenOrgsCompleted _
+      | AccountEvent.InternalTransferBetweenOrgsFailed _
+      | AccountEvent.InternalTransferBetweenOrgsDeposited _ -> true
+      | _ -> false
+   | TransactionGroupFilter.InternalAutomatedTransfer ->
+      match event with
+      | AccountEvent.InternalAutomatedTransferPending _
+      | AccountEvent.InternalAutomatedTransferCompleted _
+      | AccountEvent.InternalAutomatedTransferFailed _
+      | AccountEvent.InternalAutomatedTransferDeposited _ -> true
+      | _ -> false
+   | TransactionGroupFilter.DomesticTransfer ->
+      match event with
+      | AccountEvent.DomesticTransferPending _
+      | AccountEvent.DomesticTransferCompleted _
+      | AccountEvent.DomesticTransferFailed _
+      | AccountEvent.DomesticTransferProgress _ -> true
+      | _ -> false
+   | TransactionGroupFilter.PlatformPayment ->
+      match event with
+      | AccountEvent.PlatformPaymentRequested _
+      | AccountEvent.PlatformPaymentPaid _
+      | AccountEvent.PlatformPaymentDeposited _
+      | AccountEvent.PlatformPaymentDeclined _
+      | AccountEvent.PlatformPaymentCancelled _ -> true
+      | _ -> false
+
+let private matchesEmployeeEventFilter
+   (event: EmployeeEvent)
+   (filter: EmployeeEventGroupFilter)
+   =
+   match filter with
+   | EmployeeEventGroupFilter.Invitation ->
+      match event with
+      | EmployeeEvent.CreatedEmployee _
+      | EmployeeEvent.InvitationConfirmed _
+      | EmployeeEvent.InvitationCancelled _ -> true
+      | _ -> false
+   | EmployeeEventGroupFilter.CardFrozenUnfrozen ->
+      match event with
+      | EmployeeEvent.LockedCard _
+      | EmployeeEvent.UnlockedCard _ -> true
+      | _ -> false
+   | EmployeeEventGroupFilter.AccessRestored ->
+      match event with
+      | EmployeeEvent.AccessRestored _ -> true
+      | _ -> false
+   | EmployeeEventGroupFilter.Purchase ->
+      match event with
+      | EmployeeEvent.PurchasePending _
+      | EmployeeEvent.PurchaseConfirmedByAccount _
+      | EmployeeEvent.PurchaseRejectedByAccount _ -> true
+      | _ -> false
+   | EmployeeEventGroupFilter.CreatedCard ->
+      match event with
+      | EmployeeEvent.CreatedCard _ -> true
+      | _ -> false
+   | EmployeeEventGroupFilter.UpdatedRole ->
+      match event with
+      | EmployeeEvent.UpdatedRole _ -> true
+      | _ -> false
+   | EmployeeEventGroupFilter.PurchaseLimitUpdated ->
+      match event with
+      | EmployeeEvent.DailyDebitLimitUpdated _
+      | EmployeeEvent.MonthlyDebitLimitUpdated _ -> true
+      | _ -> false
+
+/// Apply the selected filter logic to events arriving via SignalR.
+/// Events fetched from the network query will be filtered via the
+/// database query but still need to apply an in-browser filter for
+/// events arriving via SignalR.
+let keepRealtimeEventsCorrespondingToSelectedFilter
+   (query: HistoryQuery)
+   (history: History)
+   =
+   let envelope =
+      match history with
+      | History.Account o -> AccountEnvelope.unwrap o.Event |> snd
+      | History.Employee o -> EmployeeEnvelope.unwrap o.Event |> snd
+      | History.Org o -> OrgEnvelope.unwrap o.Event |> snd
+
+   let qualifiedDate =
+      match query.DateRange with
+      | None -> true
+      | Some(start, finish) ->
+         let timestamp = envelope.Timestamp.ToLocalTime()
+         timestamp >= start && timestamp <= finish
+
+   let qualifiedInitiator =
+      match query.InitiatedByIds with
+      | None -> true
+      | Some initiators ->
+         initiators
+         |> List.exists (fun initiatedById ->
+            initiatedById = envelope.InitiatedById)
+
+   let qualifiedEventType =
+      match
+         history,
+         query.OrgEventType,
+         query.AccountEventType,
+         query.EmployeeEventType
+      with
+      | _, None, None, None -> true
+      | History.Org o, orgEventFilter, _, _ ->
+         match orgEventFilter with
+         | None -> false
+         | Some filters ->
+            filters |> List.exists (matchesOrgEventFilter o.Event)
+      | History.Account o, _, accountEventFilter, _ ->
+         match accountEventFilter with
+         | None -> false
+         | Some filters ->
+            filters |> List.exists (matchesAccountEventFilter o.Event)
+      | History.Employee o, _, _, employeeEventFilter ->
+         match employeeEventFilter with
+         | None -> false
+         | Some filters ->
+            filters |> List.exists (matchesEmployeeEventFilter o.Event)
+
+   qualifiedDate && qualifiedInitiator && qualifiedEventType
+
 type HistoryBrowserQuery = {
    Date: UIDomain.DateFilter option
    OrgEventType: (OrgEventGroupFilter list) option

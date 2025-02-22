@@ -2,7 +2,7 @@
 module Stub
 
 open System
-open Bank.Account.Domain
+open Bank.Org.Domain
 
 let billingStatement =
    BillingStatement.billingStatement
@@ -10,11 +10,14 @@ let billingStatement =
       AccountStub.billingPeriod
       Int64.MaxValue
 
-let accountBroadcast: AccountBroadcast = {
-   accountEventPersisted = fun evt accountState -> ()
-   accountEventValidationFail = fun orgId accountId msg -> ()
-   accountEventPersistenceFail = fun orgId accountId msg -> ()
+let signalRBroadcast: SignalRBroadcast = {
    circuitBreaker = fun msg -> ()
+   accountEventPersisted = fun evt accountState -> ()
+   employeeEventPersisted = fun evt employeeState -> ()
+   orgEventPersisted = fun evt orgState -> ()
+   accountEventError = fun orgId accountId err -> ()
+   employeeEventError = fun orgId employeeId err -> ()
+   orgEventError = fun orgId err -> ()
 }
 
 let akkaStreamsRestartSettings () =

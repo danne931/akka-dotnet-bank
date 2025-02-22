@@ -84,7 +84,7 @@ let private canProduceAutoTransfer =
       flow.IsSome
 
 let private handleValidationError
-   (broadcaster: AccountBroadcast)
+   (broadcaster: SignalRBroadcast)
    mailbox
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (account: Account)
@@ -96,7 +96,7 @@ let private handleValidationError
       $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
 
    let signalRBroadcastValidationErr () =
-      broadcaster.accountEventValidationFail account.OrgId account.AccountId err
+      broadcaster.accountEventError account.OrgId account.AccountId err
 
    match err with
    | AccountStateTransitionError e ->
@@ -144,7 +144,7 @@ let private handleValidationError
    | _ -> ()
 
 let actorProps
-   (broadcaster: AccountBroadcast)
+   (broadcaster: SignalRBroadcast)
    (getOrStartInternalTransferActor: Actor<_> -> IActorRef<InternalTransferMsg>)
    (getDomesticTransferActor: ActorSystem -> IActorRef<DomesticTransferMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
@@ -441,7 +441,7 @@ let actorProps
                               ignored ()
                      PersistFailed =
                         fun _ err evt sequenceNr ->
-                           broadcaster.accountEventPersistenceFail
+                           broadcaster.accountEventError
                               account.OrgId
                               account.AccountId
                               (Err.DatabaseError err)
@@ -475,7 +475,7 @@ let isPersistableMessage (msg: obj) =
    | _ -> false
 
 let initProps
-   (broadcaster: AccountBroadcast)
+   (broadcaster: SignalRBroadcast)
    (system: ActorSystem)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)

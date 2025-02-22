@@ -17,7 +17,8 @@ open Bank.Employee.Domain
 open Bank.Org.Domain
 open CommandApproval
 
-let handleValidationError
+let private handleValidationError
+   (broadcaster: SignalRBroadcast)
    mailbox
    (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
    (employee: Employee)
@@ -27,6 +28,8 @@ let handleValidationError
    logWarning
       mailbox
       $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
+
+   broadcaster.employeeEventError employee.OrgId employee.EmployeeId err
 
    match err with
    | EmployeeStateTransitionError e ->
@@ -81,6 +84,7 @@ let supplementaryCardInfoToCreateCardCommand
    |> EmployeeCommand.CreateCard
 
 let actorProps
+   (broadcaster: SignalRBroadcast)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
@@ -98,13 +102,15 @@ let actorProps
          let employee = state.Info
 
          let handleValidationError =
-            handleValidationError mailbox getEmailActor employee
+            handleValidationError broadcaster mailbox getEmailActor employee
 
          match box msg with
          | Persisted mailbox e ->
             let (EmployeeMessage.Event evt) = unbox e
             let state = Employee.applyEvent state evt
             let employee = state.Info
+
+            broadcaster.employeeEventPersisted evt employee
 
             match evt with
             | EmployeeEvent.CreatedAccountOwner e ->
@@ -288,6 +294,14 @@ let actorProps
                               passivate ()
                            else
                               ignored ()
+                     PersistFailed =
+                        fun _ err evt sequenceNr ->
+                           broadcaster.employeeEventError
+                              employee.OrgId
+                              employee.EmployeeId
+                              (Err.DatabaseError err)
+
+                           ignored ()
                }
                mailbox
                msg
@@ -318,11 +332,12 @@ let isPersistableMessage (msg: obj) =
 let initProps
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
+   (broadcaster: SignalRBroadcast)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    =
    persistenceSupervisor
       supervisorOpts
       isPersistableMessage
-      (actorProps getOrgRef getAccountRef EmailActor.get)
+      (actorProps broadcaster getOrgRef getAccountRef EmailActor.get)
       persistenceId

@@ -1,5 +1,5 @@
 [<RequireQualifiedAccess>]
-module AccountBroadcaster
+module SignalRBroadcaster
 
 open Akkling
 open Akka.Actor
@@ -7,16 +7,19 @@ open System
 
 open Lib.SharedTypes
 open Bank.Account.Domain
+open Bank.Org.Domain
 open ActorUtil
 open AccountLoadTestTypes
 
-let init (system: ActorSystem) : AccountBroadcast =
+let init (system: ActorSystem) : SignalRBroadcast =
    let pubSub = PubSub.get system
    let signalRPath = ActorMetadata.signalR.Path.ToStringWithoutAddress()
    let sendToSignalR = PubSub.sendPointToPoint pubSub signalRPath
 
    let loadTestPath =
       ActorMetadata.accountLoadTest.SingletonPath.ToStringWithoutAddress()
+
+   let sendError = SignalRActor.Msg.Error >> sendToSignalR
 
    {
       accountEventPersisted =
@@ -42,28 +45,51 @@ let init (system: ActorSystem) : AccountBroadcast =
 
                PubSub.sendPointToPoint pubSub loadTestPath msg
 
-      accountEventValidationFail =
-         fun orgId accountId err ->
+      employeeEventPersisted =
+         fun event employee ->
             let msg =
-               SignalRActor.Msg.AccountEventValidationFail {
-                  OrgId = orgId
-                  AccountId = accountId
-                  Error = err
-                  Date = DateTime.UtcNow
-               }
+               SignalRActor.Msg.EmployeeEventPersisted(
+                  {
+                     Date = DateTime.UtcNow
+                     EventPersisted = event
+                     Employee = employee
+                  }
+               )
 
             sendToSignalR msg
-      accountEventPersistenceFail =
-         fun orgId accountId err ->
+
+      orgEventPersisted =
+         fun event org ->
             let msg =
-               SignalRActor.Msg.AccountEventPersistenceFail {
-                  OrgId = orgId
-                  AccountId = accountId
-                  Error = err
-                  Date = DateTime.UtcNow
-               }
+               SignalRActor.Msg.OrgEventPersisted(
+                  {
+                     Date = DateTime.UtcNow
+                     EventPersisted = event
+                     Org = org
+                  }
+               )
 
             sendToSignalR msg
+
+      accountEventError =
+         fun orgId accountId err ->
+            EventProcessingError.Account(orgId, accountId, err, DateTime.UtcNow)
+            |> sendError
+
+      employeeEventError =
+         fun orgId employeeId err ->
+            EventProcessingError.Employee(
+               orgId,
+               employeeId,
+               err,
+               DateTime.UtcNow
+            )
+            |> sendError
+
+      orgEventError =
+         fun orgId err ->
+            EventProcessingError.Org(orgId, err, DateTime.UtcNow) |> sendError
+
       circuitBreaker =
          fun msg ->
             let circuitBreakerAref = CircuitBreakerActor.get system

@@ -100,6 +100,7 @@ let init (tck: TestKit.Tck) =
       mockPersistenceSupervisorProps (fun ctx ->
          let orgProps =
             OrgActor.actorProps
+               Stub.signalRBroadcast
                getEmployeeRef
                getAccountRef
                getRetryableDomesticTransfers

@@ -9,6 +9,7 @@
     <Compile Include="Commands.fs" />
     <Compile Include="CommandApproval.fs" /> 
     <Compile Include="AggregateTypes.fs" />
+    <Compile Include="SignalRBroadcast.fs" />
     <Compile Include="AnalyticsTypes.fs" /> 
     <Compile Include="Org.fs" />
   </ItemGroup>

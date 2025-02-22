@@ -270,18 +270,16 @@ let TransactionDashboardComponent
    let orgCtx = React.useContext OrgProvider.context
    let orgDispatch = React.useContext OrgProvider.dispatchContext
 
-   let signalRDispatch =
-      React.useContext SignalRAccountEventProvider.dispatchContext
+   let signalRDispatch = React.useContext SignalREventProvider.dispatchContext
 
-   // Did not receive a SignalR event in time so reverted to polling.
+   // Did not receive a SignalR event in time upon form submission so reverted to polling.
    // If the polling confirmation succeeds then update the SignalR context
    // to mimick a SignalR AccountEventPersisted event being received.
    let handlePollingConfirmation
       (confs: AccountEventPersistedConfirmation list)
       =
       for conf in confs do
-         signalRDispatch
-         <| SignalRAccountEventProvider.Msg.AccountEventPersisted conf
+         signalRDispatch (SignalREventProvider.Msg.AccountEventPersisted conf)
 
    let _, dispatch =
       React.useElmish (
@@ -290,25 +288,29 @@ let TransactionDashboardComponent
          [| box session.OrgId |]
       )
 
-   SignalRAccountEventProvider.useAccountEventSubscription {
+   SignalREventProvider.useEventSubscription {
       ComponentName = "TransactionDashboard"
       OrgId = Some session.OrgId
-      OnReceive =
+      EventTypes = [ SignalREventProvider.EventType.Account ]
+      OnPersist =
          fun conf ->
-            // Update account context so AccountSummary & AccountSelection
-            // components are up to date with the latest balance
-            // & other metrics info. Ensure we are using current account info
-            // when attempting to initiate transactions against an account.
-            orgDispatch (OrgProvider.Msg.AccountUpdated conf)
+            match conf with
+            | SignalREventProvider.EventPersistedConfirmation.Account conf ->
+               // Update account context so AccountSummary & AccountSelection
+               // components are up to date with the latest balance
+               // & other metrics info. Ensure we are using current account info
+               // when attempting to initiate transactions against an account.
+               orgDispatch (OrgProvider.Msg.AccountUpdated conf)
 
-            // Handle closing the ScreenOverlayPortal containing the
-            // submitted form or redirecting to another form.
-            conf.EventPersisted
-            |> AccountEnvelope.unwrap
-            |> snd
-            |> _.CorrelationId
-            |> Msg.AccountEventReceived
-            |> dispatch
+               // Handle closing the ScreenOverlayPortal containing the
+               // submitted form or redirecting to another form.
+               conf.EventPersisted
+               |> AccountEnvelope.unwrap
+               |> snd
+               |> _.CorrelationId
+               |> Msg.AccountEventReceived
+               |> dispatch
+            | _ -> ()
    }
 
    classyNode Html.div [ "transaction-dashboard" ] [

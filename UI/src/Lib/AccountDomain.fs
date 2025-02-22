@@ -873,6 +873,56 @@ let transactionUIFriendly
             Destination = Some recipient
       }
 
+let private matchesTransactionGroupFilter
+   (event: AccountEvent)
+   (filter: TransactionGroupFilter)
+   =
+   match filter with
+   | TransactionGroupFilter.Purchase ->
+      match event with
+      | AccountEvent.DebitedAccount _ -> true
+      | _ -> false
+   | TransactionGroupFilter.Deposit ->
+      match event with
+      | AccountEvent.DepositedCash _ -> true
+      | _ -> false
+   | TransactionGroupFilter.InternalTransferWithinOrg ->
+      match event with
+      | AccountEvent.InternalTransferWithinOrgPending _
+      | AccountEvent.InternalTransferWithinOrgCompleted _
+      | AccountEvent.InternalTransferWithinOrgFailed _
+      | AccountEvent.InternalTransferWithinOrgDeposited _ -> true
+      | _ -> false
+   | TransactionGroupFilter.InternalTransferBetweenOrgs ->
+      match event with
+      | AccountEvent.InternalTransferBetweenOrgsPending _
+      | AccountEvent.InternalTransferBetweenOrgsCompleted _
+      | AccountEvent.InternalTransferBetweenOrgsFailed _
+      | AccountEvent.InternalTransferBetweenOrgsDeposited _ -> true
+      | _ -> false
+   | TransactionGroupFilter.InternalAutomatedTransfer ->
+      match event with
+      | AccountEvent.InternalAutomatedTransferPending _
+      | AccountEvent.InternalAutomatedTransferCompleted _
+      | AccountEvent.InternalAutomatedTransferFailed _
+      | AccountEvent.InternalAutomatedTransferDeposited _ -> true
+      | _ -> false
+   | TransactionGroupFilter.DomesticTransfer ->
+      match event with
+      | AccountEvent.DomesticTransferPending _
+      | AccountEvent.DomesticTransferCompleted _
+      | AccountEvent.DomesticTransferFailed _
+      | AccountEvent.DomesticTransferProgress _ -> true
+      | _ -> false
+   | TransactionGroupFilter.PlatformPayment ->
+      match event with
+      | AccountEvent.PlatformPaymentRequested _
+      | AccountEvent.PlatformPaymentPaid _
+      | AccountEvent.PlatformPaymentDeposited _
+      | AccountEvent.PlatformPaymentDeclined _
+      | AccountEvent.PlatformPaymentCancelled _ -> true
+      | _ -> false
+
 /// Apply the selected filter logic to events arriving via SignalR.
 /// Events fetched from the network query will be filtered via the
 /// database query but still need to apply an in-browser filter for
@@ -940,6 +990,12 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
       | Some(CategoryFilter.IsCategorized isCat) -> not isCat
       | Some(CategoryFilter.CategoryIds _) -> false
 
+   let qualifiedEventType =
+      match query.EventType with
+      | None -> true
+      | Some filters ->
+         filters |> List.exists (matchesTransactionGroupFilter evt)
+
    query.Page = 1
    && qualifiedDate
    && qualifiedAccount
@@ -948,3 +1004,4 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
    && qualifiedMoneyFlow
    && qualifiedAmount
    && qualifiedCategory
+   && qualifiedEventType

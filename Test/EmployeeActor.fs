@@ -105,7 +105,11 @@ let init (tck: TestKit.Tck) =
    let prop =
       mockPersistenceSupervisorProps (fun ctx ->
          spawn ctx ActorMetadata.employee.Name
-         <| EmployeeActor.actorProps getOrgRef getAccountRef getEmailActor)
+         <| EmployeeActor.actorProps
+               Stub.signalRBroadcast
+               getOrgRef
+               getAccountRef
+               getEmailActor)
 
    let employeeActor = spawn tck ActorMetadata.employee.Name prop
 

@@ -4,12 +4,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="CircuitBreakerActor.fs" />
     <Compile Include="OrgReadModelSyncActor.fs" />
     <Compile Include="OrgActor.fs" />
     <Compile Include="AnalyticsApi.fs" />
     <Compile Include="CommandApprovalApi.fs" />
     <Compile Include="OrgApi.fs" />
     <Compile Include="HistoryApi.fs" />
+    <Compile Include="SignalRBroadcaster.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="../Database/Database.fsproj" />
     <ProjectReference Include="../Scheduler.App/Scheduler.App.fsproj" />
+    <ProjectReference Include="../SignalR.App/SignalR.App.fsproj" /> 
     <ProjectReference Include="../Notifications.App/Notifications.App.fsproj" />
     <ProjectReference Include="../Org.Domain/Org.Domain.fsproj" />
   </ItemGroup>

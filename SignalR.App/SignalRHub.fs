@@ -5,11 +5,9 @@ open System.Threading.Tasks
 
 type IAccountClient =
    abstract member AccountEventPersistenceConfirmation: string -> Task
-
-   abstract member AccountEventPersistenceFail: string -> Task
-
-   abstract member AccountEventValidationFail: string -> Task
-
+   abstract member EmployeeEventPersistenceConfirmation: string -> Task
+   abstract member OrgEventPersistenceConfirmation: string -> Task
+   abstract member EventProcessingError: string -> Task
    abstract member CircuitBreakerMessage: string -> Task
 
 type AccountHub() =

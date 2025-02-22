@@ -6,6 +6,7 @@ open FsToolkit.ErrorHandling
 open Lib.SharedTypes
 open Lib.NetworkQuery
 open Lib.Postgres
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open CategorySqlMapper

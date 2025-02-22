@@ -401,26 +401,6 @@ type AccountMessage =
    | AutoTransferCompute of AutomaticTransfer.Frequency
    | Delete
 
-type AccountEventPersistedConfirmation = {
-   EventPersisted: AccountEvent
-   Account: Account
-   Date: DateTime
-}
-
-type AccountEventRejected = {
-   OrgId: OrgId
-   AccountId: AccountId
-   Error: Err
-   Date: DateTime
-}
-
-type AccountBroadcast = {
-   accountEventPersisted: AccountEvent -> Account -> unit
-   accountEventValidationFail: OrgId -> AccountId -> Err -> unit
-   accountEventPersistenceFail: OrgId -> AccountId -> Err -> unit
-   circuitBreaker: CircuitBreakerEvent -> unit
-}
-
 [<RequireQualifiedAccess>]
 type AccountClosureMessage =
    | Register of Account
