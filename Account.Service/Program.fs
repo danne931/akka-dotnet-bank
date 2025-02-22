@@ -17,8 +17,8 @@ open ActorUtil
 
 let builder = Env.builder
 
-builder.Services.AddSingleton<AccountBroadcast>(fun provider ->
-   AccountBroadcaster.init <| provider.GetRequiredService<ActorSystem>())
+builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
+   SignalRBroadcaster.init <| provider.GetRequiredService<ActorSystem>())
 |> ignore
 
 let journalOpts = AkkaInfra.getJournalOpts ()
@@ -78,7 +78,7 @@ builder.Services.AddAkka(
 
                let props =
                   OrgActor.initProps
-                     system
+                     (provider.GetRequiredService<SignalRBroadcast>())
                      // TODO: Create org-specific Environment file & replace
                      //       account env var here.
                      Env.config.AccountActorSupervisor
@@ -101,7 +101,7 @@ builder.Services.AddAkka(
 
                let props =
                   AccountActor.initProps
-                  <| provider.GetRequiredService<AccountBroadcast>()
+                  <| provider.GetRequiredService<SignalRBroadcast>()
                   <| system
                   <| Env.config.AccountActorSupervisor
                   <| persistenceId
@@ -126,6 +126,7 @@ builder.Services.AddAkka(
                      //       account env var here.
                      Env.config.AccountActorSupervisor
                      persistenceId
+                     (provider.GetRequiredService<SignalRBroadcast>())
                      (AccountActor.get system)
                      (OrgActor.get system)
 
@@ -279,7 +280,7 @@ builder.Services.AddAkka(
          )
          .WithActors(fun system registry ->
             let routerEnv = EnvTransfer.config.DomesticTransferRouter
-            let broadcast = provider.GetRequiredService<AccountBroadcast>()
+            let broadcast = provider.GetRequiredService<SignalRBroadcast>()
             let getAccountRef = AccountActor.get system
 
             let resize = DefaultResizer(1, routerEnv.MaxInstancesPerNode)

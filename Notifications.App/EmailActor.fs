@@ -16,7 +16,7 @@ open Lib.Postgres
 open Lib.Types
 open Lib.SharedTypes
 open ActorUtil
-open Bank.Account.Domain
+open Bank.Org.Domain
 open Bank.Employee.Domain
 
 type EmployeeInviteEmailInfo = {
@@ -327,7 +327,7 @@ let getAdminEmailsForOrg (orgId: OrgId) =
 
 let start
    (system: ActorSystem)
-   (broadcaster: AccountBroadcast)
+   (broadcaster: SignalRBroadcast)
    (throttle: StreamThrottle)
    (breaker: Akka.Pattern.CircuitBreaker)
    : IActorRef<EmailMessage>

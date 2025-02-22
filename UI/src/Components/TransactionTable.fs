@@ -453,7 +453,7 @@ let TransactionTableComponent
    =
    let categories = React.useContext TransactionCategoryProvider.context
    let merchants = React.useContext MerchantProvider.stateContext
-   let signalRCtx = React.useContext SignalRAccountEventProvider.context
+   let signalRCtx = React.useContext SignalREventProvider.context
    let browserQuery = Routes.IndexUrl.accountBrowserQuery ()
 
    let txnQuery =
@@ -502,7 +502,7 @@ let TransactionTableComponent
          | Some(Resolved(Ok None)) -> Html.p "No transactions found."
          | Some(Resolved(Ok(Some txns))) ->
             let txns =
-               signalRCtx.RealtimeEvents
+               signalRCtx.RealtimeAccountEvents
                |> List.filter (
                   keepRealtimeEventsCorrespondingToSelectedFilter state.Query
                )

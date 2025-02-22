@@ -19,7 +19,13 @@ open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open CommandApproval
 
-let private handleValidationError mailbox (err: Err) (cmd: OrgCommand) =
+let private handleValidationError
+   (broadcaster: SignalRBroadcast)
+   mailbox
+   (orgId: OrgId)
+   (err: Err)
+   (cmd: OrgCommand)
+   =
    match cmd, err with
    | OrgCommand.FailDomesticTransferRecipient cmd,
      Err.OrgStateTransitionError OrgStateTransitionError.RecipientDeactivated ->
@@ -43,6 +49,8 @@ let private handleValidationError mailbox (err: Err) (cmd: OrgCommand) =
       logWarning
          mailbox
          $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
+
+      broadcaster.orgEventError orgId err
 
 // Sends the ApprovableCommand to the appropriate Account or Employee actor
 // when the approval process is complete or no approval required.
@@ -240,6 +248,7 @@ module private RetryDomesticTransfers =
          spawn mailbox name <| actorProps getAccountRef getRetryableTransfers)
 
 let actorProps
+   (broadcaster: SignalRBroadcast)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
@@ -258,12 +267,17 @@ let actorProps
 
          let org = state.Info
 
+         let handleValidationError =
+            handleValidationError broadcaster mailbox org.OrgId
+
          match msg with
          | Persisted mailbox e ->
             let (OrgMessage.Event evt) = unbox e
 
             let previousState = state
             let state = Org.applyEvent state evt
+
+            broadcaster.orgEventPersisted evt state.Info
 
             match evt with
             | OrgCreated e ->
@@ -398,7 +412,7 @@ let actorProps
                            mailbox
                            (OrgMessage.Event evt)
                            envelope.ConfirmationId
-                  | Error err -> handleValidationError mailbox err cmd
+                  | Error err -> handleValidationError err cmd
                | msg -> return unknownMsg msg
             | msg -> return unknownMsg msg
          | :? OrgMessage as msg ->
@@ -475,10 +489,10 @@ let actorProps
                   PersistentActorEventHandler.init with
                      PersistFailed =
                         fun _ err evt sequenceNr ->
-                           let msg =
-                              $"Persistence failed in org actor for event: {evt}. Error: {err}"
+                           broadcaster.orgEventError
+                              org.OrgId
+                              (Err.DatabaseError err)
 
-                           logError msg
                            ignored ()
                      LifecyclePostStop =
                         fun _ ->
@@ -505,7 +519,7 @@ let isPersistableMessage (msg: obj) =
    | _ -> false
 
 let initProps
-   (system: ActorSystem)
+   (broadcaster: SignalRBroadcast)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
@@ -515,6 +529,7 @@ let initProps
    =
    let childProps =
       actorProps
+         broadcaster
          getEmployeeRef
          getAccountRef
          getDomesticTransfersRetryableUponRecipientEdit

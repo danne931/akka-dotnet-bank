@@ -116,7 +116,7 @@ let init (tck: TestKit.Tck) =
       mockPersistenceSupervisorProps (fun ctx ->
          spawn ctx ActorMetadata.account.Name
          <| AccountActor.actorProps
-               Stub.accountBroadcast
+               Stub.signalRBroadcast
                getOrStartInternalTransferActor
                getDomesticTransferActor
                getEmailActor

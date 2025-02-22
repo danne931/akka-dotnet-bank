@@ -8,7 +8,7 @@ open Feliz.Router
 open Browser.Dom
 
 open SignalRConnectionProvider
-open SignalRAccountEventProvider
+open SignalREventProvider
 open TransactionCategoryProvider
 open UserSessionProvider
 open MerchantProvider
@@ -76,13 +76,17 @@ let App () =
    | Routes.IndexUrl.Employees url ->
       appShell None (EmployeeDashboard.EmployeeDashboardComponent url)
    | Routes.IndexUrl.History url ->
-      appShell None (HistoryDashboard.HistoryDashboardComponent url)
+      let contextProviders = SignalRConnectionProvider << SignalREventProvider
+
+      appShell
+         (Some contextProviders)
+         (HistoryDashboard.HistoryDashboardComponent url)
    | Routes.IndexUrl.Cards url ->
       appShell None (CardDashboard.CardDashboardComponent url)
    | Routes.IndexUrl.Transactions url ->
       let contextProviders =
          SignalRConnectionProvider
-         << SignalRAccountEventProvider
+         << SignalREventProvider
          << MerchantProvider
          << TransactionCategoryProvider
 

@@ -11,6 +11,7 @@ open FsToolkit.ErrorHandling
 
 open Lib.ActivePatterns
 open Lib.SharedTypes
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 
@@ -269,7 +270,7 @@ let private transferRequest
 
 let start
    (system: ActorSystem)
-   (broadcaster: AccountBroadcast)
+   (broadcaster: SignalRBroadcast)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (breaker: Akka.Pattern.CircuitBreaker)
    (router: Akka.Routing.Pool)

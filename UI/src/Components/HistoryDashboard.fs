@@ -39,6 +39,7 @@ type State = {
 
 type Msg =
    | LoadHistory of HistoryQuery * AsyncOperationStatus<HistoryMaybe>
+   | RealtimeEventReceived of History
    | UpdateFilter of HistoryFilter
    | ResetPageIndex
 
@@ -84,6 +85,25 @@ let update orgId msg state =
                   query.Page
                   (Option.map (fun _ -> Deferred.Resolved(Error err)))
                   state.History
+      },
+      Cmd.none
+   | RealtimeEventReceived evt ->
+      let resolved = Deferred.Resolved << Ok << Some
+
+      {
+         state with
+            History =
+               state.History
+               |> Map.change
+                     // NOTE: If the user is on page 3 and then goes back to
+                     // page 1 they will be able to see the realtime event that
+                     // came in while they were not on page 1.
+                     1
+                     (Option.map (fun history ->
+                        match history with
+                        | Deferred.Resolved(Ok(Some history)) ->
+                           resolved (evt :: history)
+                        | _ -> resolved [ evt ]))
       },
       Cmd.none
    | UpdateFilter filter ->
@@ -422,6 +442,46 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
    let orgCtx = React.useContext OrgProvider.context
 
    let history = Map.tryFind state.Query.Page state.History
+
+   SignalREventProvider.useEventSubscription {
+      ComponentName = "HistoryDashboard"
+      OrgId = Some session.OrgId
+      EventTypes = [
+         SignalREventProvider.EventType.Account
+         SignalREventProvider.EventType.Org
+         SignalREventProvider.EventType.Employee
+      ]
+      OnPersist =
+         React.useCallbackRef (fun conf ->
+            let history =
+               match conf with
+               | SignalREventProvider.EventPersistedConfirmation.Account conf ->
+                  History.Account {
+                     Event = conf.EventPersisted
+                     // TODO: Edit BankEvent to have an Initiator type
+                     // which includes not just the InitiatedById but also the
+                     // name.
+                     InitiatedByName = "-"
+                  }
+               | SignalREventProvider.EventPersistedConfirmation.Org conf ->
+                  History.Org {
+                     Event = conf.EventPersisted
+                     InitiatedByName = "-"
+                  }
+               | SignalREventProvider.EventPersistedConfirmation.Employee conf ->
+                  History.Employee {
+                     Event = conf.EventPersisted
+                     InitiatedByName = "-"
+                     EmployeeName = conf.Employee.Name
+                  }
+
+            if
+               keepRealtimeEventsCorrespondingToSelectedFilter
+                  state.Query
+                  history
+            then
+               dispatch (Msg.RealtimeEventReceived history))
+   }
 
    classyNode Html.div [ "history-dashboard" ] [
       classyNode Html.main [ "container-fluid" ] [

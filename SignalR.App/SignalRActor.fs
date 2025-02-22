@@ -7,15 +7,18 @@ open Microsoft.AspNetCore.SignalR
 
 open ActorUtil
 open Bank.Account.Domain
+open Bank.Employee.Domain
+open Bank.Org.Domain
 open Bank.Hubs
 open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
 type Msg =
    | AccountEventPersisted of AccountEventPersistedConfirmation
-   | AccountEventValidationFail of AccountEventRejected
-   | AccountEventPersistenceFail of AccountEventRejected
+   | Error of EventProcessingError
    | CircuitBreaker of CircuitBreakerEvent
+   | EmployeeEventPersisted of EmployeeEventPersistedConfirmation
+   | OrgEventPersisted of OrgEventPersistedConfirmation
 
 let actorProps (hub: IHubContext<AccountHub, IAccountClient>) =
    let handler (ctx: Actor<_>) =
@@ -30,18 +33,25 @@ let actorProps (hub: IHubContext<AccountHub, IAccountClient>) =
                .Group(string msg.Account.OrgId)
                .AccountEventPersistenceConfirmation(Serialization.serialize msg)
             |> ignore
-         | Msg.AccountEventValidationFail msg ->
+         | Msg.Error err ->
             hub.Clients
-               .Group(string msg.OrgId)
-               .AccountEventValidationFail(Serialization.serialize msg)
-            |> ignore
-         | Msg.AccountEventPersistenceFail msg ->
-            hub.Clients
-               .Group(string msg.OrgId)
-               .AccountEventPersistenceFail(Serialization.serialize msg)
+               .Group(string err.OrgId)
+               .EventProcessingError(Serialization.serialize err)
             |> ignore
          | Msg.CircuitBreaker msg ->
             hub.Clients.All.CircuitBreakerMessage(Serialization.serialize msg)
+            |> ignore
+         | Msg.EmployeeEventPersisted msg ->
+            hub.Clients
+               .Group(string msg.Employee.OrgId)
+               .EmployeeEventPersistenceConfirmation(
+                  Serialization.serialize msg
+               )
+            |> ignore
+         | Msg.OrgEventPersisted msg ->
+            hub.Clients
+               .Group(string msg.Org.OrgId)
+               .OrgEventPersistenceConfirmation(Serialization.serialize msg)
             |> ignore
       }
 

@@ -1,4 +1,4 @@
-module SignalRAccountEventProvider
+module SignalREventProvider
 
 open Feliz
 open Feliz.UseElmish
@@ -6,19 +6,41 @@ open Elmish
 open FsToolkit.ErrorHandling
 
 open Bank.Account.Domain
+open Bank.Employee.Domain
+open Bank.Org.Domain
 open Lib.SharedTypes
 
-type SignalRAccountEventContext = {
-   Subscribers: Map<string, (AccountEventPersistedConfirmation -> unit)>
-   RealtimeEvents: AccountEvent list
-   Errors: AccountEventRejected list
+[<RequireQualifiedAccess>]
+type EventType =
+   | Account
+   | Employee
+   | Org
+
+[<RequireQualifiedAccess>]
+type EventPersistedConfirmation =
+   | Account of AccountEventPersistedConfirmation
+   | Employee of EmployeeEventPersistedConfirmation
+   | Org of OrgEventPersistedConfirmation
+
+type SignalREventContext = {
+   AccountSubscribers: Map<string, AccountEventPersistedConfirmation -> unit>
+   EmployeeSubscribers: Map<string, EmployeeEventPersistedConfirmation -> unit>
+   OrgSubscribers: Map<string, OrgEventPersistedConfirmation -> unit>
+   RealtimeAccountEvents: AccountEvent list
+   RealtimeEmployeeEvents: EmployeeEvent list
+   RealtimeOrgEvents: OrgEvent list
+   Errors: EventProcessingError list
    CurrentOrgId: OrgId option
    QueuedOrgId: OrgId option
 }
 
 let private initState = {
-   Subscribers = Map.empty
-   RealtimeEvents = []
+   AccountSubscribers = Map.empty
+   EmployeeSubscribers = Map.empty
+   OrgSubscribers = Map.empty
+   RealtimeAccountEvents = []
+   RealtimeEmployeeEvents = []
+   RealtimeOrgEvents = []
    Errors = []
    CurrentOrgId = None
    QueuedOrgId = None
@@ -50,28 +72,31 @@ let private addOrgToConnection
    }
 
 let context =
-   React.createContext<SignalRAccountEventContext> (
-      name = "SignalRAccountEventContext",
+   React.createContext<SignalREventContext> (
+      name = "SignalREventContext",
       defaultValue = initState
    )
 
 type Msg =
    | AccountEventPersisted of AccountEventPersistedConfirmation
-   | AddAccountEventSubscriber of
+   | EmployeeEventPersisted of EmployeeEventPersistedConfirmation
+   | OrgEventPersisted of OrgEventPersistedConfirmation
+   | AddEventSubscriber of
       componentName: string *
       OrgId *
-      (AccountEventPersistedConfirmation -> unit)
-   | RemoveAccountEventSubscriber of componentName: string
+      EventType list *
+      onPersist: (EventPersistedConfirmation -> unit)
+   | RemoveEventSubscriber of componentName: string * EventType list
    | QueueOrgConnectionStart of OrgId
    | AddOrgToConnection of
       SignalR.Connection *
       OrgId *
       AsyncOperationStatus<Result<OrgId, Err>>
-   | AccountErrorReceived of AccountEventRejected
+   | ErrorReceived of EventProcessingError
 
 let dispatchContext =
    React.createContext<Msg -> unit> (
-      name = "SignalRAccountEventDispatchContext",
+      name = "SignalREventDispatchContext",
       defaultValue = ignore
    )
 
@@ -91,50 +116,110 @@ let update msg state =
          state with
             CurrentOrgId = Some orgId
             QueuedOrgId = None
-            RealtimeEvents = []
+            RealtimeAccountEvents = []
+            RealtimeEmployeeEvents = []
+            RealtimeOrgEvents = []
       },
       Cmd.fromAsync addToConn
    | AddOrgToConnection(_, _, Finished(Error _)) ->
       { state with CurrentOrgId = None }, Cmd.none
    | AddOrgToConnection(_, _, Finished(Ok _)) -> state, Cmd.none
-   | AddAccountEventSubscriber(componentName, orgId, callback) ->
-      {
+   | AddEventSubscriber(componentName, orgId, eventTypes, onPersist) ->
+      let updateSubscribers subscribers onPersist =
+         match state.CurrentOrgId, state.QueuedOrgId with
+         | Some existingId, _ when existingId = orgId ->
+            Map.add componentName onPersist subscribers
+         | None, Some queuedId when queuedId = orgId ->
+            Map.add componentName onPersist subscribers
+         | _ ->
+            // Reset subscribers when OrgId changes
+            Map[componentName, onPersist]
+
+      let state = {
          state with
-            Subscribers =
-               match state.CurrentOrgId, state.QueuedOrgId with
-               | Some existingId, _ when existingId = orgId ->
-                  Map.add componentName callback state.Subscribers
-               | None, Some queuedId when queuedId = orgId ->
-                  Map.add componentName callback state.Subscribers
-               | _ ->
-                  // Reset subscribers when OrgId changes
-                  Map[componentName, callback]
-      },
-      Cmd.none
-   | RemoveAccountEventSubscriber componentName ->
-      {
+            AccountSubscribers =
+               if List.contains EventType.Account eventTypes then
+                  updateSubscribers
+                     state.AccountSubscribers
+                     (EventPersistedConfirmation.Account >> onPersist)
+               else
+                  state.AccountSubscribers
+            EmployeeSubscribers =
+               if List.contains EventType.Employee eventTypes then
+                  updateSubscribers
+                     state.EmployeeSubscribers
+                     (EventPersistedConfirmation.Employee >> onPersist)
+               else
+                  state.EmployeeSubscribers
+            OrgSubscribers =
+               if List.contains EventType.Org eventTypes then
+                  updateSubscribers
+                     state.OrgSubscribers
+                     (EventPersistedConfirmation.Org >> onPersist)
+               else
+                  state.OrgSubscribers
+      }
+
+      state, Cmd.none
+   | RemoveEventSubscriber(componentName, eventTypes) ->
+      let state = {
          state with
-            Subscribers = state.Subscribers.Remove componentName
-      },
-      Cmd.none
+            AccountSubscribers =
+               if List.contains EventType.Account eventTypes then
+                  state.AccountSubscribers.Remove componentName
+               else
+                  state.AccountSubscribers
+            EmployeeSubscribers =
+               if List.contains EventType.Employee eventTypes then
+                  state.EmployeeSubscribers.Remove componentName
+               else
+                  state.EmployeeSubscribers
+            OrgSubscribers =
+               if List.contains EventType.Org eventTypes then
+                  state.OrgSubscribers.Remove componentName
+               else
+                  state.OrgSubscribers
+      }
+
+      state, Cmd.none
    | AccountEventPersisted conf ->
-      for subscriberCallback in state.Subscribers.Values do
+      for subscriberCallback in state.AccountSubscribers.Values do
+         subscriberCallback (conf)
+
+      {
+         state with
+            RealtimeAccountEvents =
+               conf.EventPersisted :: state.RealtimeAccountEvents
+      },
+      Cmd.none
+   | EmployeeEventPersisted conf ->
+      for subscriberCallback in state.EmployeeSubscribers.Values do
          subscriberCallback conf
 
       {
          state with
-            RealtimeEvents = conf.EventPersisted :: state.RealtimeEvents
+            RealtimeEmployeeEvents =
+               conf.EventPersisted :: state.RealtimeEmployeeEvents
       },
       Cmd.none
-   | AccountErrorReceived(msg) ->
+   | OrgEventPersisted conf ->
+      for subscriberCallback in state.OrgSubscribers.Values do
+         subscriberCallback conf
+
       {
          state with
-            Errors = msg :: state.Errors
+            RealtimeOrgEvents = conf.EventPersisted :: state.RealtimeOrgEvents
+      },
+      Cmd.none
+   | ErrorReceived error ->
+      {
+         state with
+            Errors = error :: state.Errors
       },
       Cmd.none
 
 [<ReactComponent>]
-let SignalRAccountEventProvider (child: Fable.React.ReactElement) =
+let SignalREventProvider (child: Fable.React.ReactElement) =
    let state, dispatch = React.useElmish (init, update, [||])
    let connection = React.useContext SignalRConnectionProvider.context
 
@@ -142,33 +227,47 @@ let SignalRAccountEventProvider (child: Fable.React.ReactElement) =
       fun () ->
          match connection with
          | Some conn ->
-            let onSerializedAccountEventError (errMsg: string) =
-               let deseri =
-                  Serialization.deserialize<AccountEventRejected> errMsg
-
-               match deseri with
-               | Error seriErr -> Log.error (string seriErr)
-               | Ok msg -> msg |> Msg.AccountErrorReceived |> dispatch
-
             conn.on (
-               "AccountEventPersistenceFail",
-               onSerializedAccountEventError
+               "EventProcessingError",
+               fun errMsg ->
+                  match
+                     Serialization.deserialize<EventProcessingError> errMsg
+                  with
+                  | Error seriErr -> Log.error (string seriErr)
+                  | Ok err -> dispatch (Msg.ErrorReceived err)
             )
 
-            conn.on (
-               "AccountEventValidationFail",
-               onSerializedAccountEventError
-            )
-
-            let deseri =
+            let deseriAccount =
                Serialization.deserialize<AccountEventPersistedConfirmation>
+
+            let deseriEmployee =
+               Serialization.deserialize<EmployeeEventPersistedConfirmation>
+
+            let deseriOrg =
+               Serialization.deserialize<OrgEventPersistedConfirmation>
 
             conn.on (
                "AccountEventPersistenceConfirmation",
                fun (msg: string) ->
-                  match deseri msg with
+                  match deseriAccount msg with
                   | Error err -> Log.error (string err)
-                  | Ok msg -> dispatch <| Msg.AccountEventPersisted msg
+                  | Ok msg -> dispatch (Msg.AccountEventPersisted msg)
+            )
+
+            conn.on (
+               "EmployeeEventPersistenceConfirmation",
+               fun (msg: string) ->
+                  match deseriEmployee msg with
+                  | Error err -> Log.error (string err)
+                  | Ok msg -> dispatch (Msg.EmployeeEventPersisted msg)
+            )
+
+            conn.on (
+               "OrgEventPersistenceConfirmation",
+               fun (msg: string) ->
+                  match deseriOrg msg with
+                  | Error err -> Log.error (string err)
+                  | Ok msg -> dispatch (Msg.OrgEventPersisted msg)
             )
          | _ -> ()
       , [| box connection |]
@@ -192,16 +291,16 @@ let SignalRAccountEventProvider (child: Fable.React.ReactElement) =
       React.contextProvider (dispatchContext, dispatch, child)
    )
 
-type AccountEventSubscription = {
+type EventSubscription = {
    ComponentName: string
    OrgId: OrgId option
-   OnReceive: AccountEventPersistedConfirmation -> unit
+   EventTypes: EventType list
+   OnPersist: EventPersistedConfirmation -> unit
 }
 
-// Custom hook to subscribe to persisted account events received
-// via SignalR.
+// Custom hook to subscribe to persisted events received via SignalR.
 // The subscription is removed when the consuming component unmounts.
-let useAccountEventSubscription (sub: AccountEventSubscription) =
+let useEventSubscription (sub: EventSubscription) =
    let state = React.useContext context
    let dispatch = React.useContext dispatchContext
    let connection = React.useContext SignalRConnectionProvider.context
@@ -212,13 +311,20 @@ let useAccountEventSubscription (sub: AccountEventSubscription) =
       fun () ->
          match orgIdOpt with
          | Some orgId ->
-            (sub.ComponentName, orgId, sub.OnReceive)
-            |> Msg.AddAccountEventSubscriber
+            // Add subscriber for all requested event types
+            Msg.AddEventSubscriber(
+               sub.ComponentName,
+               orgId,
+               sub.EventTypes,
+               sub.OnPersist
+            )
             |> dispatch
          | _ -> ()
 
          React.createDisposable (fun _ ->
-            sub.ComponentName |> Msg.RemoveAccountEventSubscriber |> dispatch)
+            // Remove all subscriptions on unmount
+            Msg.RemoveEventSubscriber(sub.ComponentName, sub.EventTypes)
+            |> dispatch)
       , [| box (string orgIdOpt) |]
    )
 
