@@ -316,14 +316,13 @@ let ruleConfigureOrRequestApproval
       |> OrgCommand.ConfigureApprovalRule
    | Some ruleForManagingApprovalRules ->
       let approvableCmd =
-         {
-            Rule = rule
-            IsDeletion = false
-            Initiator = {
+         ManageApprovalRuleInput.CreateOrEdit(
+            rule,
+            {
                EmployeeName = session.Name
                EmployeeId = session.EmployeeId
             }
-         }
+         )
          |> ManageApprovalRuleCommand.create
          |> ManageApprovalRule
          |> ApprovableCommand.PerCommand

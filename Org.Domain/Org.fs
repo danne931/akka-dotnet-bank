@@ -250,13 +250,11 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
             CommandApprovalRules =
                match e.Data.Command with
                | ApprovableCommand.PerCommand(ManageApprovalRule cmd) ->
-                  let info = cmd.Data
-
-                  if info.IsDeletion then
-                     org.CommandApprovalRules |> Map.remove info.Rule.RuleId
-                  else
-                     org.CommandApprovalRules
-                     |> Map.add info.Rule.RuleId info.Rule
+                  match cmd.Data with
+                  | ManageApprovalRuleInput.Delete(rule, _) ->
+                     org.CommandApprovalRules |> Map.remove rule.RuleId
+                  | ManageApprovalRuleInput.CreateOrEdit(rule, _) ->
+                     org.CommandApprovalRules |> Map.add rule.RuleId rule
                | _ -> org.CommandApprovalRules
             CommandApprovalProgress =
                org.CommandApprovalProgress
@@ -470,17 +468,17 @@ module private StateTransition =
          | Some _ ->
             // Check for rule conflicts when command is ManageApprovalRule
             match cmd.Data.Command with
-            | ApprovableCommand.PerCommand(ManageApprovalRule manageCmd) when
-               (not manageCmd.Data.IsDeletion)
-               ->
-               let existingRules = org.CommandApprovalRules.Values
-               let rule = manageCmd.Data.Rule
+            | ApprovableCommand.PerCommand(ManageApprovalRule manageCmd) ->
+               match manageCmd.Data with
+               | ManageApprovalRuleInput.CreateOrEdit(rule, _) ->
+                  let existingRules = org.CommandApprovalRules.Values
 
-               match
-                  validateApprovalRuleAgainstExistingRules existingRules rule
-               with
-               | Error err -> transitionErr err
-               | Ok() -> validated ()
+                  match
+                     validateApprovalRuleAgainstExistingRules existingRules rule
+                  with
+                  | Error err -> transitionErr err
+                  | Ok() -> validated ()
+               | ManageApprovalRuleInput.Delete _ -> validated ()
             | _ -> validated ()
 
    let acquireCommandApproval

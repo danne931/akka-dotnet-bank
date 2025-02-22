@@ -79,11 +79,12 @@ module ApprovableCommand =
          | UnlockCard c ->
             $"Unlock {c.Data.EmployeeName}'s {c.Data.CardName} **{c.Data.CardNumberLast4} card"
          | ManageApprovalRule c ->
-            if c.Data.IsDeletion then
-               $"Delete {c.Data.Rule.CommandType.Display} command approval rule"
-            else
-               $"Configure {c.Data.Rule.CommandType.Display} command approval rule:"
-               + $" {CommandApprovalRule.displayVerbose c.Data.Rule}"
+            match c.Data with
+            | ManageApprovalRuleInput.Delete(rule, _) ->
+               $"Delete {rule.CommandType.Display} command approval rule"
+            | ManageApprovalRuleInput.CreateOrEdit(rule, _) ->
+               $"Configure {rule.CommandType.Display} command approval rule:"
+               + $" {CommandApprovalRule.displayVerbose rule}"
       | ApprovableCommand.AmountBased c ->
          match c with
          | DomesticTransfer c ->

@@ -83,19 +83,20 @@ let private sendApprovedCommand
          let info = cmd.Data
 
          let cmd =
-            if info.IsDeletion then
+            match info with
+            | ManageApprovalRuleInput.Delete(rule, initiator) ->
                CommandApprovalRule.DeleteApprovalRuleCommand.create {
-                  RuleId = info.Rule.RuleId
-                  OrgId = info.Rule.OrgId
-                  CommandType = info.Rule.CommandType
-                  DeletedBy = info.Initiator
+                  RuleId = rule.RuleId
+                  OrgId = rule.OrgId
+                  CommandType = rule.CommandType
+                  DeletedBy = initiator
                }
                |> OrgCommand.DeleteApprovalRule
-            else
+            | ManageApprovalRuleInput.CreateOrEdit(rule, _) ->
                CommandApprovalRule.ConfigureApprovalRuleCommand.create
                   cmd.OrgId
                   cmd.InitiatedBy
-                  info.Rule
+                  rule
                |> OrgCommand.ConfigureApprovalRule
 
          orgRef <! OrgMessage.StateChange cmd
