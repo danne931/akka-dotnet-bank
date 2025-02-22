@@ -134,11 +134,7 @@ let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
             match msg.DeletionRequiresApproval with
             | Some ruleForEditingApprovalRules ->
                let approvableCommand =
-                  {
-                     Rule = msg.Rule
-                     IsDeletion = true
-                     Initiator = initiator
-                  }
+                  ManageApprovalRuleInput.Delete(msg.Rule, initiator)
                   |> ManageApprovalRuleCommand.create
                   |> ManageApprovalRule
                   |> ApprovableCommand.PerCommand

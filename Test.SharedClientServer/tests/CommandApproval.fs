@@ -2378,11 +2378,7 @@ let tests =
             Requester = admin
             RequesterIsConfiguredAsAnApprover = true
             Command =
-               {
-                  Rule = ruleToInviteEmployee
-                  IsDeletion = false
-                  Initiator = admin
-               }
+               ManageApprovalRuleInput.CreateOrEdit(ruleToInviteEmployee, admin)
                |> ManageApprovalRuleCommand.create
                |> ManageApprovalRule
                |> ApprovableCommand.PerCommand
@@ -2440,11 +2436,10 @@ let tests =
             Requester = admin
             RequesterIsConfiguredAsAnApprover = true
             Command =
-               {
-                  Rule = ruleToInviteEmployeeEdited
-                  IsDeletion = false
-                  Initiator = admin
-               }
+               ManageApprovalRuleInput.CreateOrEdit(
+                  ruleToInviteEmployeeEdited,
+                  admin
+               )
                |> ManageApprovalRuleCommand.create
                |> ManageApprovalRule
                |> ApprovableCommand.PerCommand
@@ -2580,11 +2575,7 @@ let tests =
                   Requester = admin
                   RequesterIsConfiguredAsAnApprover = true
                   Command =
-                     {
-                        Rule = ruleToInviteEmployee
-                        IsDeletion = true
-                        Initiator = admin
-                     }
+                     ManageApprovalRuleInput.Delete(ruleToInviteEmployee, admin)
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
                      |> ApprovableCommand.PerCommand
@@ -2696,11 +2687,10 @@ let tests =
                   Requester = admin
                   RequesterIsConfiguredAsAnApprover = true
                   Command =
-                     {
-                        Rule = conflictingPaymentRule
-                        IsDeletion = false
-                        Initiator = admin
-                     }
+                     ManageApprovalRuleInput.CreateOrEdit(
+                        conflictingPaymentRule,
+                        admin
+                     )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
                      |> ApprovableCommand.PerCommand
@@ -2795,11 +2785,10 @@ let tests =
                   Requester = admin
                   RequesterIsConfiguredAsAnApprover = true
                   Command =
-                     {
-                        Rule = ruleWithAmountGap
-                        IsDeletion = false
-                        Initiator = admin
-                     }
+                     ManageApprovalRuleInput.CreateOrEdit(
+                        ruleWithAmountGap,
+                        admin
+                     )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
                      |> ApprovableCommand.PerCommand
@@ -2887,11 +2876,10 @@ let tests =
                   Requester = admin
                   RequesterIsConfiguredAsAnApprover = true
                   Command =
-                     {
-                        Rule = duplicateCommandTypeRule
-                        IsDeletion = false
-                        Initiator = admin
-                     }
+                     ManageApprovalRuleInput.CreateOrEdit(
+                        duplicateCommandTypeRule,
+                        admin
+                     )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
                      |> ApprovableCommand.PerCommand
@@ -2979,12 +2967,11 @@ let tests =
                   Requester = admin
                   RequesterIsConfiguredAsAnApprover = true
                   Command =
-                     {
-                        Rule = duplicateCommandTypeRule
-                        // NOTE: DELETION bypasses validation
-                        IsDeletion = true
-                        Initiator = admin
-                     }
+                     // NOTE: DELETION bypasses validation
+                     ManageApprovalRuleInput.Delete(
+                        duplicateCommandTypeRule,
+                        admin
+                     )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
                      |> ApprovableCommand.PerCommand

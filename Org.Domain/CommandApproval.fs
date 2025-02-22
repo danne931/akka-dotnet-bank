@@ -307,22 +307,30 @@ type CommandApprovalRule = {
    Approvers: CommandApprover list
 }
 
-type ManageApprovalRuleInput = {
-   Rule: CommandApprovalRule
-   /// User intends to delete a rule rather than create/edit one.
-   IsDeletion: bool
-   Initiator: EmployeeReference
-}
+[<RequireQualifiedAccess>]
+type ManageApprovalRuleInput =
+   | CreateOrEdit of Rule: CommandApprovalRule * EmployeeReference
+   | Delete of Rule: CommandApprovalRule * EmployeeReference
+
+   member x.CommandType =
+      match x with
+      | CreateOrEdit(rule, _)
+      | Delete(rule, _) -> rule.CommandType
 
 type ManageApprovalRuleCommand = Command<ManageApprovalRuleInput>
 
 module ManageApprovalRuleCommand =
    let create (data: ManageApprovalRuleInput) =
+      let (rule, initiator) =
+         match data with
+         | ManageApprovalRuleInput.CreateOrEdit(rule, initiator)
+         | ManageApprovalRuleInput.Delete(rule, initiator) -> rule, initiator
+
       Command.create
-         (OrgId.toEntityId data.Rule.OrgId)
-         data.Rule.OrgId
+         (OrgId.toEntityId rule.OrgId)
+         rule.OrgId
          (CorrelationId.create ())
-         (InitiatedById data.Initiator.EmployeeId)
+         (InitiatedById initiator.EmployeeId)
          data
 
 type ApprovableCommandPerCommand =
@@ -401,10 +409,11 @@ type ApprovableCommand =
    member x.Display =
       match x with
       | ApprovableCommand.PerCommand(ManageApprovalRule cmd) ->
-         if cmd.Data.IsDeletion then
-            $"Delete {cmd.Data.Rule.CommandType.Display} Rule"
-         else
-            $"Configure {cmd.Data.Rule.CommandType.Display} Rule"
+         match cmd.Data with
+         | ManageApprovalRuleInput.Delete(rule, _) ->
+            $"Delete {rule.CommandType.Display} Rule"
+         | ManageApprovalRuleInput.CreateOrEdit(rule, _) ->
+            $"Configure {rule.CommandType.Display} Rule"
       | _ -> x.CommandType.Display
 
 module CommandApprovalRule =
@@ -766,7 +775,7 @@ module CommandApprovalProgress =
       |> Map.exists (fun _ p ->
          match p.Status, p.CommandToInitiateOnApproval with
          | Status.Pending, ApprovableCommand.PerCommand(ManageApprovalRule c) ->
-            c.Data.Rule.CommandType = commandType
+            c.Data.CommandType = commandType
          | _ -> false)
 
    /// Has the person approving the command already approved the
