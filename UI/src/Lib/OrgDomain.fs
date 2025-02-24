@@ -73,7 +73,7 @@ module ApprovableCommand =
          match c with
          | InviteEmployee c -> $"Invite employee {c.Data.Name}"
          | UpdateEmployeeRole c ->
-            $"Update {c.Data.Name}'s role from {c.Data.PriorRole} to {c.Data.Role}"
+            $"Update {c.Data.EmployeeName}'s role from {c.Data.PriorRole} to {c.Data.Role}"
          | UnlockCard c ->
             $"Unlock {c.Data.EmployeeName}'s {c.Data.CardName} **{c.Data.CardNumberLast4} card"
          | ManageApprovalRule c ->

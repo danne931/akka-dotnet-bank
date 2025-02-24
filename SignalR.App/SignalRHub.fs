@@ -3,15 +3,15 @@ namespace Bank.Hubs
 open Microsoft.AspNetCore.SignalR
 open System.Threading.Tasks
 
-type IAccountClient =
+type IBankClient =
    abstract member AccountEventPersistenceConfirmation: string -> Task
    abstract member EmployeeEventPersistenceConfirmation: string -> Task
    abstract member OrgEventPersistenceConfirmation: string -> Task
    abstract member EventProcessingError: string -> Task
    abstract member CircuitBreakerMessage: string -> Task
 
-type AccountHub() =
-   inherit Hub<IAccountClient>()
+type BankHub() =
+   inherit Hub<IBankClient>()
 
    member x.RemoveFromConnectionGroup(orgId: string) =
       x.Groups.RemoveFromGroupAsync(x.Context.ConnectionId, orgId)
