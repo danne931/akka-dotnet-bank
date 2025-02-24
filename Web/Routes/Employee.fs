@@ -131,16 +131,19 @@ let startEmployeeRoutes (app: WebApplication) =
                match employee.Status with
                | EmployeeStatus.PendingInviteConfirmation token ->
                   if token.IsExpired() then
-                     let initiatedBy =
-                        context.Session.GetString("EmployeeId")
-                        |> Guid.Parse
-                        |> EmployeeId
-                        |> InitiatedById
+                     let initiator = {
+                        Id =
+                           context.Session.GetString("EmployeeId")
+                           |> Guid.Parse
+                           |> EmployeeId
+                           |> InitiatedById
+                        Name = context.Session.GetString("EmployeeId")
+                     }
 
                      let cmd =
                         RefreshInvitationTokenCommand.create
                            employee.CompositeId
-                           initiatedBy
+                           initiator
                            { Reason = None }
                         |> EmployeeCommand.RefreshInvitationToken
 

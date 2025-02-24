@@ -124,7 +124,10 @@ let private handleValidationError
                      Info = {
                         AccountId = account.AccountId
                         CorrelationId = cmd.CorrelationId
-                        EmployeeId = employee.EmployeeId
+                        InitiatedBy = {
+                           Id = InitiatedById employee.EmployeeId
+                           Name = employee.EmployeeName
+                        }
                         CardId = employee.CardId
                         CardNumberLast4 = employee.EmployeeCardNumberLast4
                         Date = info.Date
@@ -188,7 +191,10 @@ let actorProps
                         Info = {
                            AccountId = account.AccountId
                            CorrelationId = e.CorrelationId
-                           EmployeeId = employee.EmployeeId
+                           InitiatedBy = {
+                              Id = InitiatedById employee.EmployeeId
+                              Name = employee.EmployeeName
+                           }
                            CardId = employee.CardId
                            CardNumberLast4 = employee.EmployeeCardNumberLast4
                            Date = info.Date
@@ -243,7 +249,7 @@ let actorProps
                   let cmd =
                      FailDomesticTransferRecipientCommand.create
                         e.OrgId
-                        e.InitiatedById
+                        e.InitiatedBy
                         {
                            RecipientId = info.Recipient.RecipientAccountId
                            TransferId = info.TransferId
@@ -261,7 +267,7 @@ let actorProps
                   let cmd =
                      DomesticTransferRetryConfirmsRecipientCommand.create
                         e.OrgId
-                        e.InitiatedById
+                        e.InitiatedBy
                         {
                            RecipientId = info.Recipient.RecipientAccountId
                            TransferId = info.TransferId
@@ -306,7 +312,7 @@ let actorProps
                let msg =
                   DepositPlatformPaymentCommand.create
                      (payee.AccountId, payee.OrgId)
-                     e.InitiatedById
+                     e.InitiatedBy
                      {
                         BaseInfo = e.Data.BaseInfo
                         PaymentMethod = e.Data.PaymentMethod

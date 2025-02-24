@@ -1901,7 +1901,7 @@ let tests =
             let cmd =
                ConfigureApprovalRuleCommand.create
                   Stub.orgId
-                  (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                  Stub.initiator
                   rule
                |> OrgCommand.ConfigureApprovalRule
 
@@ -1911,10 +1911,10 @@ let tests =
             Expect.hasLength org.Info.CommandApprovalRules 1 ""
 
             let cmd =
-               ConfigureApprovalRuleCommand.create
-                  Stub.orgId
-                  (Guid.NewGuid() |> EmployeeId |> InitiatedById)
-                  { rule with RuleId = Stub.ruleId () }
+               ConfigureApprovalRuleCommand.create Stub.orgId Stub.initiator {
+                  rule with
+                     RuleId = Stub.ruleId ()
+               }
                |> OrgCommand.ConfigureApprovalRule
 
             let res = update org cmd
@@ -2004,7 +2004,7 @@ let tests =
                let cmd =
                   ConfigureApprovalRuleCommand.create
                      Stub.orgId
-                     (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                     Stub.initiator
                      rule
                   |> OrgCommand.ConfigureApprovalRule
 
@@ -2027,7 +2027,7 @@ let tests =
                let cmd =
                   ConfigureApprovalRuleCommand.create
                      Stub.orgId
-                     (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                     Stub.initiator
                      rule2
                   |> OrgCommand.ConfigureApprovalRule
 
@@ -2136,7 +2136,7 @@ let tests =
                let cmd =
                   ConfigureApprovalRuleCommand.create
                      Stub.orgId
-                     (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                     Stub.initiator
                      rule
                   |> OrgCommand.ConfigureApprovalRule
 
@@ -2159,7 +2159,7 @@ let tests =
                let cmd =
                   ConfigureApprovalRuleCommand.create
                      Stub.orgId
-                     (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+                     Stub.initiator
                      rule2
                   |> OrgCommand.ConfigureApprovalRule
 
@@ -2194,7 +2194,10 @@ let tests =
             ]
          }
 
-         let initiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById
+         let initiatedBy = {
+            Id = approverA.EmployeeId |> InitiatedById
+            Name = approverA.EmployeeName
+         }
 
          let cmd =
             ConfigureApprovalRuleCommand.create Stub.orgId initiatedBy rule
@@ -2343,7 +2346,10 @@ let tests =
          let cmdToMakeManagingRulesRequireDualAdminApproval =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                {
                   RuleId = ruleIdForManagingApproval
                   OrgId = Stub.orgId
@@ -2373,12 +2379,20 @@ let tests =
             Approvers = [ CommandApprover.AnyAdmin; CommandApprover.AnyAdmin ]
          }
 
+         let initiator = {
+            Id = InitiatedById admin.EmployeeId
+            Name = admin.EmployeeName
+         }
+
          let approvalRequest: CommandApprovalRequested = {
             RuleId = ruleIdForManagingApproval
             Requester = admin
             RequesterIsConfiguredAsAnApprover = true
             Command =
-               ManageApprovalRuleInput.CreateOrEdit(ruleToInviteEmployee, admin)
+               ManageApprovalRuleInput.CreateOrEdit(
+                  ruleToInviteEmployee,
+                  initiator
+               )
                |> ManageApprovalRuleCommand.create
                |> ManageApprovalRule
                |> ApprovableCommand.PerCommand
@@ -2387,7 +2401,7 @@ let tests =
          let cmdRequestingApprovalToManageRule =
             RequestCommandApproval.create
                org.Info.OrgId
-               (InitiatedById admin.EmployeeId)
+               initiator
                (Guid.NewGuid() |> CorrelationId)
                approvalRequest
             |> OrgCommand.RequestCommandApproval
@@ -2431,6 +2445,11 @@ let tests =
                ]
          }
 
+         let initiator = {
+            Id = InitiatedById admin.EmployeeId
+            Name = admin.EmployeeName
+         }
+
          let approvalRequest: CommandApprovalRequested = {
             RuleId = ruleIdForManagingApproval
             Requester = admin
@@ -2438,7 +2457,7 @@ let tests =
             Command =
                ManageApprovalRuleInput.CreateOrEdit(
                   ruleToInviteEmployeeEdited,
-                  admin
+                  initiator
                )
                |> ManageApprovalRuleCommand.create
                |> ManageApprovalRule
@@ -2448,7 +2467,7 @@ let tests =
          let cmdRequestingApprovalToManageRule =
             RequestCommandApproval.create
                org.Info.OrgId
-               (InitiatedById admin.EmployeeId)
+               initiator
                (Guid.NewGuid() |> CorrelationId)
                approvalRequest
             |> OrgCommand.RequestCommandApproval
@@ -2511,7 +2530,10 @@ let tests =
          let configureInviteEmployeeApprovalRuleCmd =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                {
                   RuleId = ruleToInviteEmployee.RuleId
                   OrgId = Stub.orgId
@@ -2543,7 +2565,10 @@ let tests =
          let cmdToMakeManagingRulesRequireDualAdminApproval =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                {
                   RuleId = ruleIdForManagingApproval
                   OrgId = Stub.orgId
@@ -2565,17 +2590,25 @@ let tests =
 
          let _, org = Expect.wantOk res ""
 
+         let initiator = {
+            Id = InitiatedById admin.EmployeeId
+            Name = admin.EmployeeName
+         }
+
          let cmdRequestingApprovalToDeleteRule =
             RequestCommandApproval.create
                org.Info.OrgId
-               (InitiatedById admin.EmployeeId)
+               initiator
                (Guid.NewGuid() |> CorrelationId)
                {
                   RuleId = ruleIdForManagingApproval
                   Requester = admin
                   RequesterIsConfiguredAsAnApprover = true
                   Command =
-                     ManageApprovalRuleInput.Delete(ruleToInviteEmployee, admin)
+                     ManageApprovalRuleInput.Delete(
+                        ruleToInviteEmployee,
+                        initiator
+                     )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
                      |> ApprovableCommand.PerCommand
@@ -2635,7 +2668,10 @@ let tests =
          let cmdToAddPaymentRule =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                existingPaymentRule
             |> OrgCommand.ConfigureApprovalRule
 
@@ -2647,7 +2683,10 @@ let tests =
          let cmdToMakeManagingRulesRequireDualAdminApproval =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                {
                   RuleId = ruleIdForManagingApproval
                   OrgId = Stub.orgId
@@ -2677,10 +2716,15 @@ let tests =
             Approvers = [ CommandApprover.AnyAdmin ]
          }
 
+         let initiator = {
+            Id = InitiatedById admin.EmployeeId
+            Name = admin.EmployeeName
+         }
+
          let cmdRequestingApprovalForConflictingRule =
             RequestCommandApproval.create
                org.Info.OrgId
-               (InitiatedById admin.EmployeeId)
+               initiator
                (Guid.NewGuid() |> CorrelationId)
                {
                   RuleId = ruleIdForManagingApproval
@@ -2689,7 +2733,7 @@ let tests =
                   Command =
                      ManageApprovalRuleInput.CreateOrEdit(
                         conflictingPaymentRule,
-                        admin
+                        initiator
                      )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
@@ -2733,7 +2777,10 @@ let tests =
          let cmdToAddPaymentRule =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                existingPaymentRule
             |> OrgCommand.ConfigureApprovalRule
 
@@ -2745,7 +2792,10 @@ let tests =
          let cmdToMakeManagingRulesRequireDualAdminApproval =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                {
                   RuleId = ruleIdForManagingApproval
                   OrgId = Stub.orgId
@@ -2775,10 +2825,15 @@ let tests =
             Approvers = [ CommandApprover.AnyAdmin ]
          }
 
+         let initiator = {
+            Id = InitiatedById admin.EmployeeId
+            Name = admin.EmployeeName
+         }
+
          let cmdRequestingApprovalForRuleWithGap =
             RequestCommandApproval.create
                org.Info.OrgId
-               (InitiatedById admin.EmployeeId)
+               initiator
                (Guid.NewGuid() |> CorrelationId)
                {
                   RuleId = ruleIdForManagingApproval
@@ -2787,7 +2842,7 @@ let tests =
                   Command =
                      ManageApprovalRuleInput.CreateOrEdit(
                         ruleWithAmountGap,
-                        admin
+                        initiator
                      )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
@@ -2828,7 +2883,10 @@ let tests =
          let cmdToAddPaymentRule =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                existingPaymentRule
             |> OrgCommand.ConfigureApprovalRule
 
@@ -2840,7 +2898,10 @@ let tests =
          let cmdToMakeManagingRulesRequireDualAdminApproval =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                {
                   RuleId = ruleIdForManagingApproval
                   OrgId = Stub.orgId
@@ -2866,10 +2927,15 @@ let tests =
             Approvers = [ CommandApprover.AnyAdmin ]
          }
 
+         let initiator = {
+            Id = InitiatedById admin.EmployeeId
+            Name = admin.EmployeeName
+         }
+
          let cmdRequestingApprovalForDuplicateType =
             RequestCommandApproval.create
                org.Info.OrgId
-               (InitiatedById admin.EmployeeId)
+               initiator
                (Guid.NewGuid() |> CorrelationId)
                {
                   RuleId = ruleIdForManagingApproval
@@ -2878,7 +2944,7 @@ let tests =
                   Command =
                      ManageApprovalRuleInput.CreateOrEdit(
                         duplicateCommandTypeRule,
-                        admin
+                        initiator
                      )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule
@@ -2919,7 +2985,10 @@ let tests =
          let cmdToAddPaymentRule =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                existingPaymentRule
             |> OrgCommand.ConfigureApprovalRule
 
@@ -2931,7 +3000,10 @@ let tests =
          let cmdToMakeManagingRulesRequireDualAdminApproval =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
-               (admin.EmployeeId |> InitiatedById)
+               {
+                  Id = InitiatedById admin.EmployeeId
+                  Name = admin.EmployeeName
+               }
                {
                   RuleId = ruleIdForManagingApproval
                   OrgId = Stub.orgId
@@ -2957,10 +3029,15 @@ let tests =
             Approvers = [ CommandApprover.AnyAdmin ]
          }
 
+         let initiator = {
+            Id = InitiatedById admin.EmployeeId
+            Name = admin.EmployeeName
+         }
+
          let cmdRequestingApprovalForDuplicateType =
             RequestCommandApproval.create
                org.Info.OrgId
-               (InitiatedById admin.EmployeeId)
+               initiator
                (Guid.NewGuid() |> CorrelationId)
                {
                   RuleId = ruleIdForManagingApproval
@@ -2970,7 +3047,7 @@ let tests =
                      // NOTE: DELETION bypasses validation
                      ManageApprovalRuleInput.Delete(
                         duplicateCommandTypeRule,
-                        admin
+                        initiator
                      )
                      |> ManageApprovalRuleCommand.create
                      |> ManageApprovalRule

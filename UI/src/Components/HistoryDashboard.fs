@@ -458,20 +458,26 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
                | SignalREventProvider.EventPersistedConfirmation.Account conf ->
                   History.Account {
                      Event = conf.EventPersisted
-                     // TODO: Edit BankEvent to have an Initiator type
-                     // which includes not just the InitiatedById but also the
-                     // name.
-                     InitiatedByName = "-"
+                     InitiatedByName =
+                        AccountEnvelope.unwrap conf.EventPersisted
+                        |> snd
+                        |> _.InitiatedBy.Name
                   }
                | SignalREventProvider.EventPersistedConfirmation.Org conf ->
                   History.Org {
                      Event = conf.EventPersisted
-                     InitiatedByName = "-"
+                     InitiatedByName =
+                        OrgEnvelope.unwrap conf.EventPersisted
+                        |> snd
+                        |> _.InitiatedBy.Name
                   }
                | SignalREventProvider.EventPersistedConfirmation.Employee conf ->
                   History.Employee {
                      Event = conf.EventPersisted
-                     InitiatedByName = "-"
+                     InitiatedByName =
+                        EmployeeEnvelope.unwrap conf.EventPersisted
+                        |> snd
+                        |> _.InitiatedBy.Name
                      EmployeeName = conf.Employee.Name
                   }
 

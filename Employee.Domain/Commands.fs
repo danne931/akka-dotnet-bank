@@ -22,7 +22,10 @@ module CreateAccountOwnerCommand =
          (EmployeeId.toEntityId data.EmployeeId)
          data.OrgId
          (CorrelationId.create ())
-         (InitiatedById data.EmployeeId)
+         {
+            Name = $"{data.FirstName} {data.LastName}"
+            Id = InitiatedById data.EmployeeId
+         }
          data
 
    let toEvent
@@ -58,14 +61,14 @@ type CreateEmployeeCommand = Command<CreateEmployeeInput>
 
 module CreateEmployeeCommand =
    // Remaining employees are created by someone other than self.
-   let create (initiatedBy: InitiatedById) (data: CreateEmployeeInput) =
+   let create (initiator: Initiator) (data: CreateEmployeeInput) =
       let employeeId = Guid.NewGuid() |> EmployeeId
 
       Command.create
          (EmployeeId.toEntityId employeeId)
          data.OrgId
          (CorrelationId.create ())
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -103,7 +106,7 @@ type RefreshInvitationTokenCommand = Command<RefreshInvitationTokenInput>
 module RefreshInvitationTokenCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: RefreshInvitationTokenInput)
       =
       Command.create
@@ -130,7 +133,7 @@ type CreateCardInput = {
    CardNickname: string option
    Virtual: bool
    CardType: CardType
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
    DailyPurchaseLimit: decimal option
    MonthlyPurchaseLimit: decimal option
    AccountId: AccountId
@@ -212,14 +215,15 @@ type PurchasePendingCommand = Command<PurchasePendingInput>
 // -> EmployeeCommand.AccountConfirmsPurchase/AccountRejectsPurchase
 module PurchasePendingCommand =
    let create
-      (employeeId: EmployeeId, orgId: OrgId)
+      (initiatedBy: Initiator)
+      (orgId: OrgId)
       (data: PurchasePendingInput)
       =
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         (initiatedBy.Id |> InitiatedById.toEmployeeId |> EmployeeId.toEntityId)
          orgId
          (CorrelationId.create ())
-         (InitiatedById employeeId)
+         initiatedBy
          data
 
    let toEvent
@@ -235,7 +239,7 @@ module PurchasePendingCommand =
          return
             BankEvent.create2<PurchasePendingInput, PurchasePending> cmd {
                Info = {
-                  EmployeeId = EmployeeId.fromEntityId cmd.EntityId
+                  InitiatedBy = cmd.InitiatedBy
                   CorrelationId = cmd.CorrelationId
                   CardId = input.CardId
                   CardNumberLast4 = input.CardNumberLast4
@@ -259,7 +263,7 @@ module AccountConfirmsPurchaseCommand =
          (EmployeeId.toEntityId employeeId)
          orgId
          data.Info.CorrelationId
-         (InitiatedById employeeId)
+         data.Info.InitiatedBy
          data
 
    let toEvent
@@ -279,7 +283,7 @@ module AccountRejectsPurchaseCommand =
          (EmployeeId.toEntityId employeeId)
          orgId
          data.Info.CorrelationId
-         (InitiatedById employeeId)
+         data.Info.InitiatedBy
          data
 
    let toEvent
@@ -293,7 +297,7 @@ type LimitDailyDebitsCommand = Command<DailyDebitLimitUpdated>
 module LimitDailyDebitsCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: DailyDebitLimitUpdated)
       =
       Command.create
@@ -321,7 +325,7 @@ type LimitMonthlyDebitsCommand = Command<MonthlyDebitLimitUpdated>
 module LimitMonthlyDebitsCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: MonthlyDebitLimitUpdated)
       =
       Command.create
@@ -349,7 +353,7 @@ type LockCardCommand = Command<LockedCard>
 module LockCardCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: LockedCard)
       =
       Command.create
@@ -370,7 +374,7 @@ type UnlockCardCommand = Command<UnlockedCard>
 module UnlockCardCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: UnlockedCard)
       =
       Command.create
@@ -391,7 +395,7 @@ type UpdateRoleCommand = Command<RoleUpdated>
 module UpdateRoleCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: RoleUpdated)
       =
       Command.create
@@ -420,7 +424,7 @@ type EditCardNicknameCommand = Command<CardNicknamed>
 module EditCardNicknameCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: CardNicknamed)
       =
       Command.create
@@ -442,7 +446,7 @@ type CancelInvitationCommand = Command<InvitationCancelled>
 module CancelInvitationCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: InvitationCancelled)
       =
       Command.create
@@ -462,14 +466,15 @@ type ConfirmInvitationCommand = Command<InvitationConfirmed>
 
 module ConfirmInvitationCommand =
    let create
-      (employeeId: EmployeeId, orgId: OrgId)
+      (initiatedBy: Initiator)
+      (orgId: OrgId)
       (data: InvitationConfirmed)
       =
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         (initiatedBy.Id |> InitiatedById.toEmployeeId |> EmployeeId.toEntityId)
          orgId
          (CorrelationId.create ())
-         (InitiatedById employeeId)
+         initiatedBy
          data
 
    let toEvent
@@ -483,7 +488,7 @@ type RestoreAccessCommand = Command<AccessRestored>
 module RestoreAccessCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: AccessRestored)
       =
       Command.create
@@ -509,7 +514,7 @@ type ApproveAccessCommand = Command<ApproveAccessInput>
 module ApproveAccessCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (correlationId: CorrelationId)
       (data: ApproveAccessInput)
       =

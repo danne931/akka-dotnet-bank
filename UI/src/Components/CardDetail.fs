@@ -31,14 +31,14 @@ type State = {
 type NicknameEditMsg = {
    CommandInput: CardNicknamed
    Employee: Employee
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
 }
 
 type CardLockMsg = {
    WillLock: bool
    Employee: Employee
    Card: Card
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
    UserSession: UserSession
    UnlockRequiresApproval: CommandApprovalRule option
 }
@@ -285,8 +285,7 @@ let CardNicknameComponent
                               CardId = card.Card.CardId
                            }
                            Employee = card.Employee
-                           InitiatedBy = (InitiatedById session.EmployeeId)
-
+                           InitiatedBy = session.AsInitiator
                         },
                         Started
                      )
@@ -309,7 +308,7 @@ let CardDetailComponent
       React.useElmish (init, update onCardUpdate orgDispatch, [||])
 
    let lockCardMsg = {
-      InitiatedBy = InitiatedById userSession.EmployeeId
+      InitiatedBy = userSession.AsInitiator
       Employee = card.Employee
       Card = card.Card
       WillLock = true
@@ -317,7 +316,7 @@ let CardDetailComponent
       UnlockRequiresApproval =
          CommandApprovalRule.commandTypeRequiresApproval
             (ApprovableCommandType.ApprovablePerCommand UnlockCardCommandType)
-            (InitiatedById userSession.EmployeeId)
+            userSession.AsInitiator.Id
             org.Org.CommandApprovalRules
    }
 

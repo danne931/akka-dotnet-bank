@@ -125,10 +125,7 @@ let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
    | DismissDeleteRuleConfirmation -> state, Cmd.none
    | ConfirmDeleteRule(msg, Started) ->
       let delete = async {
-         let initiator = {
-            EmployeeId = msg.Session.EmployeeId
-            EmployeeName = msg.Session.Name
-         }
+         let initiator = msg.Session.AsInitiator
 
          let cmd =
             match msg.DeletionRequiresApproval with
@@ -145,11 +142,10 @@ let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
                   approvableCommand
                |> OrgCommand.RequestCommandApproval
             | None ->
-               CommandApprovalRule.DeleteApprovalRuleCommand.create {
+               CommandApprovalRule.DeleteApprovalRuleCommand.create initiator {
                   RuleId = msg.Rule.RuleId
                   OrgId = msg.Rule.OrgId
                   CommandType = msg.Rule.CommandType
-                  DeletedBy = initiator
                }
                |> OrgCommand.DeleteApprovalRule
 
@@ -186,7 +182,7 @@ let update (orgDispatch: OrgProvider.Msg -> unit) msg state =
    | ConfigureRuleSubmitted msg ->
       let ruleConfigRequiresApproval =
          CommandApprovalRule.ruleManagementRequiresApproval
-            (InitiatedById msg.Session.EmployeeId)
+            msg.Session.AsInitiator.Id
             msg.Receipt.PendingState.CommandApprovalRules
          |> _.IsSome
 
@@ -236,7 +232,7 @@ let EditApprovalRuleComponent
       Rule = rule
       DeletionRequiresApproval =
          CommandApprovalRule.ruleManagementRequiresApproval
-            (InitiatedById session.EmployeeId)
+            session.AsInitiator.Id
             org.CommandApprovalRules
    }
 

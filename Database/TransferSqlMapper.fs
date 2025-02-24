@@ -169,7 +169,10 @@ module TransferSqlReader =
 
       let transfer (read: RowReader) : DomesticTransfer = {
          TransferId = transferId read
-         InitiatedBy = initiatedById read
+         InitiatedBy = {
+            Id = initiatedById read
+            Name = read.string "initiated_by_name"
+         }
          Memo = memo read
          Status = status read
          Sender = sender read
@@ -239,6 +242,12 @@ module TransferSqlWriter =
 
 module Query =
    let domesticTransfer =
+      let employeeId = EmployeeSqlMapper.EmployeeFields.employeeId
+
+      let employeeName =
+         $"employee.{EmployeeSqlMapper.EmployeeFields.firstName} || ' ' ||
+           employee.{EmployeeSqlMapper.EmployeeFields.lastName}"
+
       $"""
       SELECT
          dt.{TransferFields.Domestic.recipientAccountId},
@@ -263,12 +272,15 @@ module Query =
          a.{AccountFields.name},
          a.{AccountFields.accountNumber} as sender_account_number,
          a.{AccountFields.routingNumber} as sender_routing_number,
-         a.{AccountFields.accountId}
+         a.{AccountFields.accountId},
+         {employeeName} as initiated_by_name
       FROM {Table.domesticTransfer} dt
       JOIN {Table.domesticRecipient} dr using({TransferFields.Domestic.recipientAccountId})
       JOIN {Table.transfer} t using({TransferFields.transferId})
       JOIN {AccountSqlMapper.table} a
          ON t.{TransferFields.senderAccountId} = a.{AccountFields.accountId}
+      JOIN {EmployeeSqlMapper.table} employee
+         ON t.{TransferFields.initiatedById} = employee.{employeeId}
       """
 
    let domesticTransferRecipient =

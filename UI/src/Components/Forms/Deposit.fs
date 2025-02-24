@@ -30,7 +30,7 @@ let fieldDestinationAccount accounts =
 
 let form
    (accounts: Map<AccountId, Account>)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let amountField =
@@ -75,7 +75,7 @@ let DepositFormComponent
          DestinationAccountId = ""
          Amount = ""
       }
-      Form = form org.CheckingAccounts (InitiatedById session.EmployeeId)
+      Form = form org.CheckingAccounts session.AsInitiator
       Action = None
       OnSubmit = onSubmit
    |}

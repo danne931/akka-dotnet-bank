@@ -165,20 +165,22 @@ type CommandApprovalProgressId =
       let (CorrelationId id) = progressId
       id
 
+type Initiator = { Id: InitiatedById; Name: string }
+
 type CommandEnvelope = {
    Id: EventId
    EntityId: EntityId
    OrgId: OrgId
    Timestamp: DateTime
    CorrelationId: CorrelationId
-   InitiatedById: InitiatedById
+   InitiatedBy: Initiator
 }
 
 type Command<'C> = {
    Id: EventId
    EntityId: EntityId
    OrgId: OrgId
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
    Timestamp: DateTime
    CorrelationId: CorrelationId
    Data: 'C
@@ -189,7 +191,7 @@ module Command =
       (entityId: EntityId)
       (orgId: OrgId)
       (correlationId: CorrelationId)
-      (initiatedById: InitiatedById)
+      (initiator: Initiator)
       (data)
       : Command<'t>
       =
@@ -199,7 +201,7 @@ module Command =
          OrgId = orgId
          Timestamp = DateTime.UtcNow
          CorrelationId = correlationId
-         InitiatedBy = initiatedById
+         InitiatedBy = initiator
          Data = data
       }
 
@@ -209,14 +211,14 @@ module Command =
       OrgId = cmd.OrgId
       Timestamp = cmd.Timestamp
       CorrelationId = cmd.CorrelationId
-      InitiatedById = cmd.InitiatedBy
+      InitiatedBy = cmd.InitiatedBy
    }
 
 type BankEvent<'E> = {
    Id: EventId
    EntityId: EntityId
    OrgId: OrgId
-   InitiatedById: InitiatedById
+   InitiatedBy: Initiator
    Timestamp: DateTime
    Data: 'E
    CorrelationId: CorrelationId
@@ -233,7 +235,7 @@ module BankEvent =
       EntityId = command.EntityId
       OrgId = command.OrgId
       CorrelationId = command.CorrelationId
-      InitiatedById = command.InitiatedBy
+      InitiatedBy = command.InitiatedBy
       Timestamp = command.Timestamp
       Data = command.Data
    }
@@ -242,7 +244,7 @@ module BankEvent =
       Id = command.Id
       EntityId = command.EntityId
       OrgId = command.OrgId
-      InitiatedById = command.InitiatedBy
+      InitiatedBy = command.InitiatedBy
       CorrelationId = command.CorrelationId
       Timestamp = command.Timestamp
       Data = evtData
@@ -255,7 +257,7 @@ type Envelope = {
    Timestamp: DateTime
    EventName: string
    CorrelationId: CorrelationId
-   InitiatedById: InitiatedById
+   InitiatedBy: Initiator
 }
 
 [<RequireQualifiedAccess>]

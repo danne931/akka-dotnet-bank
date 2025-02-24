@@ -48,7 +48,7 @@ let private updateTransaction
 type RecipientNicknameEditMsg = {
    CommandInput: NicknamedDomesticTransferRecipient
    Org: Org
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
 }
 
 type Msg =
@@ -317,8 +317,7 @@ let RecipientNicknameEditComponent
                            Nickname = pendingNickname
                         }
                         Org = org
-                        InitiatedBy = (InitiatedById session.EmployeeId)
-
+                        InitiatedBy = session.AsInitiator
                      },
                      Started
                   )

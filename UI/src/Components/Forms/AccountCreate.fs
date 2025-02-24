@@ -18,7 +18,7 @@ type Values = {
 }
 
 let private form
-   (initiatedBy: UserSession)
+   (session: UserSession)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let fieldAccountDepository =
@@ -66,10 +66,10 @@ let private form
             Name = name
             Depository = depository
             AccountNumber = AccountNumber.generate ()
-            OrgId = initiatedBy.OrgId
+            OrgId = session.OrgId
             AccountId = Guid.NewGuid() |> AccountId
             Currency = Currency.USD
-            InitiatedBy = InitiatedById initiatedBy.EmployeeId
+            InitiatedBy = session.AsInitiator
          }
          |> AccountCommand.CreateAccount
 

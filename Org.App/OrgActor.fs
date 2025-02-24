@@ -93,11 +93,10 @@ let private sendApprovedCommand
          let cmd =
             match info with
             | ManageApprovalRuleInput.Delete(rule, initiator) ->
-               CommandApprovalRule.DeleteApprovalRuleCommand.create {
+               CommandApprovalRule.DeleteApprovalRuleCommand.create initiator {
                   RuleId = rule.RuleId
                   OrgId = rule.OrgId
                   CommandType = rule.CommandType
-                  DeletedBy = initiator
                }
                |> OrgCommand.DeleteApprovalRule
             | ManageApprovalRuleInput.CreateOrEdit(rule, _) ->
@@ -152,7 +151,7 @@ let private hasAccruableTransaction
             | InternalTransferBetweenOrgs _ ->
                OrgAccrualMetricEventType.InternalTransferBetweenOrgs
          CorrelationId = cmd.CorrelationId
-         InitiatedById = cmd.InitiatedBy
+         InitiatedBy = cmd.InitiatedBy
          Timestamp = cmd.Timestamp
       }
 
@@ -288,7 +287,7 @@ let actorProps
                   FinalizeOrgOnboardingCommand.create {
                      OrgId = e.OrgId
                      CorrelationId = e.CorrelationId
-                     InitiatedBy = e.InitiatedById
+                     InitiatedBy = e.InitiatedBy
                      EmployerIdentificationNumber = 123456789
                   }
                   |> OrgCommand.FinalizeOrgOnboarding
@@ -338,7 +337,7 @@ let actorProps
                   let msg =
                      CancelInvitationCommand.create
                         (employeeId, e.OrgId)
-                        e.InitiatedById
+                        e.InitiatedBy
                         {
                            Reason =
                               Some
@@ -353,7 +352,7 @@ let actorProps
                      getAccountRef (AccountId.fromEntityId cmd.EntityId)
 
                   let msg =
-                     DeclinePlatformPaymentCommand.create e.InitiatedById {
+                     DeclinePlatformPaymentCommand.create e.InitiatedBy {
                         RequestedPayment = cmd.Data.RequestedPayment
                         Reason =
                            Some
@@ -446,25 +445,13 @@ let actorProps
                            RuleId = rule.RuleId
                            Command = cmd
                            Requester = {
-                              // NOTE:
-                              // Currently not able to nicely reference the EmployeeName so
-                              // the snapshot will be saved with empty string for the name.
-                              // This is currently okay since the read models are saved
-                              // with just the EmployeeId anyway.  When it comes time to
-                              // fetch the approval progress read model for display in the browser,
-                              // the EmployeeId field of the command_approval_progress table
-                              // is used to join with the employee table and
-                              // select the name field on the employee record.
-                              // TODO: Consider replacing the InitiatedById property on
-                              // Command<T> & BankEvent<T> with an InitiatedBy type which
-                              // contains both the id and the name.
-                              EmployeeName = ""
+                              EmployeeName = cmd.InitiatedBy.Name
                               EmployeeId =
-                                 InitiatedById.toEmployeeId cmd.InitiatedBy
+                                 InitiatedById.toEmployeeId cmd.InitiatedBy.Id
                            }
                            RequesterIsConfiguredAsAnApprover =
                               CommandApprovalRule.isRequesterOneOfManyApprovers
-                                 cmd.InitiatedBy
+                                 cmd.InitiatedBy.Id
                                  rule
                         }
                      |> OrgCommand.RequestCommandApproval

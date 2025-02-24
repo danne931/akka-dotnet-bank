@@ -54,15 +54,21 @@ let form
 
    let onSubmit amount merchant =
       let cmd =
-         PurchasePendingCommand.create employee.CompositeId {
-            CardId = selectedCardId
-            CardNumberLast4 = card.CardNumberLast4
-            AccountId = account.AccountId
-            Amount = amount
-            Merchant = merchant
-            Reference = None
-            Date = DateTime.UtcNow
-         }
+         PurchasePendingCommand.create
+            {
+               Id = InitiatedById employee.EmployeeId
+               Name = employee.Name
+            }
+            employee.OrgId
+            {
+               CardId = selectedCardId
+               CardNumberLast4 = card.CardNumberLast4
+               AccountId = account.AccountId
+               Amount = amount
+               Merchant = merchant
+               Reference = None
+               Date = DateTime.UtcNow
+            }
          |> EmployeeCommand.PurchasePending
 
       Msg.Submit(employee, cmd, Started)

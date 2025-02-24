@@ -177,8 +177,7 @@ let getDemoUserSessions (orgId: OrgId) =
       (fun read -> {
          EmployeeId = Reader.employeeId read
          OrgId = Reader.orgId read
-         FirstName = Reader.firstName read
-         LastName = Reader.lastName read
+         Name = Reader.firstName read + " " + Reader.lastName read
          Email = Reader.email read
          Role = Reader.role read
       })

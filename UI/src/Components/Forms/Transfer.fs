@@ -97,7 +97,7 @@ let fieldRecipientSelect accounts =
 
 let formInternalWithinOrg
    (accounts: Map<AccountId, Account>)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let onSubmit (sender: Account) (recipient: Account) (amount: decimal) =
@@ -153,7 +153,7 @@ let formInternalWithinOrg
 let formInternalBetweenOrgs
    (senderAccounts: Map<AccountId, Account>)
    (destinationOrgs: Org list)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let fieldOrgSelect =
@@ -252,7 +252,7 @@ let formInternalBetweenOrgs
 let formDomestic
    (org: Org)
    (senderAccounts: Map<AccountId, Account>)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let fieldDomesticSelect =
@@ -351,8 +351,6 @@ let TransferInternalWithinOrgComponent
    (accounts: Map<AccountId, Account>)
    (onSubmit: AccountCommandReceipt -> unit)
    =
-   let initiatedBy = InitiatedById session.EmployeeId
-
    AccountFormContainer {|
       InitialValues = {
          Amount = ""
@@ -361,7 +359,7 @@ let TransferInternalWithinOrgComponent
          Memo = ""
          ScheduledAt = "TODAY"
       }
-      Form = formInternalWithinOrg accounts initiatedBy
+      Form = formInternalWithinOrg accounts session.AsInitiator
       Action = None
       OnSubmit = onSubmit
    |}
@@ -401,7 +399,7 @@ let TransferInternalBetweenOrgsComponent
          formInternalBetweenOrgs
             senderAccounts
             destinationOrgs
-            (InitiatedById session.EmployeeId)
+            session.AsInitiator
       Action = None
       OnSubmit =
          fun receipt ->
@@ -439,8 +437,6 @@ let TransferDomesticFormComponent
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
-   let initiatedBy = InitiatedById session.EmployeeId
-
    let defaultRecipientId =
       match selectedRecipient with
       | Some(env, accountId) when env = RecipientAccountEnvironment.Domestic ->
@@ -459,7 +455,7 @@ let TransferDomesticFormComponent
          Memo = ""
          ScheduledAt = "TODAY"
       }
-      Form = formDomestic org senderAccounts initiatedBy
+      Form = formDomestic org senderAccounts session.AsInitiator
       Action = None
       OnSubmit =
          fun receipt ->
@@ -502,7 +498,7 @@ let TransferFormComponent
          let! res =
             OrgService.getTodaysAccrualMetricsByInitiatedBy
                session.OrgId
-               (InitiatedById session.EmployeeId)
+               session.AsInitiator.Id
 
          match res with
          | Error e -> Log.error $"Error getting employee accrual metrics {e}"

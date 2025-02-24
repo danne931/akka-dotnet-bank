@@ -84,7 +84,7 @@ let dailyAccrual
       (fun acc _ metrics ->
          if
             DateTime.isToday metrics.Timestamp
-            && metrics.InitiatedById = initiatedBy
+            && metrics.InitiatedBy.Id = initiatedBy
          then
             match metrics.EventType with
             | OrgAccrualMetricEventType.PaymentPaid -> {
@@ -111,7 +111,7 @@ let dailyAccrual
       }
 
 let commandRequiresApproval (cmd: ApprovableCommand) (state: OrgSnapshot) =
-   let accrual = dailyAccrual cmd.InitiatedBy state.AccrualMetrics
+   let accrual = dailyAccrual cmd.InitiatedBy.Id state.AccrualMetrics
 
    CommandApprovalProgress.commandRequiresApproval
       cmd

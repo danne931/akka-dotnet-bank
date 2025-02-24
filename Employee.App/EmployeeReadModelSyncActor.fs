@@ -85,7 +85,7 @@ let sqlParamReducer
       |> EmployeeEventSqlWriter.employeeId
 
       "initiatedById",
-      envelope.InitiatedById |> EmployeeEventSqlWriter.initiatedById
+      envelope.InitiatedBy.Id |> EmployeeEventSqlWriter.initiatedById
 
       "orgId", EmployeeEventSqlWriter.orgId envelope.OrgId
 

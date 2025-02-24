@@ -27,11 +27,17 @@ let private authorizeInvite
    (authProviderUserId: Guid)
    =
    let cmd =
-      ConfirmInvitationCommand.create employee.CompositeId {
-         Email = authProviderEmail
-         AuthProviderUserId = authProviderUserId
-         Reference = None
-      }
+      ConfirmInvitationCommand.create
+         {
+            Name = employee.Name
+            Id = InitiatedById employee.EmployeeId
+         }
+         employee.OrgId
+         {
+            Email = authProviderEmail
+            AuthProviderUserId = authProviderUserId
+            Reference = None
+         }
       |> EmployeeCommand.ConfirmInvitation
 
    processCommand system cmd
@@ -48,8 +54,7 @@ let private setUserSessionContext
          | Error err -> Results.BadRequest err
          | Ok None -> Results.NotFound()
          | Ok(Some employee) ->
-            context.Session.SetString("FirstName", employee.FirstName)
-            context.Session.SetString("LastName", employee.LastName)
+            context.Session.SetString("Name", employee.Name)
             context.Session.SetString("Email", string employee.Email)
             context.Session.SetString("EmployeeId", string employee.EmployeeId)
             context.Session.SetString("OrgId", string employee.OrgId)

@@ -110,7 +110,7 @@ let update
          let cmd =
             CancelInvitationCommand.create
                employee.CompositeId
-               (InitiatedById session.EmployeeId)
+               session.AsInitiator
                { Reason = None }
             |> EmployeeCommand.CancelInvitation
 
@@ -182,13 +182,10 @@ let update
    | RestoreAccess(session, employee, Started) ->
       let send = async {
          let cmd =
-            RestoreAccessCommand.create
-               employee.CompositeId
-               (InitiatedById session.EmployeeId)
-               {
-                  Name = employee.Name
-                  Reference = None
-               }
+            RestoreAccessCommand.create employee.CompositeId session.AsInitiator {
+               Name = employee.Name
+               Reference = None
+            }
             |> EmployeeCommand.RestoreAccess
 
          let! res = EmployeeService.submitCommand employee cmd

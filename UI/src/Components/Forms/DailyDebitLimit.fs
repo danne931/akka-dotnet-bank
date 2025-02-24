@@ -48,7 +48,7 @@ let DailyPurchaseLimitFormComponent
    (employee: Employee)
    =
    let form =
-      Form.succeed (onSubmit card employee (InitiatedById session.EmployeeId))
+      Form.succeed (onSubmit card employee session.AsInitiator)
       |> Form.append dailyPurchaseLimitField
 
    EmployeeFormContainer {|

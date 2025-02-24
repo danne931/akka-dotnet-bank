@@ -7,7 +7,7 @@ open Lib.SharedTypes
 type CreateOrgInput = {
    Name: string
    OrgId: OrgId
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
 }
 
 type CreateOrgCommand = Command<CreateOrgInput>
@@ -32,7 +32,7 @@ type FinalizeOrgOnboardingInput = {
    OrgId: OrgId
    CorrelationId: CorrelationId
    EmployerIdentificationNumber: int
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
 }
 
 type FinalizeOrgOnboardingCommand = Command<FinalizeOrgOnboardingInput>
@@ -58,12 +58,12 @@ module FinalizeOrgOnboardingCommand =
 type ConfigureFeatureFlagCommand = Command<FeatureFlagConfigured>
 
 module ConfigureFeatureFlagCommand =
-   let create orgId initiatedBy (data: FeatureFlagConfigured) =
+   let create orgId (initiator: Initiator) (data: FeatureFlagConfigured) =
       Command.create
          (OrgId.toEntityId orgId)
          orgId
          (CorrelationId.create ())
-         initiatedBy
+         initiator
          data
 
    let toEvent

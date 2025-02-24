@@ -31,7 +31,7 @@ type InternalTransferStatus =
 
 type BaseInternalTransferInfo = {
    TransferId: TransferId
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
    Recipient: InternalTransferRecipient
    Amount: decimal
    ScheduledDate: DateTime
