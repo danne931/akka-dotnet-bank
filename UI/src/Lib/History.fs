@@ -437,7 +437,7 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
       | Some initiators ->
          initiators
          |> List.exists (fun initiatedById ->
-            initiatedById = envelope.InitiatedById)
+            initiatedById = envelope.InitiatedBy.Id)
 
    let qualifiedEventType =
       match

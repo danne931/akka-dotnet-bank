@@ -46,7 +46,7 @@ let employeeRoleSelect (onSelect: Role -> unit) =
    }
 
 let private form
-   (initiatedBy: UserSession)
+   (session: UserSession)
    (employee: Employee)
    (accounts: Map<AccountId, Account>)
    (onRoleSelect: Role -> unit)
@@ -57,15 +57,12 @@ let private form
       (cardInfo: EmployeeInviteSupplementaryCardInfo option)
       =
       let cmd =
-         UpdateRoleCommand.create
-            employee.CompositeId
-            (InitiatedById initiatedBy.EmployeeId)
-            {
-               Name = employee.Name
-               PriorRole = employee.Role
-               Role = role
-               CardInfo = cardInfo
-            }
+         UpdateRoleCommand.create employee.CompositeId session.AsInitiator {
+            Name = employee.Name
+            PriorRole = employee.Role
+            Role = role
+            CardInfo = cardInfo
+         }
          |> EmployeeCommand.UpdateRole
 
       Msg.Submit(employee, cmd, Started)

@@ -79,7 +79,7 @@ let fieldPhysicalCard =
 *)
 
 let private form
-   (initiatedBy: UserSession)
+   (session: UserSession)
    (employee: Employee)
    (accounts: Map<AccountId, Account>)
    : Form.Form<Values, Msg<Values>, IReactProperty>
@@ -104,7 +104,7 @@ let private form
             OrgId = employee.OrgId
             AccountId = selectedAccountId
             EmployeeId = employee.EmployeeId
-            InitiatedBy = InitiatedById initiatedBy.EmployeeId
+            InitiatedBy = session.AsInitiator
          }
          |> EmployeeCommand.CreateCard
 

@@ -5,7 +5,6 @@ open Fable.Form.Simple
 
 open Bank.Employee.Domain
 open UIDomain.Employee
-open Lib.SharedTypes
 open FormContainer
 
 type Values = { Duration: string; Amount: string }
@@ -30,7 +29,7 @@ let PurchaseLimitFormComponent
    (card: Card)
    (employee: Employee)
    =
-   let initiatedBy = (InitiatedById session.EmployeeId)
+   let initiatedBy = session.AsInitiator
 
    let form =
       durationSelect

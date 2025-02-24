@@ -29,7 +29,7 @@ type Values = {
 }
 
 let form
-   (initiatedBy: UserSession)
+   (session: UserSession)
    (accounts: Map<AccountId, Account>)
    (employeeInviteRuleOpt: CommandApprovalRule option)
    (onRoleSelect: Role -> unit)
@@ -85,12 +85,12 @@ let form
       (email: string)
       =
       let cmd =
-         CreateEmployeeCommand.create (InitiatedById initiatedBy.EmployeeId) {
+         CreateEmployeeCommand.create session.AsInitiator {
             Email = email
             FirstName = firstName
             LastName = lastName
             Role = role
-            OrgId = initiatedBy.OrgId
+            OrgId = session.OrgId
             OrgRequiresEmployeeInviteApproval =
                employeeInviteRuleOpt |> Option.map _.RuleId
             CardInfo = cardInfo
@@ -228,7 +228,7 @@ let EmployeeCreateFormComponent
                      let commandToInitiateOnApproval =
                         ApproveAccessCommand.create
                            employee.CompositeId
-                           envelope.InitiatedById
+                           envelope.InitiatedBy
                            envelope.CorrelationId
                            {
                               Name = employee.Name

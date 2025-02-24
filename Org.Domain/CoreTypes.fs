@@ -34,7 +34,7 @@ type OrgAccrualMetric = {
    TransactionAmount: decimal
    EventType: OrgAccrualMetricEventType
    CorrelationId: CorrelationId
-   InitiatedById: InitiatedById
+   InitiatedBy: Initiator
    Timestamp: System.DateTime
 }
 

@@ -345,6 +345,7 @@ let getTransactionInfo
             LEFT JOIN {atiTable} ON {fieldTxnId} = {fieldCorrelationId}
             LEFT JOIN {CategorySqlMapper.table} using({Fields.categoryId})
          WHERE {fieldCorrelationId} = @transactionId
+         ORDER BY timestamp
          """
 
       let! res =

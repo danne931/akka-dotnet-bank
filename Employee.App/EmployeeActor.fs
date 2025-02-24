@@ -65,7 +65,7 @@ let private handleValidationError
 
 let supplementaryCardInfoToCreateCardCommand
    (employee: Employee)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    (info: EmployeeInviteSupplementaryCardInfo)
    =
    CreateCardCommand.create {
@@ -129,7 +129,7 @@ let actorProps
                   let cmd =
                      ApproveAccessCommand.create
                         employee.CompositeId
-                        e.InitiatedById
+                        e.InitiatedBy
                         e.CorrelationId
                         {
                            Name = employee.Name
@@ -182,7 +182,7 @@ let actorProps
                      let cmd =
                         supplementaryCardInfoToCreateCardCommand
                            employee
-                           e.InitiatedById
+                           e.InitiatedBy
                            info
 
                      mailbox.Parent() <! (EmployeeMessage.StateChange cmd)
@@ -192,7 +192,7 @@ let actorProps
                   let cmd =
                      supplementaryCardInfoToCreateCardCommand
                         employee
-                        e.InitiatedById
+                        e.InitiatedBy
                         info
 
                   mailbox.Parent() <! (EmployeeMessage.StateChange cmd)
@@ -205,7 +205,7 @@ let actorProps
                   DebitCommand.create
                      (accountId, e.OrgId)
                      e.CorrelationId
-                     e.InitiatedById
+                     e.InitiatedBy
                      {
                         Date = info.Date
                         Amount = info.Amount
@@ -214,7 +214,8 @@ let actorProps
                         EmployeePurchaseReference = {
                            EmployeeName = employee.Name
                            EmployeeCardNumberLast4 = info.CardNumberLast4
-                           EmployeeId = info.EmployeeId
+                           EmployeeId =
+                              InitiatedById.toEmployeeId info.InitiatedBy.Id
                            CardId = info.CardId
                         }
                      }

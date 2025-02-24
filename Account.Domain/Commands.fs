@@ -12,7 +12,7 @@ type CreateAccountInput = {
    Currency: Currency
    AccountId: AccountId
    OrgId: OrgId
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
 }
 
 type CreateAccountCommand = Command<CreateAccountInput>
@@ -62,14 +62,14 @@ type DepositCashCommand = Command<DepositCashInput>
 module DepositCashCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: DepositCashInput)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -93,14 +93,14 @@ module DebitCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       (correlationId: CorrelationId)
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: DebitedAccount)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          correlationId
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -124,7 +124,10 @@ module MaintenanceFeeCommand =
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         (InitiatedById Constants.SYSTEM_USER_ID)
+         {
+            Id = Constants.SYSTEM_USER_ID |> InitiatedById
+            Name = "System"
+         }
          {
             Amount = MaintenanceFee.RecurringDebitAmount
          }
@@ -147,7 +150,10 @@ module SkipMaintenanceFeeCommand =
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         (InitiatedById Constants.SYSTEM_USER_ID)
+         {
+            Id = Constants.SYSTEM_USER_ID |> InitiatedById
+            Name = "System"
+         }
          data
 
    let toEvent
@@ -161,14 +167,14 @@ type CloseAccountCommand = Command<AccountClosed>
 module CloseAccountCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: AccountClosed)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -185,7 +191,10 @@ module StartBillingCycleCommand =
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         (InitiatedById Constants.SYSTEM_USER_ID)
+         {
+            Id = Constants.SYSTEM_USER_ID |> InitiatedById
+            Name = "System"
+         }
          data
 
    let toEvent

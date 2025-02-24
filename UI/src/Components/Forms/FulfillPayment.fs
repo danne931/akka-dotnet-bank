@@ -19,7 +19,7 @@ type Values = { AccountIdSourceOfFunds: string }
 let formFulfillPlatformPayment
    (payerAccounts: Map<AccountId, Account>)
    (payment: PlatformPayment)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let fundingSourceOptions =
@@ -55,7 +55,7 @@ let formFulfillPlatformPayment
             PaymentMethod = selectedAccountId
             RequestedPayment = {
                PlatformPaymentRequested.fromPayment payment with
-                  BaseInfo.InitiatedById = initiatedBy
+                  BaseInfo.InitiatedById = initiatedBy.Id
             }
          }
          |> AccountCommand.FulfillPlatformPayment
@@ -82,7 +82,7 @@ let PaymentFulfillmentFormComponent
          let! res =
             OrgService.getTodaysAccrualMetricsByInitiatedBy
                session.OrgId
-               (InitiatedById session.EmployeeId)
+               session.AsInitiator.Id
 
          match res with
          | Error e -> Log.error $"Error getting employee accrual metrics {e}"
@@ -106,8 +106,6 @@ let PaymentFulfillmentFormComponent
    let initValues = {
       AccountIdSourceOfFunds = defaultSourceAccountId
    }
-
-   let initiatedBy = InitiatedById session.EmployeeId
 
    React.fragment [
       match payment with
@@ -137,7 +135,10 @@ let PaymentFulfillmentFormComponent
             AccountFormContainer {|
                InitialValues = initValues
                Form =
-                  formFulfillPlatformPayment payerAccounts payment initiatedBy
+                  formFulfillPlatformPayment
+                     payerAccounts
+                     payment
+                     session.AsInitiator
                Action = Some(Form.View.Action.SubmitOnly "Submit Payment")
                OnSubmit =
                   fun receipt ->

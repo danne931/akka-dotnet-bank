@@ -309,8 +309,8 @@ type CommandApprovalRule = {
 
 [<RequireQualifiedAccess>]
 type ManageApprovalRuleInput =
-   | CreateOrEdit of Rule: CommandApprovalRule * EmployeeReference
-   | Delete of Rule: CommandApprovalRule * EmployeeReference
+   | CreateOrEdit of Rule: CommandApprovalRule * Initiator
+   | Delete of Rule: CommandApprovalRule * Initiator
 
    member x.CommandType =
       match x with
@@ -330,7 +330,7 @@ module ManageApprovalRuleCommand =
          (OrgId.toEntityId rule.OrgId)
          rule.OrgId
          (CorrelationId.create ())
-         (InitiatedById initiator.EmployeeId)
+         initiator
          data
 
 type ApprovableCommandPerCommand =
@@ -363,7 +363,7 @@ type ApprovableCommand =
          | InternalTransferBetweenOrgs o -> Command.envelope o
          | DomesticTransfer o -> Command.envelope o
 
-   member x.InitiatedBy = ApprovableCommand.envelope x |> _.InitiatedById
+   member x.InitiatedBy = ApprovableCommand.envelope x |> _.InitiatedBy
 
    member x.OrgId = ApprovableCommand.envelope x |> _.OrgId
 
@@ -659,7 +659,7 @@ module CommandApprovalRule =
          let forCommandType =
             ruleDemandsApprovalForCommandType
                command.CommandType
-               command.InitiatedBy
+               command.InitiatedBy.Id
                rule
 
          let forCriteria = ruleDemandsApprovalForCriteria command accrual rule
@@ -681,18 +681,21 @@ module CommandApprovalRule =
       RuleId: CommandApprovalRuleId
       OrgId: OrgId
       CommandType: ApprovableCommandType
-      DeletedBy: EmployeeReference
    }
 
    type DeleteApprovalRuleCommand = Command<ApprovalRuleDeleted>
 
    module DeleteApprovalRuleCommand =
-      let create (data: ApprovalRuleDeleted) : DeleteApprovalRuleCommand =
+      let create
+         initiatedBy
+         (data: ApprovalRuleDeleted)
+         : DeleteApprovalRuleCommand
+         =
          Command.create
             (OrgId.toEntityId data.OrgId)
             data.OrgId
             (CorrelationId.create ())
-            (InitiatedById data.DeletedBy.EmployeeId)
+            initiatedBy
             data
 
       let toEvent
@@ -707,7 +710,7 @@ module CommandApprovalRule =
    module ConfigureApprovalRuleCommand =
       let create
          (orgId: OrgId)
-         (initiatedBy: InitiatedById)
+         (initiatedBy: Initiator)
          (data: CommandApprovalRule)
          : ConfigureApprovalRuleCommand
          =
@@ -898,7 +901,7 @@ module CommandApprovalProgress =
    module RequestCommandApproval =
       let create
          (orgId: OrgId)
-         (initiatedBy: InitiatedById)
+         (initiatedBy: Initiator)
          (correlationId: CorrelationId)
          (data: CommandApprovalRequested)
          =
@@ -925,7 +928,10 @@ module CommandApprovalProgress =
             (OrgId.toEntityId orgId)
             orgId
             correlationId
-            (InitiatedById data.ApprovedBy.EmployeeId)
+            {
+               Id = InitiatedById data.ApprovedBy.EmployeeId
+               Name = data.ApprovedBy.EmployeeName
+            }
             data
 
       let toEvent
@@ -948,7 +954,10 @@ module CommandApprovalProgress =
             (OrgId.toEntityId cmd.OrgId)
             cmd.OrgId
             correlationId
-            (InitiatedById cmd.Data.ApprovedBy.EmployeeId)
+            {
+               Id = InitiatedById cmd.Data.ApprovedBy.EmployeeId
+               Name = cmd.Data.ApprovedBy.EmployeeName
+            }
             {
                RuleId = cmd.Data.RuleId
                ApprovedBy = cmd.Data.ApprovedBy
@@ -972,7 +981,10 @@ module CommandApprovalProgress =
             (OrgId.toEntityId orgId)
             orgId
             correlationId
-            (InitiatedById data.DeclinedBy.EmployeeId)
+            {
+               Id = InitiatedById data.DeclinedBy.EmployeeId
+               Name = data.DeclinedBy.EmployeeName
+            }
             data
 
       let toEvent
@@ -991,7 +1003,10 @@ module CommandApprovalProgress =
             (OrgId.toEntityId orgId)
             orgId
             correlationId
-            (InitiatedById Constants.SYSTEM_USER_ID)
+            {
+               Id = InitiatedById Constants.SYSTEM_USER_ID
+               Name = "System"
+            }
             data
 
       let toEvent

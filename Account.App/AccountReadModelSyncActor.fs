@@ -33,7 +33,7 @@ let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [
 let private internalTransferBaseSqlParams (o: BaseInternalTransferInfo) = [
    "transferId", TransferSqlWriter.transferId o.TransferId
 
-   "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy
+   "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
 
    "senderOrgId", TransferSqlWriter.senderOrgId o.Sender.OrgId
 
@@ -52,7 +52,7 @@ let private internalTransferBaseSqlParams (o: BaseInternalTransferInfo) = [
 let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
    "transferId", TransferSqlWriter.transferId o.TransferId
 
-   "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy
+   "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
 
    "senderOrgId", TransferSqlWriter.senderOrgId o.Sender.OrgId
 
@@ -130,7 +130,8 @@ let sqlParamReducer
 
       "correlationId", TransactionSqlWriter.correlationId envelope.CorrelationId
 
-      "initiatedById", TransactionSqlWriter.initiatedById envelope.InitiatedById
+      "initiatedById",
+      TransactionSqlWriter.initiatedById envelope.InitiatedBy.Id
 
       "name", TransactionSqlWriter.name envelope.EventName
       "timestamp", TransactionSqlWriter.timestamp envelope.Timestamp

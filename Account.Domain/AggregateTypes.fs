@@ -181,7 +181,7 @@ module AccountEnvelope =
       EntityId = evt.EntityId
       OrgId = evt.OrgId
       CorrelationId = evt.CorrelationId
-      InitiatedById = evt.InitiatedById
+      InitiatedBy = evt.InitiatedBy
       Timestamp = evt.Timestamp
       EventName = evt.EventName
    }

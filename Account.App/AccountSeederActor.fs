@@ -241,6 +241,11 @@ let enableUpdatePreventionTriggers () =
       "ALTER TABLE organization_event ENABLE TRIGGER prevent_update;", []
    ]
 
+let systemUser: Initiator = {
+   Id = InitiatedById Constants.SYSTEM_USER_ID
+   Name = "System"
+}
+
 let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
    let myOrg = orgId, orgName
 
@@ -255,7 +260,7 @@ let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
             CreateOrgCommand.create {
                Name = name
                OrgId = orgId
-               InitiatedBy = InitiatedById Constants.SYSTEM_USER_ID
+               InitiatedBy = systemUser
             } with
                Timestamp = DateTime.UtcNow.AddMonths -4
          }
@@ -270,15 +275,12 @@ let enableOrgSocialTransferDiscovery
    =
    for org in otherOrgs do
       let cmd =
-         ConfigureFeatureFlagCommand.create
-            org.OrgId
-            (InitiatedById Constants.SYSTEM_USER_ID)
-            {
-               Config = {
-                  SocialTransferDiscoveryPrimaryAccountId =
-                     Some org.PrimaryAccountId
-               }
+         ConfigureFeatureFlagCommand.create org.OrgId systemUser {
+            Config = {
+               SocialTransferDiscoveryPrimaryAccountId =
+                  Some org.PrimaryAccountId
             }
+         }
          |> OrgCommand.ConfigureFeatureFlag
 
       (getOrgRef org.OrgId) <! OrgMessage.StateChange cmd
@@ -399,7 +401,10 @@ let mockAccountOwnerCmd =
          Timestamp = startOfMonth.AddMonths -3
    }
 
-let mockAccountOwnerId = mockAccountOwnerCmd.InitiatedBy
+let mockAccountOwner: Initiator = {
+   Id = InitiatedById Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON
+   Name = "Daniel Eisenbarger"
+}
 
 let arCheckingAccountId =
    "ec3e94cc-eba1-4ff4-b3dc-55010ecf67a4" |> Guid.Parse |> AccountId
@@ -427,7 +432,7 @@ let mockAccounts =
          AccountId = apCheckingAccountId
          AccountNumber = AccountNumber.generate ()
          OrgId = orgId
-         InitiatedBy = mockAccountOwnerId
+         InitiatedBy = mockAccountOwner
       }
       |> withModifiedTimestamp
 
@@ -439,7 +444,7 @@ let mockAccounts =
          AccountId = arCheckingAccountId
          AccountNumber = AccountNumber.generate ()
          OrgId = orgId
-         InitiatedBy = mockAccountOwnerId
+         InitiatedBy = mockAccountOwner
       }
       |> withModifiedTimestamp
 
@@ -451,7 +456,7 @@ let mockAccounts =
          AccountId = opsCheckingAccountId
          AccountNumber = AccountNumber.generate ()
          OrgId = orgId
-         InitiatedBy = mockAccountOwnerId
+         InitiatedBy = mockAccountOwner
       }
       |> withModifiedTimestamp
 
@@ -463,7 +468,7 @@ let mockAccounts =
          AccountId = savingsAccountId
          AccountNumber = AccountNumber.generate ()
          OrgId = orgId
-         InitiatedBy = mockAccountOwnerId
+         InitiatedBy = mockAccountOwner
       }
       |> withModifiedTimestamp
 
@@ -481,7 +486,7 @@ let mockAccounts =
                   AccountId = o.PrimaryAccountId
                   AccountNumber = AccountNumber.generate ()
                   OrgId = o.OrgId
-                  InitiatedBy = InitiatedById o.AccountOwnerId
+                  InitiatedBy = mockAccountOwner
                }
                |> withModifiedTimestamp
 
@@ -493,7 +498,11 @@ let mockAccounts =
                   AccountId = o.OpsAccountId
                   AccountNumber = AccountNumber.generate ()
                   OrgId = o.OrgId
-                  InitiatedBy = InitiatedById o.AccountOwnerId
+                  InitiatedBy = {
+                     Id = InitiatedById o.AccountOwnerId
+                     Name =
+                        $"{o.AccountOwnerName.First} {o.AccountOwnerName.Last}"
+                  }
                }
                |> withModifiedTimestamp
 
@@ -505,7 +514,11 @@ let mockAccounts =
                   AccountId = o.SavingsAccountId
                   AccountNumber = AccountNumber.generate ()
                   OrgId = o.OrgId
-                  InitiatedBy = InitiatedById o.AccountOwnerId
+                  InitiatedBy = {
+                     Id = InitiatedById o.AccountOwnerId
+                     Name =
+                        $"{o.AccountOwnerName.First} {o.AccountOwnerName.Last}"
+                  }
                }
                |> withModifiedTimestamp
             ])
@@ -549,7 +562,7 @@ let mockAccountOwnerCards =
          Virtual = true
          DailyPurchaseLimit = Some 9_310m
          MonthlyPurchaseLimit = None
-         InitiatedBy = mockAccountOwnerId
+         InitiatedBy = mockAccountOwner
       } with
          Timestamp = cmd.Timestamp.AddHours 1
    }
@@ -566,7 +579,7 @@ let mockAccountOwnerCards =
 
 let mockEmployees =
    let cmds = [
-      CreateEmployeeCommand.create mockAccountOwnerId {
+      CreateEmployeeCommand.create mockAccountOwner {
          Email = "pongkool@gmail.com"
          FirstName = "Pop"
          LastName = "Pongkool"
@@ -575,7 +588,7 @@ let mockEmployees =
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
-      CreateEmployeeCommand.create mockAccountOwnerId {
+      CreateEmployeeCommand.create mockAccountOwner {
          Email = "fishinthesea@gmail.com"
          FirstName = "Devon"
          LastName = "Eisenbarger"
@@ -584,7 +597,7 @@ let mockEmployees =
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
-      CreateEmployeeCommand.create mockAccountOwnerId {
+      CreateEmployeeCommand.create mockAccountOwner {
          Email = "inkwaruntorn@gmail.com"
          FirstName = "Ink"
          LastName = "Waruntorn"
@@ -593,7 +606,7 @@ let mockEmployees =
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
-      CreateEmployeeCommand.create mockAccountOwnerId {
+      CreateEmployeeCommand.create mockAccountOwner {
          Email = "hanzzimmer@gmail.com"
          FirstName = "Hanz"
          LastName = "Zimmer"
@@ -602,7 +615,7 @@ let mockEmployees =
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
-      CreateEmployeeCommand.create mockAccountOwnerId {
+      CreateEmployeeCommand.create mockAccountOwner {
          Email = "denvau@gmail.com"
          FirstName = "Den"
          LastName = "Vau"
@@ -611,7 +624,7 @@ let mockEmployees =
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
-      CreateEmployeeCommand.create mockAccountOwnerId {
+      CreateEmployeeCommand.create mockAccountOwner {
          Email = "sadeadu@gmail.com"
          FirstName = "Sade"
          LastName = "Adu"
@@ -634,7 +647,7 @@ let mockEmployees =
          Virtual = true
          DailyPurchaseLimit = Some 10_000m
          MonthlyPurchaseLimit = None
-         InitiatedBy = mockAccountOwnerId
+         InitiatedBy = mockAccountOwner
       } with
          Timestamp = cmd.Timestamp.AddHours 1
    }
@@ -651,7 +664,7 @@ let mockEmployees =
 
 let mockEmployeesPendingInviteConfirmation =
    [
-      CreateEmployeeCommand.create mockAccountOwnerId {
+      CreateEmployeeCommand.create mockAccountOwner {
          Email = "zikomo@gmail.com"
          FirstName = "Zikomo"
          LastName = "Fwasa"
@@ -660,7 +673,7 @@ let mockEmployeesPendingInviteConfirmation =
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
-      CreateEmployeeCommand.create mockAccountOwnerId {
+      CreateEmployeeCommand.create mockAccountOwner {
          Email = "megmeyers@gmail.com"
          FirstName = "Meg"
          LastName = "Meyers"
@@ -684,12 +697,12 @@ let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task
          let cmd =
             RequestPlatformPaymentCommand.create
                (arCheckingAccountId, orgId)
-               mockAccountOwnerId
+               mockAccountOwner
                {
                   Memo = "Services rendered..."
                   Expiration = None
                   BaseInfo = {
-                     InitiatedById = mockAccountOwnerId
+                     InitiatedById = mockAccountOwner.Id
                      Id = Guid.NewGuid() |> PaymentId
                      Amount = randomAmount 3000 5000
                      Payee = {
@@ -723,7 +736,10 @@ let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task
       let msg =
          {
             FulfillPlatformPaymentCommand.create
-               (InitiatedById payer.AccountOwnerId)
+               {
+                  Id = InitiatedById payer.AccountOwnerId
+                  Name = payer.BusinessName
+               }
                {
                   RequestedPayment = {
                      Memo = request.Data.Memo
@@ -748,7 +764,10 @@ let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task
       let cmd =
          RequestPlatformPaymentCommand.create
             (payee.PrimaryAccountId, payee.OrgId)
-            (InitiatedById payee.AccountOwnerId)
+            {
+               Id = InitiatedById payee.AccountOwnerId
+               Name = payee.BusinessName
+            }
             {
                Expiration = Some <| DateTime.UtcNow.AddDays 13
                Memo = "Services rendered..."
@@ -819,7 +838,7 @@ let configureAutoTransferRules
       {
          ConfigureAutoTransferRuleCommand.create
             (sender.AccountId, sender.OrgId)
-            mockAccountOwnerId
+            mockAccountOwner
             {
                RuleIdToUpdate = None
                Rule =
@@ -847,7 +866,7 @@ let configureAutoTransferRules
       {
          ConfigureAutoTransferRuleCommand.create
             (sender.AccountId, sender.OrgId)
-            mockAccountOwnerId
+            mockAccountOwner
             {
                RuleIdToUpdate = None
                Rule =
@@ -881,7 +900,7 @@ let configureAutoTransferRules
       {
          ConfigureAutoTransferRuleCommand.create
             (target.AccountId, target.OrgId)
-            mockAccountOwnerId
+            mockAccountOwner
             {
                RuleIdToUpdate = None
                Rule =
@@ -923,7 +942,10 @@ let configureAutoTransferRules
          {
             ConfigureAutoTransferRuleCommand.create
                (sender.AccountId, sender.OrgId)
-               (InitiatedById candidate.AccountOwnerId)
+               {
+                  Id = InitiatedById candidate.AccountOwnerId
+                  Name = candidate.BusinessName
+               }
                {
                   RuleIdToUpdate = None
                   Rule =
@@ -952,7 +974,7 @@ let seedAccountOwnerActions
    (account: Account)
    =
    let domesticRecipientCmd =
-      RegisterDomesticTransferRecipientCommand.create orgId mockAccountOwnerId {
+      RegisterDomesticTransferRecipientCommand.create orgId mockAccountOwner {
          AccountId = Guid.NewGuid() |> AccountId
          FirstName = "Microsoft"
          LastName = "Azure"
@@ -990,7 +1012,7 @@ let seedAccountOwnerActions
          DomesticTransferCommand.create
             (account.AccountId, orgId)
             (Guid.NewGuid() |> CorrelationId)
-            mockAccountOwnerId
+            mockAccountOwner
             {
                ScheduledDateSeedOverride = Some timestamp
                Amount = 30_000m + (randomAmount 1000 7000)
@@ -1031,7 +1053,7 @@ let seedAccountOwnerActions
                {
                   DepositCashCommand.create
                      (apCheckingAccountId, orgId)
-                     mockAccountOwnerId
+                     mockAccountOwner
                      {
                         Amount = randomAmount 5000 20_000
                         Origin = Some "ATM"
@@ -1053,7 +1075,10 @@ let seedAccountOwnerActions
                {
                   InternalTransferBetweenOrgsCommand.create
                      (sender.PrimaryAccountId, sender.OrgId)
-                     (InitiatedById sender.AccountOwnerId)
+                     {
+                        Name = sender.BusinessName
+                        Id = InitiatedById sender.AccountOwnerId
+                     }
                      {
                         Memo = None
                         Amount = 10_000m + randomAmount 1000 10_000
@@ -1083,7 +1108,7 @@ let seedAccountOwnerActions
                {
                   InternalTransferBetweenOrgsCommand.create
                      (apCheckingAccountId, orgId)
-                     mockAccountOwnerId
+                     mockAccountOwner
                      {
                         Memo = None
                         Recipient =
@@ -1120,7 +1145,7 @@ let seedAccountOwnerActions
                {
                   InternalTransferWithinOrgCommand.create
                      (apCheckingAccountId, orgId)
-                     mockAccountOwnerId
+                     mockAccountOwner
                      {
                         Memo = None
                         Recipient =
@@ -1185,7 +1210,6 @@ let seedEmployeeActions
    ]
 
    let rnd = new Random()
-   let compositeId = employee.EmployeeId, orgId
 
    for month in [ 1..3 ] do
       let timestamp = timestamp.AddMonths month
@@ -1211,8 +1235,13 @@ let seedEmployeeActions
             | false, None -> timestamp
             | true, _ -> DateTime.UtcNow
 
+         let initiator: Initiator = {
+            Id = InitiatedById employee.EmployeeId
+            Name = employee.Name
+         }
+
          let purchaseCmd = {
-            PurchasePendingCommand.create compositeId {
+            PurchasePendingCommand.create initiator orgId {
                AccountId = card.AccountId
                CardId = card.CardId
                CardNumberLast4 = card.CardNumberLast4
@@ -1260,7 +1289,7 @@ let createAccountOwners getEmployeeRef =
          |> EmployeeMessage.StateChange
 
       let confirmInviteCmd =
-         ConfirmInvitationCommand.create (employeeId, cmd.OrgId) {
+         ConfirmInvitationCommand.create cmd.InitiatedBy cmd.OrgId {
             Email = Email.deserialize cmd.Data.Email
             Reference = None
             AuthProviderUserId = Guid.NewGuid()
@@ -1297,7 +1326,7 @@ let createEmployees
       employeeRef <! msg
 
       let confirmInviteCmd = {
-         ConfirmInvitationCommand.create (employeeId, orgId) {
+         ConfirmInvitationCommand.create employeeCreateCmd.InitiatedBy orgId {
             Email = Email.deserialize employeeCreateCmd.Data.Email
             AuthProviderUserId = Guid.NewGuid()
             Reference = None
@@ -1371,7 +1400,7 @@ let seedAccountTransactions
       | Some depositAmount ->
          let msg =
             {
-               DepositCashCommand.create compositeId mockAccountOwnerId {
+               DepositCashCommand.create compositeId mockAccountOwner {
                   Amount = depositAmount
                   Origin = Some "ATM"
                } with

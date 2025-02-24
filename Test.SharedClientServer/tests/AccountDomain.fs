@@ -399,7 +399,7 @@ let tests =
             FailDomesticTransferCommand.create
                state.Info.CompositeId
                transferPendingEvt.CorrelationId
-               transferPendingEvt.InitiatedById
+               transferPendingEvt.InitiatedBy
                {
                   BaseInfo = transferPendingEvt.Data.BaseInfo
                   Reason = DomesticTransferFailReason.AccountClosed

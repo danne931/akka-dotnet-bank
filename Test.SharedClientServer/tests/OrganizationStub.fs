@@ -11,7 +11,11 @@ open CommandApproval
 
 let orgId = Guid.NewGuid() |> OrgId
 let ruleId () = Guid.NewGuid() |> CommandApprovalRuleId
-let initiatedById = Guid.NewGuid() |> EmployeeId |> InitiatedById
+
+let initiator = {
+   Id = Guid.NewGuid() |> EmployeeId |> InitiatedById
+   Name = "Devon E"
+}
 
 let progressId () =
    Guid.NewGuid() |> CorrelationId |> CommandApprovalProgressId
@@ -32,22 +36,19 @@ let domesticRecipient: DomesticTransferRecipient = {
 
 let command = {|
    updateRole =
-      UpdateRoleCommand.create
-         (Guid.NewGuid() |> EmployeeId, orgId)
-         (Guid.NewGuid() |> EmployeeId |> InitiatedById)
-         {
-            Name = ""
-            Role = Role.Admin
-            PriorRole = Role.Scholar
-            CardInfo = None
-         }
+      UpdateRoleCommand.create (Guid.NewGuid() |> EmployeeId, orgId) initiator {
+         Name = ""
+         Role = Role.Admin
+         PriorRole = Role.Scholar
+         CardInfo = None
+      }
       |> UpdateEmployeeRole
       |> ApprovableCommand.PerCommand
 
    inviteEmployee =
       ApproveAccessCommand.create
          (Guid.NewGuid() |> EmployeeId, orgId)
-         (Guid.NewGuid() |> EmployeeId |> InitiatedById)
+         initiator
          (Guid.NewGuid() |> CorrelationId)
          { Name = "Dan E"; Reference = None }
       |> InviteEmployee
@@ -56,10 +57,10 @@ let command = {|
       CreateOrgCommand.create {
          OrgId = orgId
          Name = "new org"
-         InitiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById
+         InitiatedBy = initiator
       }
    registerDomesticRecipient =
-      RegisterDomesticTransferRecipientCommand.create orgId initiatedById {
+      RegisterDomesticTransferRecipientCommand.create orgId initiator {
          AccountId = Guid.NewGuid() |> AccountId
          FirstName = domesticRecipient.FirstName
          LastName = domesticRecipient.LastName

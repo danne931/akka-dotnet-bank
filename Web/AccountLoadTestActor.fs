@@ -62,7 +62,11 @@ module private Stub =
    let depositAmount = 3m
    let balanceAfter3Deposits = depositAmount * 3m
    let orgId = Guid.NewGuid() |> OrgId
-   let initiatedBy = InitiatedById Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON
+
+   let initiatedBy: Initiator = {
+      Id = InitiatedById Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON
+      Name = "Daniel Eisenbarger"
+   }
 
    let createAccountMessage accountId =
       AccountMessage.StateChange << AccountCommand.CreateAccount

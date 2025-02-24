@@ -13,7 +13,11 @@ let accountNumber = AccountNumber.generate () |> int64 |> AccountNumber
 let orgId = Guid.NewGuid() |> OrgId
 let compositeId = accountId, orgId
 let correlationId = Guid.NewGuid() |> CorrelationId
-let initiatedById = Guid.NewGuid() |> EmployeeId |> InitiatedById
+
+let initiator: Initiator = {
+   Id = Guid.NewGuid() |> EmployeeId |> InitiatedById
+   Name = "Devon E"
+}
 
 let internalRecipient: InternalTransferRecipient = {
    Name = "Savings"
@@ -29,7 +33,7 @@ let internalSender: InternalTransferSender = {
 
 let internalTransferWithinOrgBaseInfo = {
    Sender = internalSender
-   InitiatedBy = initiatedById
+   InitiatedBy = initiator
    TransferId = correlationId |> CorrelationId.get |> TransferId
    Recipient = internalRecipient
    Amount = 33m
@@ -38,7 +42,7 @@ let internalTransferWithinOrgBaseInfo = {
 
 let internalTransferBetweenOrgsBaseInfo = {
    Sender = internalSender
-   InitiatedBy = initiatedById
+   InitiatedBy = initiator
    TransferId = correlationId |> CorrelationId.get |> TransferId
    Recipient = {
       Name = "Linear"
@@ -66,13 +70,13 @@ let command = {|
          AccountNumber = string accountNumber
          Depository = AccountDepository.Checking
          OrgId = orgId
-         InitiatedBy = initiatedById
+         InitiatedBy = initiator
       }
    closeAccount =
-      CloseAccountCommand.create compositeId initiatedById { Reference = None }
+      CloseAccountCommand.create compositeId initiator { Reference = None }
    debit =
       fun amount ->
-         DebitCommand.create compositeId correlationId initiatedById {
+         DebitCommand.create compositeId correlationId initiator {
             Date = DateTime.UtcNow
             Amount = amount
             Merchant = "Groceries"
@@ -86,13 +90,13 @@ let command = {|
          }
    depositCash =
       fun amount ->
-         DepositCashCommand.create compositeId initiatedById {
+         DepositCashCommand.create compositeId initiator {
             Amount = amount
             Origin = None
          }
    domesticTransfer =
       fun amount ->
-         DomesticTransferCommand.create compositeId correlationId initiatedById {
+         DomesticTransferCommand.create compositeId correlationId initiator {
             Sender = domesticSender
             Recipient = OrganizationStub.domesticRecipient
             Amount = amount
@@ -102,7 +106,7 @@ let command = {|
    internalTransfer =
       fun amount ->
          let transferCmd =
-            InternalTransferWithinOrgCommand.create compositeId initiatedById {
+            InternalTransferWithinOrgCommand.create compositeId initiator {
                Recipient = internalRecipient
                Sender = internalSender
                Amount = amount
@@ -118,7 +122,7 @@ let command = {|
       CompleteInternalTransferWithinOrgCommand.create
          compositeId
          correlationId
-         initiatedById
+         initiator
          {
             BaseInfo = internalTransferWithinOrgBaseInfo
          }
@@ -127,7 +131,7 @@ let command = {|
          FailInternalTransferWithinOrgCommand.create
             compositeId
             correlationId
-            initiatedById
+            initiator
             {
                BaseInfo = {
                   internalTransferWithinOrgBaseInfo with
@@ -140,7 +144,7 @@ let command = {|
          DepositInternalTransferWithinOrgCommand.create
             compositeId
             correlationId
-            initiatedById
+            initiator
             {
                BaseInfo = {
                   internalTransferWithinOrgBaseInfo with
@@ -152,7 +156,7 @@ let command = {|
          DepositInternalTransferBetweenOrgsCommand.create
             compositeId
             correlationId
-            initiatedById
+            initiator
             {
                BaseInfo = {
                   internalTransferBetweenOrgsBaseInfo with

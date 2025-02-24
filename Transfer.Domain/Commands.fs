@@ -25,14 +25,14 @@ type InternalTransferWithinOrgCommand = Command<InternalTransferInput>
 module InternalTransferWithinOrgCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: InternalTransferInput)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -71,14 +71,14 @@ module CompleteInternalTransferWithinOrgCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: InternalTransferWithinOrgCompleted)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          correlationId
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -94,14 +94,14 @@ module FailInternalTransferWithinOrgCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: InternalTransferWithinOrgFailed)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          correlationId
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -115,14 +115,14 @@ type InternalTransferBetweenOrgsCommand = Command<InternalTransferInput>
 module InternalTransferBetweenOrgsCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: InternalTransferInput)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -161,14 +161,14 @@ type ScheduleInternalTransferBetweenOrgsCommand =
 module ScheduleInternalTransferBetweenOrgsCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: ScheduleInternalTransferInput)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -232,14 +232,14 @@ module CompleteInternalTransferBetweenOrgsCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: InternalTransferBetweenOrgsCompleted)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          correlationId
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -255,14 +255,14 @@ module FailInternalTransferBetweenOrgsCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiator: Initiator)
       (data: InternalTransferBetweenOrgsFailed)
       =
       Command.create
          (AccountId.toEntityId accountId)
          orgId
          correlationId
-         initiatedBy
+         initiator
          data
 
    let toEvent
@@ -278,7 +278,7 @@ module DepositInternalTransferWithinOrgCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: InternalTransferWithinOrgDeposited)
       =
       Command.create
@@ -301,7 +301,7 @@ module DepositInternalTransferBetweenOrgsCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: InternalTransferBetweenOrgsDeposited)
       =
       Command.create
@@ -323,14 +323,14 @@ type NicknameDomesticTransferRecipientCommand =
 module NicknameDomesticTransferRecipientCommand =
    let create
       (orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: NicknamedDomesticTransferRecipient)
       =
       Command.create
          (OrgId.toEntityId orgId)
          orgId
          (CorrelationId.create ())
-         (initiatedBy: InitiatedById)
+         initiatedBy
          data
 
    let toEvent
@@ -355,7 +355,7 @@ type RegisterDomesticTransferRecipientCommand =
 module RegisterDomesticTransferRecipientCommand =
    let create
       (orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: DomesticTransferRecipientInput)
       =
       Command.create
@@ -418,7 +418,7 @@ type EditDomesticTransferRecipientCommand =
 module EditDomesticTransferRecipientCommand =
    let create
       (orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: EditDomesticTransferRecipientInput)
       =
       Command.create
@@ -467,7 +467,7 @@ type FailDomesticTransferRecipientCommand =
 module FailDomesticTransferRecipientCommand =
    let create
       (orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: DomesticTransferRecipientFailed)
       =
       Command.create
@@ -489,7 +489,7 @@ type DomesticTransferRetryConfirmsRecipientCommand =
 module DomesticTransferRetryConfirmsRecipientCommand =
    let create
       (orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: DomesticTransferRetryConfirmsRecipient)
       =
       Command.create
@@ -524,7 +524,7 @@ module DomesticTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       (correlationId: CorrelationId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: DomesticTransferInput)
       : DomesticTransferCommand
       =
@@ -567,7 +567,7 @@ type ScheduleDomesticTransferCommand = Command<ScheduleDomesticTransferInput>
 module ScheduleDomesticTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: ScheduleDomesticTransferInput)
       : ScheduleDomesticTransferCommand
       =
@@ -633,7 +633,7 @@ module CompleteDomesticTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: DomesticTransferCompleted)
       =
       Command.create
@@ -655,7 +655,7 @@ module FailDomesticTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: DomesticTransferFailed)
       =
       Command.create
@@ -678,7 +678,7 @@ module UpdateDomesticTransferProgressCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: DomesticTransferProgressUpdate)
       =
       Command.create
@@ -779,7 +779,7 @@ type RequestPlatformPaymentCommand = Command<PlatformPaymentRequestInput>
 module RequestPlatformPaymentCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: PlatformPaymentRequestInput)
       =
       Command.create
@@ -828,7 +828,7 @@ type CancelPlatformPaymentInput = {
 type CancelPlatformPaymentCommand = Command<CancelPlatformPaymentInput>
 
 module CancelPlatformPaymentCommand =
-   let create (initiatedBy: InitiatedById) (data: CancelPlatformPaymentInput) =
+   let create (initiatedBy: Initiator) (data: CancelPlatformPaymentInput) =
       let payee = data.RequestedPayment.BaseInfo.Payee
 
       Command.create
@@ -859,7 +859,7 @@ type DeclinePlatformPaymentInput = {
 type DeclinePlatformPaymentCommand = Command<DeclinePlatformPaymentInput>
 
 module DeclinePlatformPaymentCommand =
-   let create (initiatedBy: InitiatedById) (data: DeclinePlatformPaymentInput) =
+   let create (initiatedBy: Initiator) (data: DeclinePlatformPaymentInput) =
       let payee = data.RequestedPayment.BaseInfo.Payee
 
       Command.create
@@ -889,7 +889,7 @@ type FulfillPlatformPaymentInput = {
 type FulfillPlatformPaymentCommand = Command<FulfillPlatformPaymentInput>
 
 module FulfillPlatformPaymentCommand =
-   let create (initiatedBy: InitiatedById) (data: FulfillPlatformPaymentInput) =
+   let create (initiatedBy: Initiator) (data: FulfillPlatformPaymentInput) =
       let payer = data.RequestedPayment.BaseInfo.Payer
 
       Command.create
@@ -914,7 +914,7 @@ type DepositPlatformPaymentCommand = Command<PlatformPaymentDeposited>
 module DepositPlatformPaymentCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: PlatformPaymentDeposited)
       =
       Command.create
@@ -940,7 +940,7 @@ type ConfigureAutoTransferRuleCommand = Command<ConfigureAutoTransferRuleInput>
 module ConfigureAutoTransferRuleCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: ConfigureAutoTransferRuleInput)
       =
       Command.create
@@ -974,7 +974,7 @@ type DeleteAutoTransferRuleCommand = Command<AutomaticTransferRuleDeleted>
 module DeleteAutoTransferRuleCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: AutomaticTransferRuleDeleted)
       =
       Command.create
@@ -1001,7 +1001,10 @@ module InternalAutoTransferCommand =
          (AccountId.toEntityId t.Sender.AccountId)
          t.Sender.OrgId
          (CorrelationId.create ())
-         (InitiatedById Constants.SYSTEM_USER_ID)
+         {
+            Id = InitiatedById Constants.SYSTEM_USER_ID
+            Name = "System"
+         }
          data
 
    let toEvent
@@ -1039,7 +1042,7 @@ module CompleteInternalAutoTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: InternalAutomatedTransferCompleted)
       =
       Command.create
@@ -1061,7 +1064,7 @@ module FailInternalAutoTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: InternalAutomatedTransferFailed)
       =
       Command.create
@@ -1084,7 +1087,7 @@ module DepositInternalAutoTransferCommand =
    let create
       (accountId: AccountId, orgId: OrgId)
       correlationId
-      (initiatedBy: InitiatedById)
+      (initiatedBy: Initiator)
       (data: InternalAutomatedTransferDeposited)
       =
       Command.create

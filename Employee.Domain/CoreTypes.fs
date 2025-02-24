@@ -156,7 +156,7 @@ type EmployeeStatus =
 
 type PurchaseInfo = {
    AccountId: AccountId
-   EmployeeId: EmployeeId
+   InitiatedBy: Initiator
    CorrelationId: CorrelationId
    CardId: CardId
    CardNumberLast4: string
@@ -190,13 +190,15 @@ type EmployeeOnboardingTask = CreateCard of EmployeeInviteSupplementaryCardInfo
 type UserSession = {
    OrgId: OrgId
    EmployeeId: EmployeeId
-   FirstName: string
-   LastName: string
+   Name: string
    Email: Email
    Role: Role
 } with
 
-   member x.Name = x.FirstName + " " + x.LastName
+   member x.AsInitiator: Initiator = {
+      Id = InitiatedById x.EmployeeId
+      Name = x.Name
+   }
 
 [<RequireQualifiedAccess>]
 type EmployeeEventGroupFilter =

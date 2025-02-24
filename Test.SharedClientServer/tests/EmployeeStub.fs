@@ -14,12 +14,16 @@ let compositeId = employeeId, orgId
 let correlationId = Guid.NewGuid() |> CorrelationId
 let cardId = Guid.NewGuid() |> CardId
 let cardNumberLast4 = "9310"
-let initiatedById = Guid.NewGuid() |> EmployeeId |> InitiatedById
+
+let initiator = {
+   Id = Guid.NewGuid() |> EmployeeId |> InitiatedById
+   Name = "Devon E"
+}
 
 let purchaseInfo: PurchaseInfo = {
    CardId = cardId
    AccountId = accountId
-   EmployeeId = employeeId
+   InitiatedBy = initiator
    CorrelationId = correlationId
    CardNumberLast4 = cardNumberLast4
    Date = DateTime.UtcNow
@@ -42,7 +46,7 @@ let command =
             EmployeeId = Guid.NewGuid() |> EmployeeId
          }
       createEmployee = {
-         CreateEmployeeCommand.create initiatedById {
+         CreateEmployeeCommand.create initiator {
             OrgId = orgId
             OrgRequiresEmployeeInviteApproval = None
             Role = Role.Admin
@@ -54,17 +58,17 @@ let command =
             EntityId = EmployeeId.toEntityId employeeId
       }
       confirmInvite =
-         ConfirmInvitationCommand.create compositeId {
+         ConfirmInvitationCommand.create initiator orgId {
             AuthProviderUserId = Guid.NewGuid()
             Email = Email.deserialize "jellyfish@gmail.com"
             Reference = None
          }
       refreshInviteToken =
-         RefreshInvitationTokenCommand.create compositeId initiatedById {
+         RefreshInvitationTokenCommand.create compositeId initiator {
             Reason = None
          }
       updateRoleWithSupplementaryCardInfo =
-         UpdateRoleCommand.create compositeId initiatedById {
+         UpdateRoleCommand.create compositeId initiator {
             Name = "Dan Eis"
             PriorRole = Role.Admin
             Role = Role.CardOnly
@@ -81,7 +85,7 @@ let command =
             PersonName = "Dan Eis"
             CardNickname = Some "Travel"
             CardType = CardType.Debit
-            InitiatedBy = initiatedById
+            InitiatedBy = initiator
             DailyPurchaseLimit = Some dailyPurchaseLimit
             MonthlyPurchaseLimit = Some monthlyPurchaseLimit
             AccountId = accountId
@@ -91,7 +95,7 @@ let command =
          }
       debit =
          fun amount -> {
-            PurchasePendingCommand.create compositeId {
+            PurchasePendingCommand.create initiator orgId {
                CardId = purchaseInfo.CardId
                CardNumberLast4 = purchaseInfo.CardNumberLast4
                AccountId = purchaseInfo.AccountId
@@ -108,7 +112,7 @@ let command =
          }
       limitDailyDebits =
          fun amount ->
-            LimitDailyDebitsCommand.create compositeId initiatedById {
+            LimitDailyDebitsCommand.create compositeId initiator {
                PriorLimit = dailyPurchaseLimit
                DebitLimit = amount
                CardId = cardId
@@ -116,14 +120,14 @@ let command =
             }
       limitMonthlyDebits =
          fun amount ->
-            LimitMonthlyDebitsCommand.create compositeId initiatedById {
+            LimitMonthlyDebitsCommand.create compositeId initiator {
                PriorLimit = monthlyPurchaseLimit
                DebitLimit = amount
                CardId = cardId
                CardNumberLast4 = cardNumberLast4
             }
       lockCard =
-         LockCardCommand.create compositeId initiatedById {
+         LockCardCommand.create compositeId initiator {
             CardName = ""
             EmployeeName = ""
             CardId = cardId
@@ -131,7 +135,7 @@ let command =
             CardNumberLast4 = cardNumberLast4
          }
       unlockCard =
-         UnlockCardCommand.create compositeId initiatedById {
+         UnlockCardCommand.create compositeId initiator {
             CardName = ""
             EmployeeName = ""
             CardId = cardId

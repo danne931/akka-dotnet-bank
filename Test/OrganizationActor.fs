@@ -148,10 +148,7 @@ let setupApprovalRequest
    }
 
    let configureApprovalRuleCmd =
-      ConfigureApprovalRuleCommand.create
-         rule.OrgId
-         (Guid.NewGuid() |> EmployeeId |> InitiatedById)
-         rule
+      ConfigureApprovalRuleCommand.create rule.OrgId Stub.initiator rule
 
    let msg =
       configureApprovalRuleCmd
@@ -283,17 +280,13 @@ let tests =
                   UpdateEmployeeRoleCommandType)
 
          let deleteRuleCmd =
-            DeleteApprovalRuleCommand.create {
-               RuleId = rule.RuleId
-               OrgId = rule.OrgId
-               CommandType = rule.CommandType
-               DeletedBy = {
-                  EmployeeId =
-                     InitiatedById.toEmployeeId
-                        configureApprovalRuleCmd.InitiatedBy
-                  EmployeeName = ""
+            DeleteApprovalRuleCommand.create
+               configureApprovalRuleCmd.InitiatedBy
+               {
+                  RuleId = rule.RuleId
+                  OrgId = rule.OrgId
+                  CommandType = rule.CommandType
                }
-            }
             |> OrgCommand.DeleteApprovalRule
 
          o.orgActor <! OrgMessage.StateChange deleteRuleCmd
@@ -460,7 +453,7 @@ let tests =
 
          o.orgActor
          <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
-               cmd.InitiatedBy
+               cmd.InitiatedBy.Id
 
          let accrual = fishForAccrual tck
 
@@ -471,7 +464,7 @@ let tests =
 
       akkaTest
          "Org Actor should accrue daily metrics for approvable command
-                by the initiator of the command."
+          by the initiator of the command."
       <| Some config
       <| fun tck ->
          let o = init tck
@@ -496,7 +489,7 @@ let tests =
 
          o.orgActor
          <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
-               cmd.InitiatedBy
+               cmd.InitiatedBy.Id
 
          let accrual = fishForAccrual tck
 
@@ -509,7 +502,10 @@ let tests =
             {
                AccountStub.command.domesticTransfer 300m with
                   CorrelationId = Guid.NewGuid() |> CorrelationId
-                  InitiatedBy = Guid.NewGuid() |> EmployeeId |> InitiatedById
+                  InitiatedBy = {
+                     Id = Guid.NewGuid() |> EmployeeId |> InitiatedById
+                     Name = ""
+                  }
             }
             |> DomesticTransfer
             |> ApprovableCommand.AmountBased
@@ -518,7 +514,7 @@ let tests =
 
          o.orgActor
          <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
-               cmd3.InitiatedBy
+               cmd3.InitiatedBy.Id
 
          let accrual = fishForAccrual tck
 
@@ -529,7 +525,7 @@ let tests =
 
          o.orgActor
          <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
-               cmd.InitiatedBy
+               cmd.InitiatedBy.Id
 
          let accrual = fishForAccrual tck
 
@@ -564,10 +560,7 @@ let tests =
          }
 
          let configureApprovalRuleCmd =
-            ConfigureApprovalRuleCommand.create
-               rule.OrgId
-               (Guid.NewGuid() |> EmployeeId |> InitiatedById)
-               rule
+            ConfigureApprovalRuleCommand.create rule.OrgId Stub.initiator rule
 
          let msg =
             configureApprovalRuleCmd
@@ -590,7 +583,7 @@ let tests =
             fun () ->
                o.orgActor
                <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
-                     cmd.InitiatedBy
+                     cmd.InitiatedBy.Id
 
                let accrual = tck.ExpectMsg<CommandApprovalDailyAccrual>()
 
@@ -620,10 +613,7 @@ let tests =
          }
 
          let configureApprovalRuleCmd =
-            ConfigureApprovalRuleCommand.create
-               rule.OrgId
-               (Guid.NewGuid() |> EmployeeId |> InitiatedById)
-               rule
+            ConfigureApprovalRuleCommand.create rule.OrgId Stub.initiator rule
 
          let msg =
             configureApprovalRuleCmd
@@ -652,7 +642,7 @@ let tests =
             fun () ->
                o.orgActor
                <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
-                     cmd.InitiatedBy
+                     cmd.InitiatedBy.Id
 
                let accrual = tck.ExpectMsg<CommandApprovalDailyAccrual>()
 
@@ -681,7 +671,7 @@ let tests =
             fun () ->
                o.orgActor
                <! OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy
-                     cmd2.InitiatedBy
+                     cmd2.InitiatedBy.Id
 
                let accrual = tck.ExpectMsg<CommandApprovalDailyAccrual>()
 

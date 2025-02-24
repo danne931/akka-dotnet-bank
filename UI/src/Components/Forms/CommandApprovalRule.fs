@@ -302,27 +302,23 @@ let ruleConfigureOrRequestApproval
    (org: Org)
    (rule: CommandApprovalRule)
    =
+   let initiator = session.AsInitiator
+
    let ruleForManagingApprovalRules =
       CommandApprovalRule.ruleManagementRequiresApproval
-         (InitiatedById session.EmployeeId)
+         initiator.Id
          org.CommandApprovalRules
 
    match ruleForManagingApprovalRules with
    | None ->
       CommandApprovalRule.ConfigureApprovalRuleCommand.create
          session.OrgId
-         (InitiatedById session.EmployeeId)
+         initiator
          rule
       |> OrgCommand.ConfigureApprovalRule
    | Some ruleForManagingApprovalRules ->
       let approvableCmd =
-         ManageApprovalRuleInput.CreateOrEdit(
-            rule,
-            {
-               EmployeeName = session.Name
-               EmployeeId = session.EmployeeId
-            }
-         )
+         ManageApprovalRuleInput.CreateOrEdit(rule, initiator)
          |> ManageApprovalRuleCommand.create
          |> ManageApprovalRule
          |> ApprovableCommand.PerCommand

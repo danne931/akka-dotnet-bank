@@ -287,7 +287,7 @@ let ConfigureAutoTransferRuleFormContainer
                         let cmd =
                            ConfigureAutoTransferRuleCommand.create
                               account.CompositeId
-                              (InitiatedById props.Session.EmployeeId)
+                              props.Session.AsInitiator
                               {
                                  RuleIdToUpdate = existingRuleId
                                  Rule = formResult.Rule

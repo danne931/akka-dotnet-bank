@@ -54,7 +54,7 @@ let update (onDeleted: AccountCommandReceipt -> unit) msg (state: State) =
       let cmd =
          DeleteAutoTransferRuleCommand.create
             (account.AccountId, account.OrgId)
-            (InitiatedById session.EmployeeId)
+            session.AsInitiator
             { RuleId = ruleConfig.Id }
          |> AccountCommand.DeleteAutoTransferRule
 

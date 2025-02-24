@@ -26,7 +26,7 @@ let private failTransferWithinOrgMsg
    FailInternalTransferWithinOrgCommand.create
       (info.Sender.AccountId, info.Sender.OrgId)
       evt.CorrelationId
-      evt.InitiatedById
+      evt.InitiatedBy
       { BaseInfo = info; Reason = reason }
    |> AccountCommand.FailInternalTransfer
    |> AccountMessage.StateChange
@@ -40,7 +40,7 @@ let private failTransferBetweenOrgsMsg
    FailInternalTransferBetweenOrgsCommand.create
       (info.Sender.AccountId, evt.OrgId)
       evt.CorrelationId
-      evt.InitiatedById
+      evt.InitiatedBy
       { BaseInfo = info; Reason = reason }
    |> AccountCommand.FailInternalTransferBetweenOrgs
    |> AccountMessage.StateChange
@@ -54,7 +54,7 @@ let private failAutoTransferMsg
    FailInternalAutoTransferCommand.create
       (info.Sender.AccountId, info.Sender.OrgId)
       evt.CorrelationId
-      evt.InitiatedById
+      evt.InitiatedBy
       {
          Rule = evt.Data.Rule
          BaseInfo = info
@@ -71,7 +71,7 @@ let private completeTransferWithinOrgMsg
    CompleteInternalTransferWithinOrgCommand.create
       (info.Sender.AccountId, evt.OrgId)
       evt.CorrelationId
-      evt.InitiatedById
+      evt.InitiatedBy
       { BaseInfo = info }
    |> AccountCommand.CompleteInternalTransfer
    |> AccountMessage.StateChange
@@ -84,7 +84,7 @@ let private completeTransferBetweenOrgsMsg
    CompleteInternalTransferBetweenOrgsCommand.create
       (info.Sender.AccountId, evt.OrgId)
       evt.CorrelationId
-      evt.InitiatedById
+      evt.InitiatedBy
       { BaseInfo = info }
    |> AccountCommand.CompleteInternalTransferBetweenOrgs
    |> AccountMessage.StateChange
@@ -97,7 +97,7 @@ let private completeAutoTransferMsg
    CompleteInternalAutoTransferCommand.create
       (info.Sender.AccountId, evt.OrgId)
       evt.CorrelationId
-      evt.InitiatedById
+      evt.InitiatedBy
       {
          Rule = evt.Data.Rule
          BaseInfo = info
@@ -136,19 +136,19 @@ let actorProps
             e.Data.BaseInfo,
             {|
                CorrId = e.CorrelationId
-               InitiatedBy = e.InitiatedById
+               InitiatedBy = e.InitiatedBy
             |}
          | InternalTransferMessage.TransferRequestBetweenOrgs e ->
             e.Data.BaseInfo,
             {|
                CorrId = e.CorrelationId
-               InitiatedBy = e.InitiatedById
+               InitiatedBy = e.InitiatedBy
             |}
          | InternalTransferMessage.AutomatedTransferRequest e ->
             e.Data.BaseInfo,
             {|
                CorrId = e.CorrelationId
-               InitiatedBy = e.InitiatedById
+               InitiatedBy = e.InitiatedBy
             |}
 
       let recipientId = info.Recipient.AccountId

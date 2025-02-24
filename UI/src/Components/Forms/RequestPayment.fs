@@ -77,7 +77,7 @@ let formPlatformPayment
    (payeeOrg: Org)
    (payeeDestinationAccounts: Map<AccountId, Account>)
    (orgs: Org list)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let orgPayerOptions =
@@ -148,7 +148,7 @@ let formPlatformPayment
                Memo = memo
                BaseInfo = {
                   Id = Guid.NewGuid() |> PaymentId
-                  InitiatedById = initiatedBy
+                  InitiatedById = initiatedBy.Id
                   Amount = amount
                   Payer = {
                      OrgId = payerOrg.OrgId
@@ -198,7 +198,7 @@ let PaymentRequestFormComponent
       Expiration = ""
    }
 
-   let initiatedBy = InitiatedById session.EmployeeId
+   let initiatedBy = session.AsInitiator
 
    let selectedPaymentType, setSelectedPaymentType =
       React.useState PaymentType.Platform

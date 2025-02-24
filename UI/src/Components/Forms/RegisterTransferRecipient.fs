@@ -27,7 +27,7 @@ type Values = {
 let domesticRecipientForm
    (org: Org)
    (editingDomesticRecipient: DomesticTransferRecipient option)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let fieldFirstName =
@@ -188,7 +188,7 @@ let domesticRecipientForm
 let form
    (org: Org)
    (editingDomesticRecipient: DomesticTransferRecipient option)
-   (initiatedBy: InitiatedById)
+   (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let fieldAccountEnvironment =
@@ -304,7 +304,7 @@ let RegisterTransferRecipientFormComponent
 
          OrgFormContainer {|
             InitialValues = formProps
-            Form = form org recipient (InitiatedById session.EmployeeId)
+            Form = form org recipient session.AsInitiator
             Action = None
             OnSubmit = onSubmit
          |}

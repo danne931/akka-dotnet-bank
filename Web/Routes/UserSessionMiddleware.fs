@@ -22,8 +22,7 @@ let getSession (context: HttpContext) =
       let session: UserSession = {
          EmployeeId = EmployeeId employeeId
          OrgId = OrgId orgId
-         FirstName = context.Session.GetString("FirstName")
-         LastName = context.Session.GetString("LastName")
+         Name = context.Session.GetString("Name")
          Email = email
          Role = role
       }

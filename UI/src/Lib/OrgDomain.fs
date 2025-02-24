@@ -24,11 +24,9 @@ module CommandApprovalProgress =
          (command: ApprovableCommand)
          : CommandApprovalProgress.RequestCommandApproval
          =
-         let initiatedBy = InitiatedById session.EmployeeId
-
          CommandApprovalProgress.RequestCommandApproval.create
             session.OrgId
-            initiatedBy
+            session.AsInitiator
             command.CorrelationId
             {
                RuleId = rule.RuleId
@@ -39,7 +37,7 @@ module CommandApprovalProgress =
                }
                RequesterIsConfiguredAsAnApprover =
                   CommandApprovalRule.isRequesterOneOfManyApprovers
-                     initiatedBy
+                     session.AsInitiator.Id
                      rule
             }
 

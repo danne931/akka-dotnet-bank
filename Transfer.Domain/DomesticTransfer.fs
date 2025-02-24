@@ -138,7 +138,7 @@ type BaseDomesticTransferInfo = {
    Recipient: DomesticTransferRecipient
    Amount: decimal
    TransferId: TransferId
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
    Memo: string option
    ScheduledDate: DateTime
 }
@@ -147,7 +147,7 @@ type DomesticTransfer = {
    Sender: DomesticTransferSender
    Recipient: DomesticTransferRecipient
    TransferId: TransferId
-   InitiatedBy: InitiatedById
+   InitiatedBy: Initiator
    Amount: decimal
    ScheduledDate: DateTime
    Status: DomesticTransferProgress

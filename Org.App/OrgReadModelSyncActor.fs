@@ -79,7 +79,8 @@ let sqlParamReducer
       "orgId",
       envelope.EntityId |> OrgId.fromEntityId |> OrgEventSqlWriter.orgId
 
-      "initiatedById", envelope.InitiatedById |> OrgEventSqlWriter.initiatedById
+      "initiatedById",
+      envelope.InitiatedBy.Id |> OrgEventSqlWriter.initiatedById
 
       "orgId", OrgEventSqlWriter.orgId envelope.OrgId
 
@@ -201,7 +202,7 @@ let sqlParamReducer
          "orgId", CommandApprovalProgressSqlMapper.Writer.orgId e.OrgId
 
          "requestedById",
-         e.InitiatedById |> CommandApprovalProgressSqlMapper.Writer.requestedBy
+         e.InitiatedBy.Id |> CommandApprovalProgressSqlMapper.Writer.requestedBy
 
          "status", CommandApprovalProgressSqlMapper.Writer.status status
 
