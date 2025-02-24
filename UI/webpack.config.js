@@ -23,7 +23,7 @@ module.exports = (env, argv) => {
         '/api': proxyUrl,
         '/login': proxyUrl,
         '/session': proxyUrl,
-        '/accountHub': {
+        '/bankHub': {
           target: 'ws://localhost:3000',
           ws: true
         }

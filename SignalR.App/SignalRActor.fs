@@ -15,12 +15,12 @@ open Lib.SharedTypes
 [<RequireQualifiedAccess>]
 type Msg =
    | AccountEventPersisted of AccountEventPersistedConfirmation
-   | Error of EventProcessingError
-   | CircuitBreaker of CircuitBreakerEvent
    | EmployeeEventPersisted of EmployeeEventPersistedConfirmation
    | OrgEventPersisted of OrgEventPersistedConfirmation
+   | Error of EventProcessingError
+   | CircuitBreaker of CircuitBreakerEvent
 
-let actorProps (hub: IHubContext<AccountHub, IAccountClient>) =
+let actorProps (hub: IHubContext<BankHub, IBankClient>) =
    let handler (ctx: Actor<_>) =
       PubSub.subscribePointToPoint (PubSub.get ctx.System) ctx.Self
 
@@ -32,14 +32,6 @@ let actorProps (hub: IHubContext<AccountHub, IAccountClient>) =
             hub.Clients
                .Group(string msg.Account.OrgId)
                .AccountEventPersistenceConfirmation(Serialization.serialize msg)
-            |> ignore
-         | Msg.Error err ->
-            hub.Clients
-               .Group(string err.OrgId)
-               .EventProcessingError(Serialization.serialize err)
-            |> ignore
-         | Msg.CircuitBreaker msg ->
-            hub.Clients.All.CircuitBreakerMessage(Serialization.serialize msg)
             |> ignore
          | Msg.EmployeeEventPersisted msg ->
             hub.Clients
@@ -53,9 +45,17 @@ let actorProps (hub: IHubContext<AccountHub, IAccountClient>) =
                .Group(string msg.Org.OrgId)
                .OrgEventPersistenceConfirmation(Serialization.serialize msg)
             |> ignore
+         | Msg.Error err ->
+            hub.Clients
+               .Group(string err.OrgId)
+               .EventProcessingError(Serialization.serialize err)
+            |> ignore
+         | Msg.CircuitBreaker msg ->
+            hub.Clients.All.CircuitBreakerMessage(Serialization.serialize msg)
+            |> ignore
       }
 
    props handler
 
-let start (system: ActorSystem) (hub: IHubContext<AccountHub, IAccountClient>) =
+let start (system: ActorSystem) (hub: IHubContext<BankHub, IBankClient>) =
    spawn system ActorMetadata.signalR.Name <| actorProps hub

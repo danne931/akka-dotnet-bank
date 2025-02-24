@@ -69,7 +69,7 @@ let command =
          }
       updateRoleWithSupplementaryCardInfo =
          UpdateRoleCommand.create compositeId initiator {
-            Name = "Dan Eis"
+            EmployeeName = "Dan Eis"
             PriorRole = Role.Admin
             Role = Role.CardOnly
             CardInfo =

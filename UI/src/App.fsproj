@@ -28,7 +28,7 @@
     <Compile Include="Routes.fs" />
     <Compile Include="Context/UserSessionProvider.fs" />
     <Compile Include="Context/SignalRConnectionProvider.fs" />
-    <Compile Include="Context/SignalRAccountEventProvider.fs" />
+    <Compile Include="Context/SignalREventProvider.fs" />
     <Compile Include="Context/OrgAndAccountProfileProvider.fs" />
     <Compile Include="Context/TransactionCategoryProvider.fs" />
     <Compile Include="Context/MerchantProvider.fs" />

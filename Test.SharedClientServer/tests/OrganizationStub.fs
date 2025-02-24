@@ -37,7 +37,7 @@ let domesticRecipient: DomesticTransferRecipient = {
 let command = {|
    updateRole =
       UpdateRoleCommand.create (Guid.NewGuid() |> EmployeeId, orgId) initiator {
-         Name = ""
+         EmployeeName = ""
          Role = Role.Admin
          PriorRole = Role.Scholar
          CardInfo = None

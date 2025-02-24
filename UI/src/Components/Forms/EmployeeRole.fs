@@ -58,7 +58,7 @@ let private form
       =
       let cmd =
          UpdateRoleCommand.create employee.CompositeId session.AsInitiator {
-            Name = employee.Name
+            EmployeeName = employee.Name
             PriorRole = employee.Role
             Role = role
             CardInfo = cardInfo

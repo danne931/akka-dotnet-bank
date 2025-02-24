@@ -18,7 +18,7 @@ let init () =
 let update msg state =
    match msg with
    | ConnectToSignalR Started ->
-      let connection = SignalR.buildConnection "/accountHub"
+      let connection = SignalR.buildConnection Constants.SIGNAL_R_HUB
 
       let connect = async {
          match! connection.start () with

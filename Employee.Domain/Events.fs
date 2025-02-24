@@ -75,7 +75,7 @@ type UnlockedCard = {
 }
 
 type RoleUpdated = {
-   Name: string
+   EmployeeName: string
    Role: Role
    PriorRole: Role
    CardInfo: EmployeeInviteSupplementaryCardInfo option

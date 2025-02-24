@@ -48,7 +48,7 @@ builder.Services.AddAkka(
    Env.config.AkkaSystemName,
    (fun builder provider ->
       let signalRHub =
-         provider.GetRequiredService<IHubContext<AccountHub, IAccountClient>>()
+         provider.GetRequiredService<IHubContext<BankHub, IBankClient>>()
 
       let initConfig =
          AkkaInfra.withClustering [|
@@ -148,7 +148,7 @@ app
 if app.Environment.IsDevelopment() then
    app.UseSwagger().UseSwaggerUI() |> ignore
 
-app.MapHub<AccountHub>("/accountHub") |> ignore
+app.MapHub<BankHub>(Constants.SIGNAL_R_HUB) |> ignore
 
 // Available at endpoint: /healthz/akka
 // Changing the default ResponseWriter to JsonResponseWriter
