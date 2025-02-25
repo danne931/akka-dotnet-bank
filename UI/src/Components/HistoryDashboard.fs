@@ -221,7 +221,8 @@ let renderTable (org: OrgWithAccountProfiles) (history: History list) =
       ]
    ]
 
-let renderPagination state dispatch =
+let renderPagination state dispatch = Html.none
+(*
    Pagination.render {|
       PaginatedResults = state.History
       Page = state.Query.Page
@@ -231,6 +232,7 @@ let renderPagination state dispatch =
             <| Msg.LoadHistory({ state.Query with Page = page }, Started)
       OnPageReset = fun () -> dispatch Msg.ResetPageIndex
    |}
+   *)
 
 let withoutPurchaseFilter =
    function
