@@ -39,12 +39,14 @@ type TransactionFilter =
 type State = {
    Transactions: Map<int, Deferred<TransactionsMaybe>>
    Query: TransactionQuery
+   Page: int
 }
 
 type Msg =
    | UpdateFilter of TransactionFilter
    | ResetPageIndex
    | LoadTransactions of
+      page: int *
       TransactionQuery *
       AsyncOperationStatus<TransactionsMaybe>
    | RefreshTransactions of TransactionQuery
@@ -54,6 +56,7 @@ let init (txnQuery: TransactionQuery) () =
    {
       Transactions = Map [ 1, Deferred.Idle ]
       Query = txnQuery
+      Page = 1
    },
    Cmd.none
 
@@ -96,33 +99,39 @@ let update msg state =
 
       state, Cmd.navigate (Routes.TransactionsUrl.queryPath browserQuery)
    | ResetPageIndex ->
-      let query = {
-         state.Query with
-            TransactionQuery.Page = 1
+      let state = {
+         state with
+            Page = 1
+            Query.Cursor = None
       }
 
-      { state with Query = query }, Cmd.none
+      state, Cmd.none
    | RefreshTransactions query ->
       let load = async {
          let! res = TransactionService.getTransactions query
-         return LoadTransactions(query, Finished res)
+         return LoadTransactions(1, query, Finished res)
       }
 
       {
          state with
-            Query = { query with Page = 1 }
+            Page = 1
+            Query = { query with Cursor = None }
             Transactions = Map [ 1, Deferred.InProgress ]
       },
       Cmd.fromAsync load
-   | LoadTransactions(query, Started) ->
+   | LoadTransactions(page, query, Started) ->
       let load = async {
          let! res = TransactionService.getTransactions query
-         return LoadTransactions(query, Finished res)
+         return LoadTransactions(page, query, Finished res)
       }
 
-      let page = query.Page
       let deferredPageData = state.Transactions.TryFind page
-      let state = { state with Query = query }
+
+      let state = {
+         state with
+            Page = page
+            Query = query
+      }
 
       match deferredPageData with
       | Some(Deferred.Resolved(Ok _)) when page <> 1 -> state, Cmd.none
@@ -133,17 +142,17 @@ let update msg state =
                   state.Transactions |> Map.add page Deferred.InProgress
          },
          Cmd.fromAsync load
-   | LoadTransactions(query, Finished(Ok txnsOpt)) ->
+   | LoadTransactions(page, _, Finished(Ok txnsOpt)) ->
       let resolvedTxns = Deferred.Resolved(Ok txnsOpt)
 
       {
          state with
             Transactions =
                state.Transactions
-               |> Map.change query.Page (Option.map (fun _ -> resolvedTxns))
+               |> Map.change page (Option.map (fun _ -> resolvedTxns))
       },
       Cmd.none
-   | LoadTransactions(query, Finished(Error err)) ->
+   | LoadTransactions(page, query, Finished(Error err)) ->
       Log.error $"Error loading transactions for query {query}: {err}"
 
       {
@@ -151,7 +160,7 @@ let update msg state =
             Transactions =
                state.Transactions
                |> Map.change
-                     query.Page
+                     page
                      (Option.map (fun _ -> Deferred.Resolved(Error err)))
       },
       Cmd.none
@@ -168,11 +177,30 @@ let update msg state =
 let renderPagination state dispatch =
    Pagination.render {|
       PaginatedResults = state.Transactions
-      Page = state.Query.Page
+      Page = state.Page
       OnPageChange =
          fun page ->
-            dispatch
-            <| Msg.LoadTransactions({ state.Query with Page = page }, Started)
+            let query = {
+               state.Query with
+                  Cursor =
+                     if page = 1 then
+                        None
+                     else
+                        state.Transactions.TryFind(page - 1)
+                        |> Option.bind (fun txnsOfPage ->
+                           match txnsOfPage with
+                           | Deferred.Resolved(Ok(Some txns)) ->
+                              txns
+                              |> List.tryLast
+                              |> Option.bind (fun txn ->
+                                 Some {
+                                    Timestamp = txn.Timestamp
+                                    TransactionId = txn.Id
+                                 })
+                           | _ -> None)
+            }
+
+            dispatch <| Msg.LoadTransactions(page, query, Started)
       OnPageReset = fun () -> dispatch ResetPageIndex
    |}
 
@@ -468,7 +496,7 @@ let TransactionTableComponent
       , [| box org.Org.OrgId; box browserQuery.ChangeDetection |]
    )
 
-   let txns = Map.tryFind state.Query.Page state.Transactions
+   let txns = Map.tryFind state.Page state.Transactions
 
    let displayTransaction (txn: Transaction.T) =
       let txn = {
@@ -501,6 +529,8 @@ let TransactionTableComponent
          match txns with
          | Some(Resolved(Ok None)) -> Html.p "No transactions found."
          | Some(Resolved(Ok(Some txns))) ->
+            let txns = [ for txn in txns -> txn.Id, txn ] |> Map.ofList
+
             let txns =
                signalRCtx.RealtimeAccountEvents
                |> List.filter (
