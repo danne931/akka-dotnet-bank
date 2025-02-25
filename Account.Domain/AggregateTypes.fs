@@ -691,5 +691,9 @@ module Transaction =
             }
       | None -> txns
 
-   let fromAccountEvents (events: AccountEvent list) : Map<TransactionId, T> =
-      events |> List.fold applyAccountEvent Map.empty
+   let fromAccountEvents (events: AccountEvent list) : T list =
+      events
+      |> List.fold applyAccountEvent Map.empty
+      |> _.Values
+      |> Seq.toList
+      |> List.sortByDescending (fun txn -> txn.Timestamp, txn.Id)

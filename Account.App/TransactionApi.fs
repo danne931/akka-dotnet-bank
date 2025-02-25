@@ -49,15 +49,32 @@ let filtersToOriginatingEventNames
 
 let transactionQuery (query: TransactionQuery) =
    let table = TransactionSqlMapper.table
-   let txnLimit = 30
 
    let agg =
-      [
-         "orgId", Writer.orgId query.OrgId
-         "offset", Sql.int <| Math.Max(query.Page - 1, 0) * txnLimit
-      ],
+      [ "orgId", Writer.orgId query.OrgId; "limit", Sql.int query.PageLimit ],
       $"{Fields.orgId} = @orgId",
       false
+
+   let agg =
+      Option.fold
+         (fun (queryParams, where, joinAncillary) cursor ->
+            let queryParams =
+               [
+                  "timestamp", Writer.timestamp cursor.Timestamp
+                  "txnId",
+                  cursor.TransactionId
+                  |> TransactionId.toCorrelationId
+                  |> Writer.correlationId
+               ]
+               @ queryParams
+
+            queryParams,
+            $"{where} AND
+              ({Fields.timestamp} < @timestamp OR
+              ({Fields.timestamp} = @timestamp AND {Fields.correlationId} < @txnId))",
+            joinAncillary)
+         agg
+         query.Cursor
 
    let agg =
       Option.fold
@@ -203,8 +220,7 @@ let transactionQuery (query: TransactionQuery) =
       {joinAncillaryTxnInfo |> Option.defaultValue ""}
       WHERE {where}
       ORDER BY {Fields.timestamp} desc
-      LIMIT {txnLimit}
-      OFFSET @offset
+      LIMIT @limit
    ),
    correlated_transactions AS (
       SELECT
@@ -220,12 +236,12 @@ let transactionQuery (query: TransactionQuery) =
    SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM matching_transactions
    UNION
    SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM correlated_transactions
-   ORDER BY {Fields.timestamp}, {Fields.correlationId}
+   ORDER BY {Fields.timestamp}
    """
 
 let getTransactions
    (query: TransactionQuery)
-   : TaskResultOption<Map<TransactionId, Transaction.T>, Err>
+   : TaskResultOption<Transaction.T list, Err>
    =
    taskResultOption {
       let queryParams, queryString = transactionQuery query
@@ -362,7 +378,7 @@ let getTransactionInfo
                Reader.note read)
 
       let events = res |> List.map (fun (e, _, _) -> e)
-      let txn = (Transaction.fromAccountEvents events)[txnId]
+      let txn = (Transaction.fromAccountEvents events).Head
       let _, category, note = List.head res
 
       return {
