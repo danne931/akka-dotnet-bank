@@ -73,8 +73,7 @@ let handlePaginationMsg (state: State) (msg: Pagination.Msg<Transaction.T>) =
          }
       onLoadError =
          fun page err ->
-            Log.error
-               $"Error loading transactions for page {page} query {query}: {err}"
+            Log.error $"Error loading transactions for page {page}: {err}"
    }
 
    let paginationState, paginationCmd =
@@ -442,9 +441,8 @@ let TransactionTableComponent
                txn.Events
                |> List.map (function
                   | AccountEvent.DebitedAccount e ->
-                     AccountEvent.DebitedAccount(
-                        debitWithMerchantAlias e merchants
-                     )
+                     debitWithMerchantAlias e merchants
+                     |> AccountEvent.DebitedAccount
                   | evt -> evt)
       }
 

@@ -91,8 +91,15 @@ module OrgEventGroupFilter =
          ""
          items
 
+/// Indicates the oldest History item within a "page".
+type HistoryCursor = {
+   Timestamp: DateTime
+   EventId: EventId
+}
+
 type HistoryQuery = {
-   Page: int
+   PageLimit: int
+   Cursor: HistoryCursor option
    DateRange: (DateTime * DateTime) option
    EmployeeEventType:
       (Bank.Employee.Domain.EmployeeEventGroupFilter list) option

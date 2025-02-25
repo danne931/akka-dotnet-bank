@@ -14,6 +14,7 @@ open History
 open TableControlPanel
 open EmployeeSearch
 open Lib.SharedTypes
+open Pagination
 
 [<RequireQualifiedAccess>]
 type HistoryFilterView =
@@ -34,78 +35,56 @@ type HistoryFilter =
 
 type State = {
    Query: HistoryQuery
-   History: Map<int, Deferred<HistoryMaybe>>
+   Pagination: Pagination.State<HistoryCursor, History>
+   RealtimeHistory: History list
 }
 
 type Msg =
-   | LoadHistory of HistoryQuery * AsyncOperationStatus<HistoryMaybe>
-   | RealtimeEventReceived of History
    | UpdateFilter of HistoryFilter
-   | ResetPageIndex
+   | PaginationMsg of Pagination.Msg<History>
+   | RealtimeHistoryReceived of History
 
 let init (browserQuery: HistoryBrowserQuery) () =
    let query = OrgService.networkQueryFromHistoryBrowserQuery browserQuery
+   let paginationState, cmd = Pagination.init<HistoryCursor, History> ()
 
    {
       Query = query
-      History = Map [ 1, Deferred.Idle ]
+      Pagination = paginationState
+      RealtimeHistory = []
    },
-   Cmd.ofMsg (LoadHistory(query, Started))
+   Cmd.map PaginationMsg cmd
+
+let handlePaginationMsg orgId (state: State) (msg: Pagination.Msg<History>) =
+   let config = {
+      PageLimit = state.Query.PageLimit
+      loadPage =
+         fun cursor -> async {
+            let query = { state.Query with Cursor = cursor }
+            return! OrgService.getHistory orgId query
+         }
+      getCursor =
+         fun history -> {
+            Timestamp = history.Envelope.Timestamp
+            EventId = history.Envelope.Id
+         }
+      onLoadError =
+         fun page err ->
+            Log.error $"Error loading history for page {page}: {err}"
+   }
+
+   let paginationState, paginationCmd =
+      Pagination.update config msg state.Pagination
+
+   {
+      state with
+         Pagination = paginationState
+   },
+   Cmd.map PaginationMsg paginationCmd
 
 let update orgId msg state =
    match msg with
-   | LoadHistory(query, Started) ->
-      let load = async {
-         let! res = OrgService.getHistory orgId query
-         return LoadHistory(query, Finished res)
-      }
-
-      {
-         Query = query
-         History = state.History |> Map.add query.Page Deferred.InProgress
-      },
-      Cmd.fromAsync load
-   | LoadHistory(query, Finished(Ok(history))) ->
-      let resolvedHistory = Deferred.Resolved(Ok history)
-
-      {
-         state with
-            History =
-               state.History
-               |> Map.change query.Page (Option.map (fun _ -> resolvedHistory))
-      },
-      Cmd.none
-   | LoadHistory(query, Finished(Error err)) ->
-      Log.error $"Error loading history for Page {query.Page}: {err}"
-
-      {
-         state with
-            History =
-               Map.change
-                  query.Page
-                  (Option.map (fun _ -> Deferred.Resolved(Error err)))
-                  state.History
-      },
-      Cmd.none
-   | RealtimeEventReceived evt ->
-      let resolved = Deferred.Resolved << Ok << Some
-
-      {
-         state with
-            History =
-               state.History
-               |> Map.change
-                     // NOTE: If the user is on page 3 and then goes back to
-                     // page 1 they will be able to see the realtime event that
-                     // came in while they were not on page 1.
-                     1
-                     (Option.map (fun history ->
-                        match history with
-                        | Deferred.Resolved(Ok(Some history)) ->
-                           resolved (evt :: history)
-                        | _ -> resolved [ evt ]))
-      },
-      Cmd.none
+   | PaginationMsg msg -> handlePaginationMsg orgId state msg
    | UpdateFilter filter ->
       let browserQuery = Routes.IndexUrl.historyBrowserQuery ()
 
@@ -129,13 +108,10 @@ let update orgId msg state =
          |> Router.encodeQueryString
 
       state, Cmd.navigate (Routes.HistoryUrl.BasePath, browserQueryParams)
-   | ResetPageIndex ->
+   | RealtimeHistoryReceived history ->
       {
          state with
-            Query = {
-               state.Query with
-                  HistoryQuery.Page = 1
-            }
+            RealtimeHistory = history :: state.RealtimeHistory
       },
       Cmd.none
 
@@ -221,18 +197,8 @@ let renderTable (org: OrgWithAccountProfiles) (history: History list) =
       ]
    ]
 
-let renderPagination state dispatch = Html.none
-(*
-   Pagination.render {|
-      PaginatedResults = state.History
-      Page = state.Query.Page
-      OnPageChange =
-         fun page ->
-            dispatch
-            <| Msg.LoadHistory({ state.Query with Page = page }, Started)
-      OnPageReset = fun () -> dispatch Msg.ResetPageIndex
-   |}
-   *)
+let renderPagination state dispatch =
+   Pagination.render state.Pagination (PaginationMsg >> dispatch)
 
 let withoutPurchaseFilter =
    function
@@ -443,7 +409,13 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
 
    let orgCtx = React.useContext OrgProvider.context
 
-   let history = Map.tryFind state.Query.Page state.History
+   let history = Map.tryFind state.Pagination.Page state.Pagination.Items
+
+   let realtimeHistory =
+      state.RealtimeHistory
+      |> List.filter (
+         keepRealtimeEventsCorrespondingToSelectedFilter state.Query
+      )
 
    SignalREventProvider.useEventSubscription {
       ComponentName = "HistoryDashboard"
@@ -483,12 +455,7 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
                      EmployeeName = conf.Employee.Name
                   }
 
-            if
-               keepRealtimeEventsCorrespondingToSelectedFilter
-                  state.Query
-                  history
-            then
-               dispatch (Msg.RealtimeEventReceived history))
+            dispatch (Msg.RealtimeHistoryReceived history))
    }
 
    classyNode Html.div [ "history-dashboard" ] [
@@ -511,6 +478,12 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
                      Html.small "Uh oh. Error getting history."
                   | _, Some(Resolved(Ok None)) -> Html.small "No history."
                   | Resolved(Ok(Some org)), Some(Resolved(Ok(Some history))) ->
+                     let history =
+                        if state.Pagination.Page = 1 then
+                           realtimeHistory @ history
+                        else
+                           history
+
                      if history.IsEmpty then
                         Html.small "No history."
                      else

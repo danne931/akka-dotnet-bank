@@ -48,7 +48,8 @@ let networkQueryFromHistoryBrowserQuery
    : HistoryQuery
    =
    {
-      Page = 1
+      PageLimit = 40
+      Cursor = None
       DateRange = query.Date |> Option.map UIDomain.DateFilter.toDateRange
       EmployeeEventType = query.EmployeeEventType
       AccountEventType = query.AccountEventType
@@ -117,7 +118,13 @@ let getOrgAndAccountProfiles
 let getHistory (orgId: OrgId) (query: HistoryQuery) : Async<HistoryMaybe> = async {
    let queryParams =
       [
-         "page", string query.Page
+         "pageLimit", string query.PageLimit
+
+         match query.Cursor with
+         | Some cursor ->
+            "cursorTimestamp", DateTime.toISOString cursor.Timestamp
+            "cursorEventId", string cursor.EventId
+         | None -> ()
 
          match query.InitiatedByIds with
          | None -> ()
