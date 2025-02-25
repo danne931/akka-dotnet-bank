@@ -17,6 +17,7 @@ open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
 open Lib.NetworkQuery
+open Lib.Time
 
 let startOrgRoutes (app: WebApplication) =
    app
@@ -162,10 +163,23 @@ let startOrgRoutes (app: WebApplication) =
    app
       .MapGet(
          OrgPath.History,
-         Func<Guid, int, string, string, string, string, string, Task<IResult>>
+         Func<
+            Guid,
+            Nullable<int>,
+            string,
+            Nullable<Guid>,
+            string,
+            string,
+            string,
+            string,
+            string,
+            Task<IResult>
+          >
             (fun
                  orgId
-                 ([<FromQuery>] page)
+                 ([<FromQuery>] pageLimit: Nullable<int>)
+                 ([<FromQuery>] cursorTimestamp: string)
+                 ([<FromQuery>] cursorEventId: Nullable<Guid>)
                  ([<FromQuery>] date)
                  ([<FromQuery>] employeeEventFilters)
                  ([<FromQuery>] accountEventFilters)
@@ -173,7 +187,19 @@ let startOrgRoutes (app: WebApplication) =
                  ([<FromQuery>] initiatedByIds) ->
                let query = {
                   DateRange = dateRangeFromQueryString date
-                  Page = page
+                  PageLimit =
+                     if pageLimit.HasValue then pageLimit.Value else 40
+                  Cursor =
+                     match
+                        cursorEventId.HasValue,
+                        DateTime.parseOptional cursorTimestamp
+                     with
+                     | true, Some ts ->
+                        Some {
+                           EventId = EventId cursorEventId.Value
+                           Timestamp = ts
+                        }
+                     | _ -> None
                   OrgEventType =
                      OrgEventGroupFilter.fromQueryString orgEventFilters
                   EmployeeEventType =

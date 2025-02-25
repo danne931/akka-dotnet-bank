@@ -144,7 +144,6 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
    let employeeEventTable = EmployeeEventSqlMapper.table
    let accountEventTable = TransactionSqlMapper.table
    let orgEventTable = OrganizationEventSqlMapper.table
-   let limit = 50
 
    let query =
       match
@@ -166,7 +165,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
 
    let queryParams = [
       "orgId", Writer.orgId orgId
-      "offset", Sql.int <| Math.Max(query.Page - 1, 0) * limit
+      "limit", Sql.int query.PageLimit
    ]
 
    let agg =
@@ -204,6 +203,29 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             })
          agg
          query.DateRange
+
+   let agg =
+      Option.fold
+         (fun (queryParams, where) (cursor: HistoryCursor) ->
+            let queryParams =
+               [
+                  "timestamp", Writer.timestamp cursor.Timestamp
+                  "eventId", Writer.eventId cursor.EventId
+               ]
+               @ queryParams
+
+            let cursorWhere =
+               $"({Fields.timestamp} < @timestamp OR
+                ({Fields.timestamp} = @timestamp AND {Fields.eventId} < @eventId))"
+
+            queryParams,
+            {
+               Employee = $"{where.Employee} AND {cursorWhere}"
+               Account = $"{where.Account} AND {cursorWhere}"
+               Org = $"{where.Org} AND {cursorWhere}"
+            })
+         agg
+         query.Cursor
 
    let agg =
       Option.fold
@@ -318,8 +340,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
          {historySubQueries}
 
          ORDER BY timestamp desc
-         LIMIT {limit}
-         OFFSET @offset
+         LIMIT @limit
       )
       JOIN {employeeTable} initiators ON {Fields.initiatedById} = initiators.{Fields.employeeId}
       ORDER BY timestamp desc

@@ -229,3 +229,9 @@ type History =
    | Org of OrgHistory
    | Account of AccountHistory
    | Employee of EmployeeHistory
+
+   member x.Envelope =
+      match x with
+      | Org h -> OrgEnvelope.unwrap h.Event |> snd
+      | Account h -> AccountEnvelope.unwrap h.Event |> snd
+      | Employee h -> EmployeeEnvelope.unwrap h.Event |> snd
