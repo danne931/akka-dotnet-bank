@@ -152,10 +152,17 @@ module TransactionGroupFilter =
          ""
          items
 
+/// Indicates the oldest Transaction within a "page" of transactions.
+type TransactionCursor = {
+   Timestamp: DateTime
+   TransactionId: TransactionId
+}
+
 type TransactionQuery = {
    OrgId: OrgId
    AccountIds: (AccountId list) option
-   Page: int
+   PageLimit: int
+   Cursor: TransactionCursor option
    MoneyFlow: MoneyFlow option
    Category: CategoryFilter option
    Amount: AmountFilter option

@@ -22,7 +22,8 @@ let transactionQueryFromAccountBrowserQuery
    {
       OrgId = orgId
       AccountIds = query.Accounts |> Option.map (List.map _.AccountId)
-      Page = 1
+      PageLimit = 30
+      Cursor = None
       Category = query.Category
       MoneyFlow = query.MoneyFlow
       Amount = query.Amount
@@ -36,7 +37,7 @@ let transactionQueryFromAccountBrowserQuery
 
 let transactionQueryParams (query: TransactionQuery) : (string * string) list =
    let queryParams =
-      ("page", string query.Page)
+      ("pageLimit", string query.PageLimit)
       :: AccountBrowserQuery.toQueryParams {
          Amount = query.Amount
          Category = query.Category
@@ -49,6 +50,16 @@ let transactionQueryParams (query: TransactionQuery) : (string * string) list =
          Action = None
          Transaction = None
       }
+
+   let queryParams =
+      match query.Cursor with
+      | Some cursor ->
+         [
+            "cursorTimestamp", DateTime.toISOString cursor.Timestamp
+            "cursorTransactionId", string cursor.TransactionId
+         ]
+         @ queryParams
+      | None -> queryParams
 
    let queryParams =
       match query.AccountIds with
@@ -85,11 +96,11 @@ let getTransactions (query: TransactionQuery) : Async<TransactionsMaybe> = async
    if code = 404 then
       return Ok None
    elif code <> 200 then
-      return Error <| Err.InvalidStatusCodeError("AccountService", code)
+      return Error <| Err.InvalidStatusCodeError(serviceName, code)
    else
       return
          responseText
-         |> Serialization.deserialize<Map<TransactionId, Transaction.T>>
+         |> Serialization.deserialize<Transaction.T list>
          |> Result.map Some
 }
 

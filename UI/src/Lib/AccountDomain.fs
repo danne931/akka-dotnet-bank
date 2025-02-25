@@ -14,7 +14,7 @@ type AccountProfilesMaybe = Result<Map<AccountId, AccountProfile> option, Err>
 
 type AccountMaybe = Result<Account option, Err>
 
-type TransactionsMaybe = Result<Map<TransactionId, Transaction.T> option, Err>
+type TransactionsMaybe = Result<Transaction.T list option, Err>
 
 type PaymentsMaybe = Result<PaymentSummary option, Err>
 
@@ -996,8 +996,7 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
       | Some filters ->
          filters |> List.exists (matchesTransactionGroupFilter evt)
 
-   query.Page = 1
-   && qualifiedDate
+   qualifiedDate
    && qualifiedAccount
    && qualifiedInitiator
    && qualifiedCard

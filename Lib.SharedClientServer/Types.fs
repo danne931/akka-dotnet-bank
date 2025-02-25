@@ -56,6 +56,10 @@ module TransactionId =
       let (TransactionId id) = txnId
       CorrelationId.get id
 
+   let toCorrelationId (id: TransactionId) : CorrelationId =
+      let (TransactionId txnId) = id
+      txnId
+
 type OrgId =
    | OrgId of Guid
 
