@@ -190,11 +190,9 @@ let getCards (orgId: OrgId) (query: CardQuery) =
    let table = CardSqlMapper.table
    let employeeTable = EmployeeSqlMapper.table
 
-   let dpaView =
-      TransactionSqlMapper.TransactionViews.dailyPurchaseAccruedByCard
+   let dpaView = AccountEventSqlMapper.Views.dailyPurchaseAccruedByCard
 
-   let mpaView =
-      TransactionSqlMapper.TransactionViews.monthlyPurchaseAccruedByCard
+   let mpaView = AccountEventSqlMapper.Views.monthlyPurchaseAccruedByCard
 
    let agg = [ "orgId", Writer.orgId orgId ], $"{table}.{Fields.orgId} = @orgId"
 

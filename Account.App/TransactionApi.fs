@@ -11,11 +11,17 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open CategorySqlMapper
 open AncillaryTransactionInfoSqlMapper
-open TransactionSqlMapper
 
-module Fields = TransactionFields
-module Writer = TransactionSqlWriter
-module Reader = TransactionSqlReader
+let table = AccountEventSqlMapper.table
+module Fields = AccountEventSqlMapper.Fields
+module Writer = AccountEventSqlMapper.SqlWriter
+module Reader = AccountEventSqlMapper.SqlReader
+module TypeCast = AccountEventSqlMapper.TypeCast
+
+module atiFields = AncillaryTransactionFields
+module atiWriter = AncillaryTransactionSqlWriter
+module atiReader = AncillaryTransactionSqlReader
+let private atiTable = AncillaryTransactionInfoSqlMapper.table
 
 let filtersToOriginatingEventNames
    (filters: TransactionGroupFilter list)
@@ -48,8 +54,6 @@ let filtersToOriginatingEventNames
    |> List.toArray
 
 let transactionQuery (query: TransactionQuery) =
-   let table = TransactionSqlMapper.table
-
    let agg =
       [ "orgId", Writer.orgId query.OrgId; "limit", Sql.int query.PageLimit ],
       $"{Fields.orgId} = @orgId",
@@ -130,7 +134,7 @@ let transactionQuery (query: TransactionQuery) =
          let queryParams, where, joinAncillary = agg
 
          ("direction", Writer.moneyFlow (Some direction)) :: queryParams,
-         $"{where} AND {Fields.moneyFlow} = @direction::{TransactionTypeCast.moneyFlow}",
+         $"{where} AND {Fields.moneyFlow} = @direction::{TypeCast.moneyFlow}",
          joinAncillary
 
    let agg =
@@ -209,7 +213,7 @@ let transactionQuery (query: TransactionQuery) =
 
    queryParams,
    $"""
-   WITH matching_transactions AS (
+   WITH matching_account_events AS (
       SELECT
          {Fields.event},
          {Fields.timestamp},
@@ -222,20 +226,20 @@ let transactionQuery (query: TransactionQuery) =
       ORDER BY {Fields.timestamp} desc
       LIMIT @limit
    ),
-   correlated_transactions AS (
+   correlated_account_events AS (
       SELECT
-         t.{Fields.event},
-         t.{Fields.timestamp},
-         t.{Fields.correlationId},
-         t.{Fields.eventId}
-      FROM {table} t
-      JOIN matching_transactions mt ON
-         t.{Fields.correlationId} = mt.{Fields.correlationId}
-         AND t.{Fields.eventId} != mt.{Fields.eventId}
+         correlated.{Fields.event},
+         correlated.{Fields.timestamp},
+         correlated.{Fields.correlationId},
+         correlated.{Fields.eventId}
+      FROM {table} correlated
+      JOIN matching_account_events matching ON
+         correlated.{Fields.correlationId} = matching.{Fields.correlationId}
+         AND correlated.{Fields.eventId} != matching.{Fields.eventId}
    )
-   SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM matching_transactions
+   SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM matching_account_events
    UNION
-   SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM correlated_transactions
+   SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM correlated_account_events
    ORDER BY {Fields.timestamp}
    """
 
@@ -254,75 +258,62 @@ let getTransactions
       return Transaction.fromAccountEvents events
    }
 
-module Fields = AncillaryTransactionFields
-module Writer = AncillaryTransactionSqlWriter
-module Reader = AncillaryTransactionSqlReader
-let private atiTable = AncillaryTransactionInfoSqlMapper.table
+let getTransactionInfo
+   (txnId: TransactionId)
+   : TaskResultOption<Transaction.TransactionWithAncillaryInfo, Err>
+   =
+   taskResultOption {
+      let fieldCorrelationId = $"{table}.{Fields.correlationId}"
 
-let upsertTransactionCategory (transactionId: TransactionId) (categoryId: int) = taskResult {
-   let query =
-      $"""
-      INSERT INTO {atiTable}
-         ({Fields.transactionId}, {Fields.categoryId})
-      VALUES
-         (@transactionId, @categoryId)
-      ON CONFLICT ({Fields.transactionId})
-      DO UPDATE SET {Fields.categoryId} = @categoryId
-      """
+      let query =
+         $"""
+         SELECT
+            {fieldCorrelationId},
+            {table}.{Fields.event},
+            {atiTable}.{atiFields.categoryId},
+            {atiTable}.{atiFields.note},
+            {CategorySqlMapper.table}.{CategoryFields.name} as category_name
+         FROM {table}
+            LEFT JOIN {atiTable}
+               ON {atiTable}.{atiFields.transactionId} = {fieldCorrelationId}
+            LEFT JOIN {CategorySqlMapper.table} using({atiFields.categoryId})
+         WHERE {fieldCorrelationId} = @transactionId
+         ORDER BY timestamp
+         """
 
-   let! res =
-      pgPersist query [
-         "transactionId", Writer.transactionId transactionId
-         "categoryId", Writer.categoryId (Some categoryId)
-      ]
+      let! res =
+         pgQuery<AccountEvent * TransactionCategory option * string option>
+            query
+            (Some [ "transactionId", atiWriter.transactionId txnId ])
+            (fun read ->
+               Reader.event read,
+               atiReader.categoryId read
+               |> Option.map (fun catId -> {
+                  Id = catId
+                  Name = read.string "category_name"
+               }),
+               atiReader.note read)
 
-   return res
-}
+      let events = res |> List.map (fun (e, _, _) -> e)
+      let txn = (Transaction.fromAccountEvents events).Head
+      let _, category, note = List.head res
 
-let deleteTransactionCategory (transactionId: TransactionId) =
-   let query =
-      $"""
-      UPDATE {atiTable}
-      SET {Fields.categoryId} = null
-      WHERE {Fields.transactionId} = @txnId
-      """
-
-   pgPersist query [ "txnId", Writer.transactionId transactionId ]
-
-let upsertTransactionNote (transactionId: TransactionId) (note: string) =
-   let query =
-      $"""
-      INSERT INTO {atiTable}
-         ({Fields.transactionId}, {Fields.note}, {Fields.categoryId})
-      VALUES
-         (@transactionId, @note, @categoryId)
-      ON CONFLICT ({Fields.transactionId})
-      DO UPDATE SET {Fields.note} = @note
-      """
-
-   pgPersist query [
-      "transactionId", Writer.transactionId transactionId
-      "note", Writer.note note
-      "categoryId", Writer.categoryId None
-   ]
-
-let getCategories () =
-   pgQuery<TransactionCategory>
-      "SELECT category_id, name FROM category"
-      None
-      (fun read -> {
-         Id = read.int "category_id"
-         Name = read.string "name"
-      })
+      return {
+         Id = txnId
+         Transaction = txn
+         Category = category
+         Note = note
+      }
+   }
 
 let getCorrelatedTransactionConfirmations (correlationId: CorrelationId) =
    let query =
       $"""
       SELECT
-         {TransactionSqlMapper.table}.{Fields.timestamp} as txn_timestamp,
-         {TransactionSqlMapper.table}.{Fields.event},
+         {table}.{Fields.timestamp} as txn_timestamp,
+         {table}.{Fields.event},
          {AccountSqlMapper.table}.*
-      FROM {TransactionSqlMapper.table}
+      FROM {table}
          JOIN {AccountSqlMapper.table} using({Fields.accountId})
       WHERE {Fields.correlationId} = @correlationId
       ORDER BY txn_timestamp DESC
@@ -339,52 +330,58 @@ let getCorrelatedTransactionConfirmations (correlationId: CorrelationId) =
       (Some [ "correlationId", Writer.correlationId correlationId ])
       rowReader
 
-let getTransactionInfo
-   (txnId: TransactionId)
-   : TaskResultOption<Transaction.TransactionWithAncillaryInfo, Err>
-   =
-   taskResultOption {
-      let fieldCorrelationId =
-         $"{TransactionSqlMapper.table}.{Fields.correlationId}"
+let upsertTransactionCategory (transactionId: TransactionId) (categoryId: int) = taskResult {
+   let query =
+      $"""
+      INSERT INTO {atiTable}
+         ({atiFields.transactionId}, {atiFields.categoryId})
+      VALUES
+         (@transactionId, @categoryId)
+      ON CONFLICT ({atiFields.transactionId})
+      DO UPDATE SET {atiFields.categoryId} = @categoryId
+      """
 
-      let fieldTxnId = $"{atiTable}.{Fields.transactionId}"
+   let! res =
+      pgPersist query [
+         "transactionId", atiWriter.transactionId transactionId
+         "categoryId", atiWriter.categoryId (Some categoryId)
+      ]
 
-      let query =
-         $"""
-         SELECT
-            {fieldCorrelationId},
-            {TransactionSqlMapper.table}.{Fields.event},
-            {atiTable}.{Fields.categoryId},
-            {atiTable}.{Fields.note},
-            {CategorySqlMapper.table}.{CategoryFields.name} as category_name
-         FROM {TransactionSqlMapper.table}
-            LEFT JOIN {atiTable} ON {fieldTxnId} = {fieldCorrelationId}
-            LEFT JOIN {CategorySqlMapper.table} using({Fields.categoryId})
-         WHERE {fieldCorrelationId} = @transactionId
-         ORDER BY timestamp
-         """
+   return res
+}
 
-      let! res =
-         pgQuery<AccountEvent * TransactionCategory option * string option>
-            query
-            (Some [ "transactionId", Writer.transactionId txnId ])
-            (fun read ->
-               Reader.event read,
-               Reader.categoryId read
-               |> Option.map (fun catId -> {
-                  Id = catId
-                  Name = read.string "category_name"
-               }),
-               Reader.note read)
+let deleteTransactionCategory (transactionId: TransactionId) =
+   let query =
+      $"""
+      UPDATE {atiTable}
+      SET {atiFields.categoryId} = null
+      WHERE {atiFields.transactionId} = @txnId
+      """
 
-      let events = res |> List.map (fun (e, _, _) -> e)
-      let txn = (Transaction.fromAccountEvents events).Head
-      let _, category, note = List.head res
+   pgPersist query [ "txnId", atiWriter.transactionId transactionId ]
 
-      return {
-         Id = txnId
-         Transaction = txn
-         Category = category
-         Note = note
-      }
-   }
+let upsertTransactionNote (transactionId: TransactionId) (note: string) =
+   let query =
+      $"""
+      INSERT INTO {atiTable}
+         ({atiFields.transactionId}, {atiFields.note}, {atiFields.categoryId})
+      VALUES
+         (@transactionId, @note, @categoryId)
+      ON CONFLICT ({atiFields.transactionId})
+      DO UPDATE SET {atiFields.note} = @note
+      """
+
+   pgPersist query [
+      "transactionId", atiWriter.transactionId transactionId
+      "note", atiWriter.note note
+      "categoryId", atiWriter.categoryId None
+   ]
+
+let getCategories () =
+   pgQuery<TransactionCategory>
+      "SELECT category_id, name FROM category"
+      None
+      (fun read -> {
+         Id = read.int "category_id"
+         Name = read.string "name"
+      })

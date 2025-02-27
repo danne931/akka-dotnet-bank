@@ -25,7 +25,7 @@ DROP TABLE IF EXISTS transfer;
 DROP TABLE IF EXISTS transfer_domestic_recipient;
 DROP TABLE IF EXISTS merchant;
 DROP TABLE IF EXISTS ancillarytransactioninfo;
-DROP TABLE IF EXISTS transaction;
+DROP TABLE IF EXISTS account_event;
 DROP TABLE IF EXISTS card;
 DROP TABLE IF EXISTS command_approval_progress;
 DROP TABLE IF EXISTS command_approval_rule_amount_daily_limit;
@@ -358,8 +358,8 @@ EXECUTE FUNCTION update_search_query();
 COMMENT ON COLUMN employee.search_query IS
 'search_query exists for text searches on employee name/email
 (see update_search_query_trigger above).  Being able to search by employee name/email
-comes in handy in dashboard forms and filtering transaction, employee_event, or
-employee tables in the UI.';
+comes in handy in dashboard forms and filtering transaction, history, or
+employees in the UI.';
 
 COMMENT ON COLUMN employee.onboarding_tasks IS
 'An employee may optionally be configured with onboarding tasks when they are
@@ -420,7 +420,7 @@ CREATE INDEX employee_event_initiated_by_id_idx ON employee_event(initiated_by_i
 COMMENT ON TABLE employee_event IS
 'Read model representation of Akka event sourced employee events.
 
-These events are not necessarily tied to account transactions.
+These events are not necessarily tied to account events.
 Ex:
 Creating a debit card, applying purchase limits to a card, locking a card,
 updating employee role, etc.';
@@ -462,10 +462,10 @@ When an employee makes a purchase with their card, funds will be
 deducted from the organization account the card is linked to.';
 
 
---- TRANSACTIONS ---
+--- ACCOUNT EVENTS ---
 CREATE TYPE money_flow AS ENUM ('In', 'Out');
 
-CREATE TABLE transaction (
+CREATE TABLE account_event (
    name VARCHAR(50) NOT NULL,
    amount MONEY,
    money_flow money_flow,
@@ -480,24 +480,24 @@ CREATE TABLE transaction (
    org_id UUID NOT NULL REFERENCES organization
 );
 
-SELECT add_created_at_column('transaction');
-SELECT prevent_update('transaction');
+SELECT add_created_at_column('account_event');
+SELECT prevent_update('account_event');
 
-CREATE INDEX transaction_account_id_idx ON transaction(account_id);
-CREATE INDEX transaction_initiated_by_id_idx ON transaction(initiated_by_id);
-CREATE INDEX transaction_card_id_idx ON transaction(card_id);
-CREATE INDEX transaction_org_id_timestamp_idx ON transaction(org_id, timestamp desc);
-CREATE INDEX transaction_timestamp_brin ON transaction USING BRIN(timestamp);
-CREATE INDEX transaction_accrued_amount_view_query_idx ON transaction(amount, name, timestamp);
+CREATE INDEX account_event_account_id_idx ON account_event(account_id);
+CREATE INDEX account_event_initiated_by_id_idx ON account_event(initiated_by_id);
+CREATE INDEX account_event_card_id_idx ON account_event(card_id);
+CREATE INDEX account_event_org_id_timestamp_idx ON account_event(org_id, timestamp desc);
+CREATE INDEX account_event_timestamp_brin ON account_event USING BRIN(timestamp);
+CREATE INDEX account_event_accrued_amount_view_query_idx ON account_event(amount, name, timestamp);
 
-COMMENT ON TABLE transaction IS
-'Transaction is the read model representation of Akka event sourced account events.';
-COMMENT ON COLUMN transaction.event IS
-'Representation of the transaction in its Akka event sourcing form.';
-COMMENT ON COLUMN transaction.source IS
-'Source may be a merchant name, transfer recipient name, etc. depending on the transaction type.
+COMMENT ON TABLE account_event IS
+'account_event is the read model representation of Akka event sourced account events.';
+COMMENT ON COLUMN account_event.event IS
+'Representation of the account_event in its Akka event sourcing form.';
+COMMENT ON COLUMN account_event.source IS
+'Source may be a merchant name, transfer recipient name, etc. depending on the account_event type.
 This property is used only for analytics queries.';
-COMMENT ON COLUMN transaction.correlation_id IS
+COMMENT ON COLUMN account_event.correlation_id IS
 'Correlation ID allows us to trace the lifecycle of some transaction
 (ex: DomesticTransferRequested -> DomesticTransferProgressUpdate -> DomesticTransferCompleted)
 is an example where 3 events share the same correlation_id.';
@@ -813,7 +813,7 @@ SELECT add_created_at_column('command_approval_rule_amount_daily_limit');
 SELECT add_updated_at_column_and_trigger('command_approval_rule_amount_daily_limit');
 
 
---- APPROVAL RULES to apply when a transaction amount is within some range ---
+--- APPROVAL RULES to apply when a account_event amount is within some range ---
 CREATE TABLE command_approval_rule_amount_per_command(
    rule_id UUID PRIMARY KEY REFERENCES command_approval_rule,
    org_id UUID REFERENCES organization,
@@ -854,7 +854,7 @@ BEGIN
          account_id,
          MIN(timestamp::date) AS start_date,
          (CURRENT_DATE - interval '1 day')::date AS end_date
-      FROM transaction
+      FROM account_event
       GROUP BY account_id
 
       UNION ALL
@@ -871,7 +871,7 @@ BEGIN
          account_id,
          timestamp::date AS date,
          SUM(CASE WHEN money_flow = 'In' THEN amount::numeric ELSE -amount::numeric END) AS daily_diff
-      FROM transaction
+      FROM account_event
       GROUP BY account_id, timestamp::date
    )
    SELECT
@@ -914,17 +914,17 @@ BEGIN
       COALESCE(
          SUM(
             CASE
-            WHEN t.money_flow = 'In' THEN t.amount::numeric
-            ELSE -t.amount::numeric
+            WHEN ae.money_flow = 'In' THEN ae.amount::numeric
+            ELSE -ae.amount::numeric
             END
          ),
          0
       ) AS balance
    FROM account
-   LEFT JOIN transaction t
-      ON t.account_id = account.account_id
-      AND t.money_flow IS NOT NULL
-      AND t.timestamp::date = yesterday
+   LEFT JOIN account_event ae
+      ON ae.account_id = account.account_id
+      AND ae.money_flow IS NOT NULL
+      AND ae.timestamp::date = yesterday
    JOIN balance_history bh
       ON bh.account_id = account.account_id
       -- Join on the balance_history date 1 day prior to yesterday.
@@ -959,12 +959,12 @@ BEGIN
       ds.day::date,
 
       COALESCE(
-         SUM(t.amount::numeric) filter(where t.money_flow = 'In'),
+         SUM(ae.amount::numeric) filter(where ae.money_flow = 'In'),
          0
       ) AS amount_in,
 
       COALESCE(
-         SUM(t.amount::numeric) filter(where t.money_flow = 'Out'),
+         SUM(ae.amount::numeric) filter(where ae.money_flow = 'Out'),
          0
       ) AS amount_out,
 
@@ -975,13 +975,13 @@ BEGIN
       FROM account
       WHERE account.org_id = orgId
    ) ids
-   LEFT JOIN transaction t
-      ON t.account_id = ids.account_id
-      AND t.timestamp::date = ds.day::date
-      AND t.money_flow IS NOT NULL
+   LEFT JOIN account_event ae
+      ON ae.account_id = ids.account_id
+      AND ae.timestamp::date = ds.day::date
+      AND ae.money_flow IS NOT NULL
       -- Exclude internal transfers within an org while
       -- still fetching internal transfers between orgs.
-      AND t.name NOT IN(
+      AND ae.name NOT IN(
          'InternalTransferWithinOrgPending',
          'InternalTransferWithinOrgFailed',
          'InternalTransferWithinOrgDeposited',
@@ -1012,12 +1012,12 @@ BEGIN
       months.month::date,
 
       COALESCE(
-         SUM(t.amount::numeric) filter(where t.money_flow = 'In'),
+         SUM(ae.amount::numeric) filter(where ae.money_flow = 'In'),
          0
       ) AS amount_in,
 
       COALESCE(
-         SUM(t.amount::numeric) filter(where t.money_flow = 'Out'),
+         SUM(ae.amount::numeric) filter(where ae.money_flow = 'Out'),
          0
       ) AS amount_out
    FROM generate_series(
@@ -1026,18 +1026,18 @@ BEGIN
       '1 month'
    ) AS months(month)
    LEFT JOIN LATERAL (
-      SELECT t.money_flow, t.amount
-      FROM transaction t
+      SELECT money_flow, amount
+      FROM account_event
       WHERE
          CASE
-            WHEN filterBy = 'Org' THEN t.org_id = filterId
-            WHEN filterBy = 'Account' THEN t.account_id = filterId
+            WHEN filterBy = 'Org' THEN org_id = filterId
+            WHEN filterBy = 'Account' THEN account_id = filterId
          END
-         AND t.money_flow IS NOT NULL
-         AND DATE_TRUNC('month', t.timestamp) = months.month
+         AND money_flow IS NOT NULL
+         AND DATE_TRUNC('month', timestamp) = months.month
          -- Exclude internal transfers within an org while
          -- still fetching internal transfers between orgs.
-         AND t.name NOT IN(
+         AND name NOT IN(
             'InternalTransferWithinOrgPending',
             'InternalTransferWithinOrgFailed',
             'InternalTransferWithinOrgDeposited',
@@ -1045,7 +1045,7 @@ BEGIN
             'InternalAutomatedTransferFailed',
             'InternalAutomatedTransferDeposited'
          )
-   ) t ON true
+   ) ae ON true
    GROUP BY months.month
    ORDER BY months.month;
 END
@@ -1065,19 +1065,19 @@ RETURNS TABLE (
 BEGIN
    RETURN QUERY
    SELECT
-      flow as money_flow,
-      COALESCE(SUM(t.amount::numeric), 0) AS amount,
-      t.source
-   FROM transaction t
+      flow AS money_flow,
+      COALESCE(SUM(ae.amount::numeric), 0) AS amount,
+      ae.source
+   FROM account_event ae
    WHERE
-      t.org_id = orgId
-      AND t.money_flow = flow
-      AND t.timestamp::date
+      org_id = orgId
+      AND ae.money_flow = flow
+      AND timestamp::date
          BETWEEN DATE_TRUNC('month', d)
          AND (DATE_TRUNC('month', d) + INTERVAL '1 month' - INTERVAL '1 day')
       -- Exclude internal transfers within an org while
       -- still fetching internal transfers between orgs.
-      AND t.name NOT IN(
+      AND name NOT IN(
          'InternalTransferWithinOrgPending',
          'InternalTransferWithinOrgFailed', 
          'InternalTransferWithinOrgDeposited',
@@ -1085,7 +1085,7 @@ BEGIN
          'InternalAutomatedTransferFailed',
          'InternalAutomatedTransferDeposited'
       )
-   GROUP BY t.source
+   GROUP BY ae.source
    ORDER BY amount DESC
    LIMIT topN;
 END
@@ -1104,19 +1104,19 @@ RETURNS TABLE (
 BEGIN
    RETURN QUERY
    SELECT
-      e.employee_id,
+      employee_event.employee_id,
       employee.first_name || ' ' || employee.last_name as employee_name,
-      COALESCE(SUM(t.amount::numeric), 0) AS amount
-   FROM employee_event e
-   JOIN transaction t using(correlation_id)
+      COALESCE(SUM(ae.amount::numeric), 0) AS amount
+   FROM employee_event
+   JOIN account_event ae using(correlation_id)
    JOIN employee using(employee_id)
    WHERE
-      e.org_id = orgId
-      AND e.name = 'PurchaseConfirmedByAccount'
-      AND e.timestamp::date
+      employee_event.org_id = orgId
+      AND employee_event.name = 'PurchaseConfirmedByAccount'
+      AND employee_event.timestamp::date
          BETWEEN DATE_TRUNC('month', d)
          AND (DATE_TRUNC('month', d) + INTERVAL '1 month' - INTERVAL '1 day')
-   GROUP BY e.employee_id, employee_name
+   GROUP BY employee_event.employee_id, employee_name
    ORDER BY amount DESC
    LIMIT topN;
 END
@@ -1126,7 +1126,7 @@ CREATE VIEW daily_purchase_accrued AS
 SELECT
    account_id,
    COALESCE(SUM(amount::numeric), 0) as amount_accrued
-FROM transaction
+FROM account_event
 WHERE
    amount IS NOT NULL
    AND name = 'DebitedAccount'
@@ -1137,7 +1137,7 @@ CREATE VIEW monthly_purchase_accrued AS
 SELECT
    account_id,
    COALESCE(SUM(amount::numeric), 0) as amount_accrued
-FROM transaction
+FROM account_event
 WHERE
    amount IS NOT NULL
    AND name = 'DebitedAccount'
@@ -1148,7 +1148,7 @@ CREATE VIEW daily_purchase_accrued_by_card AS
 SELECT
    card_id,
    COALESCE(SUM(amount::numeric), 0) as amount_accrued
-FROM transaction
+FROM account_event
 WHERE
    amount IS NOT NULL
    AND name = 'DebitedAccount'
@@ -1159,7 +1159,7 @@ CREATE VIEW monthly_purchase_accrued_by_card AS
 SELECT
    card_id,
    COALESCE(SUM(amount::numeric), 0) as amount_accrued
-FROM transaction
+FROM account_event
 WHERE
    amount IS NOT NULL
    AND name = 'DebitedAccount'
@@ -1187,17 +1187,17 @@ BEGIN
      COALESCE(
         SUM(
            CASE
-           WHEN t.name IN(
+           WHEN ae.name IN(
               'InternalTransferWithinOrgPending',
               'InternalAutomatedTransferPending'
            )
-           THEN t.amount::numeric
+           THEN ae.amount::numeric
 
-           WHEN t.name IN(
+           WHEN ae.name IN(
               'InternalTransferWithinOrgFailed',
               'InternalAutomatedTransferFailed'
            )
-           THEN -t.amount::numeric
+           THEN -ae.amount::numeric
 
            ELSE 0
            END
@@ -1208,11 +1208,11 @@ BEGIN
      COALESCE(
         SUM(
            CASE
-           WHEN t.name = 'InternalTransferBetweenOrgsPending'
-           THEN t.amount::numeric
+           WHEN ae.name = 'InternalTransferBetweenOrgsPending'
+           THEN ae.amount::numeric
 
-           WHEN t.name = 'InternalTransferBetweenOrgsFailed'
-           THEN -t.amount::numeric
+           WHEN ae.name = 'InternalTransferBetweenOrgsFailed'
+           THEN -ae.amount::numeric
 
            ELSE 0
            END
@@ -1223,8 +1223,8 @@ BEGIN
      COALESCE(
         SUM(
            CASE
-           WHEN t.name = 'DomesticTransferPending' THEN t.amount::numeric
-           WHEN t.name = 'DomesticTransferFailed' THEN -t.amount::numeric
+           WHEN ae.name = 'DomesticTransferPending' THEN ae.amount::numeric
+           WHEN ae.name = 'DomesticTransferFailed' THEN -ae.amount::numeric
            ELSE 0
            END
         ),
@@ -1234,29 +1234,29 @@ BEGIN
      COALESCE(
         SUM(
            CASE
-           WHEN t.name = 'PlatformPaymentPaid' THEN t.amount::numeric
+           WHEN ae.name = 'PlatformPaymentPaid' THEN ae.amount::numeric
            ELSE 0
            END
         ),
         0
      ) AS payment_paid_accrued
-  FROM transaction t
+  FROM account_event ae
   JOIN account using(account_id)
-  -- Transactions related to transfers are represented as "transfer" read models.
-  -- Transactions related to platform payments are represented as "payment_platform" read models.
+  -- Account events related to transfers are represented as "transfer" read models.
+  -- Account events related to platform payments are represented as "payment_platform" read models.
   -- Use LEFT JOIN instead of JOIN on transfer or we will miss out on payments paid metrics.
-  LEFT JOIN transfer ON t.correlation_id = transfer.transfer_id
+  LEFT JOIN transfer ON ae.correlation_id = transfer.transfer_id
   WHERE
-     t.org_id = orgId
-     AND t.amount IS NOT NULL
-     AND t.name IN (
+     ae.org_id = orgId
+     AND ae.amount IS NOT NULL
+     AND ae.name IN (
         'InternalAutomatedTransferPending', 'InternalAutomatedTransferFailed',
         'InternalTransferWithinOrgPending', 'InternalTransferWithinOrgFailed',
         'InternalTransferBetweenOrgsPending', 'InternalTransferBetweenOrgsFailed',
         'DomesticTransferPending', 'DomesticTransferFailed',
         'PlatformPaymentPaid'
      )
-     AND (account.last_billing_cycle_at IS NULL OR t.timestamp > account.last_billing_cycle_at)
+     AND (account.last_billing_cycle_at IS NULL OR ae.timestamp > account.last_billing_cycle_at)
      AND
        CASE
        WHEN timeFrame = 'Day'
@@ -1265,18 +1265,18 @@ BEGIN
           WHEN transfer.scheduled_at IS NOT NULL
           THEN transfer.scheduled_at::date = CURRENT_DATE
 
-          WHEN t.name = 'PlatformPaymentPaid'
-          THEN t.timestamp::date = CURRENT_DATE
+          WHEN ae.name = 'PlatformPaymentPaid'
+          THEN ae.timestamp::date = CURRENT_DATE
 
           ELSE false
           END
        WHEN timeFrame = 'Month'
        THEN
           CASE
-          WHEN t.name = 'PlatformPaymentPaid'
-          THEN t.timestamp::date >= date_trunc('month', CURRENT_DATE)
-          -- Transaction corresponds to a transfer rather than a payment.
-          -- Need to check it's scheduled_at date rather than transaction.timestamp.
+          WHEN ae.name = 'PlatformPaymentPaid'
+          THEN ae.timestamp::date >= date_trunc('month', CURRENT_DATE)
+          -- Account event corresponds to a transfer rather than a payment.
+          -- Need to check it's scheduled_at date rather than account_event.timestamp.
           ELSE transfer.scheduled_at::date >= date_trunc('month', CURRENT_DATE)
           END
        END
@@ -1295,7 +1295,7 @@ $$ LANGUAGE plpgsql;
 **/
 
 /**
- * Create a "system" user to represent transactions which do not originate
+ * Create a "system" user to represent account events which do not originate
  * from a human user.  Used in BillingCycleCommand, MaintenanceFeeCommand, etc.
 **/
 INSERT INTO organization (org_name, status, status_detail)

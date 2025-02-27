@@ -87,11 +87,10 @@ let getOrgAndAccountProfiles
    : Task<Result<Option<OrgWithAccountProfiles>, Err>>
    =
    taskResult {
-      let dpaView = TransactionSqlMapper.TransactionViews.dailyPurchaseAccrued
-      let mpaView = TransactionSqlMapper.TransactionViews.monthlyPurchaseAccrued
+      let dpaView = AccountEventSqlMapper.Views.dailyPurchaseAccrued
+      let mpaView = AccountEventSqlMapper.Views.monthlyPurchaseAccrued
 
-      let transferAccrued =
-         TransactionSqlMapper.TransactionFunctions.transferAccrued
+      let transferAccrued = AccountEventSqlMapper.Functions.transferAccrued
 
       let accountIdField = AccountSqlMapper.AccountFields.accountId
 

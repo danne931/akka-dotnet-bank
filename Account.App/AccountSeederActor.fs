@@ -17,7 +17,6 @@ open FsToolkit.ErrorHandling
 open Lib.SharedTypes
 open Lib.Postgres
 open EmployeeEventSqlMapper
-open TransactionSqlMapper
 open OrganizationEventSqlMapper
 open Bank.Account.Api
 open Bank.Org.Domain
@@ -26,6 +25,8 @@ open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open ActorUtil
 open AutomaticTransfer
+
+module aeFields = AccountEventSqlMapper.Fields
 
 let randomAmount min max =
    let rnd = new Random()
@@ -223,21 +224,21 @@ let paymentPayers = [
 
 let otherOrgs = socialTransferOrgs @ paymentRequesters @ paymentPayers
 
-// Disable transaction & employee_event update prevention triggers
+// Disable account_event & employee_event update prevention triggers
 // during seeding so can backdate the timestamps during seeding.
 let disableUpdatePreventionTriggers () =
    pgTransaction [
       "ALTER TABLE employee_event DISABLE TRIGGER prevent_update;", []
-      "ALTER TABLE transaction DISABLE TRIGGER prevent_update;", []
+      "ALTER TABLE account_event DISABLE TRIGGER prevent_update;", []
       "ALTER TABLE organization_event DISABLE TRIGGER prevent_update;", []
    ]
 
-// Ensure updates will not occur on employee_event & transaction tables
-// once seeding finished.
+// Ensure updates will not occur on employee_event & account_event
+// tables once seeding finished.
 let enableUpdatePreventionTriggers () =
    pgTransaction [
       "ALTER TABLE employee_event ENABLE TRIGGER prevent_update;", []
-      "ALTER TABLE transaction ENABLE TRIGGER prevent_update;", []
+      "ALTER TABLE account_event ENABLE TRIGGER prevent_update;", []
       "ALTER TABLE organization_event ENABLE TRIGGER prevent_update;", []
    ]
 
@@ -289,7 +290,7 @@ let enableOrgSocialTransferDiscovery
 // Initial employee purchase requests are configured with timestamps
 // in the past.  However, subsequent employee purchase approval/decline
 // in the employee_event table as well as recording of debits in the
-// account transaction table have current timestamps since we
+// account_event table have current timestamps since we
 // don't have control over the creation of system-produced events.
 // The same goes for InternalTransferBetweenOrgsDeposited where we have control
 // over the timestamp of the initial request but need to modify timestamps
@@ -306,9 +307,9 @@ let seedBalanceHistory () = taskResultOption {
 
       UNION ALL
 
-      SELECT {TransactionFields.timestamp}, {TransactionFields.correlationId}
-      FROM {TransactionSqlMapper.table}
-      WHERE {TransactionFields.name} = 'InternalTransferBetweenOrgsPending'
+      SELECT {aeFields.timestamp}, {aeFields.correlationId}
+      FROM {AccountEventSqlMapper.table}
+      WHERE {aeFields.name} = 'InternalTransferBetweenOrgsPending'
 
       UNION ALL
 
@@ -349,18 +350,18 @@ let seedBalanceHistory () = taskResultOption {
       sqlParams
 
       $"""
-      UPDATE {TransactionSqlMapper.table}
+      UPDATE {AccountEventSqlMapper.table}
       SET
-         {TransactionFields.timestamp} = @timestamp,
-         {TransactionFields.event} = jsonb_set(
-            {TransactionFields.event},
+         {aeFields.timestamp} = @timestamp,
+         {aeFields.event} = jsonb_set(
+            {aeFields.event},
             '{{1,Timestamp}}',
             to_jsonb(@timestamp),
             false
          )
       WHERE
-         {TransactionFields.correlationId} = @correlationId
-         AND {TransactionFields.name} <> 'InternalTransferBetweenOrgsPending';
+         {aeFields.correlationId} = @correlationId
+         AND {aeFields.name} <> 'InternalTransferBetweenOrgsPending';
       """,
       sqlParams
 

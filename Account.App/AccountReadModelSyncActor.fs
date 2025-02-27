@@ -11,10 +11,13 @@ open Lib.Postgres
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open AccountSqlMapper
-open TransactionSqlMapper
 open PaymentSqlMapper
 open TransferSqlMapper
 open Lib.ReadModelSyncActor
+
+module aeSqlMapper = AccountEventSqlMapper
+module aeSqlWriter = AccountEventSqlMapper.SqlWriter
+module aeFields = AccountEventSqlMapper.Fields
 
 let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [
    "paymentId", PaymentSqlWriter.paymentId p.Id
@@ -119,23 +122,20 @@ let sqlParamReducer
    let evt, envelope = AccountEnvelope.unwrap evt
 
    let transactionSqlParams = [
-      "eventId", TransactionSqlWriter.eventId envelope.Id
+      "eventId", aeSqlWriter.eventId envelope.Id
 
       "accountId",
-      envelope.EntityId
-      |> AccountId.fromEntityId
-      |> TransactionSqlWriter.accountId
+      envelope.EntityId |> AccountId.fromEntityId |> aeSqlWriter.accountId
 
-      "orgId", TransactionSqlWriter.orgId envelope.OrgId
+      "orgId", aeSqlWriter.orgId envelope.OrgId
 
-      "correlationId", TransactionSqlWriter.correlationId envelope.CorrelationId
+      "correlationId", aeSqlWriter.correlationId envelope.CorrelationId
 
-      "initiatedById",
-      TransactionSqlWriter.initiatedById envelope.InitiatedBy.Id
+      "initiatedById", aeSqlWriter.initiatedById envelope.InitiatedBy.Id
 
-      "name", TransactionSqlWriter.name envelope.EventName
-      "timestamp", TransactionSqlWriter.timestamp envelope.Timestamp
-      "event", TransactionSqlWriter.event evt
+      "name", aeSqlWriter.name envelope.EventName
+      "timestamp", aeSqlWriter.timestamp envelope.Timestamp
+      "event", aeSqlWriter.event evt
    ]
 
    let amountOpt, moneyFlowOpt, sourceOpt = AccountEvent.moneyTransaction evt
@@ -143,12 +143,12 @@ let sqlParamReducer
    let transactionSqlParams =
       transactionSqlParams
       @ [
-         "amount", TransactionSqlWriter.amount amountOpt
-         "moneyFlow", TransactionSqlWriter.moneyFlow moneyFlowOpt
-         "source", TransactionSqlWriter.source sourceOpt
+         "amount", aeSqlWriter.amount amountOpt
+         "moneyFlow", aeSqlWriter.moneyFlow moneyFlowOpt
+         "source", aeSqlWriter.source sourceOpt
 
          "cardId",
-         TransactionSqlWriter.cardId (
+         aeSqlWriter.cardId (
             match evt with
             | AccountEvent.DebitedAccount e ->
                Some e.Data.EmployeePurchaseReference.CardId
@@ -543,19 +543,19 @@ let upsertReadModels
       accountSqlParams
 
       $"""
-      INSERT into {TransactionSqlMapper.table}
-         ({TransactionFields.eventId},
-          {TransactionFields.accountId},
-          {TransactionFields.orgId},
-          {TransactionFields.correlationId},
-          {TransactionFields.initiatedById},
-          {TransactionFields.cardId},
-          {TransactionFields.name},
-          {TransactionFields.timestamp},
-          {TransactionFields.event},
-          {TransactionFields.amount},
-          {TransactionFields.source},
-          {TransactionFields.moneyFlow})
+      INSERT into {aeSqlMapper.table}
+         ({aeFields.eventId},
+          {aeFields.accountId},
+          {aeFields.orgId},
+          {aeFields.correlationId},
+          {aeFields.initiatedById},
+          {aeFields.cardId},
+          {aeFields.name},
+          {aeFields.timestamp},
+          {aeFields.event},
+          {aeFields.amount},
+          {aeFields.source},
+          {aeFields.moneyFlow})
       VALUES
          (@eventId,
           @accountId,
@@ -568,8 +568,8 @@ let upsertReadModels
           @event,
           @amount,
           @source,
-          @moneyFlow::{TransactionTypeCast.moneyFlow})
-      ON CONFLICT ({TransactionFields.eventId})
+          @moneyFlow::{aeSqlMapper.TypeCast.moneyFlow})
+      ON CONFLICT ({aeFields.eventId})
       DO NOTHING;
       """,
       sqlParamsDerivedFromAccountEvents.Transaction
