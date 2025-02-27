@@ -142,7 +142,7 @@ type private HistoryWhere = {
 let getHistory (orgId: OrgId) (query: HistoryQuery) =
    let employeeTable = EmployeeSqlMapper.table
    let employeeEventTable = EmployeeEventSqlMapper.table
-   let accountEventTable = TransactionSqlMapper.table
+   let accountEventTable = AccountEventSqlMapper.table
    let orgEventTable = OrganizationEventSqlMapper.table
 
    let query =
@@ -300,7 +300,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             '' as employee_name,
             timestamp,
             initiated_by_id,
-            transaction.event
+            {accountEventTable}.event
          FROM {accountEventTable}
          WHERE {where.Account}
          """)
@@ -360,7 +360,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
       | "account" ->
          History.Account {
             InitiatedByName = initiator
-            Event = TransactionSqlMapper.TransactionSqlReader.event read
+            Event = AccountEventSqlMapper.SqlReader.event read
          }
       | "org" ->
          History.Org {

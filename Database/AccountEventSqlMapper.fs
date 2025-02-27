@@ -1,4 +1,4 @@
-module TransactionSqlMapper
+module AccountEventSqlMapper
 
 open System
 
@@ -8,14 +8,14 @@ open AccountSqlMapper
 open OrganizationSqlMapper
 open CardSqlMapper
 
-let table = "transaction"
+let table = "account_event"
 
-module TransactionTypeCast =
+module TypeCast =
    let timeFrame = "time_frame"
    let moneyFlow = "money_flow"
    let timeSeriesMonthlyFilterBy = "monthly_time_series_filter_by"
 
-module TransactionFunctions =
+module Functions =
    let employeePurchaserTopNMonthly = "purchase_top_n_employees_by_month"
    let moneyFlowTopNMonthly = "money_flow_top_n_source_by_month"
 
@@ -25,13 +25,13 @@ module TransactionFunctions =
 
    let transferAccrued = "transfer_accrued"
 
-module TransactionViews =
+module Views =
    let dailyPurchaseAccrued = "daily_purchase_accrued"
    let monthlyPurchaseAccrued = "monthly_purchase_accrued"
    let dailyPurchaseAccruedByCard = "daily_purchase_accrued_by_card"
    let monthlyPurchaseAccruedByCard = "monthly_purchase_accrued_by_card"
 
-module TransactionFields =
+module Fields =
    let eventId = "event_id"
    let accountId = AccountFields.accountId
    let orgId = OrgFields.orgId
@@ -45,43 +45,37 @@ module TransactionFields =
    let timestamp = "timestamp"
    let event = "event"
 
-module TransactionSqlReader =
-   let eventId (read: RowReader) =
-      TransactionFields.eventId |> read.uuid |> EventId
+module SqlReader =
+   let eventId (read: RowReader) = Fields.eventId |> read.uuid |> EventId
 
    let accountId = AccountSqlReader.accountId
 
    let orgId = OrgSqlReader.orgId
 
    let correlationId (read: RowReader) =
-      TransactionFields.correlationId |> read.uuid |> CorrelationId
+      Fields.correlationId |> read.uuid |> CorrelationId
 
    let initiatedById =
       EmployeeEventSqlMapper.EmployeeEventSqlReader.initiatedById
 
    let cardId (read: RowReader) : CardId option =
-      read.uuidOrNone TransactionFields.cardId |> Option.map CardId
+      read.uuidOrNone Fields.cardId |> Option.map CardId
 
-   let name (read: RowReader) = read.text TransactionFields.name
+   let name (read: RowReader) = read.text Fields.name
 
-   let amount (read: RowReader) =
-      read.decimalOrNone TransactionFields.amount
+   let amount (read: RowReader) = read.decimalOrNone Fields.amount
 
    let moneyFlow (read: RowReader) =
-      read.stringOrNone TransactionFields.moneyFlow
-      |> Option.bind MoneyFlow.fromString
+      read.stringOrNone Fields.moneyFlow |> Option.bind MoneyFlow.fromString
 
-   let source (read: RowReader) =
-      read.stringOrNone TransactionFields.source
+   let source (read: RowReader) = read.stringOrNone Fields.source
 
-   let timestamp (read: RowReader) =
-      read.dateTime TransactionFields.timestamp
+   let timestamp (read: RowReader) = read.dateTime Fields.timestamp
 
    let event (read: RowReader) =
-      read.text TransactionFields.event
-      |> Serialization.deserializeUnsafe<AccountEvent>
+      read.text Fields.event |> Serialization.deserializeUnsafe<AccountEvent>
 
-module TransactionSqlWriter =
+module SqlWriter =
    let eventId (evtId: EventId) =
       let (EventId id) = evtId
       Sql.uuid id

@@ -9,11 +9,7 @@ open Lib.Postgres
 open Lib.Time
 open Bank.Org.Domain
 open Bank.Account.Domain
-open TransactionSqlMapper
-
-module Fields = TransactionFields
-module Writer = TransactionSqlWriter
-module Reader = TransactionSqlReader
+open AccountEventSqlMapper
 
 type private MoneyFlowAnalyticsDBResult =
    | TimeSeriesDaily of MoneyFlowDailyTimeSeriesAnalytics option
@@ -58,18 +54,18 @@ let moneyFlowTopNAnalytics
    taskResultOption {
       let query =
          $"""
-         SELECT * FROM {TransactionFunctions.moneyFlowTopNMonthly}(
+         SELECT * FROM {Functions.moneyFlowTopNMonthly}(
             @orgId,
-            @flowIn::{TransactionTypeCast.moneyFlow},
+            @flowIn::{TypeCast.moneyFlow},
             @topN,
             @date
          )
 
          UNION ALL
 
-         SELECT * FROM {TransactionFunctions.moneyFlowTopNMonthly}(
+         SELECT * FROM {Functions.moneyFlowTopNMonthly}(
             @orgId,
-            @flowOut::{TransactionTypeCast.moneyFlow},
+            @flowOut::{TypeCast.moneyFlow},
             @topN,
             @date
          )
@@ -86,7 +82,7 @@ let moneyFlowTopNAnalytics
       let! topN =
          pgQuery<MoneyFlowTopN> query (Some qParams) (fun read -> {
             MoneyFlow =
-               match Reader.moneyFlow read with
+               match SqlReader.moneyFlow read with
                | Some flow -> flow
                | None ->
                   failwith "Error attempting to cast string to MoneyFlow"
@@ -106,7 +102,7 @@ let employeePurchaseTopNAnalytics
    =
    let query =
       $"""
-      SELECT * FROM {TransactionFunctions.employeePurchaserTopNMonthly}(
+      SELECT * FROM {Functions.employeePurchaserTopNMonthly}(
          @orgId,
          @topN,
          @date
@@ -159,7 +155,7 @@ let moneyFlowDailyTimeSeriesAnalytics
             ) AS prev_balance,
 
             bh.balance
-         FROM {TransactionFunctions.moneyFlowTimeSeriesDaily}(
+         FROM {Functions.moneyFlowTimeSeriesDaily}(
             @orgId,
             @startDate,
             @endDate
@@ -192,7 +188,7 @@ let moneyFlowDailyTimeSeriesAnalytics
                   t.amount_in,
                   t.amount_out,
                   t.amount_in - t.amount_out AS daily_diff
-               FROM {TransactionFunctions.moneyFlowTimeSeriesDaily}(
+               FROM {Functions.moneyFlowTimeSeriesDaily}(
                   @orgId,
                   CURRENT_DATE,
                   CURRENT_DATE
@@ -215,7 +211,7 @@ let moneyFlowDailyTimeSeriesAnalytics
 
                {
                   Day = read.dateTime "date"
-                  AccountId = Reader.accountId read
+                  AccountId = SqlReader.accountId read
                   AmountIn = read.decimal "amount_in"
                   AmountOut = read.decimal "amount_out"
                   BalanceHistory = {
@@ -289,8 +285,8 @@ let moneyFlowMonthlyTimeSeriesAnalytics
 
       let query =
          $"SELECT * 
-           FROM {TransactionFunctions.moneyFlowTimeSeriesMonthly}(
-              @filterBy::{TransactionTypeCast.timeSeriesMonthlyFilterBy},
+           FROM {Functions.moneyFlowTimeSeriesMonthly}(
+              @filterBy::{TypeCast.timeSeriesMonthlyFilterBy},
               @filterId,
               @lookbackMonths
            )"
