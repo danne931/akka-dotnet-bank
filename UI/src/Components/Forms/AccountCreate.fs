@@ -92,4 +92,5 @@ let AccountCreateFormComponent
       Form = form session
       Action = None
       OnSubmit = onSubmit
+      Session = session
    |}

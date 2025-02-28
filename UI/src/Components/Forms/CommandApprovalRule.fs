@@ -452,6 +452,7 @@ let CommandApprovalRuleEditFormComponent
       Form = ruleEditForm org employees session rule
       OnSubmit = onSubmit
       Action = Some(customFormSubmit onCancel)
+      Session = session
    |}
 
 [<ReactComponent>]
@@ -477,4 +478,5 @@ let CommandApprovalRuleCreateFormComponent
       Form = ruleCreateForm org employees session
       OnSubmit = onSubmit
       Action = Some(customFormSubmit onCancel)
+      Session = session
    |}

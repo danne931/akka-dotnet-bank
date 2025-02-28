@@ -18,6 +18,7 @@ open Bank.Transfer.Domain
 open Lib.SharedTypes
 open EmployeeSearch
 open TransactionDetail
+open SignalRBroadcast
 
 let navigation (view: AccountActionView option) =
    {
@@ -26,17 +27,23 @@ let navigation (view: AccountActionView option) =
    }
    |> Routes.TransactionsUrl.queryPath
 
+type PendingAction = {
+   Envelope: Envelope
+   Name: string
+   CommandPendingApproval: bool
+   RedirectTo: AccountActionView option
+}
+
 type State = {
-   PendingAction: Envelope option
+   PendingAction: PendingAction option
    EventsReceivedViaSignalRWhenNoPendingAction: Set<CorrelationId>
 }
 
 type Msg =
    | Cancel
-   | NetworkAckCommand of Envelope
-   | AccountEventReceived of CorrelationId
-   | CheckForEventConfirmation of Envelope * attemptNumber: int
-   | SubmitCommandForApproval of action: string
+   | NetworkAckCommand of PendingAction
+   | SignalREventReceived of CorrelationId
+   | CheckForEventConfirmation of PendingAction * attemptNumber: int
    | Noop
 
 let init () =
@@ -46,27 +53,24 @@ let init () =
    },
    Cmd.none
 
-let closeForm state =
-   { state with PendingAction = None }, Cmd.navigate (navigation None)
-
 // HTTP request returned 200. Command accepted by network.  Wait
 // for account actor cluster to successfully process the command into
 // an event and send out a confirmation via SignalR.
-let networkAck (state: State) (envelope: Envelope) =
+let networkAck (state: State) (action: PendingAction) =
    // Fixes SignalR event dispatched from account actor received before network ack
    let signalREventReceivedBeforeNetworkResponseReceived =
       state.EventsReceivedViaSignalRWhenNoPendingAction
-      |> Set.contains envelope.CorrelationId
+      |> Set.contains action.Envelope.CorrelationId
 
    if signalREventReceivedBeforeNetworkResponseReceived then
-      closeForm state
+      { state with PendingAction = None }, Cmd.navigate (navigation None)
    else
       let state = {
          state with
-            PendingAction = Some envelope
+            PendingAction = Some action
       }
 
-      let delayedMsg = Msg.CheckForEventConfirmation(envelope, 1)
+      let delayedMsg = Msg.CheckForEventConfirmation(action, 1)
 
       state, Cmd.fromTimeout 3000 delayedMsg
 
@@ -78,7 +82,7 @@ let update
    match msg with
    | Cancel -> state, Cmd.navigate (navigation None)
    | NetworkAckCommand envelope -> networkAck state envelope
-   | AccountEventReceived correlationId when state.PendingAction.IsNone ->
+   | SignalREventReceived correlationId when state.PendingAction.IsNone ->
       {
          state with
             EventsReceivedViaSignalRWhenNoPendingAction =
@@ -86,13 +90,26 @@ let update
                |> Set.add correlationId
       },
       Cmd.none
-   | AccountEventReceived correlationId ->
+   | SignalREventReceived correlationId ->
       match state.PendingAction with
-      | Some envelope when envelope.CorrelationId = correlationId ->
-         closeForm state
+      | Some action when action.Envelope.CorrelationId = correlationId ->
+         let state = { state with PendingAction = None }
+         let redirectCmd = Cmd.navigate (navigation action.RedirectTo)
+
+         let cmd =
+            if action.CommandPendingApproval then
+               Cmd.batch [
+                  redirectCmd
+                  Alerts.toastSuccessCommand
+                     $"Submitted {action.Name} for approval."
+               ]
+            else
+               redirectCmd
+
+         state, cmd
       | _ -> state, Cmd.none
    // Verify the PendingAction was persisted.
-   // If a SignalR event doesn't dispatch a Msg.AccountEventReceived within
+   // If a SignalR event doesn't dispatch a Msg.SignalREventReceived within
    // a few seconds of the initial network request to process the command then
    // assume the SignalR message or connection was dropped. Revert to
    // polling for the latest account read model state.
@@ -107,11 +124,13 @@ let update
          state, Cmd.none
       else
          match state.PendingAction with
-         | Some action when action.CorrelationId = commandResponse.CorrelationId ->
+         | Some action when
+            action.Envelope.CorrelationId = commandResponse.Envelope.CorrelationId
+            ->
             let getReadModel = async {
                let! confirmationMaybe =
                   TransactionService.getCorrelatedTransactionConfirmations
-                     commandResponse.CorrelationId
+                     commandResponse.Envelope.CorrelationId
 
                match confirmationMaybe with
                | Error e ->
@@ -127,12 +146,6 @@ let update
 
             state, Cmd.fromAsync getReadModel
          | _ -> state, Cmd.none
-   | SubmitCommandForApproval action ->
-      state,
-      Cmd.batch [
-         Alerts.toastSuccessCommand $"Submitted {action} for approval."
-         Cmd.navigate (navigation None)
-      ]
    | Noop -> state, Cmd.none
 
 let private renderMenuButton (view: AccountActionView) =
@@ -178,7 +191,6 @@ let private renderActionMenu () =
 
 let private renderAccountActions
    dispatch
-   orgDispatch
    session
    org
    (view: AccountActionView)
@@ -190,10 +202,15 @@ let private renderAccountActions
 
       match view with
       | AccountActionView.Deposit ->
-         DepositForm.DepositFormComponent
-            session
-            org
-            (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
+         DepositForm.DepositFormComponent session org (fun receipt ->
+            {
+               Envelope = receipt.Envelope
+               Name = "Deposit"
+               CommandPendingApproval = false
+               RedirectTo = None
+            }
+            |> Msg.NetworkAckCommand
+            |> dispatch)
       | AccountActionView.RegisterTransferRecipient ->
          RegisterTransferRecipientForm.RegisterTransferRecipientFormComponent
             session
@@ -202,18 +219,20 @@ let private renderAccountActions
             (fun conf ->
                match conf.PendingEvent with
                | OrgEvent.RegisteredDomesticTransferRecipient e ->
-                  conf.PendingCommand
-                  |> OrgProvider.Msg.OrgCommand
-                  |> orgDispatch
+                  let recipientId = e.Data.Recipient.RecipientAccountId
 
-                  let redirectTo =
-                     (RecipientAccountEnvironment.Domestic,
-                      e.Data.Recipient.RecipientAccountId)
-                     |> Some
-                     |> AccountActionView.Transfer
-                     |> Some
-
-                  Router.navigate (navigation redirectTo)
+                  {
+                     Envelope = conf.Envelope
+                     Name = "Domestic Transfer Recipient"
+                     CommandPendingApproval = false
+                     RedirectTo =
+                        (RecipientAccountEnvironment.Domestic, recipientId)
+                        |> Some
+                        |> AccountActionView.Transfer
+                        |> Some
+                  }
+                  |> Msg.NetworkAckCommand
+                  |> dispatch
                | evt ->
                   Log.error
                      $"Unknown evt {evt} in RegisterTransferRecipient submit handler")
@@ -222,30 +241,38 @@ let private renderAccountActions
             session
             org.Org
             (Some accountId)
-            (fun conf ->
-               match conf.PendingEvent with
-               | OrgEvent.EditedDomesticTransferRecipient _ ->
-                  conf.PendingCommand
-                  |> OrgProvider.Msg.OrgCommand
-                  |> orgDispatch
-
-                  Router.navigate (navigation None)
-               | evt ->
-                  Log.error
-                     $"Unknown evt {evt} in EditTransferRecipient submit handler")
+            (fun receipt ->
+               {
+                  Envelope = receipt.Envelope
+                  Name = "Edit Domestic Transfer Recipient"
+                  CommandPendingApproval = false
+                  RedirectTo = None
+               }
+               |> Msg.NetworkAckCommand
+               |> dispatch)
       | AccountActionView.Transfer selectedRecipient ->
          TransferForm.TransferFormComponent
             session
             org
             selectedRecipient
-            (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
+            (fun receipt ->
+               {
+                  Envelope = receipt.Envelope
+                  Name = "Transfer"
+                  CommandPendingApproval = false
+                  RedirectTo = None
+               }
+               |> Msg.NetworkAckCommand
+               |> dispatch)
             (fun approvableTransfer ->
-               approvableTransfer
-               |> OrgCommand.RequestCommandApproval
-               |> OrgProvider.Msg.OrgCommand
-               |> orgDispatch
-
-               dispatch (Msg.SubmitCommandForApproval "transfer"))
+               {
+                  Envelope = Command.envelope approvableTransfer
+                  Name = "Transfer"
+                  CommandPendingApproval = true
+                  RedirectTo = None
+               }
+               |> Msg.NetworkAckCommand
+               |> dispatch)
       | AccountActionView.Purchase ->
          EmployeeCardSelectSearchComponent {|
             OrgId = org.Org.OrgId
@@ -254,9 +281,18 @@ let private renderAccountActions
                <| fun card employee -> [
                   PurchaseForm.PurchaseFormComponent
                      org
+                     session
                      card.CardId
                      employee
-                     (_.Envelope >> Msg.NetworkAckCommand >> dispatch)
+                     (fun receipt ->
+                        {
+                           Envelope = receipt.Envelope
+                           Name = "Purchase"
+                           CommandPendingApproval = false
+                           RedirectTo = None
+                        }
+                        |> Msg.NetworkAckCommand
+                        |> dispatch)
                ]
             OnSelect = None
          |}
@@ -291,15 +327,18 @@ let TransactionDashboardComponent
    SignalREventProvider.useEventSubscription {
       ComponentName = "TransactionDashboard"
       OrgId = Some session.OrgId
-      EventTypes = [ SignalREventProvider.EventType.Account ]
+      EventTypes = [
+         SignalREventProvider.EventType.Account
+         SignalREventProvider.EventType.Org
+      ]
       OnPersist =
          fun conf ->
             match conf with
             | SignalREventProvider.EventPersistedConfirmation.Account conf ->
-               // Update account context so AccountSummary & AccountSelection
-               // components are up to date with the latest balance
-               // & other metrics info. Ensure we are using current account info
-               // when attempting to initiate transactions against an account.
+               // Update context so OrgSummary component & account selection
+               // form inputs are up to date with the latest balance & other
+               // metrics info. Ensure we are using current account info when
+               // attempting to initiate transactions against an account.
                orgDispatch (OrgProvider.Msg.AccountUpdated conf)
 
                // Handle closing the ScreenOverlayPortal containing the
@@ -308,9 +347,19 @@ let TransactionDashboardComponent
                |> AccountEnvelope.unwrap
                |> snd
                |> _.CorrelationId
-               |> Msg.AccountEventReceived
+               |> Msg.SignalREventReceived
+               |> dispatch
+            | SignalREventProvider.EventPersistedConfirmation.Org conf ->
+               orgDispatch (OrgProvider.Msg.OrgUpdated conf.Org)
+
+               conf.EventPersisted
+               |> OrgEnvelope.unwrap
+               |> snd
+               |> _.CorrelationId
+               |> Msg.SignalREventReceived
                |> dispatch
             | _ -> ()
+      OnError = ignore
    }
 
    classyNode Html.div [ "transaction-dashboard" ] [
@@ -329,7 +378,7 @@ let TransactionDashboardComponent
 
             match orgCtx, Routes.IndexUrl.accountBrowserQuery().Action with
             | Deferred.Resolved(Ok(Some org)), Some action ->
-               renderAccountActions dispatch orgDispatch session org action
+               renderAccountActions dispatch session org action
                |> ScreenOverlay.Portal
             | _ -> Html.aside [ renderActionMenu () ]
 

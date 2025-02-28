@@ -1,6 +1,7 @@
-namespace Bank.Org.Domain
+module SignalRBroadcast
 
 open System
+
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Org.Domain
@@ -26,22 +27,34 @@ type OrgEventPersistedConfirmation = {
 
 [<RequireQualifiedAccess>]
 type EventProcessingError =
-   | Account of OrgId * AccountId * Err * DateTime
-   | Employee of OrgId * EmployeeId * Err * DateTime
-   | Org of OrgId * Err * DateTime
+   | Account of OrgId * AccountId * CorrelationId * Err * DateTime
+   | Employee of OrgId * EmployeeId * CorrelationId * Err * DateTime
+   | Org of OrgId * CorrelationId * Err * DateTime
 
-   member x.OrgId =
+   member x.OrgId: OrgId =
       match x with
-      | Account(orgId, _, _, _) -> orgId
-      | Employee(orgId, _, _, _) -> orgId
-      | Org(orgId, _, _) -> orgId
+      | Account(orgId, _, _, _, _) -> orgId
+      | Employee(orgId, _, _, _, _) -> orgId
+      | Org(orgId, _, _, _) -> orgId
+
+   member x.CorrelationId: CorrelationId =
+      match x with
+      | Account(_, _, id, _, _) -> id
+      | Employee(_, _, id, _, _) -> id
+      | Org(_, id, _, _) -> id
+
+   member x.Error: Err =
+      match x with
+      | Account(_, _, _, err, _) -> err
+      | Employee(_, _, _, err, _) -> err
+      | Org(_, _, err, _) -> err
 
 type SignalRBroadcast = {
    circuitBreaker: CircuitBreakerEvent -> unit
    accountEventPersisted: AccountEvent -> Account -> unit
-   accountEventError: OrgId -> AccountId -> Err -> unit
+   accountEventError: OrgId -> AccountId -> CorrelationId -> Err -> unit
    employeeEventPersisted: EmployeeEvent -> Employee -> unit
-   employeeEventError: OrgId -> EmployeeId -> Err -> unit
+   employeeEventError: OrgId -> EmployeeId -> CorrelationId -> Err -> unit
    orgEventPersisted: OrgEvent -> Org -> unit
-   orgEventError: OrgId -> Err -> unit
+   orgEventError: OrgId -> CorrelationId -> Err -> unit
 }

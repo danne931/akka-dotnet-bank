@@ -16,8 +16,8 @@ open Lib.Postgres
 open Lib.Types
 open Lib.SharedTypes
 open ActorUtil
-open Bank.Org.Domain
 open Bank.Employee.Domain
+open SignalRBroadcast
 
 type EmployeeInviteEmailInfo = {
    Name: string

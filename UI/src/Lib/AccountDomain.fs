@@ -695,8 +695,7 @@ let transactionUIFriendly
    | TransactionType.Deposit ->
       let origin, recipientAccount =
          txn.Events
-         |> List.tryLast
-         |> Option.bind (function
+         |> List.tryPick (function
             | AccountEvent.DepositedCash e ->
                Some(
                   e.Data.Origin,
@@ -720,8 +719,7 @@ let transactionUIFriendly
    | TransactionType.Purchase ->
       let employee, merchant, accountName =
          txn.Events
-         |> List.tryLast
-         |> Option.bind (function
+         |> List.tryPick (function
             | AccountEvent.DebitedAccount e ->
                let em = e.Data.EmployeePurchaseReference
 
@@ -787,8 +785,7 @@ let transactionUIFriendly
    | TransactionType.DomesticTransfer ->
       let sender, recipient, payNetwork =
          txn.Events
-         |> List.tryLast
-         |> Option.bind (function
+         |> List.tryPick (function
             | AccountEvent.DomesticTransferPending e ->
                let i = e.Data.BaseInfo
 

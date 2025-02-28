@@ -240,6 +240,7 @@ let PaymentRequestFormComponent
                      |> Option.defaultValue initValues
 
                   AccountFormContainer {|
+                     Session = session
                      InitialValues = initValues
                      Form =
                         formPlatformPayment

@@ -19,6 +19,7 @@ open Bank.Employee.Domain
 open BillingStatement
 open DomesticTransferRecipientActor
 open AutomaticTransfer
+open SignalRBroadcast
 
 type private InternalTransferMsg =
    InternalTransferRecipientActor.InternalTransferMessage
@@ -96,7 +97,11 @@ let private handleValidationError
       $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
 
    let signalRBroadcastValidationErr () =
-      broadcaster.accountEventError account.OrgId account.AccountId err
+      broadcaster.accountEventError
+         account.OrgId
+         account.AccountId
+         cmd.Envelope.CorrelationId
+         err
 
    match err with
    | AccountStateTransitionError e ->
@@ -445,14 +450,6 @@ let actorProps
                               passivate ()
                            else
                               ignored ()
-                     PersistFailed =
-                        fun _ err evt sequenceNr ->
-                           broadcaster.accountEventError
-                              account.OrgId
-                              account.AccountId
-                              (Err.DatabaseError err)
-
-                           ignored ()
                      LifecyclePostStop =
                         fun _ ->
                            logInfo

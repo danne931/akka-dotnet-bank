@@ -62,4 +62,5 @@ let PurchaseLimitFormComponent
       Form = form
       Action = None
       OnSubmit = notifyParentOnSubmit
+      Session = session
    |}

@@ -7,7 +7,7 @@ open System
 
 open Lib.SharedTypes
 open Bank.Account.Domain
-open Bank.Org.Domain
+open SignalRBroadcast
 open ActorUtil
 open AccountLoadTestTypes
 
@@ -72,23 +72,31 @@ let init (system: ActorSystem) : SignalRBroadcast =
             sendToSignalR msg
 
       accountEventError =
-         fun orgId accountId err ->
-            EventProcessingError.Account(orgId, accountId, err, DateTime.UtcNow)
+         fun orgId accountId correlationId err ->
+            EventProcessingError.Account(
+               orgId,
+               accountId,
+               correlationId,
+               err,
+               DateTime.UtcNow
+            )
             |> sendError
 
       employeeEventError =
-         fun orgId employeeId err ->
+         fun orgId employeeId correlationId err ->
             EventProcessingError.Employee(
                orgId,
                employeeId,
+               correlationId,
                err,
                DateTime.UtcNow
             )
             |> sendError
 
       orgEventError =
-         fun orgId err ->
-            EventProcessingError.Org(orgId, err, DateTime.UtcNow) |> sendError
+         fun orgId correlationId err ->
+            EventProcessingError.Org(orgId, correlationId, err, DateTime.UtcNow)
+            |> sendError
 
       circuitBreaker =
          fun msg ->

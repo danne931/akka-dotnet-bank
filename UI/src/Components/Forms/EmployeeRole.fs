@@ -157,6 +157,7 @@ let EmployeeRoleFormComponent
                      state)
 
       EmployeeFormContainer {|
+         Session = session
          InitialValues = formProps
          Form = form session employee org.Accounts onSelect
          Action = Some customAction

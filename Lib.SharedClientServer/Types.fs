@@ -171,11 +171,12 @@ type CommandApprovalProgressId =
 
 type Initiator = { Id: InitiatedById; Name: string }
 
-type CommandEnvelope = {
+type Envelope = {
    Id: EventId
    EntityId: EntityId
    OrgId: OrgId
    Timestamp: DateTime
+   EventName: string
    CorrelationId: CorrelationId
    InitiatedBy: Initiator
 }
@@ -209,13 +210,18 @@ module Command =
          Data = data
       }
 
-   let envelope (cmd: Command<_>) : CommandEnvelope = {
+   let envelope (cmd: Command<'C>) : Envelope = {
       Id = cmd.Id
       EntityId = cmd.EntityId
       OrgId = cmd.OrgId
       Timestamp = cmd.Timestamp
       CorrelationId = cmd.CorrelationId
       InitiatedBy = cmd.InitiatedBy
+#if FABLE_COMPILER
+      EventName = ""
+#else
+      EventName = typedefof<'C>.Name
+#endif
    }
 
 type BankEvent<'E> = {
@@ -253,16 +259,6 @@ module BankEvent =
       Timestamp = command.Timestamp
       Data = evtData
    }
-
-type Envelope = {
-   Id: EventId
-   EntityId: EntityId
-   OrgId: OrgId
-   Timestamp: DateTime
-   EventName: string
-   CorrelationId: CorrelationId
-   InitiatedBy: Initiator
-}
 
 [<RequireQualifiedAccess>]
 type OrgStateTransitionError =

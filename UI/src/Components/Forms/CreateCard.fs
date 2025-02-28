@@ -175,5 +175,6 @@ let CreateCardFormComponent
                   Form.View.submitButton "Create Card" state)
             )
          OnSubmit = onSubmit
+         Session = session
       |}
    | _ -> Html.progress []

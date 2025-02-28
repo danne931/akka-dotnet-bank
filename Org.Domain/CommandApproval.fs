@@ -349,7 +349,7 @@ type ApprovableCommand =
    | PerCommand of ApprovableCommandPerCommand
    | AmountBased of ApprovableCommandAmountBased
 
-   static member envelope(cmd: ApprovableCommand) : CommandEnvelope =
+   static member envelope(cmd: ApprovableCommand) : Envelope =
       match cmd with
       | ApprovableCommand.PerCommand c ->
          match c with

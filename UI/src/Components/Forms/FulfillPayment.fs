@@ -133,6 +133,7 @@ let PaymentFulfillmentFormComponent
          match dailyAccrual with
          | Deferred.Resolved(Ok employeeAccrual) ->
             AccountFormContainer {|
+               Session = session
                InitialValues = initValues
                Form =
                   formFulfillPlatformPayment

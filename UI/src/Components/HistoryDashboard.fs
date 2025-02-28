@@ -425,6 +425,7 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
          SignalREventProvider.EventType.Org
          SignalREventProvider.EventType.Employee
       ]
+      OnError = ignore
       OnPersist =
          React.useCallbackRef (fun conf ->
             let history =

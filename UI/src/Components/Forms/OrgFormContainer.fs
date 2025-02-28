@@ -10,7 +10,10 @@ open Lib.SharedTypes
 open Bank.Org.Domain
 open UIDomain.Org
 
-type State<'Values> = { FormModel: Form.View.Model<'Values> }
+type State<'Values> = {
+   FormModel: Form.View.Model<'Values>
+   CommandInProgress: CorrelationId option
+}
 
 type Msg<'Values> =
    | FormChanged of Form.View.Model<'Values>
@@ -21,7 +24,11 @@ type Msg<'Values> =
    | ErrorReceivedViaSignalR of Err
 
 let init (values: 'Values) () =
-   { FormModel = Form.View.idle values }, Cmd.none
+   {
+      FormModel = Form.View.idle values
+      CommandInProgress = None
+   },
+   Cmd.none
 
 let update
    (onSubmit: OrgCommandReceipt -> unit)
@@ -37,8 +44,8 @@ let update
       }
 
       {
-         state with
-            FormModel = state.FormModel |> Form.View.setLoading
+         FormModel = Form.View.setLoading state.FormModel
+         CommandInProgress = Some command.Envelope.CorrelationId
       },
       Cmd.fromAsync submit
    | Submit(_, _, Finished(Ok receipt)) ->
@@ -49,12 +56,16 @@ let update
 
       {
          state with
+            CommandInProgress = None
             FormModel.State = Form.View.State.Error(err.HumanFriendly)
       },
       Alerts.toastCommand err
    | ErrorReceivedViaSignalR err ->
+      Log.error $"Error received via SignalR {err}"
+
       {
          state with
+            CommandInProgress = None
             FormModel.State = Form.View.State.Error(err.HumanFriendly)
       },
       Alerts.toastCommand err
@@ -67,10 +78,30 @@ let OrgFormContainer
          Form: Form.Form<'Values, Msg<'Values>, IReactProperty>
          OnSubmit: OrgCommandReceipt -> unit
          Action: Form.View.Action<Msg<'Values>> option
+         Session: Bank.Employee.Domain.UserSession
       |})
    =
    let state, dispatch =
       React.useElmish (init props.InitialValues, update props.OnSubmit, [||])
+
+   SignalREventProvider.useEventSubscription {
+      ComponentName = "OrgFormContainer"
+      OrgId = Some props.Session.OrgId
+      EventTypes = [
+         SignalREventProvider.EventType.Account
+         SignalREventProvider.EventType.Employee
+         SignalREventProvider.EventType.Org
+      ]
+      OnPersist = ignore
+      OnError =
+         React.useCallbackRef (fun err ->
+            match state.FormModel.State, state.CommandInProgress with
+            | Form.View.State.Loading, (Some inProgressId) when
+               inProgressId = err.CorrelationId
+               ->
+               dispatch (Msg.ErrorReceivedViaSignalR err.Error)
+            | _ -> ())
+   }
 
    Form.View.asHtml
       {

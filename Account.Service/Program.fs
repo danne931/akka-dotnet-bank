@@ -14,6 +14,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Infrastructure
 open ActorUtil
+open SignalRBroadcast
 
 let builder = Env.builder
 

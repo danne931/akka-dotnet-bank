@@ -78,4 +78,5 @@ let DepositFormComponent
       Form = form org.CheckingAccounts session.AsInitiator
       Action = None
       OnSubmit = onSubmit
+      Session = session
    |}

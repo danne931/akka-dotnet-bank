@@ -78,12 +78,13 @@ let form
 [<ReactComponent>]
 let PurchaseFormComponent
    (org: OrgWithAccountProfiles)
+   (session: UserSession)
    (selectedCardId: CardId)
    (employee: Employee)
    (onSubmit: EmployeeCommandReceipt -> unit)
    =
-
    EmployeeFormContainer {|
+      Session = session
       InitialValues = { Amount = ""; Merchant = "" }
       Form = form org.CheckingAccounts employee selectedCardId
       Action = None

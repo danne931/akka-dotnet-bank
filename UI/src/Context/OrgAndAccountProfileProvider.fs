@@ -9,6 +9,7 @@ open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open CommandApproval
+open SignalRBroadcast
 
 type State = Deferred<Result<OrgWithAccountProfiles option, Err>>
 
