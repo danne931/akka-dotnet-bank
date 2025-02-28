@@ -11,9 +11,9 @@ open FsToolkit.ErrorHandling
 
 open Lib.ActivePatterns
 open Lib.SharedTypes
-open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open SignalRBroadcast
 
 module Command = DomesticTransferToCommand
 type private FailReason = DomesticTransferFailReason

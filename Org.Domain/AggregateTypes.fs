@@ -27,6 +27,23 @@ type OrgCommand =
    | DomesticTransferRetryConfirmsRecipient of
       DomesticTransferRetryConfirmsRecipientCommand
 
+   member x.Envelope: Envelope =
+      match x with
+      | CreateOrg cmd -> Command.envelope cmd
+      | FinalizeOrgOnboarding cmd -> Command.envelope cmd
+      | ConfigureFeatureFlag cmd -> Command.envelope cmd
+      | ConfigureApprovalRule cmd -> Command.envelope cmd
+      | DeleteApprovalRule cmd -> Command.envelope cmd
+      | RequestCommandApproval cmd -> Command.envelope cmd
+      | AcquireCommandApproval cmd -> Command.envelope cmd
+      | DeclineCommandApproval cmd -> Command.envelope cmd
+      | TerminateCommandApproval cmd -> Command.envelope cmd
+      | RegisterDomesticTransferRecipient cmd -> Command.envelope cmd
+      | EditDomesticTransferRecipient cmd -> Command.envelope cmd
+      | NicknameDomesticTransferRecipient cmd -> Command.envelope cmd
+      | FailDomesticTransferRecipient cmd -> Command.envelope cmd
+      | DomesticTransferRetryConfirmsRecipient cmd -> Command.envelope cmd
+
 type OrgEvent =
    | OrgCreated of BankEvent<OrgCreated>
    | OrgOnboardingFinished of BankEvent<OrgOnboardingFinished>

@@ -307,6 +307,7 @@ let RegisterTransferRecipientFormComponent
             Form = form org recipient session.AsInitiator
             Action = None
             OnSubmit = onSubmit
+            Session = session
          |}
       | _ -> Html.progress []
    ]

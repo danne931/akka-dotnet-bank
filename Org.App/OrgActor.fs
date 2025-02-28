@@ -18,6 +18,7 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open CommandApproval
+open SignalRBroadcast
 
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
@@ -46,11 +47,12 @@ let private handleValidationError
 
       logDebug mailbox msg
    | _ ->
+      broadcaster.orgEventError orgId cmd.Envelope.CorrelationId err
+
       logWarning
          mailbox
          $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
 
-      broadcaster.orgEventError orgId err
 
 // Sends the ApprovableCommand to the appropriate Account or Employee actor
 // when the approval process is complete or no approval required.
@@ -474,13 +476,6 @@ let actorProps
             PersistentActorEventHandler.handleEvent
                {
                   PersistentActorEventHandler.init with
-                     PersistFailed =
-                        fun _ err evt sequenceNr ->
-                           broadcaster.orgEventError
-                              org.OrgId
-                              (Err.DatabaseError err)
-
-                           ignored ()
                      LifecyclePostStop =
                         fun _ ->
                            logInfo mailbox $"ORG POSTSTOP {org.Name}"

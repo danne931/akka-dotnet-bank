@@ -10,7 +10,10 @@ open Lib.SharedTypes
 open Bank.Account.Domain
 open UIDomain.Account
 
-type State<'Values> = { FormModel: Form.View.Model<'Values> }
+type State<'Values> = {
+   FormModel: Form.View.Model<'Values>
+   CommandInProgress: CorrelationId option
+}
 
 type Msg<'Values> =
    | FormChanged of Form.View.Model<'Values>
@@ -24,6 +27,7 @@ type Msg<'Values> =
 let init (initValues: 'Values) () =
    {
       FormModel = Form.View.idle initValues
+      CommandInProgress = None
    },
    Cmd.none
 
@@ -51,7 +55,11 @@ let update
             return Msg.Submit(Account.empty, command, Finished(Error err))
       }
 
-      state, Cmd.fromAsync getAccount
+      {
+         FormModel = Form.View.setLoading state.FormModel
+         CommandInProgress = Some command.Envelope.CorrelationId
+      },
+      Cmd.fromAsync getAccount
    | Submit(account, command, Started) ->
       let submit = async {
          let! res = AccountService.submitCommand account command
@@ -59,8 +67,8 @@ let update
       }
 
       {
-         state with
-            FormModel = state.FormModel |> Form.View.setLoading
+         FormModel = Form.View.setLoading state.FormModel
+         CommandInProgress = Some command.Envelope.CorrelationId
       },
       Cmd.fromAsync submit
    | Submit(_, _, Finished(Ok receipt)) ->
@@ -71,15 +79,20 @@ let update
 
       {
          state with
+            CommandInProgress = None
             FormModel.State = Form.View.State.Error(err.HumanFriendly)
       },
       Alerts.toastCommand err
    | ErrorReceivedViaSignalR err ->
+      Log.error $"Error received via SignalR {err}"
+
       {
          state with
+            CommandInProgress = None
             FormModel.State = Form.View.State.Error(err.HumanFriendly)
       },
       Alerts.toastCommand err
+
 
 [<ReactComponent>]
 let AccountFormContainer
@@ -89,25 +102,26 @@ let AccountFormContainer
          Form: Form.Form<'Values, Msg<'Values>, IReactProperty>
          Action: Form.View.Action<Msg<'Values>> option
          OnSubmit: AccountCommandReceipt -> unit
+         Session: Bank.Employee.Domain.UserSession
       |})
    =
    let state, dispatch =
       React.useElmish (init props.InitialValues, update props.OnSubmit, [||])
 
-   (*
-   let signalRContext = React.useContext SignalRConnectionProvider.context
-   let errors = signalRContext.Errors.Account
-
-   React.useEffect (
-      (fun () ->
-         if
-            state.FormModel.State = Form.View.State.Loading
-            && errors.Length > 0
-         then
-            dispatch <| Msg.ErrorReceivedViaSignalR errors.Head.Error),
-      [| box errors.Length |]
-   )
-   *)
+   SignalREventProvider.useEventSubscription {
+      ComponentName = "AccountFormContainer"
+      OrgId = Some props.Session.OrgId
+      EventTypes = [ SignalREventProvider.EventType.Account ]
+      OnPersist = ignore
+      OnError =
+         React.useCallbackRef (fun err ->
+            match state.FormModel.State, state.CommandInProgress with
+            | Form.View.State.Loading, (Some inProgressId) when
+               inProgressId = err.CorrelationId
+               ->
+               dispatch (Msg.ErrorReceivedViaSignalR err.Error)
+            | _ -> ())
+   }
 
    Form.View.asHtml
       {

@@ -352,6 +352,7 @@ let TransferInternalWithinOrgComponent
    (onSubmit: AccountCommandReceipt -> unit)
    =
    AccountFormContainer {|
+      Session = session
       InitialValues = {
          Amount = ""
          SenderId = ""
@@ -394,6 +395,7 @@ let TransferInternalBetweenOrgsComponent
       |> Option.defaultValue initValues
 
    AccountFormContainer {|
+      Session = session
       InitialValues = initValues
       Form =
          formInternalBetweenOrgs
@@ -448,6 +450,7 @@ let TransferDomesticFormComponent
          |> Option.defaultValue ""
 
    AccountFormContainer {|
+      Session = session
       InitialValues = {
          Amount = ""
          SenderId = ""

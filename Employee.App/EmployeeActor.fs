@@ -16,6 +16,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Org.Domain
 open CommandApproval
+open SignalRBroadcast
 
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
@@ -29,7 +30,11 @@ let private handleValidationError
       mailbox
       $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
 
-   broadcaster.employeeEventError employee.OrgId employee.EmployeeId err
+   broadcaster.employeeEventError
+      employee.OrgId
+      employee.EmployeeId
+      cmd.Envelope.CorrelationId
+      err
 
    match err with
    | EmployeeStateTransitionError e ->
@@ -295,14 +300,6 @@ let actorProps
                               passivate ()
                            else
                               ignored ()
-                     PersistFailed =
-                        fun _ err evt sequenceNr ->
-                           broadcaster.employeeEventError
-                              employee.OrgId
-                              employee.EmployeeId
-                              (Err.DatabaseError err)
-
-                           ignored ()
                }
                mailbox
                msg

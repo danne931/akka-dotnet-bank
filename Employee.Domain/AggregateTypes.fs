@@ -24,6 +24,26 @@ type EmployeeCommand =
    | RestoreAccess of RestoreAccessCommand
    | ApproveAccess of ApproveAccessCommand
 
+   member x.Envelope: Envelope =
+      match x with
+      | CreateAccountOwner cmd -> Command.envelope cmd
+      | CreateEmployee cmd -> Command.envelope cmd
+      | CreateCard cmd -> Command.envelope cmd
+      | PurchasePending cmd -> Command.envelope cmd
+      | AccountConfirmsPurchase cmd -> Command.envelope cmd
+      | AccountRejectsPurchase cmd -> Command.envelope cmd
+      | LimitDailyDebits cmd -> Command.envelope cmd
+      | LimitMonthlyDebits cmd -> Command.envelope cmd
+      | LockCard cmd -> Command.envelope cmd
+      | UnlockCard cmd -> Command.envelope cmd
+      | UpdateRole cmd -> Command.envelope cmd
+      | EditCardNickname cmd -> Command.envelope cmd
+      | CancelInvitation cmd -> Command.envelope cmd
+      | RefreshInvitationToken cmd -> Command.envelope cmd
+      | ConfirmInvitation cmd -> Command.envelope cmd
+      | RestoreAccess cmd -> Command.envelope cmd
+      | ApproveAccess cmd -> Command.envelope cmd
+
 type EmployeeEvent =
    | CreatedAccountOwner of BankEvent<CreatedAccountOwner>
    | CreatedEmployee of BankEvent<CreatedEmployee>

@@ -8,6 +8,7 @@ open FsToolkit.ErrorHandling
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Org.Domain
+open SignalRBroadcast
 open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
@@ -23,9 +24,24 @@ type EventPersistedConfirmation =
    | Org of OrgEventPersistedConfirmation
 
 type SignalREventContext = {
-   AccountSubscribers: Map<string, AccountEventPersistedConfirmation -> unit>
-   EmployeeSubscribers: Map<string, EmployeeEventPersistedConfirmation -> unit>
-   OrgSubscribers: Map<string, OrgEventPersistedConfirmation -> unit>
+   AccountSubscribers:
+      Map<
+         string,
+         (AccountEventPersistedConfirmation -> unit) *
+         (EventProcessingError -> unit)
+       >
+   EmployeeSubscribers:
+      Map<
+         string,
+         (EmployeeEventPersistedConfirmation -> unit) *
+         (EventProcessingError -> unit)
+       >
+   OrgSubscribers:
+      Map<
+         string,
+         (OrgEventPersistedConfirmation -> unit) *
+         (EventProcessingError -> unit)
+       >
    RealtimeAccountEvents: AccountEvent list
    RealtimeEmployeeEvents: EmployeeEvent list
    RealtimeOrgEvents: OrgEvent list
@@ -85,7 +101,8 @@ type Msg =
       componentName: string *
       OrgId *
       EventType list *
-      onPersist: (EventPersistedConfirmation -> unit)
+      onPersist: (EventPersistedConfirmation -> unit) *
+      onError: (EventProcessingError -> unit)
    | RemoveEventSubscriber of componentName: string * EventType list
    | QueueOrgConnectionStart of OrgId
    | AddOrgToConnection of
@@ -124,16 +141,18 @@ let update msg state =
    | AddOrgToConnection(_, _, Finished(Error _)) ->
       { state with CurrentOrgId = None }, Cmd.none
    | AddOrgToConnection(_, _, Finished(Ok _)) -> state, Cmd.none
-   | AddEventSubscriber(componentName, orgId, eventTypes, onPersist) ->
+   | AddEventSubscriber(componentName, orgId, eventTypes, onPersist, onError) ->
       let updateSubscribers subscribers onPersist =
+         let handlers = onPersist, onError
+
          match state.CurrentOrgId, state.QueuedOrgId with
          | Some existingId, _ when existingId = orgId ->
-            Map.add componentName onPersist subscribers
+            Map.add componentName handlers subscribers
          | None, Some queuedId when queuedId = orgId ->
-            Map.add componentName onPersist subscribers
+            Map.add componentName handlers subscribers
          | _ ->
             // Reset subscribers when OrgId changes
-            Map[componentName, onPersist]
+            Map[componentName, handlers]
 
       let state = {
          state with
@@ -183,8 +202,8 @@ let update msg state =
 
       state, Cmd.none
    | AccountEventPersisted conf ->
-      for subscriberCallback in state.AccountSubscribers.Values do
-         subscriberCallback (conf)
+      for onPersist, _ in state.AccountSubscribers.Values do
+         onPersist conf
 
       {
          state with
@@ -193,8 +212,8 @@ let update msg state =
       },
       Cmd.none
    | EmployeeEventPersisted conf ->
-      for subscriberCallback in state.EmployeeSubscribers.Values do
-         subscriberCallback conf
+      for onPersist, _ in state.EmployeeSubscribers.Values do
+         onPersist conf
 
       {
          state with
@@ -203,8 +222,8 @@ let update msg state =
       },
       Cmd.none
    | OrgEventPersisted conf ->
-      for subscriberCallback in state.OrgSubscribers.Values do
-         subscriberCallback conf
+      for onPersist, _ in state.OrgSubscribers.Values do
+         onPersist conf
 
       {
          state with
@@ -212,6 +231,18 @@ let update msg state =
       },
       Cmd.none
    | ErrorReceived error ->
+      let errorHandlers =
+         match error with
+         | EventProcessingError.Account _ ->
+            state.AccountSubscribers.Values |> Seq.map snd
+         | EventProcessingError.Org _ ->
+            state.OrgSubscribers.Values |> Seq.map snd
+         | EventProcessingError.Employee _ ->
+            state.EmployeeSubscribers.Values |> Seq.map snd
+
+      for onError in errorHandlers do
+         onError error
+
       {
          state with
             Errors = error :: state.Errors
@@ -296,6 +327,7 @@ type EventSubscription = {
    OrgId: OrgId option
    EventTypes: EventType list
    OnPersist: EventPersistedConfirmation -> unit
+   OnError: EventProcessingError -> unit
 }
 
 // Custom hook to subscribe to persisted events received via SignalR.
@@ -316,7 +348,8 @@ let useEventSubscription (sub: EventSubscription) =
                sub.ComponentName,
                orgId,
                sub.EventTypes,
-               sub.OnPersist
+               sub.OnPersist,
+               sub.OnError
             )
             |> dispatch
          | _ -> ()

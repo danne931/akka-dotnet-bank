@@ -44,6 +44,41 @@ type AccountCommand =
    | FailInternalAutoTransfer of FailInternalAutoTransferCommand
    | DepositInternalAutoTransfer of DepositInternalAutoTransferCommand
 
+   member x.Envelope: Envelope =
+      match x with
+      | CreateAccount cmd -> Command.envelope cmd
+      | DepositCash cmd -> Command.envelope cmd
+      | Debit cmd -> Command.envelope cmd
+      | MaintenanceFee cmd -> Command.envelope cmd
+      | SkipMaintenanceFee cmd -> Command.envelope cmd
+      | InternalTransfer cmd -> Command.envelope cmd
+      | CompleteInternalTransfer cmd -> Command.envelope cmd
+      | FailInternalTransfer cmd -> Command.envelope cmd
+      | ScheduleInternalTransferBetweenOrgs cmd -> Command.envelope cmd
+      | InternalTransferBetweenOrgs cmd -> Command.envelope cmd
+      | CompleteInternalTransferBetweenOrgs cmd -> Command.envelope cmd
+      | FailInternalTransferBetweenOrgs cmd -> Command.envelope cmd
+      | DepositTransferWithinOrg cmd -> Command.envelope cmd
+      | DepositTransferBetweenOrgs cmd -> Command.envelope cmd
+      | ScheduleDomesticTransfer cmd -> Command.envelope cmd
+      | DomesticTransfer cmd -> Command.envelope cmd
+      | UpdateDomesticTransferProgress cmd -> Command.envelope cmd
+      | CompleteDomesticTransfer cmd -> Command.envelope cmd
+      | FailDomesticTransfer cmd -> Command.envelope cmd
+      | RequestPlatformPayment cmd -> Command.envelope cmd
+      | CancelPlatformPayment cmd -> Command.envelope cmd
+      | DeclinePlatformPayment cmd -> Command.envelope cmd
+      | FulfillPlatformPayment cmd -> Command.envelope cmd
+      | DepositPlatformPayment cmd -> Command.envelope cmd
+      | CloseAccount cmd -> Command.envelope cmd
+      | StartBillingCycle cmd -> Command.envelope cmd
+      | ConfigureAutoTransferRule cmd -> Command.envelope cmd
+      | DeleteAutoTransferRule cmd -> Command.envelope cmd
+      | InternalAutoTransfer cmd -> Command.envelope cmd
+      | CompleteInternalAutoTransfer cmd -> Command.envelope cmd
+      | FailInternalAutoTransfer cmd -> Command.envelope cmd
+      | DepositInternalAutoTransfer cmd -> Command.envelope cmd
+
 type AccountEvent =
    | CreatedAccount of BankEvent<CreatedAccount>
    | DepositedCash of BankEvent<DepositedCash>

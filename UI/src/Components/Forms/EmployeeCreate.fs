@@ -209,6 +209,7 @@ let EmployeeCreateFormComponent
             |> Some
 
          EmployeeFormContainer {|
+            Session = session
             InitialValues = formProps
             Form =
                form
