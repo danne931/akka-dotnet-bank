@@ -135,9 +135,6 @@ module ActorMetadata =
 
    type EmailMarker() = class end
 
-   // Forward email messages from web node to Email actors on Account nodes
-   type EmailForwardingMarker() = class end
-
    type AccountClosureMarker() = class end
 
    type DomesticTransferMarker() = class end
@@ -241,11 +238,6 @@ module ActorMetadata =
    }
 
    let email = { Name = "email"; Route = "email" }
-
-   let emailForwarding = {
-      Name = "email-forwarding"
-      Route = "email-forwarding"
-   }
 
    let auditor = { Name = "auditor"; Route = "auditor" }
 

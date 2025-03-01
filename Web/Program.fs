@@ -102,8 +102,8 @@ builder.Services.AddAkka(
             ActorMetadata.circuitBreaker.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingletonProxy<ActorMetadata.EmailForwardingMarker>(
-            ActorMetadata.emailForwarding.Name,
+         .WithSingletonProxy<ActorMetadata.EmailMarker>(
+            ActorMetadata.email.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          .WithSingleton<ActorMetadata.AccountLoadTestMarker>(

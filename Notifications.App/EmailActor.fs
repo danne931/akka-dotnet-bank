@@ -189,6 +189,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (throttle: StreamThrottle)
    (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
+   (broadcaster: SignalRBroadcast)
    =
    let client =
       EnvNotifications.config.EmailBearerToken |> Option.map createClient
@@ -208,6 +209,36 @@ let actorProps
                      (Sink.forEach (fun msg -> ctx.Self <! msg))
                      Keep.left
                |> Graph.run (system.Materializer())
+
+            breaker.OnHalfOpen(fun () ->
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.Email
+                  Status = CircuitBreakerStatus.HalfOpen
+                  Timestamp = DateTime.UtcNow
+               }
+
+               ctx.Self <! BreakerHalfOpen)
+            |> ignore
+
+            breaker.OnClose(fun () ->
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.Email
+                  Status = CircuitBreakerStatus.Closed
+                  Timestamp = DateTime.UtcNow
+               }
+
+               ctx.Self <! BreakerClosed)
+            |> ignore
+
+            breaker.OnOpen(fun () ->
+               SystemLog.warning system "Email circuit breaker open"
+
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.Email
+                  Status = CircuitBreakerStatus.Open
+                  Timestamp = DateTime.UtcNow
+               })
+            |> ignore
 
             return! processing ctx queue
          | _ -> return ignored ()
@@ -325,54 +356,5 @@ let getAdminEmailsForOrg (orgId: OrgId) =
       ])
       Reader.email
 
-let start
-   (system: ActorSystem)
-   (broadcaster: SignalRBroadcast)
-   (throttle: StreamThrottle)
-   (breaker: Akka.Pattern.CircuitBreaker)
-   : IActorRef<EmailMessage>
-   =
-   let ref =
-      spawn system ActorMetadata.email.Name
-      <| actorProps system breaker throttle getAdminEmailsForOrg
-
-   breaker.OnHalfOpen(fun () ->
-      broadcaster.circuitBreaker {
-         Service = CircuitBreakerService.Email
-         Status = CircuitBreakerStatus.HalfOpen
-         Timestamp = DateTime.UtcNow
-      }
-      |> ignore
-
-      ref <! BreakerHalfOpen)
-   |> ignore
-
-   breaker.OnClose(fun () ->
-      broadcaster.circuitBreaker {
-         Service = CircuitBreakerService.Email
-         Status = CircuitBreakerStatus.Closed
-         Timestamp = DateTime.UtcNow
-      }
-      |> ignore
-
-      ref <! BreakerClosed)
-   |> ignore
-
-   breaker.OnOpen(fun () ->
-      SystemLog.warning system "Email circuit breaker open"
-
-      broadcaster.circuitBreaker {
-         Service = CircuitBreakerService.Email
-         Status = CircuitBreakerStatus.Open
-         Timestamp = DateTime.UtcNow
-      }
-      |> ignore)
-   |> ignore
-
-   retype ref
-
 let get (system: ActorSystem) : IActorRef<EmailMessage> =
    typed <| ActorRegistry.For(system).Get<ActorMetadata.EmailMarker>()
-
-let getForwarder (system: ActorSystem) : IActorRef<EmailMessage> =
-   typed <| ActorRegistry.For(system).Get<ActorMetadata.EmailForwardingMarker>()
