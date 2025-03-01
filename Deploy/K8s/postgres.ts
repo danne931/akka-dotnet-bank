@@ -30,6 +30,7 @@ export default function initPostgres (
       },
 
       chart: 'postgresql',
+      version: '16.0.0',
 
       namespace: namespace.metadata.name,
 
