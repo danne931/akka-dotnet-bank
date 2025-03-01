@@ -56,8 +56,8 @@ type Msg =
 
 let init () =
    {
-      SelectedTopNMonth = DateTime.UtcNow
-      SelectedTopNPurchasersMonth = DateTime.UtcNow
+      SelectedTopNMonth = DateTime.Now
+      SelectedTopNPurchasersMonth = DateTime.Now
       SelectedTimeSeriesChart = SelectedTimeSeriesChart.TimeSeries
       SelectedTimeSeriesDateFilter = DateFilter.Last30Days
       SelectedTimeSeriesYAxis = SelectedTimeSeriesYAxis.All
@@ -495,7 +495,7 @@ let renderTopNMonthSelect
    (selectedMonth: DateTime)
    (onSelect: DateTime -> unit)
    =
-   let currDate = DateTime.UtcNow
+   let currDate = DateTime.Now
    let prevDate = currDate.AddMonths -1
    let prevPrevDate = currDate.AddMonths -2
 

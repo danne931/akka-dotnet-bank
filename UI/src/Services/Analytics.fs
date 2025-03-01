@@ -23,7 +23,7 @@ let loadInitialAnalytics
          AnalyticsPath.get orgId
          + Router.encodeQueryString (
             [
-               "topNDate", DateTime.toISOString DateTime.UtcNow
+               "topNDate", DateTime.toISOString DateTime.Now
                "moneyFlowTopNLimit", topNLimit
                "moneyFlowTimeSeriesDateRange",
                DateFilter.toQueryString dateFilter
