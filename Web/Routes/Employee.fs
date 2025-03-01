@@ -137,7 +137,7 @@ let startEmployeeRoutes (app: WebApplication) =
                            |> Guid.Parse
                            |> EmployeeId
                            |> InitiatedById
-                        Name = context.Session.GetString("EmployeeId")
+                        Name = context.Session.GetString("Name")
                      }
 
                      let cmd =
@@ -158,7 +158,7 @@ let startEmployeeRoutes (app: WebApplication) =
                         Token = token
                      }
 
-                     EmailActor.getForwarder sys
+                     EmailActor.get sys
                      <! EmailActor.EmailMessage.EmployeeInvite invite
 
                      return Results.Ok()

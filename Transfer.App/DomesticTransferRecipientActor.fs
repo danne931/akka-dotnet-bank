@@ -139,6 +139,7 @@ let actorProps
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmailActor: unit -> IActorRef<EmailActor.EmailMessage>)
    (requestTransfer: DomesticTransferRequest)
+   : Props<obj>
    =
    let handler (mailbox: Actor<obj>) (message: obj) =
       let logError, logInfo = logError mailbox, logInfo mailbox
@@ -268,65 +269,80 @@ let private transferRequest
          Serialization.deserialize<DomesticTransferServiceResponse> response
    }
 
-let start
+let initProps
    (system: ActorSystem)
    (broadcaster: SignalRBroadcast)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (breaker: Akka.Pattern.CircuitBreaker)
    (router: Akka.Routing.Pool)
+   : Props<obj>
    =
-   let prop =
-      actorProps
-         breaker
-         getAccountRef
-         (fun _ -> EmailActor.get system)
-         transferRequest
+   let rec init (ctx: Actor<obj>) = actor {
+      let! msg = ctx.Receive()
 
-   let ref = spawn system actorName { prop with Router = Some router }
+      match msg with
+      | LifecycleEvent e ->
+         match e with
+         | PreStart ->
+            breaker.OnHalfOpen(fun () ->
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.DomesticTransfer
+                  Status = CircuitBreakerStatus.HalfOpen
+                  Timestamp = DateTime.UtcNow
+               }
 
-   breaker.OnHalfOpen(fun () ->
-      broadcaster.circuitBreaker {
-         Service = CircuitBreakerService.DomesticTransfer
-         Status = CircuitBreakerStatus.HalfOpen
-         Timestamp = DateTime.UtcNow
-      }
-      |> ignore
+               ctx.Self <! DomesticTransferMessage.BreakerHalfOpen)
+            |> ignore
 
-      ref <! DomesticTransferMessage.BreakerHalfOpen)
-   |> ignore
+            // Need to preface BreakerClosed message with Broadcast
+            // to ensure all routees are informed.
+            // Otherwise, only messages stashed on routee $a will be unstashed.
+            breaker.OnClose(fun () ->
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.DomesticTransfer
+                  Status = CircuitBreakerStatus.Closed
+                  Timestamp = DateTime.UtcNow
+               }
 
-   // The event handler is bound once even though there may be
-   // several routees.  Need to preface BreakerClosed message with
-   // Broadcast to ensure all routees are informed.
-   // Otherwise, only messages stashed on routee $a will be unstashed.
-   breaker.OnClose(fun () ->
-      broadcaster.circuitBreaker {
-         Service = CircuitBreakerService.DomesticTransfer
-         Status = CircuitBreakerStatus.Closed
-         Timestamp = DateTime.UtcNow
-      }
-      |> ignore
+               retype ctx.Self
+               <! Akka.Routing.Broadcast DomesticTransferMessage.BreakerClosed)
+            |> ignore
 
-      retype ref
-      <! Akka.Routing.Broadcast DomesticTransferMessage.BreakerClosed)
-   |> ignore
+            breaker.OnOpen(fun () ->
+               logWarning ctx "Domestic transfer circuit breaker open"
 
-   breaker.OnOpen(fun () ->
-      system.Log.Log(
-         Akka.Event.LogLevel.WarningLevel,
-         null,
-         "Domestic transfer circuit breaker open"
-      )
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.DomesticTransfer
+                  Status = CircuitBreakerStatus.Open
+                  Timestamp = DateTime.UtcNow
+               })
+            |> ignore
 
-      broadcaster.circuitBreaker {
-         Service = CircuitBreakerService.DomesticTransfer
-         Status = CircuitBreakerStatus.Open
-         Timestamp = DateTime.UtcNow
-      }
-      |> ignore)
-   |> ignore
+            let props = {
+               actorProps
+                  breaker
+                  getAccountRef
+                  (fun _ -> EmailActor.get system)
+                  transferRequest with
+                  Router = Some router
+            }
 
-   ref
+            let workerRef = spawn ctx actorName props
+
+            return! processing ctx workerRef
+         | _ -> return ignored ()
+      | msg ->
+         logError ctx $"Unknown msg {msg}"
+         return unhandled ()
+   }
+
+   and processing (ctx: Actor<obj>) (workerRef: IActorRef<obj>) = actor {
+      let! msg = ctx.Receive()
+      workerRef <<! msg
+      return ignored ()
+   }
+
+   props init
 
 let get (system: ActorSystem) : IActorRef<DomesticTransferMessage> =
    typed

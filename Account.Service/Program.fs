@@ -267,51 +267,41 @@ builder.Services.AddAkka(
                   Env.config.CircuitBreakerActorSupervisor),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         // Forward email messages from web node to Email actors on Account nodes
-         .WithSingleton<ActorMetadata.EmailForwardingMarker>(
-            ActorMetadata.emailForwarding.Name,
+         .WithSingleton<ActorMetadata.EmailMarker>(
+            ActorMetadata.email.Name,
             (fun system _ _ ->
-               (fun (msg: EmailActor.EmailMessage) ->
-                  EmailActor.get system <<! msg
-                  ignored ())
-               |> actorOf
-               |> props
+               EmailActor.actorProps
+                  system
+                  (EnvNotifications.config.circuitBreaker system)
+                  EnvNotifications.config.EmailThrottle
+                  EmailActor.getAdminEmailsForOrg
+                  (provider.GetRequiredService<SignalRBroadcast>())
+               |> _.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
+         )
+         .WithSingleton<ActorMetadata.DomesticTransferMarker>(
+            ActorMetadata.domesticTransfer.Name,
+            (fun system _ _ ->
+               let routerEnv = EnvTransfer.config.DomesticTransferRouter
+               let resize = DefaultResizer(1, routerEnv.MaxInstancesPerNode)
+               let router = RoundRobinPool(1, resize)
+
+               DomesticTransferRecipientActor.initProps
+                  system
+                  (provider.GetRequiredService<SignalRBroadcast>())
+                  (AccountActor.get system)
+                  (EnvTransfer.config.domesticTransferCircuitBreaker system)
+                  router
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          .WithActors(fun system registry ->
-            let routerEnv = EnvTransfer.config.DomesticTransferRouter
-            let broadcast = provider.GetRequiredService<SignalRBroadcast>()
-            let getAccountRef = AccountActor.get system
-
-            let resize = DefaultResizer(1, routerEnv.MaxInstancesPerNode)
-            let router = RoundRobinPool(1, resize)
-
-            registry.Register<ActorMetadata.DomesticTransferMarker>(
-               DomesticTransferRecipientActor.start
-                  system
-                  broadcast
-                  getAccountRef
-                  (EnvTransfer.config.domesticTransferCircuitBreaker system)
-                  router
-               |> untyped
-            )
-
             registry.Register<ActorMetadata.BillingStatementMarker>(
                BillingStatementActor.start
                   system
                   Env.config.BillingStatementPersistenceChunking
                   Env.config.BillingStatementPersistenceBackoffRestart
                   Env.config.BillingStatementRetryPersistenceAfter
-               |> untyped
-            )
-
-            registry.Register<ActorMetadata.EmailMarker>(
-               EmailActor.start
-                  system
-                  broadcast
-                  EnvNotifications.config.EmailThrottle
-                  (EnvNotifications.config.circuitBreaker system)
                |> untyped
             )
 
