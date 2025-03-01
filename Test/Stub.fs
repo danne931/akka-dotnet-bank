@@ -2,7 +2,7 @@
 module Stub
 
 open System
-open Bank.Org.Domain
+open SignalRBroadcast
 
 let billingStatement =
    BillingStatement.billingStatement
@@ -15,9 +15,9 @@ let signalRBroadcast: SignalRBroadcast = {
    accountEventPersisted = fun evt accountState -> ()
    employeeEventPersisted = fun evt employeeState -> ()
    orgEventPersisted = fun evt orgState -> ()
-   accountEventError = fun orgId accountId err -> ()
-   employeeEventError = fun orgId employeeId err -> ()
-   orgEventError = fun orgId err -> ()
+   accountEventError = fun orgId accountId correlationId err -> ()
+   employeeEventError = fun orgId employeeId correlationId err -> ()
+   orgEventError = fun orgId correlationId err -> ()
 }
 
 let akkaStreamsRestartSettings () =
