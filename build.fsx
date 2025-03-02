@@ -176,6 +176,16 @@ Target.create "BuildDockerImagesForK8s" (fun o ->
 
    Array.Parallel.iter (buildImage imageBuilders.minikube) sources)
 
+Target.create "InstallPulumiDependenciesForK8s" (fun _ ->
+   Shell.cd "./Deploy/K8s/"
+
+   let exitCode = Shell.Exec("npm", "install")
+
+   if exitCode <> 0 then
+      failwith "Error running npm install for pulumi dependencies"
+
+   Shell.cd "../../")
+
 Target.create "VerifyPulumiLogin" (fun _ ->
    if Shell.Exec("pulumi", "whoami") <> 0 then
       failwith
@@ -207,10 +217,14 @@ Target.create "ApplyK8sResources" (fun _ ->
    Shell.Exec("pulumi", "config set --secret postgresPassword testpass")
    |> ignore
 
-   let result = Shell.Exec("pulumi", "up --skip-preview")
+   let result = Shell.Exec("pulumi", "up --yes")
+
+   Trace.trace $"Finished pulumi up {result}"
 
    if result <> 0 then
-      failwith "Error applying K8s resources to minikube cluster")
+      let msg = $"Error applying K8s resources to minikube cluster {result}"
+      Trace.traceError msg
+      failwith msg)
 
 let openK8sAppInBrowser () =
    Shell.Exec("minikube", "kubectl -- get all") |> ignore
@@ -350,7 +364,9 @@ Target.create "DeployAllStaging" (fun _ ->
 
 "VerifyPulumiLogin" ==> "ApplyK8sResources"
 
-"BuildDockerImagesForK8s" ==> "ApplyK8sResources"
+"BuildDockerImagesForK8s"
+==> "InstallPulumiDependenciesForK8s"
+==> "ApplyK8sResources"
 
 "ApplyK8sResources" ==> "RunK8sApp"
 

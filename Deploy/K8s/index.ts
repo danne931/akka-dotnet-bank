@@ -69,7 +69,7 @@ initWebService(k8sProvider)
 let url = null
 if (isDev) {
   const loadBalancer = initLocalWebLoadBalancer(k8sProvider)
-  url = loadBalancer.status.apply(o => o.loadBalancer.ingress[0].ip)
+  url = loadBalancer.status.loadBalancer.ingress[0].ip
 } else {
   // TODO: https; host
   const ingress = initIngress(k8sProvider)
