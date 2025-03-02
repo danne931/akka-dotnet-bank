@@ -472,6 +472,7 @@ let TransactionTableComponent
                   |> List.filter (
                      keepRealtimeEventsCorrespondingToSelectedFilter state.Query
                   )
+                  |> List.rev
                   |> List.fold Transaction.applyAccountEvent txns
                   |> _.Values
                   |> List.ofSeq
