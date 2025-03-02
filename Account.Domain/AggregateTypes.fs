@@ -676,6 +676,25 @@ module Transaction =
          )
       | _ -> None
 
+   /// Is this this AccountEvent an originating member of
+   /// a transaction?  Used to determine if a real-time event
+   /// should be included on the page.
+   /// Ex: If we receive a DomesticTransferFailed AccountEvent
+   /// for a transaction which is not displayed then we do not
+   /// care to display it.  If on the other hand it was a
+   /// DomesticTransferPending, an originating event, then we will.
+   let isOriginatingAccountEvent =
+      function
+      | AccountEvent.DebitedAccount _
+      | AccountEvent.DepositedCash _
+      | AccountEvent.InternalTransferWithinOrgPending _
+      | AccountEvent.InternalTransferBetweenOrgsPending _
+      | AccountEvent.InternalAutomatedTransferPending _
+      | AccountEvent.DomesticTransferPending _
+      | AccountEvent.PlatformPaymentPaid _
+      | AccountEvent.PlatformPaymentDeposited _ -> true
+      | _ -> false
+
    let applyAccountEvent
       (txns: Map<TransactionId, T>)
       (evt: AccountEvent)
@@ -714,16 +733,19 @@ module Transaction =
                        }
                      | _ -> txn))
          | None ->
-            txns
-            |> Map.add txnId {
-               Type = txnType
-               Status = status
-               Events = [ evt ]
-               Timestamp = envelope.Timestamp
-               Amount = amount
-               Id = TransactionId envelope.CorrelationId
-               OrgId = envelope.OrgId
-            }
+            if isOriginatingAccountEvent evt then
+               txns
+               |> Map.add txnId {
+                  Type = txnType
+                  Status = status
+                  Events = [ evt ]
+                  Timestamp = envelope.Timestamp
+                  Amount = amount
+                  Id = TransactionId envelope.CorrelationId
+                  OrgId = envelope.OrgId
+               }
+            else
+               txns
       | None -> txns
 
    let fromAccountEvents (events: AccountEvent list) : T list =

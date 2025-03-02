@@ -294,10 +294,10 @@ let autoTransferRuleDisplay (rule: AutomaticTransfer.AutomaticTransferRule) =
 
 let transactionUIFriendlyFromAccountEvent
    (org: OrgWithAccountProfiles)
-   (txn: AccountEvent)
+   (evt: AccountEvent)
    : TransactionUIFriendly
    =
-   let _, envelope = AccountEnvelope.unwrap txn
+   let _, envelope = AccountEnvelope.unwrap evt
 
    let props = {
       Name = envelope.EventName
@@ -320,7 +320,7 @@ let transactionUIFriendlyFromAccountEvent
       |> Option.map (fun a -> a.Account.Name)
       |> Option.defaultValue "Account"
 
-   match txn with
+   match evt with
    | CreatedAccount _ -> { props with Info = "Created Account" }
    | DepositedCash evt -> {
       props with
