@@ -1,5 +1,6 @@
 import * as pulumi from '@pulumi/pulumi'
 import * as k8s from '@pulumi/kubernetes'
+import * as command from '@pulumi/command'
 
 import { ports, initContainers, isDev } from './environment'
 
@@ -167,7 +168,14 @@ export const initLocalWebLoadBalancer = (
         }
       }
     },
-    { provider }
+    {
+      provider,
+      // Run `minikube tunnel` in the background
+      dependsOn: new command.local.Command('minikubeTunnel', {
+        create: 'minikube tunnel > /dev/null 2>&1 &',
+        delete: 'pkill -f minikube'
+      })
+    }
   )
 
 // TODO: https; host
