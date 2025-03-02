@@ -16,7 +16,7 @@ module Http =
 
 module DateTime =
    let toISOString (date: DateTime) : string =
-      Fable.Core.JsInterop.emitJsExpr (string date) "new Date($0).toISOString()"
+      Fable.Core.JsInterop.emitJsExpr date "$0.toISOString()"
 
    let rangeAsQueryString (startDate: DateTime) (endDate: DateTime) : string =
       toISOString startDate + "," + toISOString endDate

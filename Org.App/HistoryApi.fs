@@ -209,14 +209,22 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
          (fun (queryParams, where) (cursor: HistoryCursor) ->
             let queryParams =
                [
-                  "timestamp", Writer.timestamp cursor.Timestamp
+                  "timestamp", Sql.timestamptz cursor.Timestamp
                   "eventId", Writer.eventId cursor.EventId
                ]
                @ queryParams
 
             let cursorWhere =
-               $"({Fields.timestamp} < @timestamp OR
-                ({Fields.timestamp} = @timestamp AND {Fields.eventId} < @eventId))"
+               // NOTE:
+               // Use of date.toISOString() browser API causes the timestamp
+               // to lose a wee bit of specificity.
+               // Ex: 2025-02-27T13:17:57.06234Z -> 2025-02-27T13:17:57.062Z
+               // Postgres has .06234 but our equivalence query has .062 so it
+               // will not match unless we truncate the Postgres value via the
+               // date_trunc function below.  I reckon this will be plenty
+               // sufficient for now.
+               let ts = $"date_trunc('milliseconds', {Fields.timestamp})"
+               $"{ts} < @timestamp OR ({ts} = @timestamp AND {Fields.eventId} < @eventId)"
 
             queryParams,
             {
@@ -284,7 +292,8 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             'employee' as event_type,
             e.first_name || ' ' || e.last_name AS employee_name,
             timestamp,
-            initiated_by_id,
+            {Fields.initiatedById},
+            {Fields.eventId},
             employee_event.event
          FROM {employeeEventTable}
          JOIN {employeeTable} e using({Fields.employeeId})
@@ -299,7 +308,8 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             'account' as event_type,
             '' as employee_name,
             timestamp,
-            initiated_by_id,
+            {Fields.initiatedById},
+            {Fields.eventId},
             {accountEventTable}.event
          FROM {accountEventTable}
          WHERE {where.Account}
@@ -313,7 +323,8 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             'org' as event_type,
             '' as employee_name,
             timestamp,
-            initiated_by_id,
+            {Fields.initiatedById},
+            {Fields.eventId},
             organization_event.event
          FROM {orgEventTable}
          WHERE {where.Org}
@@ -338,8 +349,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
          END as initiator_name
       FROM (
          {historySubQueries}
-
-         ORDER BY timestamp desc
+         ORDER BY timestamp desc, {Fields.eventId} desc
          LIMIT @limit
       )
       JOIN {employeeTable} initiators ON {Fields.initiatedById} = initiators.{Fields.employeeId}
