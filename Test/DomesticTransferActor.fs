@@ -13,6 +13,7 @@ open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open DomesticTransferRecipientActor
+open Email
 
 module Stub = AccountStub
 
@@ -149,7 +150,7 @@ let initDomesticTransferActor
    (tck: TestKit.Tck)
    (breaker: Akka.Pattern.CircuitBreaker)
    (getAccountActor: AccountId -> IEntityRef<AccountMessage>)
-   (emailActor: IActorRef<EmailActor.EmailMessage>)
+   (emailActor: IActorRef<EmailMessage>)
    (transferRequest: DomesticTransferRequest)
    =
    let prop =
@@ -170,7 +171,7 @@ let init (tck: TestKit.Tck) (mockTransferRequest: DomesticTransferRequest) =
    let domesticTransferRef =
       initDomesticTransferActor tck breaker
       <| getAccountEntityRef mockAccountRef
-      <| (typed emailProbe :> IActorRef<EmailActor.EmailMessage>)
+      <| (typed emailProbe :> IActorRef<EmailMessage>)
       <| mockTransferRequest
 
    domesticTransferRef, breaker, emailProbe
@@ -270,10 +271,10 @@ let tests =
             txn
          )
 
-         let msg = emailProbe.ExpectMsg<EmailActor.EmailMessage>()
+         let msg = emailProbe.ExpectMsg<EmailMessage>()
 
          match msg with
-         | EmailActor.EmailMessage.ApplicationErrorRequiresSupport _ ->
+         | EmailMessage.ApplicationErrorRequiresSupport _ ->
             Expect.isTrue true ""
          | msg ->
             Expect.isTrue
@@ -308,10 +309,10 @@ let tests =
             txn
          )
 
-         let msg = emailProbe.ExpectMsg<EmailActor.EmailMessage>()
+         let msg = emailProbe.ExpectMsg<EmailMessage>()
 
          match msg with
-         | EmailActor.EmailMessage.ApplicationErrorRequiresSupport _ ->
+         | EmailMessage.ApplicationErrorRequiresSupport _ ->
             Expect.isTrue true ""
          | msg ->
             Expect.isTrue

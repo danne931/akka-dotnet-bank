@@ -14,6 +14,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Lib.SharedTypes
 open CommandApproval
+open Email
 
 module Stub = EmployeeStub
 
@@ -100,7 +101,7 @@ let init (tck: TestKit.Tck) =
    let getAccountRef = getAccountEntityRef (initMockAccountActor tck)
 
    let getEmailActor (_: ActorSystem) =
-      (typed emailProbe :> IActorRef<EmailActor.EmailMessage>)
+      (typed emailProbe :> IActorRef<EmailMessage>)
 
    let prop =
       mockPersistenceSupervisorProps (fun ctx ->
@@ -134,10 +135,10 @@ let tests =
 
          let state = tck.ExpectMsg<Option<Employee>>()
 
-         let msg = o.emailProbe.ExpectMsg<EmailActor.EmailMessage>()
+         let msg = o.emailProbe.ExpectMsg<EmailMessage>()
 
          match msg with
-         | EmailActor.EmailMessage.EmployeeInvite invite ->
+         | EmailMessage.EmployeeInvite invite ->
             Expect.equal
                (state |> Option.map _.Email)
                (Some invite.Email)
@@ -158,10 +159,10 @@ let tests =
          let state = tck.ExpectMsg<Option<Employee>>()
          let employee = Expect.wantSome state ""
 
-         let msg = o.emailProbe.ExpectMsg<EmailActor.EmailMessage>()
+         let msg = o.emailProbe.ExpectMsg<EmailMessage>()
 
          match msg with
-         | EmailActor.EmailMessage.EmployeeInvite invite ->
+         | EmailMessage.EmployeeInvite invite ->
             Expect.equal
                invite.Email
                employee.Email
@@ -332,7 +333,7 @@ let tests =
          o.employeeActor <! EmployeeMessage.GetEmployee
 
          let state = tck.ExpectMsg<Option<Employee>>()
-         o.emailProbe.ExpectMsg<EmailActor.EmailMessage>() |> ignore
+         o.emailProbe.ExpectMsg<EmailMessage>() |> ignore
 
          let cmd =
             EmployeeCommand.RefreshInvitationToken
@@ -342,10 +343,10 @@ let tests =
 
          let employee = Expect.wantSome state ""
 
-         let msg = o.emailProbe.ExpectMsg<EmailActor.EmailMessage>()
+         let msg = o.emailProbe.ExpectMsg<EmailMessage>()
 
          match msg with
-         | EmailActor.EmailMessage.EmployeeInvite invite ->
+         | EmailMessage.EmployeeInvite invite ->
             Expect.equal
                invite.Email
                employee.Email
@@ -436,11 +437,11 @@ let tests =
 
          o.employeeActor <! EmployeeMessage.StateChange debitToBeRejectedMsg
 
-         o.emailProbe.ExpectMsg<EmailActor.EmailMessage>() |> ignore
-         let msg = o.emailProbe.ExpectMsg<EmailActor.EmailMessage>()
+         o.emailProbe.ExpectMsg<EmailMessage>() |> ignore
+         let msg = o.emailProbe.ExpectMsg<EmailMessage>()
 
          match msg with
-         | EmailActor.EmailMessage.PurchaseFailed info ->
+         | EmailMessage.PurchaseFailed info ->
             Expect.equal
                info.Reason
                (PurchaseFailReason.ExceededDailyCardLimit(

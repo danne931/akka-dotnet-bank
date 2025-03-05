@@ -14,6 +14,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
 open BillingStatement
+open Email
 
 module Stub = AccountStub
 
@@ -104,13 +105,16 @@ let init (tck: TestKit.Tck) =
       typed domesticTransferProbe :> IActorRef<DomesticTransferMsg>
 
    let getEmailActor (_: ActorSystem) =
-      (typed emailProbe :> IActorRef<EmailActor.EmailMessage>)
+      (typed emailProbe :> IActorRef<EmailMessage>)
 
    let getAccountClosureActor (_: ActorSystem) =
       typed accountClosureProbe :> IActorRef<AccountClosureMessage>
 
    let getBillingStatementActor (_: ActorSystem) =
       typed billingProbe :> IActorRef<BillingStatementMessage>
+
+   let getSchedulingActor (_: ActorSystem) =
+      schedulingProbe |> typed :> IActorRef<SchedulingActor.Message>
 
    let prop =
       mockPersistenceSupervisorProps (fun ctx ->
@@ -122,10 +126,10 @@ let init (tck: TestKit.Tck) =
                getEmailActor
                getAccountClosureActor
                getBillingStatementActor
+               getSchedulingActor
                getOrgRef
                getEmployeeRef
-               getAccountRef
-               (schedulingProbe |> typed :> IActorRef<SchedulingActor.Message>))
+               getAccountRef)
 
    let accountActor = spawn tck ActorMetadata.account.Name prop
 
@@ -158,10 +162,10 @@ let tests =
             (Some Stub.accountStateAfterCreate)
             "Account state after CreateAccountCommand should be initialized"
 
-         let msg = o.emailProbe.ExpectMsg<EmailActor.EmailMessage>()
+         let msg = o.emailProbe.ExpectMsg<EmailMessage>()
 
          match msg with
-         | EmailActor.EmailMessage.AccountOpen(accountName, orgId) ->
+         | EmailMessage.AccountOpen(accountName, orgId) ->
             Expect.equal
                (accountName, orgId)
                (state.Value.FullName, state.Value.OrgId)
@@ -343,10 +347,10 @@ let tests =
             2101m
             "Account state should reflect a received transfer"
 
-         o.emailProbe.ExpectMsg<EmailActor.EmailMessage>() |> ignore
+         o.emailProbe.ExpectMsg<EmailMessage>() |> ignore
 
-         match o.emailProbe.ExpectMsg<EmailActor.EmailMessage>() with
-         | EmailActor.EmailMessage.InternalTransferBetweenOrgsDeposited info ->
+         match o.emailProbe.ExpectMsg<EmailMessage>() with
+         | EmailMessage.InternalTransferBetweenOrgsDeposited info ->
             Expect.isTrue true ""
          | msg ->
             Expect.isTrue
@@ -402,10 +406,10 @@ let tests =
             "RegisterBillingStatements msg should send transactions equivalent
              to those associated with the account events"
 
-         o.emailProbe.ExpectMsg<EmailActor.EmailMessage>() |> ignore
+         o.emailProbe.ExpectMsg<EmailMessage>() |> ignore
 
-         match o.emailProbe.ExpectMsg<EmailActor.EmailMessage>() with
-         | EmailActor.EmailMessage.BillingStatement(accountName, orgId) ->
+         match o.emailProbe.ExpectMsg<EmailMessage>() with
+         | EmailMessage.BillingStatement(accountName, orgId) ->
             Expect.equal
                (accountName, orgId)
                (initAccount.FullName, initAccount.OrgId)
