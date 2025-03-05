@@ -133,7 +133,14 @@ module ActorMetadata =
 
    type AccountSeederMarker() = class end
 
-   type EmailMarker() = class end
+   /// Singleton Proxy to forward emails from web node
+   type EmailProxyMarker() = class end
+
+   /// Singleton consumes email messages off RabbitMq
+   type EmailConsumerMarker() = class end
+
+   /// Enqueues email messages into RabbitMq
+   type EmailProducerMarker() = class end
 
    type AccountClosureMarker() = class end
 
@@ -237,7 +244,20 @@ module ActorMetadata =
       Route = "billing-statement"
    }
 
-   let email = { Name = "email"; Route = "email" }
+   let emailConsumer = {
+      Name = "email-consumer"
+      Route = "email-consumer"
+   }
+
+   let emailProducer = {
+      Name = "email-producer"
+      Route = "email-producer"
+   }
+
+   let emailProxy = {
+      Name = "email-proxy"
+      Route = "email-proxy"
+   }
 
    let auditor = { Name = "auditor"; Route = "auditor" }
 

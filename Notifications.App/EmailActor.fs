@@ -1,10 +1,10 @@
 [<RequireQualifiedAccess>]
-module EmailActor
+module EmailConsumerActor
 
 open Akka.Actor
-open Akka.Hosting
+open Akka.Streams.Amqp.RabbitMq
+open Akka.Streams.Amqp.RabbitMq.Dsl
 open Akkling
-open Akka.Streams
 open Akkling.Streams
 open System
 open System.Net.Http
@@ -12,48 +12,17 @@ open System.Net.Http.Json
 open System.Threading.Tasks
 open FsToolkit.ErrorHandling
 
-open Lib.Postgres
 open Lib.Types
+open Lib.Postgres
 open Lib.SharedTypes
-open ActorUtil
 open Bank.Employee.Domain
 open SignalRBroadcast
-
-type EmployeeInviteEmailInfo = {
-   Name: string
-   Email: Email
-   Token: InviteToken
-   OrgId: OrgId
-}
-
-type TransferDepositEmailInfo = {
-   AccountName: string
-   Amount: decimal
-   SenderBusinessName: string
-   OrgId: OrgId
-}
-
-type PurchaseFailEmailInfo = {
-   Email: Email
-   Reason: PurchaseFailReason
-   OrgId: OrgId
-}
-
-[<RequireQualifiedAccess>]
-type EmailMessage =
-   | AccountOpen of accountName: string * OrgId
-   | AccountClose of accountName: string * OrgId
-   | BillingStatement of accountName: string * OrgId
-   | PurchaseFailed of PurchaseFailEmailInfo
-   | InternalTransferBetweenOrgsDeposited of TransferDepositEmailInfo
-   | ApplicationErrorRequiresSupport of error: string * OrgId
-   | EmployeeInvite of EmployeeInviteEmailInfo
+open Email
 
 type private CircuitBreakerMessage =
+   | BreakerOpen
    | BreakerHalfOpen
    | BreakerClosed
-
-type private QueueItem = QueueItem of EmailMessage
 
 module private TrackingEvent =
    type PreliminaryT = {
@@ -139,14 +108,29 @@ let private emailPropsFromMessage
       |}
      }
 
+let mutable cnt = 0
+
 // NOTE
 // Raise an exception instead of returning Result.Error to trip circuit breaker.
-let private sendEmail
-   (client: HttpClient)
-   (data: TrackingEvent.T)
-   (onError: string -> unit)
-   =
-   task {
+let private sendEmail (client: HttpClient) (data: TrackingEvent.T) = task {
+   do! Async.Sleep(500)
+
+   if cnt > 1 then
+      let res = new HttpResponseMessage(Net.HttpStatusCode.OK)
+      printfn "res %A" res
+
+      res.Content <-
+         new StringContent(
+            "DINO",
+            System.Text.Encoding.UTF8,
+            "application/json"
+         )
+
+      printfn "content %A" res.Content
+      return res
+   else
+      failwith "fail then get back up"
+
       use! response =
          client.PostAsJsonAsync(
             "track",
@@ -160,12 +144,10 @@ let private sendEmail
 
       if not response.IsSuccessStatusCode then
          let! content = response.Content.ReadFromJsonAsync()
-         let msg = $"Error sending email: {response.ReasonPhrase} - {content}"
-         onError msg
-         failwith msg
+         failwith $"Error sending email: {response.ReasonPhrase} - {content}"
 
       return response
-   }
+}
 
 let private createClient (bearerToken: string) =
    let client =
@@ -176,114 +158,93 @@ let private createClient (bearerToken: string) =
 
    client
 
-let initQueueSource (throttle: StreamThrottle) =
-   Source.queue OverflowStrategy.Backpressure 1000
-   |> Source.throttle
-         ThrottleMode.Shaping
-         throttle.Burst
-         throttle.Count
-         throttle.Duration
-
-let actorProps
+let deserializeFromRabbit
    (system: ActorSystem)
-   (breaker: Akka.Pattern.CircuitBreaker)
-   (throttle: StreamThrottle)
-   (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
-   (broadcaster: SignalRBroadcast)
+   (msg: CommittableIncomingMessage)
    =
-   let client =
-      EnvNotifications.config.EmailBearerToken |> Option.map createClient
+   try
+      let serializer =
+         system.Serialization.FindSerializerForType(typeof<EmailMessage>)
 
-   let rec init (ctx: Actor<obj>) = actor {
-      let! msg = ctx.Receive()
+      Ok <| serializer.FromBinary<EmailMessage>(msg.Message.Bytes.ToArray())
+   with ex ->
+      Error ex
 
-      match msg with
-      | LifecycleEvent e ->
-         match e with
-         | PreStart ->
-            logInfo ctx "Prestart - Initialize EmailActor Queue Source"
+let mutable attemptEmailCount = 0
+let mutable goodEmailCount = 0
 
-            let queue =
-               initQueueSource throttle
-               |> Source.toMat
-                     (Sink.forEach (fun msg -> ctx.Self <! msg))
-                     Keep.left
-               |> Graph.run (system.Materializer())
+let initEmailSink
+   (queueConnection: AmqpConnectionDetails)
+   (queueSettings: RabbitQueueSettings)
+   (mailbox: Actor<obj>)
+   (breaker: Akka.Pattern.CircuitBreaker)
+   (client: HttpClient option)
+   (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
+   parallelism
+   : Akka.Streams.UniqueKillSwitch
+   =
+   let materializer = mailbox.System.Materializer()
 
-            breaker.OnHalfOpen(fun () ->
-               broadcaster.circuitBreaker {
-                  Service = CircuitBreakerService.Email
-                  Status = CircuitBreakerStatus.HalfOpen
-                  Timestamp = DateTime.UtcNow
-               }
+   let sendEmailWithCircuitBreaker
+      client
+      (committable: CommittableIncomingMessage)
+      emailData
+      =
+      breaker.WithCircuitBreaker(fun () -> task {
+         try
+            let! res = sendEmail client emailData
+            do! committable.Ack()
+            return res
+         with e ->
+            do! committable.Nack()
+            return failwith e.Message
+      })
+      |> Async.AwaitTask
 
-               ctx.Self <! BreakerHalfOpen)
-            |> ignore
+   let source =
+      let settings =
+         Lib.Rabbit.createSourceSettings queueSettings.Name queueConnection
 
-            breaker.OnClose(fun () ->
-               broadcaster.circuitBreaker {
-                  Service = CircuitBreakerService.Email
-                  Status = CircuitBreakerStatus.Closed
-                  Timestamp = DateTime.UtcNow
-               }
+      AmqpSource.CommittableSource(settings, bufferSize = parallelism)
 
-               ctx.Self <! BreakerClosed)
-            |> ignore
+   let sink =
+      Sink.onComplete (function
+         | None -> ()
+         | Some err ->
+            logError mailbox $"Notifications stream completed with error: {err}")
 
-            breaker.OnOpen(fun () ->
-               SystemLog.warning system "Email circuit breaker open"
+   source
+   |> Source.viaMat KillSwitch.single Keep.right
+   |> Source.asyncMapUnordered parallelism (fun committable -> async {
+      let nack = committable.Nack >> Async.AwaitTask
 
-               broadcaster.circuitBreaker {
-                  Service = CircuitBreakerService.Email
-                  Status = CircuitBreakerStatus.Open
-                  Timestamp = DateTime.UtcNow
-               })
-            |> ignore
+      if breaker.IsOpen then
+         logWarning mailbox "Circuit breaker open - will try again later"
+         do! nack ()
+         return None
+      else
+         match deserializeFromRabbit mailbox.System committable with
+         | Error err ->
+            logError
+               mailbox
+               $"Error deserializing EmailMessage from RabbitMq {err}"
 
-            return! processing ctx queue
-         | _ -> return ignored ()
-      | msg ->
-         logError ctx $"Unknown msg {msg}"
-         return unhandled ()
-   }
-
-   and processing (ctx: Actor<obj>) (queue: ISourceQueueWithComplete<obj>) = actor {
-      let! msg = ctx.Receive()
-
-      let sendEmailWithCircuitBreaker emailData =
-         let onSendFail _ =
-            ctx.Schedule (TimeSpan.FromSeconds 15.) ctx.Self msg |> ignore
-
-         breaker.WithCircuitBreaker(fun () ->
-            sendEmail client.Value emailData onSendFail)
-         |> Async.AwaitTask
-         |!> retype ctx.Self
-
-      match msg with
-      | :? EmailMessage as msg ->
-         let! result = queueOffer<obj> queue <| QueueItem msg
-
-         return
-            match result with
-            | Ok effect -> effect
-            | Error errMsg -> failwith errMsg
-      | :? QueueItem as msg ->
-         let (QueueItem msg) = msg
-
-         if client.IsNone then
-            logWarning ctx "EmailBearerToken not set.  Will not send email."
-         elif breaker.IsOpen then
-            ctx.Stash()
-         else
-            // TODO:
-            // Maybe create a configurable notification api
-            // later if I get bored.  For now just send emails
-            // which aren't designated to a particular employee
-            // to all admins of an organization.
+            do! nack ()
+            return None
+         | Ok msg ->
             let preliminaryData = emailPropsFromMessage msg
 
-            match TrackingEvent.create preliminaryData with
-            | None ->
+            match TrackingEvent.create preliminaryData, client with
+            | _, None ->
+               logWarning
+                  mailbox
+                  "EmailBearerToken not set. Will not send email."
+
+               do! nack ()
+               return None
+            | Some info, Some client ->
+               return Some [ committable, client, info ]
+            | None, Some client ->
                let! emailsToSendToAdmins =
                   getAdminEmailsForOrg preliminaryData.OrgId
                   |> Async.AwaitTask
@@ -296,40 +257,151 @@ let actorProps
                   )
 
                match emailsToSendToAdmins with
-               | Error err -> logError ctx $"Error getting admin emails - {err}"
+               | Error err ->
+                  logError mailbox $"Error getting admin emails - {err}"
+                  do! nack ()
+                  return None
                | Ok None ->
                   logError
-                     ctx
+                     mailbox
                      $"Could not retrieve admin emails for email message: {msg}"
+
+                  do! nack ()
+                  return None
                | Ok(Some emails) ->
-                  emails |> List.iter sendEmailWithCircuitBreaker
-            | Some info -> sendEmailWithCircuitBreaker info
+                  return
+                     Some [ for info in emails -> committable, client, info ]
+   })
+   // Filter out items that were nacked due to circuit breaker being open,
+   // errors getting admin emails, or no EmailBearerToken set, etc.
+   |> Source.choose id
+   // Flatten (EmailInfo list) list to EmailInfo list.
+   |> Source.collect id
+   // Send email with circuit breaker integration.  If the email fails to
+   // send then the message will be Nacked and attempted later when the
+   // the breaker transition to HalfOpen or Closed.
+   |> Source.asyncMapUnordered parallelism (fun (committable, client, info) -> async {
+      if breaker.IsOpen then
+         logWarning mailbox "Circuit breaker open - will try again later"
+         do! committable.Nack() |> Async.AwaitTask
+      else
+         try
+            let! res = sendEmailWithCircuitBreaker client committable info
+            goodEmailCount <- goodEmailCount + 1
+            printfn "good %A" goodEmailCount
+
+         with e ->
+            printfn "bad %A" e
+
+         printfn "%A ATTEMPT EMAIL COUNT" attemptEmailCount
+         attemptEmailCount <- attemptEmailCount + 1
+
+      return 100
+   })
+   |> Source.toMat sink Keep.left
+   |> Graph.run materializer
+
+let actorProps
+   (breaker: Akka.Pattern.CircuitBreaker)
+   (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
+   (broadcaster: SignalRBroadcast)
+   (rabbitConnection: AmqpConnectionDetails)
+   (queueSettings: RabbitQueueSettings)
+   (bearerToken: string option)
+   =
+   let client = Some(createClient "test-invalid-token")
+   //let client = bearerToken |> Option.map createClient
+
+   let rec init (ctx: Actor<obj>) = actor {
+      let! msg = ctx.Receive()
+      printfn "MSG RECEIVED in init %A" msg
+
+      match msg with
       | LifecycleEvent e ->
          match e with
-         | PostStop ->
-            queue.Complete()
-            return! init ctx
+         | PreStart ->
+            logInfo ctx "Prestart - Initialize EmailActor Queue Source"
+
+            breaker.OnHalfOpen(fun () ->
+               cnt <- cnt + 1
+
+               ctx.Self <! BreakerHalfOpen
+
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.Email
+                  Status = CircuitBreakerStatus.HalfOpen
+                  Timestamp = DateTime.UtcNow
+               })
+            |> ignore
+
+            breaker.OnClose(fun () ->
+               ctx.Self <! BreakerClosed
+
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.Email
+                  Status = CircuitBreakerStatus.Closed
+                  Timestamp = DateTime.UtcNow
+               })
+            |> ignore
+
+            breaker.OnOpen(fun () ->
+               ctx.Self <! BreakerOpen
+
+               broadcaster.circuitBreaker {
+                  Service = CircuitBreakerService.Email
+                  Status = CircuitBreakerStatus.Open
+                  Timestamp = DateTime.UtcNow
+               })
+            |> ignore
+
+            return! processing ctx queueSettings.MaxParallelism
          | _ -> return ignored ()
-      | :? HttpResponseMessage ->
-         // Successful request to email service -> ignore
-         return ignored ()
-      | :? Status.Failure as e ->
-         logError ctx $"Failed request to email service {e}"
-         return ignored ()
-      | :? CircuitBreakerMessage as msg ->
-         match msg with
-         | BreakerHalfOpen ->
-            logInfo ctx "Breaker half open - unstash one"
-            ctx.Unstash()
-            return ignored ()
-         | BreakerClosed ->
-            logInfo ctx "Breaker closed - unstash all"
-            ctx.UnstashAll()
-            return ignored ()
       | msg ->
          logError ctx $"Unknown msg {msg}"
          return unhandled ()
    }
+
+   and processing (ctx: Actor<obj>) (limit: int) =
+      let killSwitch =
+         initEmailSink
+            rabbitConnection
+            queueSettings
+            ctx
+            breaker
+            client
+            getAdminEmailsForOrg
+            limit
+
+      actor {
+         let! msg = ctx.Receive()
+
+         match msg with
+         | LifecycleEvent e ->
+            printfn "lifecycle event down below %A" e
+
+            match e with
+            | PostStop ->
+               printfn "POSTSTOP email consumer"
+               //queue.Complete()
+               return! init ctx
+            | _ -> return ignored ()
+         | :? CircuitBreakerMessage as msg ->
+            match msg with
+            | BreakerOpen ->
+               logWarning ctx "Breaker open - pause processing"
+               killSwitch.Shutdown()
+               //killSwitch.Abort(exn "BreakerOpen")
+               return ignored ()
+            | BreakerHalfOpen ->
+               logWarning ctx "Breaker half open - try processing one"
+               return! processing ctx 1
+            | BreakerClosed ->
+               logWarning ctx "Breaker closed - resume processing"
+               return! processing ctx queueSettings.MaxParallelism
+         | msg ->
+            logError ctx $"Unknown msg {msg}"
+            return unhandled ()
+      }
 
    props init
 
@@ -356,5 +428,17 @@ let getAdminEmailsForOrg (orgId: OrgId) =
       ])
       Reader.email
 
-let get (system: ActorSystem) : IActorRef<EmailMessage> =
-   typed <| ActorRegistry.For(system).Get<ActorMetadata.EmailMarker>()
+let initProps
+   (breaker: Akka.Pattern.CircuitBreaker)
+   (broadcaster: SignalRBroadcast)
+   (queueConnection: AmqpConnectionDetails)
+   (queueSettings: RabbitQueueSettings)
+   (bearerToken: string option)
+   =
+   actorProps
+      breaker
+      getAdminEmailsForOrg
+      broadcaster
+      queueConnection
+      queueSettings
+      bearerToken

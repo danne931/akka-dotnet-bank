@@ -15,6 +15,7 @@ open CommandApproval
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
+open Email
 
 let startEmployeeRoutes (app: WebApplication) =
    app
@@ -151,15 +152,15 @@ let startEmployeeRoutes (app: WebApplication) =
                      | Ok _ -> return Results.Ok()
                      | Error e -> return RouteUtil.badRequest e
                   else
-                     let invite: EmailActor.EmployeeInviteEmailInfo = {
+                     let invite: EmployeeInviteEmailInfo = {
                         OrgId = employee.OrgId
                         Name = employee.Name
                         Email = employee.Email
                         Token = token
                      }
 
-                     EmailActor.get sys
-                     <! EmailActor.EmailMessage.EmployeeInvite invite
+                     EmailProducerActor.getProxy sys
+                     <! EmailMessage.EmployeeInvite invite
 
                      return Results.Ok()
                | _ ->

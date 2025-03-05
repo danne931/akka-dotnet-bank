@@ -5,11 +5,14 @@
 
   <ItemGroup>
     <Compile Include="Environment.fs" />
+    <Compile Include="Email.fs" />
+    <Compile Include="EmailProducerActor.fs" />
     <Compile Include="EmailActor.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Streams.Amqp.RabbitMq" />
     <PackageReference Include="Akkling" />
   </ItemGroup>
 

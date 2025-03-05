@@ -67,7 +67,7 @@ builder.Services.AddAkka(
                typedefof<Account>
                typedefof<CircuitBreakerMessage>
                typedefof<CircuitBreakerActorState>
-               typedefof<EmailActor.EmailMessage>
+               typedefof<Email.EmailMessage>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka
                //       ShardingEnvelope so need to explicitly add it for
@@ -102,8 +102,8 @@ builder.Services.AddAkka(
             ActorMetadata.circuitBreaker.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingletonProxy<ActorMetadata.EmailMarker>(
-            ActorMetadata.email.Name,
+         .WithSingletonProxy<ActorMetadata.EmailProxyMarker>(
+            ActorMetadata.emailProxy.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          .WithSingleton<ActorMetadata.AccountLoadTestMarker>(

@@ -13,7 +13,6 @@ let builder = Env.builder
 // See https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-7.0&tabs=linux#set-a-secret
 
 type NotificationsInput = {
-   EmailThrottle: Env.StreamThrottleInput
    EmailServiceUri: string
    EmailBearerToken: string option
    SupportEmail: string option
@@ -22,15 +21,28 @@ type NotificationsInput = {
       CallTimeoutSeconds: int option
       ResetTimeoutSeconds: int option
    |}
+   RabbitConnection: {|
+      Host: string option
+      Port: int option
+      VirtualHost: string option
+      Username: string option
+      Password: string option
+   |}
+   RabbitQueue: {|
+      Name: string option
+      MaxParallelism: int option
+   |}
 }
 
 type NotificationsConfig = {
    EmailServiceUri: string
-   EmailThrottle: StreamThrottle
    EmailBearerToken: string option
    SupportEmail: string option
    circuitBreaker: Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
+   RabbitConnection: RabbitConnectionSettings
+   RabbitQueue: RabbitQueueSettings
 }
+
 
 let private errorMessage missing =
    $"""
@@ -62,18 +74,27 @@ let config =
          EmailServiceUri = input.EmailServiceUri
          EmailBearerToken = input.EmailBearerToken
          SupportEmail = input.SupportEmail
-         EmailThrottle = {
-            Count = input.EmailThrottle.Count |> Option.defaultValue 150
-            Burst = input.EmailThrottle.Burst |> Option.defaultValue 150
-            Duration =
-               input.EmailThrottle.Seconds
-               |> Option.defaultValue 1
-               |> TimeSpan.FromSeconds
+         RabbitConnection = {
+            Host =
+               input.RabbitConnection.Host |> Option.defaultValue "localhost"
+            Port = input.RabbitConnection.Port |> Option.defaultValue 5672
+            VirtualHost =
+               input.RabbitConnection.VirtualHost |> Option.defaultValue "/"
+            Username =
+               input.RabbitConnection.Username |> Option.defaultValue "guest"
+            Password =
+               input.RabbitConnection.Password |> Option.defaultValue "guest"
+         }
+         RabbitQueue = {
+            Name = input.RabbitQueue.Name |> Option.defaultValue "email"
+            MaxParallelism =
+               input.RabbitQueue.MaxParallelism |> Option.defaultValue 10
          }
          circuitBreaker =
             fun system ->
                Akka.Pattern.CircuitBreaker(
                   system.Scheduler,
+
                   input.CircuitBreaker.MaxFailures |> Option.defaultValue 2,
 
                   input.CircuitBreaker.CallTimeoutSeconds
@@ -81,7 +102,7 @@ let config =
                   |> TimeSpan.FromSeconds,
 
                   input.CircuitBreaker.ResetTimeoutSeconds
-                  |> Option.defaultValue 10
+                  |> Option.defaultValue 30
                   |> TimeSpan.FromSeconds
                )
       }

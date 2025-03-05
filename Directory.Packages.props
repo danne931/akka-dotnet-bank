@@ -19,6 +19,7 @@
     <PackageVersion Include="Akka.Persistence.Sql" Version="1.5.37" />
     <PackageVersion Include="Akka.Quartz.Actor" Version="1.5.13" />
     <PackageVersion Include="Akka.Remote.Hosting" Version="1.5.37" />
+    <PackageVersion Include="Akka.Streams.Amqp.RabbitMq" Version="1.5.37" />
     <PackageVersion Include="Akkling" Version="0.16.2" />
     <PackageVersion Include="Akkling.Cluster.Sharding" Version="0.16.2" />
     <PackageVersion Include="Akkling.Persistence" Version="0.16.2" />

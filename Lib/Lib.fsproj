@@ -12,12 +12,14 @@
     <Compile Include="Actor.fs" />
     <Compile Include="BulkWriteStreamFlow.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
+    <Compile Include="RabbitMq.fs" /> 
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Akka.Cluster" />
     <PackageReference Include="Akka.Persistence.Sql" />
     <PackageReference Include="Akka.Persistence.Extras" />
+    <PackageReference Include="Akka.Streams.Amqp.RabbitMq" />
     <PackageReference Include="Akkling" />
     <PackageReference Include="Akkling.Cluster.Sharding" />
     <PackageReference Include="FsConfig" />
