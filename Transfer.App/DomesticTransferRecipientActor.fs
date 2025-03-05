@@ -14,6 +14,7 @@ open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open SignalRBroadcast
+open Email
 
 module Command = DomesticTransferToCommand
 type private FailReason = DomesticTransferFailReason
@@ -137,7 +138,7 @@ let handleTransfer
 let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getEmailActor: unit -> IActorRef<EmailActor.EmailMessage>)
+   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (requestTransfer: DomesticTransferRequest)
    : Props<obj>
    =
@@ -212,8 +213,8 @@ let actorProps
                | FailReason.InvalidAction ->
                   logError $"Transfer API requires code update: {err}"
 
-                  getEmailActor ()
-                  <! EmailActor.EmailMessage.ApplicationErrorRequiresSupport(
+                  getEmailRef mailbox.System
+                  <! EmailMessage.ApplicationErrorRequiresSupport(
                      string err,
                      txn.Sender.OrgId
                   )
@@ -270,9 +271,9 @@ let private transferRequest
    }
 
 let initProps
-   (system: ActorSystem)
    (broadcaster: SignalRBroadcast)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (breaker: Akka.Pattern.CircuitBreaker)
    (router: Akka.Routing.Pool)
    : Props<obj>
@@ -319,11 +320,7 @@ let initProps
             |> ignore
 
             let props = {
-               actorProps
-                  breaker
-                  getAccountRef
-                  (fun _ -> EmailActor.get system)
-                  transferRequest with
+               actorProps breaker getAccountRef getEmailRef transferRequest with
                   Router = Some router
             }
 

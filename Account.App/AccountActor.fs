@@ -20,6 +20,7 @@ open BillingStatement
 open DomesticTransferRecipientActor
 open AutomaticTransfer
 open SignalRBroadcast
+open Email
 
 type private InternalTransferMsg =
    InternalTransferRecipientActor.InternalTransferMessage
@@ -29,7 +30,7 @@ type private InternalTransferMsg =
 // Email account owner to notify of billing statement availability.
 let private billingCycle
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
-   (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
+   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    (mailbox: Eventsourced<obj>)
    (state: AccountSnapshot)
    (evt: BankEvent<BillingCycleStarted>)
@@ -66,8 +67,7 @@ let private billingCycle
 
       mailbox.Parent() <! msg
 
-   let msg =
-      EmailActor.EmailMessage.BillingStatement(account.FullName, account.OrgId)
+   let msg = EmailMessage.BillingStatement(account.FullName, account.OrgId)
 
    getEmailActor mailbox.System <! msg
 
@@ -153,15 +153,15 @@ let private handleValidationError
 
 let actorProps
    (broadcaster: SignalRBroadcast)
-   (getOrStartInternalTransferActor: Actor<_> -> IActorRef<InternalTransferMsg>)
-   (getDomesticTransferActor: ActorSystem -> IActorRef<DomesticTransferMessage>)
-   (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
-   (getAccountClosureActor: ActorSystem -> IActorRef<AccountClosureMessage>)
-   (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
+   (getOrStartInternalTransferRef: Actor<_> -> IActorRef<InternalTransferMsg>)
+   (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
+   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
+   (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
+   (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
+   (getSchedulingRef: ActorSystem -> IActorRef<SchedulingActor.Message>)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (schedulingRef: IActorRef<SchedulingActor.Message>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -213,20 +213,20 @@ let actorProps
 
                getEmployeeRef employee.EmployeeId <! msg
             | InternalTransferWithinOrgPending e ->
-               getOrStartInternalTransferActor mailbox
+               getOrStartInternalTransferRef mailbox
                <! InternalTransferMsg.TransferRequestWithinOrg e
             | InternalTransferBetweenOrgsPending e ->
-               getOrStartInternalTransferActor mailbox
+               getOrStartInternalTransferRef mailbox
                <! InternalTransferMsg.TransferRequestBetweenOrgs e
             | InternalAutomatedTransferPending e ->
-               getOrStartInternalTransferActor mailbox
+               getOrStartInternalTransferRef mailbox
                <! InternalTransferMsg.AutomatedTransferRequest e
             | InternalTransferBetweenOrgsScheduled e ->
-               schedulingRef
+               getSchedulingRef mailbox.System
                <! SchedulingActor.Message.ScheduleInternalTransferBetweenOrgs
                      e.Data
             | DomesticTransferScheduled e ->
-               schedulingRef
+               getSchedulingRef mailbox.System
                <! SchedulingActor.Message.ScheduleDomesticTransfer e.Data
             | DomesticTransferPending e ->
                let txn = TransferEventToDomesticTransfer.fromPending e
@@ -237,7 +237,7 @@ let actorProps
                      txn
                   )
 
-               getDomesticTransferActor mailbox.System <! msg
+               getDomesticTransferRef mailbox.System <! msg
             | DomesticTransferFailed e ->
                let info = e.Data.BaseInfo
 
@@ -283,7 +283,7 @@ let actorProps
                | _ -> ()
             | InternalTransferBetweenOrgsDeposited e ->
                let msg =
-                  EmailActor.EmailMessage.InternalTransferBetweenOrgsDeposited(
+                  EmailMessage.InternalTransferBetweenOrgsDeposited(
                      {
                         OrgId = account.OrgId
                         AccountName = account.FullName
@@ -292,25 +292,18 @@ let actorProps
                      }
                   )
 
-               getEmailActor mailbox.System <! msg
+               for _ in [ 1..3_000 ] do
+                  getEmailRef mailbox.System <! msg
             | CreatedAccount _ ->
                let msg =
-                  EmailActor.EmailMessage.AccountOpen(
-                     account.FullName,
-                     account.OrgId
-                  )
+                  EmailMessage.AccountOpen(account.FullName, account.OrgId)
 
-               getEmailActor mailbox.System <! msg
+               getEmailRef mailbox.System <! msg
             | AccountEvent.AccountClosed _ ->
-               getAccountClosureActor mailbox.System
+               getAccountClosureRef mailbox.System
                <! AccountClosureMessage.Register account
             | BillingCycleStarted e ->
-               billingCycle
-                  getBillingStatementActor
-                  getEmailActor
-                  mailbox
-                  state
-                  e
+               billingCycle getBillingStatementRef getEmailRef mailbox state e
             | PlatformPaymentPaid e ->
                let payee = e.Data.BaseInfo.Payee
 
@@ -484,22 +477,27 @@ let initProps
    (persistenceId: string)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getDomesticTransferActor: ActorSystem -> IActorRef<DomesticTransferMessage>)
+   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
+   (getAccountClosureActor: ActorSystem -> IActorRef<AccountClosureMessage>)
+   (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
+   (getSchedulingRef: ActorSystem -> IActorRef<SchedulingActor.Message>)
    =
    let getOrStartInternalTransferActor mailbox =
-      InternalTransferRecipientActor.getOrStart mailbox <| get system
+      InternalTransferRecipientActor.getOrStart mailbox (get system)
 
    let childProps =
       actorProps
          broadcaster
          getOrStartInternalTransferActor
-         DomesticTransferRecipientActor.get
-         EmailActor.get
-         AccountClosureActor.get
-         BillingStatementActor.get
+         getDomesticTransferActor
+         getEmailActor
+         getAccountClosureActor
+         getBillingStatementActor
+         getSchedulingRef
          getOrgRef
          getEmployeeRef
          (get system)
-         (SchedulingActor.get system)
 
    persistenceSupervisor
       supervisorOpts

@@ -17,11 +17,12 @@ open Bank.Employee.Domain
 open Bank.Org.Domain
 open CommandApproval
 open SignalRBroadcast
+open Email
 
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
    mailbox
-   (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
+   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    (employee: Employee)
    (cmd: EmployeeCommand)
    (err: Err)
@@ -43,7 +44,7 @@ let private handleValidationError
       | DebitAlreadyProgressedToCompletedOrFailed -> ()
       | ExceededDailyDebit(limit, accrued) ->
          let msg =
-            EmailActor.EmailMessage.PurchaseFailed(
+            EmailMessage.PurchaseFailed(
                {
                   OrgId = employee.OrgId
                   Email = employee.Email
@@ -55,7 +56,7 @@ let private handleValidationError
          getEmailActor (mailbox.System) <! msg
       | ExceededMonthlyDebit(limit, accrued) ->
          let msg =
-            EmailActor.EmailMessage.PurchaseFailed(
+            EmailMessage.PurchaseFailed(
                {
                   OrgId = employee.OrgId
                   Email = employee.Email
@@ -92,7 +93,7 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getEmailActor: ActorSystem -> IActorRef<EmailActor.EmailMessage>)
+   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -120,7 +121,7 @@ let actorProps
             match evt with
             | EmployeeEvent.CreatedAccountOwner e ->
                getEmailActor mailbox.System
-               <! EmailActor.EmailMessage.EmployeeInvite {
+               <! EmailMessage.EmployeeInvite {
                   OrgId = employee.OrgId
                   Name = employee.Name
                   Email = employee.Email
@@ -146,7 +147,7 @@ let actorProps
                   getOrgRef orgId <! OrgMessage.ApprovableRequest cmd
                | EmployeeStatus.PendingInviteConfirmation token ->
                   getEmailActor mailbox.System
-                  <! EmailActor.EmailMessage.EmployeeInvite {
+                  <! EmailMessage.EmployeeInvite {
                      OrgId = employee.OrgId
                      Name = employee.Name
                      Email = employee.Email
@@ -155,7 +156,7 @@ let actorProps
                | _ -> ()
             | EmployeeEvent.AccessApproved e ->
                getEmailActor mailbox.System
-               <! EmailActor.EmailMessage.EmployeeInvite {
+               <! EmailMessage.EmployeeInvite {
                   OrgId = employee.OrgId
                   Name = employee.Name
                   Email = employee.Email
@@ -165,7 +166,7 @@ let actorProps
                match employee.Status with
                | EmployeeStatus.PendingInviteConfirmation token ->
                   getEmailActor mailbox.System
-                  <! EmailActor.EmailMessage.EmployeeInvite {
+                  <! EmailMessage.EmployeeInvite {
                      OrgId = employee.OrgId
                      Name = employee.Name
                      Email = employee.Email
@@ -174,7 +175,7 @@ let actorProps
                | _ -> ()
             | EmployeeEvent.InvitationTokenRefreshed e ->
                getEmailActor mailbox.System
-               <! EmailActor.EmailMessage.EmployeeInvite {
+               <! EmailMessage.EmployeeInvite {
                   OrgId = employee.OrgId
                   Name = employee.Name
                   Email = employee.Email
@@ -236,7 +237,7 @@ let actorProps
             | EmployeeEvent.PurchaseRejectedByAccount e ->
                // TODO: Notify card network which issued the debit request to our bank.
                let msg =
-                  EmailActor.EmailMessage.PurchaseFailed(
+                  EmailMessage.PurchaseFailed(
                      {
                         Email = employee.Email
                         Reason = e.Data.Reason
@@ -333,9 +334,10 @@ let initProps
    (broadcaster: SignalRBroadcast)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
+   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    =
    persistenceSupervisor
       supervisorOpts
       isPersistableMessage
-      (actorProps broadcaster getOrgRef getAccountRef EmailActor.get)
+      (actorProps broadcaster getOrgRef getAccountRef getEmailActor)
       persistenceId

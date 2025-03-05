@@ -15,6 +15,7 @@ open Lib.SharedTypes
 open Lib.Types
 open ActorUtil
 open Bank.Account.Domain
+open Email
 
 let deleteAccounts
    (system: ActorSystem)
@@ -34,16 +35,17 @@ let deleteAccounts
 let initState: Map<AccountId, Account> = Map.empty
 
 let actorProps
-   (schedulingActorRef: IActorRef<SchedulingActor.Message>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getEmailRef: unit -> IActorRef<EmailActor.EmailMessage>)
+   (getSchedulingRef: ActorSystem -> IActorRef<SchedulingActor.Message>)
+   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (deleteHistoricalRecords:
       AccountId list -> TaskResultOption<AccountNumber list, Err>)
    (throttle: StreamThrottle)
    =
    let handler (mailbox: Eventsourced<obj>) =
+      let system = mailbox.System
       let logInfo, logError = logInfo mailbox, logError mailbox
-      let deleteAccounts = deleteAccounts mailbox.System getAccountRef throttle
+      let deleteAccounts = deleteAccounts system getAccountRef throttle
 
       let rec loop (accounts: Map<AccountId, Account>) = actor {
          let! msg = mailbox.Receive()
@@ -75,19 +77,20 @@ let actorProps
 
                   for account in accounts.Values do
                      let msg =
-                        EmailActor.EmailMessage.AccountClose(
+                        EmailMessage.AccountClose(
                            account.FullName,
                            account.OrgId
                         )
 
-                     getEmailRef () <! msg
+                     getEmailRef system <! msg
 
                   let accountIds = accounts |> Map.keys |> List.ofSeq
 
                   logInfo
                      $"Scheduling deletion of billing records for accounts: {accountIds}"
+
                   // Schedule deletion of historical/legal records for 3 months later.
-                  schedulingActorRef
+                  getSchedulingRef system
                   <! SchedulingActor.DeleteAccountsJobSchedule accountIds
 
                   return! loop initState <@> SaveSnapshot initState
@@ -151,15 +154,15 @@ let deleteHistoricalRecords (accountIds: AccountId list) =
          AccountSqlReader.accountNumber
 
 let initProps
-   (system: ActorSystem)
-   (schedulingActorRef: IActorRef<SchedulingActor.Message>)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
+   (getSchedulingRef: ActorSystem -> IActorRef<SchedulingActor.Message>)
    (throttle: StreamThrottle)
    =
    actorProps
-      schedulingActorRef
       getAccountRef
-      (fun _ -> EmailActor.get system)
+      getSchedulingRef
+      getEmailRef
       deleteHistoricalRecords
       throttle
 

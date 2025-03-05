@@ -24,3 +24,13 @@ type PersistenceSupervisorOptions = {
    RandomFactor: float
    MaxNrOfRetries: int
 }
+
+type RabbitConnectionSettings = {
+   Host: string
+   Port: int
+   VirtualHost: string
+   Username: string
+   Password: string
+}
+
+type RabbitQueueSettings = { Name: string; MaxParallelism: int }

@@ -7,6 +7,7 @@ open Akka.Persistence
 open Akka.Persistence.Hosting
 open Akka.Persistence.Sql.Hosting
 open Akka.Routing
+open Akka.Streams.Amqp.RabbitMq
 open Akkling
 
 open Bank.Org.Domain
@@ -19,7 +20,12 @@ open SignalRBroadcast
 let builder = Env.builder
 
 builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
-   SignalRBroadcaster.init <| provider.GetRequiredService<ActorSystem>())
+   let system = provider.GetRequiredService<ActorSystem>()
+   SignalRBroadcaster.init system)
+|> ignore
+
+builder.Services.AddSingleton<AmqpConnectionDetails>(fun _ ->
+   Lib.Rabbit.createConnection EnvNotifications.config.RabbitConnection)
 |> ignore
 
 let journalOpts = AkkaInfra.getJournalOpts ()
@@ -102,12 +108,17 @@ builder.Services.AddAkka(
 
                let props =
                   AccountActor.initProps
-                  <| provider.GetRequiredService<SignalRBroadcast>()
-                  <| system
-                  <| Env.config.AccountActorSupervisor
-                  <| persistenceId
-                  <| OrgActor.get system
-                  <| EmployeeActor.get system
+                     (provider.GetRequiredService<SignalRBroadcast>())
+                     system
+                     Env.config.AccountActorSupervisor
+                     persistenceId
+                     (OrgActor.get system)
+                     (EmployeeActor.get system)
+                     DomesticTransferRecipientActor.get
+                     EmailProducerActor.get
+                     AccountClosureActor.get
+                     BillingStatementActor.get
+                     SchedulingActor.get
 
                props),
             ClusterMetadata.accountShardRegion.messageExtractor,
@@ -130,6 +141,7 @@ builder.Services.AddAkka(
                      (provider.GetRequiredService<SignalRBroadcast>())
                      (AccountActor.get system)
                      (OrgActor.get system)
+                     (EmailProducerActor.get)
 
                props),
             ClusterMetadata.employeeShardRegion.messageExtractor,
@@ -172,10 +184,11 @@ builder.Services.AddAkka(
             ActorMetadata.accountClosure.Name,
             (fun system _ _ ->
                let typedProps =
-                  AccountClosureActor.initProps system
-                  <| SchedulingActor.get system
-                  <| AccountActor.get system
-                  <| Env.config.AccountDeleteThrottle
+                  AccountClosureActor.initProps
+                     (AccountActor.get system)
+                     EmailProducerActor.get
+                     SchedulingActor.get
+                     Env.config.AccountDeleteThrottle
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -267,15 +280,28 @@ builder.Services.AddAkka(
                   Env.config.CircuitBreakerActorSupervisor),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.EmailMarker>(
-            ActorMetadata.email.Name,
+         // Consume EmailMessages off of RabbitMq
+         .WithSingleton<ActorMetadata.EmailConsumerMarker>(
+            ActorMetadata.emailConsumer.Name,
             (fun system _ _ ->
-               EmailActor.actorProps
-                  system
+               EmailConsumerActor.initProps
                   (EnvNotifications.config.circuitBreaker system)
-                  EnvNotifications.config.EmailThrottle
-                  EmailActor.getAdminEmailsForOrg
                   (provider.GetRequiredService<SignalRBroadcast>())
+                  (provider.GetRequiredService<AmqpConnectionDetails>())
+                  EnvNotifications.config.RabbitQueue
+                  EnvNotifications.config.EmailBearerToken
+               |> _.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
+         )
+         // Forward Email messages from web node to EmailProducer actors.
+         .WithSingleton<ActorMetadata.EmailProxyMarker>(
+            ActorMetadata.emailProxy.Name,
+            (fun system _ _ ->
+               (fun (msg: Email.EmailMessage) ->
+                  EmailProducerActor.get system <<! msg
+                  ignored ())
+               |> actorOf
+               |> props
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -287,9 +313,9 @@ builder.Services.AddAkka(
                let router = RoundRobinPool(1, resize)
 
                DomesticTransferRecipientActor.initProps
-                  system
                   (provider.GetRequiredService<SignalRBroadcast>())
                   (AccountActor.get system)
+                  EmailProducerActor.get
                   (EnvTransfer.config.domesticTransferCircuitBreaker system)
                   router
                |> _.ToProps()),
@@ -302,6 +328,17 @@ builder.Services.AddAkka(
                   Env.config.BillingStatementPersistenceChunking
                   Env.config.BillingStatementPersistenceBackoffRestart
                   Env.config.BillingStatementRetryPersistenceAfter
+               |> untyped
+            )
+
+            // Other actors in the system send EmailMessages to this actor
+            // which will enqueue the message into RabbitMq for the
+            // EmailConsumer Singleton Actor to process.
+            registry.Register<ActorMetadata.EmailProducerMarker>(
+               EmailProducerActor.start
+                  system
+                  (provider.GetRequiredService<AmqpConnectionDetails>())
+                  EnvNotifications.config.RabbitQueue
                |> untyped
             )
 
