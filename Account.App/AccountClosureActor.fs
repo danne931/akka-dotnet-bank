@@ -17,6 +17,11 @@ open ActorUtil
 open Bank.Account.Domain
 open Email
 
+// NOTE:
+// This was created before scope was expanded into the business banking
+// domain so it likely does not work as intended anymore.
+// Need to evalutate foreign relations & determine how to proceed.
+
 let deleteAccounts
    (system: ActorSystem)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)

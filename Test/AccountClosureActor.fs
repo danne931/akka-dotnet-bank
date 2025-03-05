@@ -53,9 +53,10 @@ let init (tck: TestKit.Tck) =
    let accountClosureActor =
       spawn tck ActorMetadata.accountClosure.Name
       <| AccountClosureActor.actorProps
-         (typed quartzSchedulerProbe :> IActorRef<SchedulingActor.Message>)
          getAccountRef
-         (fun _ -> (typed emailProbe :> IActorRef<EmailActor.EmailMessage>))
+         (fun _ ->
+            typed quartzSchedulerProbe :> IActorRef<SchedulingActor.Message>)
+         (fun _ -> (typed emailProbe :> IActorRef<Email.EmailMessage>))
          mockDeleteHistoricalRecords
          {
             Count = 10
@@ -137,8 +138,8 @@ let tests =
          for account in [ account1; account2 ] do
             TestKit.expectMsg tck AccountMessage.Delete |> ignore
 
-            match emailProbe.ExpectMsg<EmailActor.EmailMessage>() with
-            | EmailActor.EmailMessage.AccountClose(accountName, orgId) ->
+            match emailProbe.ExpectMsg<Email.EmailMessage>() with
+            | Email.EmailMessage.AccountClose(accountName, orgId) ->
                Expect.equal
                   (accountName, orgId)
                   (account.FullName, account.OrgId)
