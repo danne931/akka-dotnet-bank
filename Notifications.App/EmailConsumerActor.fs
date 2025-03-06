@@ -438,3 +438,15 @@ let initProps
       queueConnection
       queueSettings
       bearerToken
+
+let getProducer (system: ActorSystem) : IActorRef<Email.EmailMessage> =
+   Akka.Hosting.ActorRegistry
+      .For(system)
+      .Get<ActorUtil.ActorMetadata.EmailProducerMarker>()
+   |> typed
+
+let getProducerProxy (system: ActorSystem) : IActorRef<Email.EmailMessage> =
+   Akka.Hosting.ActorRegistry
+      .For(system)
+      .Get<ActorUtil.ActorMetadata.EmailProxyMarker>()
+   |> typed
