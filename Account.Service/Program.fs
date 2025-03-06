@@ -6,13 +6,13 @@ open Akka.Cluster.Hosting
 open Akka.Persistence
 open Akka.Persistence.Hosting
 open Akka.Persistence.Sql.Hosting
-open Akka.Routing
 open Akka.Streams.Amqp.RabbitMq
 open Akkling
 
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Transfer.Domain
 open Bank.Infrastructure
 open ActorUtil
 open SignalRBroadcast
@@ -114,8 +114,8 @@ builder.Services.AddAkka(
                      persistenceId
                      (OrgActor.get system)
                      (EmployeeActor.get system)
-                     DomesticTransferProducerActor.get
-                     EmailProducerActor.get
+                     DomesticTransferConsumerActor.getProducer
+                     EmailConsumerActor.getProducer
                      AccountClosureActor.get
                      BillingStatementActor.get
                      SchedulingActor.get
@@ -141,7 +141,7 @@ builder.Services.AddAkka(
                      (provider.GetRequiredService<SignalRBroadcast>())
                      (AccountActor.get system)
                      (OrgActor.get system)
-                     (EmailProducerActor.get)
+                     EmailConsumerActor.getProducer
 
                props),
             ClusterMetadata.employeeShardRegion.messageExtractor,
@@ -164,7 +164,7 @@ builder.Services.AddAkka(
                let typedProps =
                   TransferProgressTrackingActor.initProps
                      system
-                     DomesticTransferProducerActor.get
+                     DomesticTransferConsumerActor.getProducer
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -186,7 +186,7 @@ builder.Services.AddAkka(
                let typedProps =
                   AccountClosureActor.initProps
                      (AccountActor.get system)
-                     EmailProducerActor.get
+                     EmailConsumerActor.getProducer
                      SchedulingActor.get
                      Env.config.AccountDeleteThrottle
 
@@ -298,7 +298,7 @@ builder.Services.AddAkka(
             ActorMetadata.emailProxy.Name,
             (fun system _ _ ->
                (fun (msg: Email.EmailMessage) ->
-                  EmailProducerActor.get system <<! msg
+                  EmailConsumerActor.getProducer system <<! msg
                   ignored ())
                |> actorOf
                |> props
@@ -312,7 +312,7 @@ builder.Services.AddAkka(
                DomesticTransferConsumerActor.initProps
                   (provider.GetRequiredService<SignalRBroadcast>())
                   (AccountActor.get system)
-                  EmailProducerActor.get
+                  EmailConsumerActor.getProducer
                   (EnvTransfer.config.domesticTransferCircuitBreaker system)
                   (provider.GetRequiredService<AmqpConnectionDetails>())
                   EnvTransfer.config.RabbitQueue
@@ -333,7 +333,7 @@ builder.Services.AddAkka(
             // which will enqueue the message into RabbitMq for the
             // EmailConsumer Singleton Actor to process.
             registry.Register<ActorMetadata.EmailProducerMarker>(
-               EmailProducerActor.start
+               Lib.Rabbit.startProducer
                   system
                   (provider.GetRequiredService<AmqpConnectionDetails>())
                   EnvNotifications.config.RabbitQueue
@@ -344,7 +344,7 @@ builder.Services.AddAkka(
             // which will enqueue the message into RabbitMq for the
             // DomesticTransferConsumer Singleton Actor to process.
             registry.Register<ActorMetadata.DomesticTransferProducerMarker>(
-               DomesticTransferProducerActor.start
+               Lib.Rabbit.startProducer
                   system
                   (provider.GetRequiredService<AmqpConnectionDetails>())
                   EnvTransfer.config.RabbitQueue

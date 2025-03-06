@@ -6,7 +6,6 @@
   <ItemGroup>
     <Compile Include="Environment.fs" />
     <Compile Include="InternalTransferRecipientActor.fs" />
-    <Compile Include="DomesticTransferProducerActor.fs" />
     <Compile Include="DomesticTransferConsumerActor.fs" />
     <Compile Include="TransferProgressTrackingActor.fs" />
     <Compile Include="AutomaticTransferSchedulingActor.fs" />

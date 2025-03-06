@@ -159,7 +159,7 @@ let startEmployeeRoutes (app: WebApplication) =
                         Token = token
                      }
 
-                     EmailProducerActor.getProxy sys
+                     EmailConsumerActor.getProducerProxy sys
                      <! EmailMessage.EmployeeInvite invite
 
                      return Results.Ok()

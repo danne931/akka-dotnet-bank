@@ -10,9 +10,9 @@
     <Compile Include="Environment.fs" />
     <Compile Include="TCP.fs" />
     <Compile Include="Actor.fs" />
+    <Compile Include="RabbitMq.fs" />
     <Compile Include="BulkWriteStreamFlow.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
-    <Compile Include="RabbitMq.fs" /> 
   </ItemGroup>
 
   <ItemGroup>

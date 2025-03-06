@@ -421,3 +421,9 @@ let initProps
       transferRequest
       queueConnection
       queueSettings
+
+let getProducer (system: ActorSystem) : IActorRef<DomesticTransferMessage> =
+   Akka.Hosting.ActorRegistry
+      .For(system)
+      .Get<ActorUtil.ActorMetadata.DomesticTransferProducerMarker>()
+   |> typed
