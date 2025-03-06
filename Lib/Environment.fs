@@ -156,7 +156,7 @@ let streamBackoffRestartSettingsFromInput
       |> TimeSpan.FromSeconds
    )
 
-type RabbitConnectionInput = {|
+type QueueConnectionInput = {|
    Host: string option
    Port: int option
    VirtualHost: string option
@@ -167,7 +167,7 @@ type RabbitConnectionInput = {|
 type private BankConfigInput = {
    ConnectionStrings: Connection
    AkkaRemoting: {| Host: string option; Port: int |}
-   RabbitConnection: RabbitConnectionInput
+   QueueConnection: QueueConnectionInput
    PetabridgeCmdRemoting: PetabridgeCmdRemoting
    ClusterStartupMethod: string
    ClusterDiscoveryStartup: ClusterDiscoveryStartup option
@@ -192,7 +192,7 @@ type private BankConfigInput = {
 type BankConfig = {
    ConnectionStrings: Connection
    AkkaPersistence: AkkaPersistence
-   RabbitConnection: RabbitConnectionSettings
+   QueueConnection: QueueConnectionSettings
    AkkaSystemName: string
    AkkaRemoting: AkkaRemoting
    PetabridgeCmdRemoting: PetabridgeCmdRemoting
@@ -215,15 +215,15 @@ type BankConfig = {
 let config =
    match AppConfig(builder.Configuration).Get<BankConfigInput>() with
    | Ok input ->
-      let rabbitConnection = {
-         Host = input.RabbitConnection.Host |> Option.defaultValue "localhost"
-         Port = input.RabbitConnection.Port |> Option.defaultValue 5672
+      let queueConnection = {
+         Host = input.QueueConnection.Host |> Option.defaultValue "localhost"
+         Port = input.QueueConnection.Port |> Option.defaultValue 5672
          VirtualHost =
-            input.RabbitConnection.VirtualHost |> Option.defaultValue "/"
+            input.QueueConnection.VirtualHost |> Option.defaultValue "/"
          Username =
-            input.RabbitConnection.Username |> Option.defaultValue "guest"
+            input.QueueConnection.Username |> Option.defaultValue "guest"
          Password =
-            input.RabbitConnection.Password |> Option.defaultValue "guest"
+            input.QueueConnection.Password |> Option.defaultValue "guest"
       }
 
       let clusterStartupMethod =
@@ -316,7 +316,7 @@ let config =
          CircuitBreakerActorSupervisor =
             backoffSupervisorOptionsFromInput
                input.CircuitBreakerActorSupervisor
-         RabbitConnection = rabbitConnection
+         QueueConnection = queueConnection
       }
    | Error err ->
       match err with

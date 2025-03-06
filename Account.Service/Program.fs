@@ -6,13 +6,11 @@ open Akka.Cluster.Hosting
 open Akka.Persistence
 open Akka.Persistence.Hosting
 open Akka.Persistence.Sql.Hosting
-open Akka.Streams.Amqp.RabbitMq
 open Akkling
 
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Bank.Transfer.Domain
 open Bank.Infrastructure
 open ActorUtil
 open SignalRBroadcast
@@ -24,9 +22,12 @@ builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
    SignalRBroadcaster.init system)
 |> ignore
 
-builder.Services.AddSingleton<AmqpConnectionDetails>(fun _ ->
-   Lib.Rabbit.createConnection Env.config.RabbitConnection)
+builder.Services.AddSingleton<Lib.Queue.QueueConnectionDetails>(fun _ ->
+   Lib.Queue.createConnection Env.config.QueueConnection)
 |> ignore
+
+let private getQueueConnection (provider: System.IServiceProvider) =
+   provider.GetRequiredService<Lib.Queue.QueueConnectionDetails>()
 
 let journalOpts = AkkaInfra.getJournalOpts ()
 
@@ -287,8 +288,8 @@ builder.Services.AddAkka(
                EmailConsumerActor.initProps
                   (EnvNotifications.config.circuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
-                  (provider.GetRequiredService<AmqpConnectionDetails>())
-                  EnvNotifications.config.RabbitQueue
+                  (getQueueConnection provider)
+                  EnvNotifications.config.Queue
                   EnvNotifications.config.EmailBearerToken
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -314,8 +315,8 @@ builder.Services.AddAkka(
                   (AccountActor.get system)
                   EmailConsumerActor.getProducer
                   (EnvTransfer.config.domesticTransferCircuitBreaker system)
-                  (provider.GetRequiredService<AmqpConnectionDetails>())
-                  EnvTransfer.config.RabbitQueue
+                  (getQueueConnection provider)
+                  EnvTransfer.config.Queue
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -333,10 +334,10 @@ builder.Services.AddAkka(
             // which will enqueue the message into RabbitMq for the
             // EmailConsumer Singleton Actor to process.
             registry.Register<ActorMetadata.EmailProducerMarker>(
-               Lib.Rabbit.startProducer
+               Lib.Queue.startProducer
                   system
-                  (provider.GetRequiredService<AmqpConnectionDetails>())
-                  EnvNotifications.config.RabbitQueue
+                  (getQueueConnection provider)
+                  EnvNotifications.config.Queue
                |> untyped
             )
 
@@ -344,10 +345,10 @@ builder.Services.AddAkka(
             // which will enqueue the message into RabbitMq for the
             // DomesticTransferConsumer Singleton Actor to process.
             registry.Register<ActorMetadata.DomesticTransferProducerMarker>(
-               Lib.Rabbit.startProducer
+               Lib.Queue.startProducer
                   system
-                  (provider.GetRequiredService<AmqpConnectionDetails>())
-                  EnvTransfer.config.RabbitQueue
+                  (getQueueConnection provider)
+                  EnvTransfer.config.Queue
                |> untyped
             )
 

@@ -1,4 +1,4 @@
-module Lib.Rabbit
+module Lib.Queue
 
 open System
 open Akka.Streams.Amqp.RabbitMq
@@ -9,11 +9,13 @@ open Akkling.Streams
 
 open Lib.Types
 
+type QueueConnectionDetails = AmqpConnectionDetails
+
 let createConnection
-   (settings: RabbitConnectionSettings)
-   : AmqpConnectionDetails
+   (settings: QueueConnectionSettings)
+   : QueueConnectionDetails
    =
-   AmqpConnectionDetails
+   QueueConnectionDetails
       .Create(settings.Host, settings.Port)
       .WithCredentials(
          AmqpCredentials.Create(settings.Username, settings.Password)
@@ -24,19 +26,18 @@ let createConnection
 let createQueueDeclaration (queueName: string) =
    QueueDeclaration.Create(queueName).WithDurable(true).WithAutoDelete(false)
 
-let createSourceSettings (queueName: string) (conn: AmqpConnectionDetails) =
+let createSourceSettings (queueName: string) (conn: QueueConnectionDetails) =
    NamedQueueSourceSettings
       .Create(conn, queueName)
       .WithDeclarations(createQueueDeclaration queueName)
 
-let createSinkSettings (queueName: string) (conn: AmqpConnectionDetails) =
+let createSinkSettings (queueName: string) (conn: QueueConnectionDetails) =
    AmqpSinkSettings
       .Create(conn)
       .WithRoutingKey(queueName)
       .WithDeclarations(createQueueDeclaration queueName)
 
-// Serialize message for RabbitMq
-let private serializeForRabbit
+let private serializeForQueue
    (system: ActorSystem)
    (msg: 'Message)
    : Result<OutgoingMessage, exn>
@@ -57,7 +58,7 @@ let private producerActorProps system targetRef : Props<'Message> =
       let rec loop () = actor {
          let! msg = ctx.Receive()
 
-         match serializeForRabbit system msg with
+         match serializeForQueue system msg with
          | Error e ->
             logError ctx $"Producer serialization broken {e.Message}"
 
@@ -75,8 +76,8 @@ let private producerActorProps system targetRef : Props<'Message> =
 /// for a corresponding rabbit consumer actor to dequeue.
 let startProducer
    (system: ActorSystem)
-   (conn: AmqpConnectionDetails)
-   (queueSettings: RabbitQueueSettings)
+   (conn: QueueConnectionDetails)
+   (queueSettings: QueueSettings)
    : IActorRef<'Message>
    =
    let spawnActor targetRef =

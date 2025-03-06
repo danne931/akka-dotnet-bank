@@ -25,7 +25,7 @@ type PersistenceSupervisorOptions = {
    MaxNrOfRetries: int
 }
 
-type RabbitConnectionSettings = {
+type QueueConnectionSettings = {
    Host: string
    Port: int
    VirtualHost: string
@@ -33,4 +33,4 @@ type RabbitConnectionSettings = {
    Password: string
 }
 
-type RabbitQueueSettings = { Name: string; MaxParallelism: int }
+type QueueSettings = { Name: string; MaxParallelism: int }

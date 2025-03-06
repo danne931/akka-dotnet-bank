@@ -137,7 +137,7 @@ let handleTransfer
 
 let initTransferSink
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: RabbitQueueSettings)
+   (queueSettings: QueueSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
@@ -172,7 +172,7 @@ let initTransferSink
 
    let source =
       let settings =
-         Lib.Rabbit.createSourceSettings queueSettings.Name queueConnection
+         Lib.Queue.createSourceSettings queueSettings.Name queueConnection
 
       AmqpSource.CommittableSource(settings, bufferSize = parallelism)
 
@@ -266,7 +266,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (requestTransfer: DomesticTransferRequest)
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: RabbitQueueSettings)
+   (queueSettings: QueueSettings)
    : Props<obj>
    =
    let createKillSwitch () =
@@ -411,7 +411,7 @@ let initProps
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (breaker: Akka.Pattern.CircuitBreaker)
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: RabbitQueueSettings)
+   (queueSettings: QueueSettings)
    =
    actorProps
       broadcaster
