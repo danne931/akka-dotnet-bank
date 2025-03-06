@@ -21,9 +21,6 @@ module Stub = AccountStub
 type private InternalTransferMsg =
    InternalTransferRecipientActor.InternalTransferMessage
 
-type private DomesticTransferMsg =
-   DomesticTransferRecipientActor.DomesticTransferMessage
-
 // NOTE: Change default snapshot store from local file system
 //       to in memory.
 let config =
@@ -102,7 +99,7 @@ let init (tck: TestKit.Tck) =
       typed internalTransferProbe :> IActorRef<InternalTransferMsg>
 
    let getDomesticTransferActor (_: ActorSystem) =
-      typed domesticTransferProbe :> IActorRef<DomesticTransferMsg>
+      typed domesticTransferProbe :> IActorRef<DomesticTransferMessage>
 
    let getEmailActor (_: ActorSystem) =
       (typed emailProbe :> IActorRef<EmailMessage>)
@@ -310,10 +307,10 @@ let tests =
             (2000m - transfer.Data.Amount)
             "Account state should reflect a transfer debit"
 
-         let msg = o.domesticTransferProbe.ExpectMsg<DomesticTransferMsg>()
+         let msg = o.domesticTransferProbe.ExpectMsg<DomesticTransferMessage>()
 
          match msg with
-         | DomesticTransferMsg.TransferRequest(action, evt) ->
+         | DomesticTransferMessage.TransferRequest(action, evt) ->
             Expect.isTrue true ""
          | msg ->
             Expect.isTrue

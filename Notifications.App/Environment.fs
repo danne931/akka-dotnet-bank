@@ -21,13 +21,6 @@ type NotificationsInput = {
       CallTimeoutSeconds: int option
       ResetTimeoutSeconds: int option
    |}
-   RabbitConnection: {|
-      Host: string option
-      Port: int option
-      VirtualHost: string option
-      Username: string option
-      Password: string option
-   |}
    RabbitQueue: {|
       Name: string option
       MaxParallelism: int option
@@ -39,7 +32,6 @@ type NotificationsConfig = {
    EmailBearerToken: string option
    SupportEmail: string option
    circuitBreaker: Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
-   RabbitConnection: RabbitConnectionSettings
    RabbitQueue: RabbitQueueSettings
 }
 
@@ -74,17 +66,6 @@ let config =
          EmailServiceUri = input.EmailServiceUri
          EmailBearerToken = input.EmailBearerToken
          SupportEmail = input.SupportEmail
-         RabbitConnection = {
-            Host =
-               input.RabbitConnection.Host |> Option.defaultValue "localhost"
-            Port = input.RabbitConnection.Port |> Option.defaultValue 5672
-            VirtualHost =
-               input.RabbitConnection.VirtualHost |> Option.defaultValue "/"
-            Username =
-               input.RabbitConnection.Username |> Option.defaultValue "guest"
-            Password =
-               input.RabbitConnection.Password |> Option.defaultValue "guest"
-         }
          RabbitQueue = {
             Name = input.RabbitQueue.Name |> Option.defaultValue "email"
             MaxParallelism =

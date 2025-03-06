@@ -144,8 +144,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? CircuitBreakerEvent -> "CircuitBreakerEvent"
       | :? CircuitBreakerMessage -> "CircuitBreakerActorMessage"
       | :? BillingCycleMessage -> "BillingCycleActorMessage"
-      | :? DomesticTransferRecipientActor.DomesticTransferMessage ->
-         "DomesticTransferActorMessage"
+      | :? DomesticTransferMessage -> "DomesticTransferActorMessage"
       | :? TransferProgressTrackingMessage ->
          "TransferProgressTrackingActorMessage"
       | :? AutomaticTransfer.Message -> "AutomaticTransferActorMessage"
@@ -200,7 +199,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? AutomaticTransfer.Message
       // ProgressCheck messages from TransferProgressTracking
       // singleton actor to DomesticTransferActor
-      | :? DomesticTransferRecipientActor.DomesticTransferMessage
+      | :? DomesticTransferMessage
       // Messages from sharded account nodes to AccountClosureActor cluster
       // singleton. Also for messages from SchedulingActor to Account Closure Proxy
       | :? AccountClosureMessage
@@ -311,8 +310,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "TransferProgressTrackingActorMessage" ->
             typeof<TransferProgressTrackingMessage>
          | "AutomaticTransferActorMessage" -> typeof<AutomaticTransfer.Message>
-         | "DomesticTransferActorMessage" ->
-            typeof<DomesticTransferRecipientActor.DomesticTransferMessage>
+         | "Bank.Transfer.Domain.DomesticTransferMessage, Transfer.Domain"
+         | "DomesticTransferActorMessage" -> typeof<DomesticTransferMessage>
          | "AccountClosureActorMessage" -> typeof<AccountClosureMessage>
          | "SchedulingActorMessage" -> typeof<SchedulingActor.Message>
          | "AccountSeederMessage" -> typeof<AccountSeederMessage>

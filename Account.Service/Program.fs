@@ -25,7 +25,7 @@ builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
 |> ignore
 
 builder.Services.AddSingleton<AmqpConnectionDetails>(fun _ ->
-   Lib.Rabbit.createConnection EnvNotifications.config.RabbitConnection)
+   Lib.Rabbit.createConnection Env.config.RabbitConnection)
 |> ignore
 
 let journalOpts = AkkaInfra.getJournalOpts ()
@@ -114,7 +114,7 @@ builder.Services.AddAkka(
                      persistenceId
                      (OrgActor.get system)
                      (EmployeeActor.get system)
-                     DomesticTransferRecipientActor.get
+                     DomesticTransferProducerActor.get
                      EmailProducerActor.get
                      AccountClosureActor.get
                      BillingStatementActor.get
@@ -164,7 +164,7 @@ builder.Services.AddAkka(
                let typedProps =
                   TransferProgressTrackingActor.initProps
                      system
-                     DomesticTransferRecipientActor.get
+                     DomesticTransferProducerActor.get
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -305,19 +305,17 @@ builder.Services.AddAkka(
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.DomesticTransferMarker>(
-            ActorMetadata.domesticTransfer.Name,
+         // Consume DomesticTransferMessages off of RabbitMq
+         .WithSingleton<ActorMetadata.DomesticTransferConsumerMarker>(
+            ActorMetadata.domesticTransferConsumer.Name,
             (fun system _ _ ->
-               let routerEnv = EnvTransfer.config.DomesticTransferRouter
-               let resize = DefaultResizer(1, routerEnv.MaxInstancesPerNode)
-               let router = RoundRobinPool(1, resize)
-
-               DomesticTransferRecipientActor.initProps
+               DomesticTransferConsumerActor.initProps
                   (provider.GetRequiredService<SignalRBroadcast>())
                   (AccountActor.get system)
                   EmailProducerActor.get
                   (EnvTransfer.config.domesticTransferCircuitBreaker system)
-                  router
+                  (provider.GetRequiredService<AmqpConnectionDetails>())
+                  EnvTransfer.config.RabbitQueue
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -339,6 +337,17 @@ builder.Services.AddAkka(
                   system
                   (provider.GetRequiredService<AmqpConnectionDetails>())
                   EnvNotifications.config.RabbitQueue
+               |> untyped
+            )
+
+            // Other actors in the system send DomesticTransferMessages to this actor
+            // which will enqueue the message into RabbitMq for the
+            // DomesticTransferConsumer Singleton Actor to process.
+            registry.Register<ActorMetadata.DomesticTransferProducerMarker>(
+               DomesticTransferProducerActor.start
+                  system
+                  (provider.GetRequiredService<AmqpConnectionDetails>())
+                  EnvTransfer.config.RabbitQueue
                |> untyped
             )
 
