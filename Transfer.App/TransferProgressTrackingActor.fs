@@ -13,7 +13,6 @@ open Bank.Transfer.Domain
 open ActorUtil
 open Lib.Types
 open Lib.Postgres
-open DomesticTransferRecipientActor
 open TransferSqlMapper
 
 let actorProps

@@ -156,9 +156,18 @@ let streamBackoffRestartSettingsFromInput
       |> TimeSpan.FromSeconds
    )
 
+type RabbitConnectionInput = {|
+   Host: string option
+   Port: int option
+   VirtualHost: string option
+   Username: string option
+   Password: string option
+|}
+
 type private BankConfigInput = {
    ConnectionStrings: Connection
    AkkaRemoting: {| Host: string option; Port: int |}
+   RabbitConnection: RabbitConnectionInput
    PetabridgeCmdRemoting: PetabridgeCmdRemoting
    ClusterStartupMethod: string
    ClusterDiscoveryStartup: ClusterDiscoveryStartup option
@@ -183,6 +192,7 @@ type private BankConfigInput = {
 type BankConfig = {
    ConnectionStrings: Connection
    AkkaPersistence: AkkaPersistence
+   RabbitConnection: RabbitConnectionSettings
    AkkaSystemName: string
    AkkaRemoting: AkkaRemoting
    PetabridgeCmdRemoting: PetabridgeCmdRemoting
@@ -205,6 +215,17 @@ type BankConfig = {
 let config =
    match AppConfig(builder.Configuration).Get<BankConfigInput>() with
    | Ok input ->
+      let rabbitConnection = {
+         Host = input.RabbitConnection.Host |> Option.defaultValue "localhost"
+         Port = input.RabbitConnection.Port |> Option.defaultValue 5672
+         VirtualHost =
+            input.RabbitConnection.VirtualHost |> Option.defaultValue "/"
+         Username =
+            input.RabbitConnection.Username |> Option.defaultValue "guest"
+         Password =
+            input.RabbitConnection.Password |> Option.defaultValue "guest"
+      }
+
       let clusterStartupMethod =
          match input.ClusterStartupMethod with
          | "Discovery" ->
@@ -295,6 +316,7 @@ let config =
          CircuitBreakerActorSupervisor =
             backoffSupervisorOptionsFromInput
                input.CircuitBreakerActorSupervisor
+         RabbitConnection = rabbitConnection
       }
    | Error err ->
       match err with

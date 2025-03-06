@@ -144,7 +144,11 @@ module ActorMetadata =
 
    type AccountClosureMarker() = class end
 
-   type DomesticTransferMarker() = class end
+   /// Singleton consumes domestic transfer messages off RabbitMq
+   type DomesticTransferConsumerMarker() = class end
+
+   /// Enqueues domestic transfer messages into RabbitMq
+   type DomesticTransferProducerMarker() = class end
 
    type TransferProgressTrackingMarker() = class end
 
@@ -219,9 +223,14 @@ module ActorMetadata =
          fun accountId -> $"account/{accountId}/internal-transfer-recipient"
    }
 
-   let domesticTransfer = {
-      Name = "domestic-transfer-recipient"
-      Route = "domestic-transfer-recipient"
+   let domesticTransferConsumer = {
+      Name = "domestic-transfer-consumer"
+      Route = "domestic-transfer-consumer"
+   }
+
+   let domesticTransferProducer = {
+      Name = "domestic-transfer-producer"
+      Route = "domestic-transfer-producer"
    }
 
    let transferProgressTracking = {

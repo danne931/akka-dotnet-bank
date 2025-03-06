@@ -20,7 +20,6 @@ open SignalRBroadcast
 open Email
 
 type private CircuitBreakerMessage =
-   | BreakerOpen
    | BreakerHalfOpen
    | BreakerClosed
 
@@ -113,8 +112,6 @@ let mutable cnt = 0
 // NOTE
 // Raise an exception instead of returning Result.Error to trip circuit breaker.
 let private sendEmail (client: HttpClient) (data: TrackingEvent.T) = task {
-   do! Async.Sleep(500)
-
    if cnt > 1 then
       let res = new HttpResponseMessage(Net.HttpStatusCode.OK)
       printfn "res %A" res
@@ -176,12 +173,12 @@ let mutable goodEmailCount = 0
 let initEmailSink
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: RabbitQueueSettings)
-   (mailbox: Actor<obj>)
    (breaker: Akka.Pattern.CircuitBreaker)
    (client: HttpClient option)
    (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
+   (killSwitch: Akka.Streams.SharedKillSwitch)
+   (mailbox: Actor<obj>)
    parallelism
-   : Akka.Streams.UniqueKillSwitch
    =
    let materializer = mailbox.System.Materializer()
 
@@ -214,7 +211,7 @@ let initEmailSink
             logError mailbox $"Notifications stream completed with error: {err}")
 
    source
-   |> Source.viaMat KillSwitch.single Keep.right
+   |> Source.viaMat (killSwitch.Flow()) Keep.none
    |> Source.asyncMapUnordered parallelism (fun committable -> async {
       let nack = committable.Nack >> Async.AwaitTask
 
@@ -289,7 +286,6 @@ let initEmailSink
             let! res = sendEmailWithCircuitBreaker client committable info
             goodEmailCount <- goodEmailCount + 1
             printfn "good %A" goodEmailCount
-
          with e ->
             printfn "bad %A" e
 
@@ -298,7 +294,7 @@ let initEmailSink
 
       return 100
    })
-   |> Source.toMat sink Keep.left
+   |> Source.toMat sink Keep.none
    |> Graph.run materializer
 
 let actorProps
@@ -311,6 +307,19 @@ let actorProps
    =
    let client = Some(createClient "test-invalid-token")
    //let client = bearerToken |> Option.map createClient
+
+   let createKillSwitch () =
+      KillSwitch.shared "CircuitBreakerOpen.Email"
+
+   let mutable killSwitch = createKillSwitch ()
+
+   let initStream =
+      initEmailSink
+         rabbitConnection
+         queueSettings
+         breaker
+         client
+         getAdminEmailsForOrg
 
    let rec init (ctx: Actor<obj>) = actor {
       let! msg = ctx.Receive()
@@ -345,7 +354,7 @@ let actorProps
             |> ignore
 
             breaker.OnOpen(fun () ->
-               ctx.Self <! BreakerOpen
+               logWarning ctx "Breaker open - pause processing"
 
                broadcaster.circuitBreaker {
                   Service = CircuitBreakerService.Email
@@ -362,15 +371,7 @@ let actorProps
    }
 
    and processing (ctx: Actor<obj>) (limit: int) =
-      let killSwitch =
-         initEmailSink
-            rabbitConnection
-            queueSettings
-            ctx
-            breaker
-            client
-            getAdminEmailsForOrg
-            limit
+      initStream killSwitch ctx limit
 
       actor {
          let! msg = ctx.Receive()
@@ -387,11 +388,6 @@ let actorProps
             | _ -> return ignored ()
          | :? CircuitBreakerMessage as msg ->
             match msg with
-            | BreakerOpen ->
-               logWarning ctx "Breaker open - pause processing"
-               killSwitch.Shutdown()
-               //killSwitch.Abort(exn "BreakerOpen")
-               return ignored ()
             | BreakerHalfOpen ->
                logWarning ctx "Breaker half open - try processing one"
                return! processing ctx 1

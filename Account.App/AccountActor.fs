@@ -17,7 +17,6 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open BillingStatement
-open DomesticTransferRecipientActor
 open AutomaticTransfer
 open SignalRBroadcast
 open Email
@@ -237,7 +236,8 @@ let actorProps
                      txn
                   )
 
-               getDomesticTransferRef mailbox.System <! msg
+               for _ in [ 1..100 ] do
+                  getDomesticTransferRef mailbox.System <! msg
             | DomesticTransferFailed e ->
                let info = e.Data.BaseInfo
 
