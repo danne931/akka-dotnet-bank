@@ -172,7 +172,7 @@ let mutable goodEmailCount = 0
 
 let initEmailSink
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: RabbitQueueSettings)
+   (queueSettings: QueueSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (client: HttpClient option)
    (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
@@ -200,7 +200,7 @@ let initEmailSink
 
    let source =
       let settings =
-         Lib.Rabbit.createSourceSettings queueSettings.Name queueConnection
+         Lib.Queue.createSourceSettings queueSettings.Name queueConnection
 
       AmqpSource.CommittableSource(settings, bufferSize = parallelism)
 
@@ -302,7 +302,7 @@ let actorProps
    (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
    (broadcaster: SignalRBroadcast)
    (rabbitConnection: AmqpConnectionDetails)
-   (queueSettings: RabbitQueueSettings)
+   (queueSettings: QueueSettings)
    (bearerToken: string option)
    =
    let client = Some(createClient "test-invalid-token")
@@ -428,7 +428,7 @@ let initProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: RabbitQueueSettings)
+   (queueSettings: QueueSettings)
    (bearerToken: string option)
    =
    actorProps

@@ -21,7 +21,7 @@ type NotificationsInput = {
       CallTimeoutSeconds: int option
       ResetTimeoutSeconds: int option
    |}
-   RabbitQueue: {|
+   Queue: {|
       Name: string option
       MaxParallelism: int option
    |}
@@ -32,7 +32,7 @@ type NotificationsConfig = {
    EmailBearerToken: string option
    SupportEmail: string option
    circuitBreaker: Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
-   RabbitQueue: RabbitQueueSettings
+   Queue: QueueSettings
 }
 
 
@@ -66,10 +66,10 @@ let config =
          EmailServiceUri = input.EmailServiceUri
          EmailBearerToken = input.EmailBearerToken
          SupportEmail = input.SupportEmail
-         RabbitQueue = {
-            Name = input.RabbitQueue.Name |> Option.defaultValue "email"
+         Queue = {
+            Name = input.Queue.Name |> Option.defaultValue "email"
             MaxParallelism =
-               input.RabbitQueue.MaxParallelism |> Option.defaultValue 10
+               input.Queue.MaxParallelism |> Option.defaultValue 10
          }
          circuitBreaker =
             fun system ->

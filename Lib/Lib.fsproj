@@ -10,7 +10,7 @@
     <Compile Include="Environment.fs" />
     <Compile Include="TCP.fs" />
     <Compile Include="Actor.fs" />
-    <Compile Include="RabbitMq.fs" />
+    <Compile Include="Queue.fs" />
     <Compile Include="BulkWriteStreamFlow.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
   </ItemGroup>

@@ -34,7 +34,7 @@ type private TransferConfigInput = {
    |}
    TransferProgressTrackingThrottle: Env.StreamThrottleInput
    TransferProgressLookbackMinutes: int option
-   RabbitQueue: {|
+   Queue: {|
       Name: string option
       MaxParallelism: int option
    |}
@@ -47,7 +47,7 @@ type TransferConfig = {
       Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
    TransferProgressTrackingThrottle: StreamThrottle
    TransferProgressLookbackMinutes: int
-   RabbitQueue: RabbitQueueSettings
+   Queue: QueueSettings
 }
 
 let private getMockDomesticTransferProcessorHost (host: string option) =
@@ -114,11 +114,9 @@ let config =
             |> Option.defaultValue 10
             |> TimeSpan.FromSeconds
       }
-      RabbitQueue = {
-         Name =
-            input.RabbitQueue.Name |> Option.defaultValue "domestic-transfer"
-         MaxParallelism =
-            input.RabbitQueue.MaxParallelism |> Option.defaultValue 10
+      Queue = {
+         Name = input.Queue.Name |> Option.defaultValue "domestic-transfer"
+         MaxParallelism = input.Queue.MaxParallelism |> Option.defaultValue 10
       }
      }
    | Error err ->
