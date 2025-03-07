@@ -11,6 +11,7 @@ open Akkling
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Transfer.Domain
 open Bank.Infrastructure
 open ActorUtil
 open SignalRBroadcast
@@ -311,12 +312,12 @@ builder.Services.AddAkka(
             ActorMetadata.domesticTransferConsumer.Name,
             (fun system _ _ ->
                DomesticTransferConsumerActor.initProps
+                  (getQueueConnection provider)
+                  EnvTransfer.config.Queue
+                  (EnvTransfer.config.domesticTransferCircuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
                   (AccountActor.get system)
                   EmailConsumerActor.getProducer
-                  (EnvTransfer.config.domesticTransferCircuitBreaker system)
-                  (getQueueConnection provider)
-                  EnvTransfer.config.Queue
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -334,7 +335,7 @@ builder.Services.AddAkka(
             // which will enqueue the message into RabbitMq for the
             // EmailConsumer Singleton Actor to process.
             registry.Register<ActorMetadata.EmailProducerMarker>(
-               Lib.Queue.startProducer
+               Lib.Queue.startProducer<Email.EmailMessage>
                   system
                   (getQueueConnection provider)
                   EnvNotifications.config.Queue
@@ -345,7 +346,7 @@ builder.Services.AddAkka(
             // which will enqueue the message into RabbitMq for the
             // DomesticTransferConsumer Singleton Actor to process.
             registry.Register<ActorMetadata.DomesticTransferProducerMarker>(
-               Lib.Queue.startProducer
+               Lib.Queue.startProducer<DomesticTransferMessage>
                   system
                   (getQueueConnection provider)
                   EnvTransfer.config.Queue

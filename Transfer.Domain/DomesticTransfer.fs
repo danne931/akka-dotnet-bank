@@ -189,7 +189,3 @@ type DomesticTransferRequest =
 [<RequireQualifiedAccess>]
 type DomesticTransferMessage =
    | TransferRequest of DomesticTransferServiceAction * DomesticTransfer
-   | TransferResponse of
-      DomesticTransferServiceResponse *
-      DomesticTransferServiceAction *
-      DomesticTransfer

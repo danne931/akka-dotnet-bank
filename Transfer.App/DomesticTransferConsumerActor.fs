@@ -1,16 +1,14 @@
 [<RequireQualifiedAccess>]
 module DomesticTransferConsumerActor
 
-open System
 open System.Text
 open System.Text.Json
+open System.Threading.Tasks
 open Akkling
 open Akkling.Cluster.Sharding
 open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
-open Akka.Streams.Amqp.RabbitMq.Dsl
 open FsToolkit.ErrorHandling
-open Akkling.Streams
 
 open Lib.ActivePatterns
 open Lib.SharedTypes
@@ -20,35 +18,18 @@ open SignalRBroadcast
 open Email
 open Lib.Types
 
-let mutable cnt = 0
-
 module Command = DomesticTransferToCommand
 type private FailReason = DomesticTransferFailReason
-
-type private CircuitBreakerMessage =
-   | BreakerHalfOpen
-   | BreakerClosed
-
-module private Msg =
-   let progress =
-      AccountMessage.StateChange
-      << AccountCommand.UpdateDomesticTransferProgress
-
-   let complete =
-      AccountMessage.StateChange << AccountCommand.CompleteDomesticTransfer
-
-   let fail = AccountMessage.StateChange << AccountCommand.FailDomesticTransfer
 
 let private progressFromResponse (response: DomesticTransferServiceResponse) =
    match response.Status with
    | "Complete" -> DomesticTransferProgress.Completed
    | "ReceivedRequest" ->
-      DomesticTransferProgress.InProgress
-         DomesticTransferInProgress.InitialHandshakeAck
+      DomesticTransferInProgress.InitialHandshakeAck
+      |> DomesticTransferProgress.InProgress
    | status ->
-      DomesticTransferProgress.InProgress(
-         DomesticTransferInProgress.Other status
-      )
+      DomesticTransferInProgress.Other status
+      |> DomesticTransferProgress.InProgress
 
 let private failReasonFromError (err: string) : FailReason =
    match err with
@@ -85,296 +66,123 @@ let private networkRecipient
          | DomesticRecipientAccountDepository.Savings -> "savings"
    }
 
-let deserializeFromRabbit
-   (system: ActorSystem)
-   (msg: CommittableIncomingMessage)
-   =
-   try
-      let serializer =
-         system.Serialization.FindSerializerForType(
-            typeof<DomesticTransferMessage>
-         )
-
-      msg.Message.Bytes.ToArray()
-      |> serializer.FromBinary<DomesticTransferMessage>
-      |> Ok
-   with ex ->
-      Error ex
-
-let handleTransfer
-   (mailbox: Actor<obj>)
-   (requestTransfer: DomesticTransferRequest)
-   (action: DomesticTransferServiceAction)
-   (txn: DomesticTransfer)
-   =
-   task {
-      printfn "TRY TRANSFER"
-      let! result = requestTransfer action txn
-      printfn "result from transfer %A" result
-
-      return
-         match result with
-         | Ok res -> DomesticTransferMessage.TransferResponse(res, action, txn)
-         | Error err ->
-            match err with
-            | Err.SerializationError errMsg ->
-               let errMsg = $"Corrupt data: {errMsg}"
-               logError mailbox errMsg
-
-               let res = {
-                  Sender = networkSender txn.Sender
-                  Recipient = networkRecipient txn.Recipient
-                  Ok = false
-                  Status = ""
-                  Reason = "CorruptData"
-                  TransactionId = string txn.TransferId
-               }
-
-               DomesticTransferMessage.TransferResponse(res, action, txn)
-            | Err.NetworkError err -> failwith err.Message
-            | err -> failwith (string err)
-   }
-
-let initTransferSink
-   (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
-   (breaker: Akka.Pattern.CircuitBreaker)
+let protectedAction
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
-   (requestTransfer: DomesticTransferRequest)
-   (killSwitch: Akka.Streams.SharedKillSwitch)
-   (mailbox: Actor<obj>)
-   parallelism
+   (networkRequest: DomesticTransferRequest)
+   (mailbox: Actor<_>)
+   (msg: DomesticTransferMessage)
+   : Task<unit>
    =
-   let logError, logWarning = logError mailbox, logWarning mailbox
+   match msg with
+   | DomesticTransferMessage.TransferRequest(action, txn) -> task {
+      let! result = networkRequest action txn
 
-   let handleTransferWithCircuitBreaker
-      (committable: CommittableIncomingMessage)
-      (msg: DomesticTransferMessage)
-      =
-      breaker.WithCircuitBreaker(fun () -> task {
-         try
-            match msg with
-            | DomesticTransferMessage.TransferRequest(action, txn) ->
-               let! response =
-                  handleTransfer mailbox requestTransfer action txn
+      let onOk res =
+         let accountRef = getAccountRef txn.Sender.AccountId
 
-               do! committable.Ack()
-               return response
+         if res.Ok then
+            let progress = progressFromResponse res
+
+            match progress with
+            | DomesticTransferProgress.Completed ->
+               let msg =
+                  Command.complete txn
+                  |> AccountCommand.CompleteDomesticTransfer
+                  |> AccountMessage.StateChange
+
+               accountRef <! msg
+            | DomesticTransferProgress.InProgress progress ->
+               let msg =
+                  Command.progress txn progress
+                  |> AccountCommand.UpdateDomesticTransferProgress
+                  |> AccountMessage.StateChange
+
+               match action with
+               | DomesticTransferServiceAction.TransferAck -> accountRef <! msg
+               | DomesticTransferServiceAction.ProgressCheck ->
+                  let previousProgress = txn.Status
+
+                  if
+                     (DomesticTransferProgress.InProgress progress)
+                     <> previousProgress
+                  then
+                     accountRef <! msg
+            | _ -> ()
+         else
+            let err = failReasonFromError res.Reason
+
+            match err with
+            | FailReason.CorruptData
+            | FailReason.InvalidPaymentNetwork
+            | FailReason.InvalidDepository
+            | FailReason.InvalidAction ->
+               logError mailbox $"Transfer API requires code update: {err}"
+
+               getEmailRef mailbox.System
+               <! EmailMessage.ApplicationErrorRequiresSupport(
+                  string err,
+                  txn.Sender.OrgId
+               )
+            | FailReason.InvalidAmount
+            | FailReason.InvalidAccountInfo
+            | FailReason.AccountClosed
             | _ ->
-               do! committable.Ack()
-               return msg
-         with e ->
-            do! committable.Nack()
-            return failwith e.Message
-      })
-      |> Async.AwaitTask
+               let msg =
+                  Command.fail txn err
+                  |> AccountCommand.FailDomesticTransfer
+                  |> AccountMessage.StateChange
 
-   let source =
-      let settings =
-         Lib.Queue.createSourceSettings queueSettings.Name queueConnection
+               accountRef <! msg
 
-      AmqpSource.CommittableSource(settings, bufferSize = parallelism)
+      match result with
+      | Ok res -> onOk res
+      | Error err ->
+         match err with
+         | Err.SerializationError errMsg ->
+            let errMsg = $"Corrupt data: {errMsg}"
+            logError mailbox errMsg
 
-   let sink =
-      Sink.onComplete (function
-         | None ->
-            logWarning "Domestic transfer Rabbit consumer stream completed."
-         | Some err ->
-            logError
-               $"Domestic transfer rabbit consumer stream completed with error: {err}")
-
-   source
-   |> Source.viaMat (killSwitch.Flow()) Keep.none
-   |> Source.asyncMapUnordered parallelism (fun msg -> async {
-      let nack = msg.Nack >> Async.AwaitTask
-
-      if breaker.IsOpen then
-         logWarning "Circuit breaker open - will try again later"
-         do! nack ()
-      else
-         match deserializeFromRabbit mailbox.System msg with
-         | Error e ->
-            logError $"DomesticTransfer deserialization broken {e.Message}"
-            do! nack ()
-         | Ok transferMsg ->
-            try
-               let! response = handleTransferWithCircuitBreaker msg transferMsg
-
-               match response with
-               | DomesticTransferMessage.TransferResponse(res, action, txn) ->
-                  let accountRef = getAccountRef txn.Sender.AccountId
-
-                  if res.Ok then
-                     let progress = progressFromResponse res
-
-                     match progress with
-                     | DomesticTransferProgress.Completed ->
-                        let cmd = Command.complete txn
-                        accountRef <! Msg.complete cmd
-                     | DomesticTransferProgress.InProgress progress ->
-                        let msg = Msg.progress <| Command.progress txn progress
-
-                        match action with
-                        | DomesticTransferServiceAction.TransferAck ->
-                           accountRef <! msg
-                        | DomesticTransferServiceAction.ProgressCheck ->
-                           let previousProgress = txn.Status
-
-                           if
-                              (DomesticTransferProgress.InProgress progress)
-                              <> previousProgress
-                           then
-                              accountRef <! msg
-                     | _ -> ()
-                  else
-                     let err = failReasonFromError res.Reason
-
-                     match err with
-                     | FailReason.CorruptData
-                     | FailReason.InvalidPaymentNetwork
-                     | FailReason.InvalidDepository
-                     | FailReason.InvalidAction ->
-                        logError $"Transfer API requires code update: {err}"
-
-                        getEmailRef mailbox.System
-                        <! EmailMessage.ApplicationErrorRequiresSupport(
-                           string err,
-                           txn.Sender.OrgId
-                        )
-                     | FailReason.InvalidAmount
-                     | FailReason.InvalidAccountInfo
-                     | FailReason.AccountClosed
-                     | _ ->
-                        let msg = Msg.fail <| Command.fail txn err
-                        accountRef <! msg
-               | _ -> ()
-
-               printfn "rezz %A" response
-            with e ->
-               logError $"Error processing transfer message: {e.Message}"
-
-      return 100
-   })
-   |> Source.toMat sink Keep.none
-   |> Graph.run (mailbox.System.Materializer())
+            onOk {
+               Sender = networkSender txn.Sender
+               Recipient = networkRecipient txn.Recipient
+               Ok = false
+               Status = ""
+               Reason = "CorruptData"
+               TransactionId = string txn.TransferId
+            }
+         | Err.NetworkError err -> failwith err.Message
+         | err -> failwith (string err)
+     }
 
 let actorProps
-   (broadcaster: SignalRBroadcast)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
-   (breaker: Akka.Pattern.CircuitBreaker)
-   (requestTransfer: DomesticTransferRequest)
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueSettings)
+   (breaker: Akka.Pattern.CircuitBreaker)
+   (broadcaster: SignalRBroadcast)
+   (networkRequest: DomesticTransferRequest)
+   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    : Props<obj>
    =
-   let createKillSwitch () =
-      KillSwitch.shared "CircuitBreakerOpen.DomesticTransfer"
-
-   let mutable killSwitch = createKillSwitch ()
-
-   let initStream =
-      initTransferSink
-         queueConnection
-         queueSettings
-         breaker
-         getAccountRef
-         getEmailRef
-         requestTransfer
-
-   let rec init (ctx: Actor<obj>) = actor {
-      let! msg = ctx.Receive()
-
-      breaker.OnHalfOpen(fun () ->
-         cnt <- cnt + 1
-
-         ctx.Self <! BreakerHalfOpen
-
-         broadcaster.circuitBreaker {
-            Service = CircuitBreakerService.DomesticTransfer
-            Status = CircuitBreakerStatus.HalfOpen
-            Timestamp = DateTime.UtcNow
-         })
-      |> ignore
-
-      breaker.OnClose(fun () ->
-         ctx.Self <! BreakerClosed
-
-         broadcaster.circuitBreaker {
-            Service = CircuitBreakerService.DomesticTransfer
-            Status = CircuitBreakerStatus.Closed
-            Timestamp = DateTime.UtcNow
-         })
-      |> ignore
-
-      breaker.OnOpen(fun () ->
-         logWarning ctx "Breaker open - pause processing"
-         // Shutdown processing of messages off RabbitMq until
-         // BreakerHalfOpen.  When BreakerHalfOpen the stream will
-         // be reinitialized and attempt to process just 1 message off
-         // the queue.  If successful then the stream will return to
-         // processing messages normally.
-         killSwitch.Shutdown()
-
-         // Need to refresh the kill switch for stream reinitialization.
-         // Otherwise, it appears the stream will never start back up again
-         // due to being configured with a killswitch that has already been
-         // shut down.
-         killSwitch <- createKillSwitch ()
-
-         broadcaster.circuitBreaker {
-            Service = CircuitBreakerService.DomesticTransfer
-            Status = CircuitBreakerStatus.Open
-            Timestamp = DateTime.UtcNow
-         })
-      |> ignore
-
-      match msg with
-      | LifecycleEvent e ->
-         match e with
-         | PreStart ->
-            logInfo ctx "Prestart - Initialize EmailActor Queue Source"
-
-            return! processing ctx queueSettings.MaxParallelism
-         | _ -> return ignored ()
-      | msg ->
-         logError ctx $"Unknown msg {msg}"
-         return unhandled ()
+   let consumerQueueOpts
+      : Lib.Queue.QueueConsumerOptions<
+           DomesticTransferMessage,
+           DomesticTransferMessage
+         > = {
+      Service = CircuitBreakerService.DomesticTransfer
+      onCircuitBreakerEvent = broadcaster.circuitBreaker
+      protectedAction = protectedAction getAccountRef getEmailRef networkRequest
+      queueMessageToActionRequests = fun _ msg -> Task.FromResult(Some [ msg ])
    }
 
-   and processing (ctx: Actor<obj>) (maxParallel: int) =
-      initStream killSwitch ctx maxParallel
+   Lib.Queue.consumerActorProps
+      queueConnection
+      queueSettings
+      breaker
+      consumerQueueOpts
 
-      actor {
-         let! msg = ctx.Receive()
-
-         match msg with
-         | :? CircuitBreakerMessage as msg ->
-            match msg with
-            | BreakerHalfOpen ->
-               logWarning ctx "Breaker half open - try processing one"
-               return! processing ctx 1
-            | BreakerClosed ->
-               logWarning ctx "Breaker closed - resume processing"
-               return! processing ctx queueSettings.MaxParallelism
-         | LifecycleEvent e ->
-            printfn "lifecycle event down below %A" e
-
-            match e with
-            | PostStop ->
-               printfn "POSTSTOP transfer consumer"
-               //queue.Complete()
-               return! init ctx
-            | _ -> return ignored ()
-         | msg ->
-            logError ctx $"Unknown msg {msg}"
-            return unhandled ()
-      }
-
-   props init
-
-let private transferRequest
+let private networkRequestToTransferProcessor
    (action: DomesticTransferServiceAction)
    (txn: DomesticTransfer)
    =
@@ -406,21 +214,22 @@ let private transferRequest
    }
 
 let initProps
+   (queueConnection: AmqpConnectionDetails)
+   (queueSettings: QueueSettings)
+   (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
-   (breaker: Akka.Pattern.CircuitBreaker)
-   (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   : Props<obj>
    =
    actorProps
-      broadcaster
-      getAccountRef
-      getEmailRef
-      breaker
-      transferRequest
       queueConnection
       queueSettings
+      breaker
+      broadcaster
+      networkRequestToTransferProcessor
+      getAccountRef
+      getEmailRef
 
 let getProducer (system: ActorSystem) : IActorRef<DomesticTransferMessage> =
    Akka.Hosting.ActorRegistry
