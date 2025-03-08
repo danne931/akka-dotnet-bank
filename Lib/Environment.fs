@@ -144,17 +144,24 @@ let streamBackoffRestartSettingsFromInput
          |> Option.defaultValue 30
          |> TimeSpan.FromSeconds,
 
-         // Adds 20% "noise" to vary intervals slightly
+         // Adds 20% "noise" to vary intervals slightly.  Will help avoid
+         // multiple streams restarting at the same time.
          input.RandomFactor |> Option.defaultValue 0.2
       )
 
-   restartSettings.WithMaxRestarts(
-      input.MaxRestarts |> Option.defaultValue 10,
+   // Cap the total # of restarts
+   match input.MaxRestarts with
+   | None -> restartSettings
+   | Some max ->
+      restartSettings.WithMaxRestarts(
+         max,
 
-      input.MaxRestartsWithinSeconds
-      |> Option.defaultValue 20
-      |> TimeSpan.FromSeconds
-   )
+         // Set a time-frame during which restarts are counted
+         // toward the same total for MaxRestarts.
+         input.MaxRestartsWithinSeconds
+         |> Option.defaultValue 20
+         |> TimeSpan.FromSeconds
+      )
 
 type QueueConnectionInput = {|
    Host: string option
@@ -187,6 +194,7 @@ type private BankConfigInput = {
    BillingStatementPersistenceChunking: StreamChunkingInput
    BillingStatementPersistenceBackoffRestart: StreamBackoffRestartSettingsInput
    CircuitBreakerActorSupervisor: BackoffSupervisorInput
+   QueueConsumerStreamBackoffRestart: StreamBackoffRestartSettingsInput
 }
 
 type BankConfig = {
@@ -210,6 +218,7 @@ type BankConfig = {
    BillingStatementPersistenceBackoffRestart: Akka.Streams.RestartSettings
    BillingStatementRetryPersistenceAfter: TimeSpan
    CircuitBreakerActorSupervisor: BackoffSupervisorOptions
+   QueueConsumerStreamBackoffRestart: Akka.Streams.RestartSettings
 }
 
 let config =
@@ -317,6 +326,9 @@ let config =
             backoffSupervisorOptionsFromInput
                input.CircuitBreakerActorSupervisor
          QueueConnection = queueConnection
+         QueueConsumerStreamBackoffRestart =
+            streamBackoffRestartSettingsFromInput
+               input.QueueConsumerStreamBackoffRestart
       }
    | Error err ->
       match err with

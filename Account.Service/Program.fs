@@ -291,6 +291,7 @@ builder.Services.AddAkka(
                   (provider.GetRequiredService<SignalRBroadcast>())
                   (getQueueConnection provider)
                   EnvNotifications.config.Queue
+                  Env.config.QueueConsumerStreamBackoffRestart
                   EnvNotifications.config.EmailBearerToken
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -314,6 +315,7 @@ builder.Services.AddAkka(
                DomesticTransferConsumerActor.initProps
                   (getQueueConnection provider)
                   EnvTransfer.config.Queue
+                  Env.config.QueueConsumerStreamBackoffRestart
                   (EnvTransfer.config.domesticTransferCircuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
                   (AccountActor.get system)
@@ -339,6 +341,7 @@ builder.Services.AddAkka(
                   system
                   (getQueueConnection provider)
                   EnvNotifications.config.Queue
+                  Env.config.QueueConsumerStreamBackoffRestart
                |> untyped
             )
 
@@ -350,6 +353,7 @@ builder.Services.AddAkka(
                   system
                   (getQueueConnection provider)
                   EnvTransfer.config.Queue
+                  Env.config.QueueConsumerStreamBackoffRestart
                |> untyped
             )
 

@@ -84,13 +84,20 @@ let startProducer<'QueueMessage>
    (system: ActorSystem)
    (conn: QueueConnectionDetails)
    (queueSettings: QueueSettings)
+   (streamRestartSettings: Akka.Streams.RestartSettings)
    : IActorRef<'QueueMessage>
    =
    let spawnActor targetRef =
       let p = producerActorProps<'QueueMessage> system targetRef
       spawnAnonymous system p
 
-   let sink = createSinkSettings queueSettings.Name conn |> AmqpSink.Create
+   let sinkSettings = createSinkSettings queueSettings.Name conn
+
+   let sink =
+      Akka.Streams.Dsl.RestartSink.WithBackoff(
+         (fun () -> AmqpSink.Create sinkSettings),
+         streamRestartSettings
+      )
 
    Source.actorRef Akka.Streams.OverflowStrategy.DropNew 1000
    |> Source.mapMatValue spawnActor
@@ -125,6 +132,7 @@ type QueueConsumerOptions<'QueueMessage, 'ActionRequest> = {
 let private initConsumerStream
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueSettings)
+   (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (opts: QueueConsumerOptions<'QueueMessage, 'ActionRequest>)
    (killSwitch: Akka.Streams.SharedKillSwitch)
@@ -138,8 +146,15 @@ let private initConsumerStream
       $"({queueSettings.Name}) Init rabbit consumer stream with buffer size {maxParallel}"
 
    let source =
-      let settings = createSourceSettings queueSettings.Name queueConnection
-      AmqpSource.CommittableSource(settings, bufferSize = maxParallel)
+      let srcSettings = createSourceSettings queueSettings.Name queueConnection
+
+      let src =
+         AmqpSource.CommittableSource(srcSettings, bufferSize = maxParallel)
+
+      Akka.Streams.Dsl.RestartSource.WithBackoff(
+         (fun () -> src),
+         streamRestartSettings
+      )
 
    let sink =
       Sink.onComplete (function
@@ -228,6 +243,7 @@ type private CircuitBreakerMessage =
 let consumerActorProps
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueSettings)
+   (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (opts: QueueConsumerOptions<'QueueMessage, 'ActionRequest>)
    : Props<obj>
@@ -238,7 +254,12 @@ let consumerActorProps
    let mutable killSwitch = createKillSwitch ()
 
    let initStream =
-      initConsumerStream queueConnection queueSettings breaker opts
+      initConsumerStream
+         queueConnection
+         queueSettings
+         streamRestartSettings
+         breaker
+         opts
 
    let rec init (ctx: Actor<obj>) = actor {
       let! msg = ctx.Receive()
