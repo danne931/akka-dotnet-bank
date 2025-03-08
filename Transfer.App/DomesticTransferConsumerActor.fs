@@ -158,6 +158,7 @@ let protectedAction
 let actorProps
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueSettings)
+   (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (networkRequest: DomesticTransferRequest)
@@ -179,6 +180,7 @@ let actorProps
    Lib.Queue.consumerActorProps
       queueConnection
       queueSettings
+      streamRestartSettings
       breaker
       consumerQueueOpts
 
@@ -216,6 +218,7 @@ let private networkRequestToTransferProcessor
 let initProps
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueSettings)
+   (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
@@ -225,6 +228,7 @@ let initProps
    actorProps
       queueConnection
       queueSettings
+      streamRestartSettings
       breaker
       broadcaster
       networkRequestToTransferProcessor

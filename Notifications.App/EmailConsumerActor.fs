@@ -106,6 +106,8 @@ let private emailPropsFromMessage
 // NOTE
 // Raise an exception instead of returning Result.Error to trip circuit breaker.
 let private sendEmail (client: HttpClient) (data: EmailRequest.T) = task {
+   do! Async.Sleep(100)
+
    if cnt > 3 then
       let res = new HttpResponseMessage(Net.HttpStatusCode.OK)
 
@@ -187,6 +189,7 @@ let private queueMessageToActionRequest
 let actorProps
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueSettings)
+   (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (client: HttpClient)
@@ -208,6 +211,7 @@ let actorProps
    Lib.Queue.consumerActorProps
       queueConnection
       queueSettings
+      streamRestartSettings
       breaker
       consumerQueueOpts
 
@@ -239,6 +243,7 @@ let initProps
    (broadcaster: SignalRBroadcast)
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueSettings)
+   (streamRestartSettings: Akka.Streams.RestartSettings)
    (bearerToken: string option)
    =
    let client = Some(createClient "invalid-token")
@@ -249,6 +254,7 @@ let initProps
       actorProps
          queueConnection
          queueSettings
+         streamRestartSettings
          breaker
          broadcaster
          client
