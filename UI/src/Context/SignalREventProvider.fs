@@ -17,12 +17,6 @@ type EventType =
    | Employee
    | Org
 
-[<RequireQualifiedAccess>]
-type EventPersistedConfirmation =
-   | Account of AccountEventPersistedConfirmation
-   | Employee of EmployeeEventPersistedConfirmation
-   | Org of OrgEventPersistedConfirmation
-
 type SignalREventContext = {
    AccountSubscribers:
       Map<

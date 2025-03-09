@@ -49,9 +49,7 @@
     <Compile Include="Components/OrgSocialTransferDiscovery.fs" />
     <Compile Include="Components/AccountSelection.fs" />
     <Compile Include="Components/Forms/Util.fs" />
-    <Compile Include="Components/Forms/OrgFormContainer.fs" />
-    <Compile Include="Components/Forms/EmployeeFormContainer.fs" />
-    <Compile Include="Components/Forms/AccountFormContainer.fs" />
+    <Compile Include="Components/Forms/FormContainer.fs" />
     <Compile Include="Components/Forms/AccountProfile.fs" />
     <Compile Include="Components/Forms/ConfigureAutoTransferRuleContainer.fs" />
     <Compile Include="Components/Forms/ConfigureAutoTransferZeroBalanceRule.fs" />

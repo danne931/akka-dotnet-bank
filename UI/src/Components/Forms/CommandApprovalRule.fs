@@ -11,10 +11,8 @@ open Lib.SharedTypes
 open Lib.Validators
 open UIDomain.Org
 open Fable.Form.Simple.Pico
-open Bank.Org.Forms
 open CommandApproval
-
-open FormContainer
+open Bank.Forms.FormContainer
 
 type ApproverValues = { EmployeeId: string; Name: string }
 
@@ -344,8 +342,9 @@ let private ruleCreateForm
             Criteria = criteria
             Approvers = approvers
          }
+         |> FormCommand.Org
 
-      Msg.Submit(org, cmd, Started))
+      Msg.Submit(FormEntity.Org org, cmd, Started))
    |> Form.append (
       fieldApprovableCommandType
       |> Form.andThen (fun cmdType ->
@@ -380,8 +379,9 @@ let private ruleEditForm
                Criteria = criteria
                Approvers = approvers
             }
+            |> FormCommand.Org
 
-         Msg.Submit(org, cmd, Started))
+         Msg.Submit(FormEntity.Org org, cmd, Started))
    |> Form.append (
       match rule.CommandType with
       | ApprovableCommandType.ApprovablePerCommand _ ->
@@ -447,12 +447,17 @@ let CommandApprovalRuleEditFormComponent
         }
       | ApprovalCriteria.PerCommand -> initValues
 
-   OrgFormContainer {|
+   FormContainer {|
       InitialValues = initValues
       Form = ruleEditForm org employees session rule
-      OnSubmit = onSubmit
+      OnSubmit =
+         function
+         | FormSubmitReceipt.Org receipt -> onSubmit receipt
+         | _ -> ()
       Action = Some(customFormSubmit onCancel)
       Session = session
+      ComponentName = "CommandApprovalRuleEditForm"
+      UseEventSubscription = Some [ SignalREventProvider.EventType.Org ]
    |}
 
 [<ReactComponent>]
@@ -463,7 +468,7 @@ let CommandApprovalRuleCreateFormComponent
    (org: Org)
    (employees: Map<EmployeeId, Employee>)
    =
-   OrgFormContainer {|
+   FormContainer {|
       InitialValues = {
          CommandType =
             InviteEmployeeCommandType
@@ -476,7 +481,12 @@ let CommandApprovalRuleCreateFormComponent
          RangeUpperBound = ""
       }
       Form = ruleCreateForm org employees session
-      OnSubmit = onSubmit
+      OnSubmit =
+         function
+         | FormSubmitReceipt.Org receipt -> onSubmit receipt
+         | _ -> ()
       Action = Some(customFormSubmit onCancel)
       Session = session
+      ComponentName = "CommandApprovalRuleCreateForm"
+      UseEventSubscription = Some [ SignalREventProvider.EventType.Org ]
    |}

@@ -9,7 +9,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
 open Lib.Validators
-open FormContainer
+open Bank.Forms.FormContainer
 open Lib.SharedTypes
 
 type Values = {
@@ -72,8 +72,9 @@ let private form
             InitiatedBy = session.AsInitiator
          }
          |> AccountCommand.CreateAccount
+         |> FormCommand.Account
 
-      Msg.Submit(Account.empty, cmd, Started)
+      Msg.Submit(FormEntity.Account Account.empty, cmd, Started)
 
    Form.succeed onSubmit
    |> Form.append fieldAccountDepository
@@ -84,13 +85,18 @@ let AccountCreateFormComponent
    (session: UserSession)
    (onSubmit: AccountCommandReceipt -> unit)
    =
-   AccountFormContainer {|
+   FormContainer {|
       InitialValues = {
          AccountName = ""
          AccountDepository = "checking"
       }
       Form = form session
       Action = None
-      OnSubmit = onSubmit
+      OnSubmit =
+         function
+         | FormSubmitReceipt.Account receipt -> onSubmit receipt
+         | _ -> ()
       Session = session
+      ComponentName = "AccountCreateForm"
+      UseEventSubscription = Some [ SignalREventProvider.EventType.Account ]
    |}

@@ -13,7 +13,7 @@ open Bank.Employee.Domain
 open UIDomain.Account
 open UIDomain.Org
 open Lib.Validators
-open FormContainer
+open Bank.Forms.FormContainer
 open Lib.SharedTypes
 open Bank.Employee.Forms.AccountProfileForm
 open CommandApproval
@@ -123,8 +123,9 @@ let formInternalWithinOrg
             initiatedBy
             transfer
          |> AccountCommand.InternalTransfer
+         |> FormCommand.Account
 
-      Msg.Submit(sender, msg, Started)
+      Msg.Submit(FormEntity.Account sender, msg, Started)
 
    Form.meta (fun values ->
       let senderOptions =
@@ -230,7 +231,7 @@ let formInternalBetweenOrgs
                scheduledTransfer
             |> AccountCommand.ScheduleInternalTransferBetweenOrgs
 
-      Msg.Submit(sender, cmd, Started)
+      Msg.Submit(FormEntity.Account sender, FormCommand.Account cmd, Started)
 
    Form.succeed (fun (recipientId: string) props ->
       let senderId, amount, memo, scheduledAt = props
@@ -325,7 +326,7 @@ let formDomestic
                scheduledTransfer
             |> AccountCommand.ScheduleDomesticTransfer
 
-      Msg.Submit(sender, cmd, Started)
+      Msg.Submit(FormEntity.Account sender, FormCommand.Account cmd, Started)
 
    Form.succeed (fun props ->
       let sender, recipient, amount, memo, scheduledAt = props
@@ -351,7 +352,7 @@ let TransferInternalWithinOrgComponent
    (accounts: Map<AccountId, Account>)
    (onSubmit: AccountCommandReceipt -> unit)
    =
-   AccountFormContainer {|
+   FormContainer {|
       Session = session
       InitialValues = {
          Amount = ""
@@ -362,7 +363,12 @@ let TransferInternalWithinOrgComponent
       }
       Form = formInternalWithinOrg accounts session.AsInitiator
       Action = None
-      OnSubmit = onSubmit
+      OnSubmit =
+         function
+         | FormSubmitReceipt.Account receipt -> onSubmit receipt
+         | _ -> ()
+      ComponentName = "TransferInternalWithinOrgForm"
+      UseEventSubscription = Some [ SignalREventProvider.EventType.Account ]
    |}
 
 [<ReactComponent>]
@@ -394,7 +400,7 @@ let TransferInternalBetweenOrgsComponent
       })
       |> Option.defaultValue initValues
 
-   AccountFormContainer {|
+   FormContainer {|
       Session = session
       InitialValues = initValues
       Form =
@@ -404,7 +410,8 @@ let TransferInternalBetweenOrgsComponent
             session.AsInitiator
       Action = None
       OnSubmit =
-         fun receipt ->
+         function
+         | FormSubmitReceipt.Account receipt ->
             match receipt.PendingCommand with
             | AccountCommand.InternalTransferBetweenOrgs cmd ->
                let cmd =
@@ -427,6 +434,15 @@ let TransferInternalBetweenOrgsComponent
                      cmd
                   |> onSubmitForApproval
             | _ -> ()
+         | _ -> ()
+      ComponentName = "TransferInternalBetweenOrgsForm"
+      UseEventSubscription =
+         Some [
+            // Listen for internal transfer between orgs
+            SignalREventProvider.EventType.Account
+            // Listen for command approval request
+            SignalREventProvider.EventType.Org
+         ]
    |}
 
 [<ReactComponent>]
@@ -449,7 +465,7 @@ let TransferDomesticFormComponent
          |> Option.map (_.RecipientAccountId >> string)
          |> Option.defaultValue ""
 
-   AccountFormContainer {|
+   FormContainer {|
       Session = session
       InitialValues = {
          Amount = ""
@@ -461,7 +477,8 @@ let TransferDomesticFormComponent
       Form = formDomestic org senderAccounts session.AsInitiator
       Action = None
       OnSubmit =
-         fun receipt ->
+         function
+         | FormSubmitReceipt.Account receipt ->
             match receipt.PendingCommand with
             | AccountCommand.DomesticTransfer cmd ->
                let cmd =
@@ -482,6 +499,15 @@ let TransferDomesticFormComponent
                      cmd
                   |> onSubmitForApproval
             | _ -> ()
+         | _ -> ()
+      ComponentName = "DomesticTransferForm"
+      UseEventSubscription =
+         Some [
+            // Listen for domestic transfer
+            SignalREventProvider.EventType.Account
+            // Listen for command approval request
+            SignalREventProvider.EventType.Org
+         ]
    |}
 
 [<ReactComponent>]

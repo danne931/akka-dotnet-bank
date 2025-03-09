@@ -15,6 +15,7 @@ open TableControlPanel
 open EmployeeSearch
 open Lib.SharedTypes
 open Pagination
+open SignalRBroadcast
 
 [<RequireQualifiedAccess>]
 type HistoryFilterView =
@@ -430,7 +431,7 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
          React.useCallbackRef (fun conf ->
             let history =
                match conf with
-               | SignalREventProvider.EventPersistedConfirmation.Account conf ->
+               | EventPersistedConfirmation.Account conf ->
                   History.Account {
                      Event = conf.EventPersisted
                      InitiatedByName =
@@ -438,7 +439,7 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
                         |> snd
                         |> _.InitiatedBy.Name
                   }
-               | SignalREventProvider.EventPersistedConfirmation.Org conf ->
+               | EventPersistedConfirmation.Org conf ->
                   History.Org {
                      Event = conf.EventPersisted
                      InitiatedByName =
@@ -446,7 +447,7 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
                         |> snd
                         |> _.InitiatedBy.Name
                   }
-               | SignalREventProvider.EventPersistedConfirmation.Employee conf ->
+               | EventPersistedConfirmation.Employee conf ->
                   History.Employee {
                      Event = conf.EventPersisted
                      InitiatedByName =

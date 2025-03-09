@@ -5,7 +5,7 @@ open Fable.Form.Simple
 
 open Bank.Employee.Domain
 open UIDomain.Employee
-open FormContainer
+open Bank.Forms.FormContainer
 
 type Values = { Duration: string; Amount: string }
 
@@ -57,10 +57,15 @@ let PurchaseLimitFormComponent
                }
             ))
 
-   EmployeeFormContainer {|
+   FormContainer {|
       InitialValues = { Amount = ""; Duration = "daily" }
       Form = form
       Action = None
-      OnSubmit = notifyParentOnSubmit
+      OnSubmit =
+         function
+         | FormSubmitReceipt.Employee receipt -> notifyParentOnSubmit receipt
+         | _ -> ()
       Session = session
+      ComponentName = "PurchaseLimitForm"
+      UseEventSubscription = None
    |}

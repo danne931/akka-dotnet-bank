@@ -70,11 +70,23 @@ let App () =
             Html.progress []
          ))
    | Routes.IndexUrl.Account url ->
-      appShell None (AccountDashboard.AccountDashboardComponent url)
+      let contextProviders = SignalRConnectionProvider << SignalREventProvider
+
+      appShell
+         (Some contextProviders)
+         (AccountDashboard.AccountDashboardComponent url)
    | Routes.IndexUrl.Approvals url ->
-      appShell None (ApprovalDashboard.ApprovalDashboardComponent url)
+      let contextProviders = SignalRConnectionProvider << SignalREventProvider
+
+      appShell
+         (Some contextProviders)
+         (ApprovalDashboard.ApprovalDashboardComponent url)
    | Routes.IndexUrl.Employees url ->
-      appShell None (EmployeeDashboard.EmployeeDashboardComponent url)
+      let contextProviders = SignalRConnectionProvider << SignalREventProvider
+
+      appShell
+         (Some contextProviders)
+         (EmployeeDashboard.EmployeeDashboardComponent url)
    | Routes.IndexUrl.History url ->
       let contextProviders = SignalRConnectionProvider << SignalREventProvider
 
@@ -82,7 +94,11 @@ let App () =
          (Some contextProviders)
          (HistoryDashboard.HistoryDashboardComponent url)
    | Routes.IndexUrl.Cards url ->
-      appShell None (CardDashboard.CardDashboardComponent url)
+      let contextProviders = SignalRConnectionProvider << SignalREventProvider
+
+      appShell
+         (Some contextProviders)
+         (CardDashboard.CardDashboardComponent url)
    | Routes.IndexUrl.Transactions url ->
       let contextProviders =
          SignalRConnectionProvider
@@ -94,7 +110,11 @@ let App () =
          (Some contextProviders)
          (TransactionDashboard.TransactionDashboardComponent url)
    | Routes.IndexUrl.Payments url ->
-      appShell None (PaymentDashboard.PaymentDashboardComponent url)
+      let contextProviders = SignalRConnectionProvider << SignalREventProvider
+
+      appShell
+         (Some contextProviders)
+         (PaymentDashboard.PaymentDashboardComponent url)
    | Routes.IndexUrl.NotFound -> Html.h1 "Not Found"
 
 let root = ReactDOM.createRoot <| document.getElementById "bank-react-root"

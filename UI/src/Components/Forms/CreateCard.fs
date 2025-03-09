@@ -9,10 +9,10 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Employee
 open Lib.SharedTypes
-open FormContainer
 open AccountProfileForm
 open DailyPurchaseLimitForm
 open MonthlyPurchaseLimitForm
+open Bank.Forms.FormContainer
 
 type Values = {
    Nickname: string
@@ -107,8 +107,9 @@ let private form
             InitiatedBy = session.AsInitiator
          }
          |> EmployeeCommand.CreateCard
+         |> FormCommand.Employee
 
-      Msg.Submit(employee, cmd, Started)
+      Msg.Submit(FormEntity.Employee employee, cmd, Started)
 
    Form.succeed onSubmit
    |> Form.append selectCardType
@@ -166,7 +167,7 @@ let CreateCardFormComponent
 
    match orgCtx, sessionCtx with
    | Deferred.Resolved(Ok(Some org)), Deferred.Resolved(Ok session) ->
-      EmployeeFormContainer {|
+      FormContainer {|
          InitialValues = formProps
          Form = form session employee org.CheckingAccounts
          Action =
@@ -174,7 +175,12 @@ let CreateCardFormComponent
                Form.View.Action.Custom(fun state _ ->
                   Form.View.submitButton "Create Card" state)
             )
-         OnSubmit = onSubmit
+         OnSubmit =
+            function
+            | FormSubmitReceipt.Employee receipt -> onSubmit receipt
+            | _ -> ()
          Session = session
+         ComponentName = "CardCreateForm"
+         UseEventSubscription = Some [ SignalREventProvider.EventType.Employee ]
       |}
    | _ -> Html.progress []
