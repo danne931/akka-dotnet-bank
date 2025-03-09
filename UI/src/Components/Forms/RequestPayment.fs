@@ -11,7 +11,7 @@ open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
 open Lib.Validators
-open FormContainer
+open Bank.Forms.FormContainer
 open Lib.SharedTypes
 
 type Values = {
@@ -162,8 +162,9 @@ let formPlatformPayment
                }
             }
          |> AccountCommand.RequestPlatformPayment
+         |> FormCommand.Account
 
-      Msg.GetAccountAndSubmit(payeeAccountId, cmd)
+      Msg.GetAndSubmit(FormEntityId.Account payeeAccountId, cmd)
 
    Form.succeed onSubmit
    |> Form.append fieldOrgPayerSelect
@@ -239,8 +240,7 @@ let PaymentRequestFormComponent
                      })
                      |> Option.defaultValue initValues
 
-                  AccountFormContainer {|
-                     Session = session
+                  FormContainer {|
                      InitialValues = initValues
                      Form =
                         formPlatformPayment
@@ -249,7 +249,14 @@ let PaymentRequestFormComponent
                            orgs
                            initiatedBy
                      Action = None
-                     OnSubmit = onSubmit
+                     OnSubmit =
+                        function
+                        | FormSubmitReceipt.Account receipt -> onSubmit receipt
+                        | _ -> ()
+                     Session = session
+                     ComponentName = "RequestPaymentForm"
+                     UseEventSubscription =
+                        Some [ SignalREventProvider.EventType.Account ]
                   |}
                | Deferred.Resolved(Ok None) ->
                   Html.p $"No orgs found by search query {searchInput}."

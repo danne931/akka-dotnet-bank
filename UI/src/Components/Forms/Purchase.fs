@@ -11,7 +11,7 @@ open Bank.Employee.Domain
 open UIDomain.Employee
 open Lib.Validators
 open Lib.SharedTypes
-open FormContainer
+open Bank.Forms.FormContainer
 
 type Values = { Amount: string; Merchant: string }
 
@@ -70,8 +70,9 @@ let form
                Date = DateTime.UtcNow
             }
          |> EmployeeCommand.PurchasePending
+         |> FormCommand.Employee
 
-      Msg.Submit(employee, cmd, Started)
+      Msg.Submit(FormEntity.Employee employee, cmd, Started)
 
    Form.succeed onSubmit |> Form.append amountField |> Form.append merchantField
 
@@ -83,10 +84,19 @@ let PurchaseFormComponent
    (employee: Employee)
    (onSubmit: EmployeeCommandReceipt -> unit)
    =
-   EmployeeFormContainer {|
-      Session = session
+   FormContainer {|
       InitialValues = { Amount = ""; Merchant = "" }
       Form = form org.CheckingAccounts employee selectedCardId
       Action = None
-      OnSubmit = onSubmit
+      OnSubmit =
+         function
+         | FormSubmitReceipt.Employee receipt -> onSubmit receipt
+         | _ -> ()
+      Session = session
+      ComponentName = "PurchaseForm"
+      UseEventSubscription =
+         Some [
+            SignalREventProvider.EventType.Employee
+            SignalREventProvider.EventType.Account
+         ]
    |}

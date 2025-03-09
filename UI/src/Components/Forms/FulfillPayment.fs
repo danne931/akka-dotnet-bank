@@ -10,7 +10,7 @@ open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open UIDomain.Org
 open UIDomain.Account
-open FormContainer
+open Bank.Forms.FormContainer
 open Lib.SharedTypes
 open CommandApproval
 
@@ -59,8 +59,9 @@ let formFulfillPlatformPayment
             }
          }
          |> AccountCommand.FulfillPlatformPayment
+         |> FormCommand.Account
 
-      Msg.GetAccountAndSubmit(selectedAccountId, cmd)
+      Msg.GetAndSubmit(FormEntityId.Account selectedAccountId, cmd)
 
    Form.succeed onSubmit |> Form.append fieldFundingSourceSelect
 
@@ -132,8 +133,7 @@ let PaymentFulfillmentFormComponent
 
          match dailyAccrual with
          | Deferred.Resolved(Ok employeeAccrual) ->
-            AccountFormContainer {|
-               Session = session
+            FormContainer {|
                InitialValues = initValues
                Form =
                   formFulfillPlatformPayment
@@ -141,8 +141,18 @@ let PaymentFulfillmentFormComponent
                      payment
                      session.AsInitiator
                Action = Some(Form.View.Action.SubmitOnly "Submit Payment")
+               Session = session
+               ComponentName = "FulfillPaymentForm"
+               UseEventSubscription =
+                  Some [
+                     // Listen for payment fulfilled
+                     SignalREventProvider.EventType.Account
+                     // Listen for command approval request
+                     SignalREventProvider.EventType.Org
+                  ]
                OnSubmit =
-                  fun receipt ->
+                  function
+                  | FormSubmitReceipt.Account receipt ->
                      match receipt.PendingCommand with
                      | AccountCommand.FulfillPlatformPayment cmd ->
                         let cmd =
@@ -165,6 +175,7 @@ let PaymentFulfillmentFormComponent
                            |> onSubmitForApproval
                         | _ -> onSubmit receipt
                      | _ -> ()
+                  | _ -> ()
             |}
          | _ -> Html.progress []
    ]

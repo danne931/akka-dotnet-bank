@@ -135,23 +135,18 @@ let getTransactionInfo
             |> Result.map Some
    }
 
-let getCorrelatedTransactionConfirmations
+let isEventPersistenceConfirmed
    (correlationId: CorrelationId)
-   : Async<Result<AccountEventPersistedConfirmation list option, Err>>
+   : Async<Result<bool, Err>>
    =
    async {
       let! (code, responseText) =
          Http.get (TransactionPath.transactionConfirmation correlationId)
 
-      if code = 404 then
-         return Ok None
-      elif code <> 200 then
+      if code <> 200 then
          return Error <| Err.InvalidStatusCodeError(serviceName, code)
       else
-         return
-            responseText
-            |> Serialization.deserialize<AccountEventPersistedConfirmation list>
-            |> Result.map Some
+         return responseText |> Serialization.deserialize<bool>
    }
 
 let updateCategory

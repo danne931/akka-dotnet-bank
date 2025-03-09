@@ -8,7 +8,7 @@ open Bank.Employee.Domain
 open UIDomain.Employee
 open Lib.Validators
 open Lib.SharedTypes
-open FormContainer
+open Bank.Forms.FormContainer
 
 type Values = { Amount: string }
 
@@ -37,8 +37,9 @@ let onSubmit (card: Card) (employee: Employee) initiatedBy amount =
          DebitLimit = amount
       }
       |> EmployeeCommand.LimitDailyDebits
+      |> FormCommand.Employee
 
-   Msg.Submit(employee, cmd, Started)
+   Msg.Submit(FormEntity.Employee employee, cmd, Started)
 
 [<ReactComponent>]
 let DailyPurchaseLimitFormComponent
@@ -51,10 +52,15 @@ let DailyPurchaseLimitFormComponent
       Form.succeed (onSubmit card employee session.AsInitiator)
       |> Form.append dailyPurchaseLimitField
 
-   EmployeeFormContainer {|
+   FormContainer {|
       InitialValues = { Amount = "" }
       Form = form
       Action = None
-      OnSubmit = notifyParentOnSubmit
+      OnSubmit =
+         function
+         | FormSubmitReceipt.Employee receipt -> notifyParentOnSubmit receipt
+         | _ -> ()
       Session = session
+      ComponentName = "DailyPurchaseLimitForm"
+      UseEventSubscription = None
    |}

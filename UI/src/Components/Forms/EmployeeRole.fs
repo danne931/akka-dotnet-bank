@@ -9,7 +9,7 @@ open Bank.Employee.Domain
 open Bank.Account.Domain
 open UIDomain.Employee
 open UIDomain.Org
-open FormContainer
+open Bank.Forms.FormContainer
 open Lib.SharedTypes
 open DailyPurchaseLimitForm
 open MonthlyPurchaseLimitForm
@@ -64,8 +64,9 @@ let private form
             CardInfo = cardInfo
          }
          |> EmployeeCommand.UpdateRole
+         |> FormCommand.Employee
 
-      Msg.Submit(employee, cmd, Started)
+      Msg.Submit(FormEntity.Employee employee, cmd, Started)
 
    employeeRoleSelect onRoleSelect
    |> Form.andThen (fun role ->
@@ -156,13 +157,16 @@ let EmployeeRoleFormComponent
                      onCancel
                      state)
 
-      EmployeeFormContainer {|
-         Session = session
+      FormContainer {|
          InitialValues = formProps
          Form = form session employee org.Accounts onSelect
          Action = Some customAction
+         Session = session
+         ComponentName = "EmployeeRoleForm"
+         UseEventSubscription = None
          OnSubmit =
-            fun receipt ->
+            function
+            | FormSubmitReceipt.Employee receipt ->
                match roleChangeRequiresApproval, receipt.PendingCommand with
                | Some rule, EmployeeCommand.UpdateRole cmd ->
                   let cmd =
@@ -174,5 +178,6 @@ let EmployeeRoleFormComponent
                      cmd
                   |> onSubmitForApproval
                | _ -> onSubmit receipt
+            | _ -> ()
       |}
    | _ -> Html.progress []

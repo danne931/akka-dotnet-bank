@@ -9,7 +9,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Org.Domain
 open UIDomain.Account
-open FormContainer
+open Bank.Forms.FormContainer
 open Bank.Employee.Forms.AccountProfileForm
 
 type Values = {
@@ -58,7 +58,11 @@ let form
          }
          |> AccountCommand.DepositCash
 
-      Msg.Submit(account, command, Started)
+      Msg.Submit(
+         FormEntity.Account account,
+         FormCommand.Account command,
+         Started
+      )
 
    Form.succeed onSubmit
    |> Form.append (fieldDestinationAccount accounts)
@@ -70,13 +74,18 @@ let DepositFormComponent
    (org: OrgWithAccountProfiles)
    (onSubmit: AccountCommandReceipt -> unit)
    =
-   AccountFormContainer {|
+   FormContainer {|
       InitialValues = {
          DestinationAccountId = ""
          Amount = ""
       }
       Form = form org.CheckingAccounts session.AsInitiator
       Action = None
-      OnSubmit = onSubmit
+      OnSubmit =
+         function
+         | FormSubmitReceipt.Account receipt -> onSubmit receipt
+         | _ -> ()
       Session = session
+      ComponentName = "DepositForm"
+      UseEventSubscription = Some [ SignalREventProvider.EventType.Account ]
    |}

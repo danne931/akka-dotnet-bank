@@ -9,7 +9,6 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open CategorySqlMapper
 open AncillaryTransactionInfoSqlMapper
-open SignalRBroadcast
 
 let table = AccountEventSqlMapper.table
 module Fields = AccountEventSqlMapper.Fields
@@ -305,29 +304,37 @@ let getTransactionInfo
       }
    }
 
-let getCorrelatedTransactionConfirmations (correlationId: CorrelationId) =
-   let query =
-      $"""
-      SELECT
-         {table}.{Fields.timestamp} as txn_timestamp,
-         {table}.{Fields.event},
-         {AccountSqlMapper.table}.*
-      FROM {table}
-         JOIN {AccountSqlMapper.table} using({Fields.accountId})
-      WHERE {Fields.correlationId} = @correlationId
-      ORDER BY txn_timestamp DESC
-      """
+let isEventPersistenceConfirmed
+   (correlationId: CorrelationId)
+   : TaskResult<bool, Err>
+   =
+   taskResult {
+      let query =
+         $"""
+         SELECT EXISTS (
+            SELECT 1 FROM {OrganizationEventSqlMapper.table}
+            WHERE {Fields.correlationId} = @corrId
 
-   let rowReader (read: RowReader) = {
-      EventPersisted = Reader.event read
-      Account = AccountSqlMapper.AccountSqlReader.account read
-      Date = read.dateTime "txn_timestamp"
+            UNION ALL
+
+            SELECT 1 FROM {EmployeeEventSqlMapper.table}
+            WHERE {Fields.correlationId} = @corrId
+
+            UNION ALL
+
+            SELECT 1 FROM {table}
+            WHERE {Fields.correlationId} = @corrId
+         ) AS correlation_id_exists;
+         """
+
+      let! isConfirmed =
+         pgQuerySingle<bool>
+            query
+            (Some [ "corrId", Writer.correlationId correlationId ])
+            (fun read -> read.bool "correlation_id_exists")
+
+      return isConfirmed |> Option.defaultValue false
    }
-
-   pgQuery<AccountEventPersistedConfirmation>
-      query
-      (Some [ "correlationId", Writer.correlationId correlationId ])
-      rowReader
 
 let upsertTransactionCategory (transactionId: TransactionId) (categoryId: int) = taskResult {
    let query =

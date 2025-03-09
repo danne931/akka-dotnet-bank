@@ -10,7 +10,7 @@ open Bank.Employee.Domain
 open UIDomain.Employee
 open UIDomain.Org
 open Lib.Validators
-open FormContainer
+open Bank.Forms.FormContainer
 open EmployeeRoleForm
 open DailyPurchaseLimitForm
 open MonthlyPurchaseLimitForm
@@ -96,8 +96,9 @@ let form
             CardInfo = cardInfo
          }
          |> EmployeeCommand.CreateEmployee
+         |> FormCommand.Employee
 
-      Msg.Submit(Employee.empty, cmd, Started)
+      Msg.Submit(FormEntity.Employee Employee.empty, cmd, Started)
 
    let roleField = employeeRoleSelect onRoleSelect
 
@@ -208,8 +209,7 @@ let EmployeeCreateFormComponent
             |> Form.View.Action.SubmitOnly
             |> Some
 
-         EmployeeFormContainer {|
-            Session = session
+         FormContainer {|
             InitialValues = formProps
             Form =
                form
@@ -218,8 +218,13 @@ let EmployeeCreateFormComponent
                   employeeInviteRequiresApproval
                   setRole
             Action = customAction
+            Session = session
+            ComponentName = "EmployeeCreateForm"
+            UseEventSubscription =
+               Some [ SignalREventProvider.EventType.Employee ]
             OnSubmit =
-               fun receipt ->
+               function
+               | FormSubmitReceipt.Employee receipt ->
                   match employeeInviteRequiresApproval with
                   | None -> onSubmit receipt
                   | Some rule ->
@@ -245,6 +250,7 @@ let EmployeeCreateFormComponent
                            commandToInitiateOnApproval
 
                      onSubmitForApproval (approvalRequest, receipt)
+               | _ -> ()
          |}
       | _ -> Html.progress []
    ]

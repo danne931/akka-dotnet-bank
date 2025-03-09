@@ -10,7 +10,7 @@ open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open UIDomain.Org
 open Lib.Validators
-open FormContainer
+open Bank.Forms.FormContainer
 open Lib.SharedTypes
 
 type Values = {
@@ -171,7 +171,7 @@ let domesticRecipientForm
             }
             |> OrgCommand.EditDomesticTransferRecipient
 
-      Msg.Submit(org, cmd, Started)
+      Msg.Submit(FormEntity.Org org, FormCommand.Org cmd, Started)
 
    Form.succeed onSubmit
    |> Form.append fieldPaymentNetwork
@@ -302,12 +302,21 @@ let RegisterTransferRecipientFormComponent
                Html.br []
             | None -> ()
 
-         OrgFormContainer {|
+         FormContainer {|
             InitialValues = formProps
             Form = form org recipient session.AsInitiator
             Action = None
-            OnSubmit = onSubmit
+            OnSubmit =
+               function
+               | FormSubmitReceipt.Org receipt -> onSubmit receipt
+               | _ -> ()
             Session = session
+            ComponentName = "RegisterTransferRecipientForm"
+            UseEventSubscription =
+               Some [
+                  // Listen for recipient registered
+                  SignalREventProvider.EventType.Org
+               ]
          |}
       | _ -> Html.progress []
    ]

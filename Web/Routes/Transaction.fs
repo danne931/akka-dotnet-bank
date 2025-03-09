@@ -122,8 +122,8 @@ let startTransactionRoutes (app: WebApplication) =
       .MapGet(
          TransactionPath.TransactionConfirmation,
          Func<Guid, Task<IResult>>(fun correlationId ->
-            getCorrelatedTransactionConfirmations (CorrelationId correlationId)
-            |> RouteUtil.unwrapTaskResultOption)
+            isEventPersistenceConfirmed (CorrelationId correlationId)
+            |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.GetTransactionInfo)
    |> ignore

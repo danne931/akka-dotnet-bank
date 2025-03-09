@@ -26,6 +26,12 @@ type OrgEventPersistedConfirmation = {
 }
 
 [<RequireQualifiedAccess>]
+type EventPersistedConfirmation =
+   | Account of AccountEventPersistedConfirmation
+   | Employee of EmployeeEventPersistedConfirmation
+   | Org of OrgEventPersistedConfirmation
+
+[<RequireQualifiedAccess>]
 type EventProcessingError =
    | Account of OrgId * AccountId * CorrelationId * Err * DateTime
    | Employee of OrgId * EmployeeId * CorrelationId * Err * DateTime
