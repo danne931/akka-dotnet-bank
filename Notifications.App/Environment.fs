@@ -21,7 +21,7 @@ type NotificationsInput = {
       CallTimeoutSeconds: int option
       ResetTimeoutSeconds: int option
    |}
-   Queue: {|
+   EmailQueue: {|
       Name: string option
       MaxParallelism: int option
    |}
@@ -67,9 +67,9 @@ let config =
          EmailBearerToken = input.EmailBearerToken
          SupportEmail = input.SupportEmail
          Queue = {
-            Name = input.Queue.Name |> Option.defaultValue "email"
+            Name = input.EmailQueue.Name |> Option.defaultValue "email"
             MaxParallelism =
-               input.Queue.MaxParallelism |> Option.defaultValue 10
+               input.EmailQueue.MaxParallelism |> Option.defaultValue 10
          }
          circuitBreaker =
             fun system ->

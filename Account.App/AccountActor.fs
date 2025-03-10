@@ -236,8 +236,7 @@ let actorProps
                      txn
                   )
 
-               for _ in [ 1..100 ] do
-                  getDomesticTransferRef mailbox.System <! msg
+               getDomesticTransferRef mailbox.System <! msg
             | DomesticTransferFailed e ->
                let info = e.Data.BaseInfo
 
@@ -292,8 +291,7 @@ let actorProps
                      }
                   )
 
-               for _ in [ 1..3_000 ] do
-                  getEmailRef mailbox.System <! msg
+               getEmailRef mailbox.System <! msg
             | CreatedAccount _ ->
                let msg =
                   EmailMessage.AccountOpen(account.FullName, account.OrgId)

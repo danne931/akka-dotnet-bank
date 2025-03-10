@@ -164,6 +164,16 @@ let private initConsumerStream
             logError
                $"Rabbit Consumer Stream Completed With Error ({opts.Service}): {err}")
 
+   let materializer =
+      let settings =
+         Akka.Streams.ActorMaterializerSettings
+            .Create(mailbox.System)
+            .WithSupervisionStrategy(fun e ->
+               logError e.Message
+               Akka.Streams.Supervision.Directive.Resume)
+
+      mailbox.System.Materializer(settings)
+
    source
    |> Source.viaMat (killSwitch.Flow()) Keep.none
    // Deserialize dequeued Rabbit message envelopes into 'QueueMessage
@@ -231,7 +241,7 @@ let private initConsumerStream
          return 100
       })
    |> Source.toMat sink Keep.none
-   |> Graph.run (mailbox.System.Materializer())
+   |> Graph.run materializer
 
 type private CircuitBreakerMessage =
    | BreakerHalfOpen

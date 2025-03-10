@@ -5,7 +5,6 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements';
 SELECT pg_reload_conf();
-SELECT pg_stat_statements_reset();
 
 begin;
 

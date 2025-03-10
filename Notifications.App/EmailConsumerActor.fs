@@ -106,40 +106,23 @@ let private emailPropsFromMessage
 // NOTE
 // Raise an exception instead of returning Result.Error to trip circuit breaker.
 let private sendEmail (client: HttpClient) (data: EmailRequest.T) = task {
-   do! Async.Sleep(100)
+   use! response =
+      client.PostAsJsonAsync(
+         "track",
+         {|
+            orgId = data.OrgId
+            event = data.Event
+            email = data.Email
+            data = data.Data
+         |}
+      )
 
-   if cnt > 3 then
-      let res = new HttpResponseMessage(Net.HttpStatusCode.OK)
+   if not response.IsSuccessStatusCode then
+      let! content = response.Content.ReadFromJsonAsync()
 
-      res.Content <-
-         new StringContent(
-            "DINO",
-            System.Text.Encoding.UTF8,
-            "application/json"
-         )
-
-      if (cnt > 500 && cnt <= 503) then
-         return failwith "fail then get back up"
-      else
-         return res
-   else
-      failwith "fail then get back up"
-
-      use! response =
-         client.PostAsJsonAsync(
-            "track",
-            {|
-               orgId = data.OrgId
-               event = data.Event
-               email = data.Email
-               data = data.Data
-            |}
-         )
-
-      if not response.IsSuccessStatusCode then
-         let! content = response.Content.ReadFromJsonAsync()
+      return
          failwith $"Error sending email: {response.ReasonPhrase} - {content}"
-
+   else
       return response
 }
 
@@ -246,8 +229,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (bearerToken: string option)
    =
-   let client = Some(createClient "invalid-token")
-   //let client = bearerToken |> Option.map createClient
+   let client = bearerToken |> Option.map createClient
 
    match client with
    | Some client ->

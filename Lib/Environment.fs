@@ -163,18 +163,10 @@ let streamBackoffRestartSettingsFromInput
          |> TimeSpan.FromSeconds
       )
 
-type QueueConnectionInput = {|
-   Host: string option
-   Port: int option
-   VirtualHost: string option
-   Username: string option
-   Password: string option
-|}
-
 type private BankConfigInput = {
    ConnectionStrings: Connection
    AkkaRemoting: {| Host: string option; Port: int |}
-   QueueConnection: QueueConnectionInput
+   QueueConnection: QueueConnectionSettings
    PetabridgeCmdRemoting: PetabridgeCmdRemoting
    ClusterStartupMethod: string
    ClusterDiscoveryStartup: ClusterDiscoveryStartup option
@@ -224,17 +216,6 @@ type BankConfig = {
 let config =
    match AppConfig(builder.Configuration).Get<BankConfigInput>() with
    | Ok input ->
-      let queueConnection = {
-         Host = input.QueueConnection.Host |> Option.defaultValue "localhost"
-         Port = input.QueueConnection.Port |> Option.defaultValue 5672
-         VirtualHost =
-            input.QueueConnection.VirtualHost |> Option.defaultValue "/"
-         Username =
-            input.QueueConnection.Username |> Option.defaultValue "guest"
-         Password =
-            input.QueueConnection.Password |> Option.defaultValue "guest"
-      }
-
       let clusterStartupMethod =
          match input.ClusterStartupMethod with
          | "Discovery" ->
@@ -325,7 +306,7 @@ let config =
          CircuitBreakerActorSupervisor =
             backoffSupervisorOptionsFromInput
                input.CircuitBreakerActorSupervisor
-         QueueConnection = queueConnection
+         QueueConnection = input.QueueConnection
          QueueConsumerStreamBackoffRestart =
             streamBackoffRestartSettingsFromInput
                input.QueueConsumerStreamBackoffRestart
