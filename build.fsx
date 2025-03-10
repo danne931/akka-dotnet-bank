@@ -56,6 +56,14 @@ let imageBuilders = {|
       GetArgs =
          fun imageName dirName -> $"image build -t {imageName}:latest {dirName}"
    }
+   // Azure AKS uses amd but my local machine is arm so ensure amd is used
+   // when deploying to azure.
+   dockerForAzure = {
+      Program = "docker"
+      GetArgs =
+         fun imageName dirName ->
+            $"buildx build --platform linux/amd64 -t danne931/akka-dotnet-bank-{imageName}:latest {dirName} --push"
+   }
 |}
 
 let publishProject project =
@@ -131,26 +139,18 @@ Target.create "BuildDockerImages" (fun o ->
 // NOTE: Pushes app images to public docker hub repos.
 //       Currently pulling public app images into Azure Staging environment.
 // TODO: Research Azure Container Registry & versioning docker images.
-let pushImageToDockerHub (image: string) =
-   let tag = $"danne931/akka-dotnet-bank-{image}"
-   Trace.trace $"Uploading {tag} to public docker hub"
+Target.create "DockerHubPublic" (fun o ->
+   Shell.Exec("docker", "buildx create --use") |> ignore
 
-   let exitCode = Shell.Exec("docker", $"tag {image} {tag}")
+   let paths = o.Context.Arguments
 
-   if exitCode <> 0 then
-      Trace.traceError $"Error creating docker tag {tag}"
+   let sources =
+      if paths.IsEmpty then
+         Seq.toArray projects
+      else
+         List.toArray paths
 
-   let exitCode = Shell.Exec("docker", $"push {tag}")
-
-   if exitCode <> 0 then
-      Trace.traceError $"Error uploading {tag} to public docker hub"
-
-Target.create "DockerHubPublic" (fun _ ->
-   projects
-   |> Seq.toArray
-   |> Array.Parallel.iter (
-      dockerImageNameFromProject >> Option.iter pushImageToDockerHub
-   ))
+   Array.iter (buildImage imageBuilders.dockerForAzure) sources)
 
 Target.create "RunDockerApp" (fun _ ->
    Shell.Exec("docker", "compose up") |> ignore)
@@ -186,6 +186,16 @@ Target.create "InstallPulumiDependenciesForK8s" (fun _ ->
 
    Shell.cd "../../")
 
+Target.create "InstallPulumiDependenciesForAzure" (fun _ ->
+   Shell.cd "./Deploy/Azure/"
+
+   let exitCode = Shell.Exec("npm", "install")
+
+   if exitCode <> 0 then
+      failwith "Error running npm install for pulumi dependencies"
+
+   Shell.cd "../../")
+
 Target.create "VerifyPulumiLogin" (fun _ ->
    if Shell.Exec("pulumi", "whoami") <> 0 then
       failwith
@@ -211,6 +221,10 @@ Target.create "ApplyK8sResources" (fun _ ->
 
    Shell.Exec("pulumi", $"config set environment {env.Dotnet}") |> ignore
    Shell.Exec("pulumi", "config set defaultK8Namespace akkabank") |> ignore
+
+   Shell.Exec("pulumi", "config set rabbitmqUser test") |> ignore
+   Shell.Exec("pulumi", "config set --secret rabbitmqPassword test") |> ignore
+
    Shell.Exec("pulumi", "config set postgresDatabase akkabank") |> ignore
    Shell.Exec("pulumi", "config set postgresUser testuser") |> ignore
 
@@ -302,7 +316,7 @@ let pulumiK8s (env: Env) =
       failwith "Could not determine current logged-in Pulumi user"
 
    let org = whoAmI.Result.Output |> String.removeLineBreaks
-   let qualified = $"{org}/{env.Pulumi}"
+   let qualified = $"{org}/default/{env.Pulumi}"
 
    Shell.Exec("pulumi", $"env init {qualified}") |> ignore
 
@@ -315,6 +329,15 @@ let pulumiK8s (env: Env) =
    Shell.Exec(
       "pulumi",
       $"env set {qualified} pulumiConfig.defaultK8Namespace akkabank"
+   )
+   |> ignore
+
+   Shell.Exec("pulumi", $"env set {qualified} pulumiConfig.rabbitmqUser test")
+   |> ignore
+
+   Shell.Exec(
+      "pulumi",
+      $"env set {qualified} pulumiConfig.rabbitmqPassword test --secret"
    )
    |> ignore
 
@@ -370,15 +393,13 @@ Target.create "DeployAllStaging" (fun _ ->
 
 "ApplyK8sResources" ==> "RunK8sApp"
 
-// NOTE:
-// Currently hosting images in public Docker Hub repos for Azure
-// staging deployment to retrieve.
-// TODO: Host containers in private Azure Container Registry.
-"BuildDockerImages" ==> "DockerHubPublic"
-
 "VerifyAzureLogin" ==> "DeployAllStaging"
 
 "VerifyPulumiLogin" ==> "DeployAllStaging"
+
+"InstallPulumiDependenciesForK8s"
+==> "InstallPulumiDependenciesForAzure"
+==> "DeployAllStaging"
 
 Target.runOrDefaultWithArguments "Clean"
 

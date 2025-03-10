@@ -2,6 +2,7 @@ import * as pulumi from '@pulumi/pulumi'
 import * as k8s from '@pulumi/kubernetes'
 
 import initPostgres from './postgres'
+import initRabbitMq from './rabbitmq'
 import { initBankEnvConfigMap, isDev } from './environment'
 import { initAccountCluster, initAccountService } from './account'
 import { initServiceAccount, initAkkaRBAC } from './admin'
@@ -49,10 +50,10 @@ if (k8sProvider == null) {
 }
 
 // Postgres Helm Chart
-// TODO:
-// -Currently using Postgres via helm chart for local & staging.
-//  Research using Azure's Postgres for staging.
 initPostgres(k8sProvider, namespace)
+
+// RabbitMq Helm Chart
+initRabbitMq(k8sProvider, namespace)
 
 const bankEnvConfigMap = initBankEnvConfigMap(k8sProvider)
 initServiceAccount(k8sProvider)

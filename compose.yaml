@@ -20,6 +20,11 @@ services:
       - ConnectionStrings__Postgres=postgres://postgres:password@postgres/akkabank
       - ConnectionStrings__PostgresAdoFormat=Server=postgres;Database=akkabank;Uid=postgres;Pwd=password
       - AkkaRemoting__Port=8081
+      - QueueConnection__Host=rabbitmq
+      - QueueConnection__Port=5672
+      - QueueConnection__Username=test
+      - QueueConnection__Password=test
+      - QueueConnection__VirtualHost=/
   account.1:
     image: account:latest
     hostname: account.1
@@ -29,6 +34,8 @@ services:
       - 8082
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     environment:
       - ClusterStartupMethod=Discovery
@@ -41,6 +48,11 @@ services:
       - ConnectionStrings__PostgresAdoFormat=Server=postgres;Database=akkabank;Uid=postgres;Pwd=password
       - EmailServiceUri=https://api.useplunk.com/v1/
       - AkkaRemoting__Port=8082
+      - QueueConnection__Host=rabbitmq
+      - QueueConnection__Port=5672
+      - QueueConnection__Username=test
+      - QueueConnection__Password=test
+      - QueueConnection__VirtualHost=/
   account.2:
     image: account:latest
     hostname: account.2
@@ -62,6 +74,11 @@ services:
       - ConnectionStrings__PostgresAdoFormat=Server=postgres;Database=akkabank;Uid=postgres;Pwd=password
       - EmailServiceUri=https://api.useplunk.com/v1/
       - AkkaRemoting__Port=8082
+      - QueueConnection__Host=rabbitmq
+      - QueueConnection__Port=5672
+      - QueueConnection__Username=test
+      - QueueConnection__Password=test
+      - QueueConnection__VirtualHost=/
   scheduler:
     image: scheduler:latest
     hostname: scheduler
@@ -83,6 +100,11 @@ services:
       - AkkaRemoting__Port=8083
       - Quartz__SchedulerName=Quartz Bank Scheduler
       - Quartz__TablePrefix=qrtz_
+      - QueueConnection__Host=rabbitmq
+      - QueueConnection__Port=5672
+      - QueueConnection__Username=test
+      - QueueConnection__Password=test
+      - QueueConnection__VirtualHost=/
   mock-domestic-transfer-processor:
     image: mock-domestic-transfer-processor:latest
     expose:
@@ -91,7 +113,7 @@ services:
       - TCP_BIND_PORT=5007
   postgres:
     image: postgres:16.0
-    restart: always
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=akkabank
       - POSTGRES_USER=postgres
@@ -109,6 +131,27 @@ services:
       retries: 5
   adminer:
     image: adminer
-    restart: always
+    restart: unless-stopped
     ports:
       - 5008:8080
+  rabbitmq:
+    image: rabbitmq:4.0.7-management
+    restart: unless-stopped
+    hostname: rabbitmq
+    ports:
+      - 5672:5672
+      - 15672:15672 # management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=test
+      - RABBITMQ_DEFAULT_PASS=test
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 20s
+      retries: 5
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  rabbitmq_data:
+    driver: local

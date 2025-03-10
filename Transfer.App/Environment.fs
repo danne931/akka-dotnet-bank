@@ -34,7 +34,7 @@ type private TransferConfigInput = {
    |}
    TransferProgressTrackingThrottle: Env.StreamThrottleInput
    TransferProgressLookbackMinutes: int option
-   Queue: {|
+   DomesticTransferQueue: {|
       Name: string option
       MaxParallelism: int option
    |}
@@ -115,8 +115,11 @@ let config =
             |> TimeSpan.FromSeconds
       }
       Queue = {
-         Name = input.Queue.Name |> Option.defaultValue "domestic-transfer"
-         MaxParallelism = input.Queue.MaxParallelism |> Option.defaultValue 10
+         Name =
+            input.DomesticTransferQueue.Name
+            |> Option.defaultValue "domestic-transfer"
+         MaxParallelism =
+            input.DomesticTransferQueue.MaxParallelism |> Option.defaultValue 10
       }
      }
    | Error err ->

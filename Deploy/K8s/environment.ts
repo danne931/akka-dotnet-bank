@@ -2,6 +2,7 @@ import * as pulumi from '@pulumi/pulumi'
 import * as k8s from '@pulumi/kubernetes'
 
 import { config as pgConfig } from './postgres'
+import { config as rmqConfig } from './rabbitmq'
 
 // Grab some values from the Pulumi stack configuration (or use defaults)
 const config = new pulumi.Config()
@@ -34,7 +35,17 @@ export const initContainers = {
       'do echo "Waiting for postgres..."; sleep 3; done;\n'
     ],
     image: 'busybox:1.28',
-    name: 'init-account-cluster'
+    name: 'init-postgres'
+  },
+  rabbitmqReady: {
+    command: [
+      'sh',
+      '-c',
+      `until nc -z ${rmqConfig.k8ResourceName}.${defaultNamespace}.svc.cluster.local 5672;` +
+      'do echo "Waiting for rabbitmq..."; sleep 3; done;\n'
+    ],
+    image: 'busybox:1.28',
+    name: 'init-rabbitmq'
   },
   accountServiceReady: {
     command: [
@@ -99,7 +110,13 @@ export const initBankEnvConfigMap = (
         ConnectionStrings__PostgresAdoFormat: pgConfig.password.apply(
           (pwd) =>
             `Server=${pgConfig.k8ResourceName}-postgresql.${defaultNamespace}.svc.cluster.local;Database=${pgConfig.database};Uid=${pgConfig.user};Pwd=${pwd}`
-        )
+        ),
+
+        QueueConnection__Host: `${rmqConfig.k8ResourceName}.${defaultNamespace}.svc.cluster.local`,
+        QueueConnection__Port: '5672',
+        QueueConnection__Username: rmqConfig.user,
+        QueueConnection__Password: rmqConfig.password,
+        QueueConnection__VirtualHost: '/'
       }
     },
     { provider }

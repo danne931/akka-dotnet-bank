@@ -289,7 +289,7 @@ export const initAccountCluster = (
                 ]
               }
             ],
-            initContainers: [initContainers.postgresReady],
+            initContainers: [initContainers.postgresReady, initContainers.rabbitmqReady],
             terminationGracePeriodSeconds: 35
           }
         }

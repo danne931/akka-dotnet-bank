@@ -11,7 +11,7 @@ import * as tls from '@pulumi/tls'
 
 const configStore = new pulumi.Config()
 const numWorkerNodes = configStore.getNumber('numWorkerNodes') ?? 2
-const k8sVersion = configStore.get('kubernetesVersion') ?? '1.28'
+const k8sVersion = configStore.get('kubernetesVersion') ?? '1.31'
 const prefixForDns = configStore.get('prefixForDns') ?? 'pulumi'
 const nodeVmSize = configStore.get('nodeVmSize') ?? 'Standard_DS2_v2'
 const resourceGroupLocation =

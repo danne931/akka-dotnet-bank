@@ -13,9 +13,6 @@ export const config = {
 }
 
 // Postgres Helm Chart
-// TODO:
-// -Currently using Postgres via helm chart for local & staging.
-//  Research using Azure's Postgres for staging.
 export default function initPostgres (
   provider: k8s.Provider,
   namespace: k8s.core.v1.Namespace
