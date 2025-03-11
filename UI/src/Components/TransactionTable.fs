@@ -373,6 +373,8 @@ let renderTableRow
 
          Html.td txnDisplay.Info
 
+         Html.td txn.InitiatedBy.Name
+
          Html.td txnDisplay.Date
       ]
    ]
@@ -394,6 +396,8 @@ let renderTable
                Html.th [ attr.scope "col"; attr.text "Amount" ]
 
                Html.th [ attr.scope "col"; attr.text "Info" ]
+
+               Html.th [ attr.scope "col"; attr.text "Initiated By" ]
 
                Html.th [ attr.scope "col"; attr.text "Date" ]
             ]

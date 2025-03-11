@@ -332,19 +332,21 @@ let transactionUIFriendlyFromAccountEvent
          Amount = Some <| Money.format evt.Data.Amount
      }
    | DebitedAccount evt ->
-      let employee = evt.Data.EmployeePurchaseReference
+      let purchaseReference = evt.Data.EmployeePurchaseReference
 
-      let employee =
-         $"{employee.EmployeeName}**{employee.EmployeeCardNumberLast4}"
+      let card =
+         $"**{evt.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
+
+      let employeeAndCard = $"{purchaseReference.EmployeeName} {card}"
 
       {
          props with
             Name = "Purchase"
             Info =
-               $"Purchase from {evt.Data.Merchant} by {employee} ({accountName})"
+               $"Purchase from {evt.Data.Merchant} with card {card} ({accountName})"
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
-            Source = Some $"{accountName} via {employee}"
+            Source = Some $"{accountName} via {employeeAndCard}"
             Destination = Some evt.Data.Merchant
       }
    | MaintenanceFeeDebited evt -> {
@@ -717,30 +719,31 @@ let transactionUIFriendly
             Destination = Some recipientAccount
       }
    | TransactionType.Purchase ->
-      let employee, merchant, accountName =
+      let employee, card, merchant, accountName =
          txn.Events
          |> List.tryPick (function
             | AccountEvent.DebitedAccount e ->
                let em = e.Data.EmployeePurchaseReference
 
                Some(
-                  $"{em.EmployeeName}**{em.EmployeeCardNumberLast4}",
+                  em.EmployeeName,
+                  $"**{em.EmployeeCardNumberLast4}",
                   e.Data.Merchant,
                   accountName (AccountId.fromEntityId e.EntityId)
                )
             | _ -> None)
-         |> Option.defaultValue ("Unknown", "Unknown", "Unknown")
+         |> Option.defaultValue ("Unknown", "Unknown", "Unknown", "Unknown")
 
       {
          props with
             Name = "Purchase"
-            Info = $"Purchase from {merchant} by {employee} ({accountName})"
+            Info = $"Purchase from {merchant} with card {card} ({accountName})"
             MoneyFlow =
                match txn.Status with
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
-            Source = Some $"{accountName} via {employee}"
+            Source = Some $"{accountName} via {employee} **{card}"
             Destination = Some merchant
       }
    | TransactionType.InternalTransferWithinOrg ->

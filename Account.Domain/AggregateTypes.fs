@@ -499,6 +499,7 @@ module Transaction =
       Amount: decimal
       Id: TransactionId
       OrgId: OrgId
+      InitiatedBy: Initiator
    }
 
    type TransactionWithAncillaryInfo = {
@@ -743,6 +744,8 @@ module Transaction =
                   Amount = amount
                   Id = TransactionId envelope.CorrelationId
                   OrgId = envelope.OrgId
+                  InitiatedBy =
+                     AccountEnvelope.unwrap evt |> snd |> _.InitiatedBy
                }
             else
                txns
