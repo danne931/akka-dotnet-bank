@@ -389,6 +389,7 @@ SELECT prevent_update('organization_event');
 CREATE INDEX organization_event_org_id_idx ON organization_event(org_id);
 CREATE INDEX organization_event_org_id_timestamp_idx ON organization_event(org_id, timestamp desc);
 CREATE INDEX organization_event_initiated_by_id_idx ON organization_event(initiated_by_id);
+CREATE INDEX organization_event_correlation_id_idx ON organization_event(correlation_id);
 
 COMMENT ON TABLE organization_event IS
 'Read model representation of Akka event sourced organization events.';
@@ -415,6 +416,7 @@ CREATE INDEX employee_event_org_id_timestamp_idx ON employee_event(org_id, times
 CREATE INDEX employee_event_timestamp_brin ON employee_event USING BRIN(timestamp);
 CREATE INDEX employee_event_employee_id_idx ON employee_event(employee_id);
 CREATE INDEX employee_event_initiated_by_id_idx ON employee_event(initiated_by_id);
+CREATE INDEX employee_event_correlation_id_idx ON employee_event(correlation_id);
 
 COMMENT ON TABLE employee_event IS
 'Read model representation of Akka event sourced employee events.
@@ -488,6 +490,7 @@ CREATE INDEX account_event_card_id_idx ON account_event(card_id);
 CREATE INDEX account_event_org_id_timestamp_idx ON account_event(org_id, timestamp desc);
 CREATE INDEX account_event_timestamp_brin ON account_event USING BRIN(timestamp);
 CREATE INDEX account_event_accrued_amount_view_query_idx ON account_event(amount, name, timestamp);
+CREATE INDEX account_event_correlation_id_idx ON account_event(correlation_id);
 
 COMMENT ON TABLE account_event IS
 'account_event is the read model representation of Akka event sourced account events.';
