@@ -211,7 +211,11 @@ let transactionQuery (query: TransactionQuery) =
 
    queryParams,
    $"""
-   WITH matching_account_events AS (
+   SELECT
+      events.{Fields.event},
+      events.{Fields.correlationId},
+      events.{Fields.timestamp}
+   FROM (
       SELECT
          {Fields.event},
          {Fields.timestamp},
@@ -223,22 +227,25 @@ let transactionQuery (query: TransactionQuery) =
       WHERE {where}
       ORDER BY {Fields.timestamp} desc
       LIMIT @limit
-   ),
-   correlated_account_events AS (
+   ) AS matching
+   CROSS JOIN LATERAL (
+      SELECT
+         matching.{Fields.event},
+         matching.{Fields.timestamp},
+         matching.{Fields.correlationId}
+
+      UNION ALL
+
       SELECT
          correlated.{Fields.event},
          correlated.{Fields.timestamp},
-         correlated.{Fields.correlationId},
-         correlated.{Fields.eventId}
+         correlated.{Fields.correlationId}
       FROM {table} correlated
-      JOIN matching_account_events matching ON
+      WHERE
          correlated.{Fields.correlationId} = matching.{Fields.correlationId}
          AND correlated.{Fields.eventId} != matching.{Fields.eventId}
-   )
-   SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM matching_account_events
-   UNION
-   SELECT {Fields.event}, {Fields.correlationId}, {Fields.timestamp} FROM correlated_account_events
-   ORDER BY {Fields.timestamp}
+   ) AS events
+   ORDER BY events.{Fields.timestamp}
    """
 
 let getTransactions
