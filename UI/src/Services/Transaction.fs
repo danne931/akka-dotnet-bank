@@ -5,6 +5,7 @@ open Fable.SimpleHttp
 open Feliz.Router
 
 open Bank.Account.Domain
+open Bank.Org.Domain
 open SignalRBroadcast
 open UIDomain
 open UIDomain.Account
@@ -100,7 +101,7 @@ let getTransactions (query: TransactionQuery) : Async<TransactionsMaybe> = async
    else
       return
          responseText
-         |> Serialization.deserialize<Transaction.T list>
+         |> Serialization.deserialize<Transaction list>
          |> Result.map Some
 }
 

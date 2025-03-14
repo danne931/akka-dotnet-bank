@@ -7,8 +7,10 @@ open Lib.NetworkQuery
 open Lib.Postgres
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open Bank.Org.Domain
 open CategorySqlMapper
 open AncillaryTransactionInfoSqlMapper
+open Transaction
 
 let table = AccountEventSqlMapper.table
 module Fields = AccountEventSqlMapper.Fields
@@ -51,6 +53,39 @@ let filtersToOriginatingEventNames
       []
    |> List.toArray
 
+let private historyReader (read: RowReader) =
+   match read.string "event_aggregate" with
+   | "account" ->
+      let evt = Reader.event read
+      let _, envelope = AccountEnvelope.unwrap evt
+
+      History.Account {
+         InitiatedByName = envelope.InitiatedBy.Name
+         Event = evt
+      }
+   | "employee" ->
+      let evt = EmployeeEventSqlMapper.EmployeeEventSqlReader.event read
+      let _, envelope = Bank.Employee.Domain.EmployeeEnvelope.unwrap evt
+
+      History.Employee {
+         InitiatedByName = envelope.InitiatedBy.Name
+         EmployeeName = read.string "employee_name"
+         Event = evt
+      }
+   | _ ->
+      let evt = OrganizationEventSqlMapper.OrgEventSqlReader.event read
+      let _, envelope = OrgEnvelope.unwrap evt
+
+      History.Org {
+         InitiatedByName = envelope.InitiatedBy.Name
+         Event = evt
+      }
+
+// TODO:
+// Consider creating a Transaction table dedicated for the UI.
+// For now, aggregating the account_events, employee_events, & org_events
+// into transactions by correlation_id is good enough.
+
 let transactionQuery (query: TransactionQuery) =
    let agg =
       [ "orgId", Writer.orgId query.OrgId; "limit", Sql.int query.PageLimit ],
@@ -59,7 +94,7 @@ let transactionQuery (query: TransactionQuery) =
 
    let agg =
       Option.fold
-         (fun (queryParams, where, joinAncillary) cursor ->
+         (fun (queryParams, where, joinAncillary) (cursor: TransactionCursor) ->
             let queryParams =
                [
                   "timestamp", Writer.timestamp cursor.Timestamp
@@ -212,6 +247,8 @@ let transactionQuery (query: TransactionQuery) =
    queryParams,
    $"""
    SELECT
+      events.event_aggregate,
+      events.employee_name,
       events.{Fields.event},
       events.{Fields.correlationId},
       events.{Fields.timestamp}
@@ -230,6 +267,8 @@ let transactionQuery (query: TransactionQuery) =
    ) AS matching
    CROSS JOIN LATERAL (
       SELECT
+         'account' as event_aggregate,
+         '' as employee_name,
          matching.{Fields.event},
          matching.{Fields.timestamp},
          matching.{Fields.correlationId}
@@ -237,30 +276,62 @@ let transactionQuery (query: TransactionQuery) =
       UNION ALL
 
       SELECT
+         correlated.event_aggregate,
+         correlated.employee_name,
          correlated.{Fields.event},
          correlated.{Fields.timestamp},
          correlated.{Fields.correlationId}
-      FROM {table} correlated
-      WHERE
-         correlated.{Fields.correlationId} = matching.{Fields.correlationId}
-         AND correlated.{Fields.eventId} != matching.{Fields.eventId}
+      FROM (
+         SELECT
+            'account' as event_aggregate,
+            '' as employee_name,
+            {Fields.event},
+            {Fields.timestamp},
+            {Fields.correlationId}
+         FROM {table}
+         WHERE
+            {Fields.correlationId} = matching.{Fields.correlationId}
+            AND {Fields.eventId} != matching.{Fields.eventId}
+
+         UNION ALL
+
+         SELECT
+            'employee' as event_aggregate,
+            e.first_name || ' ' || e.last_name AS employee_name,
+            {Fields.event},
+            {Fields.timestamp},
+            {Fields.correlationId}
+         FROM {EmployeeEventSqlMapper.table}
+         JOIN {EmployeeSqlMapper.table} e
+            using({EmployeeEventSqlMapper.EmployeeEventFields.employeeId})
+         WHERE {Fields.correlationId} = matching.{Fields.correlationId}
+
+         UNION ALL
+
+         SELECT
+            'org' as event_aggregate,
+            '' AS employee_name,
+            {Fields.event},
+            {Fields.timestamp},
+            {Fields.correlationId}
+         FROM {OrganizationEventSqlMapper.table}
+         WHERE {Fields.correlationId} = matching.{Fields.correlationId}
+      ) as correlated
    ) AS events
    ORDER BY events.{Fields.timestamp}
    """
 
 let getTransactions
    (query: TransactionQuery)
-   : TaskResultOption<Transaction.T list, Err>
+   : TaskResultOption<Transaction list, Err>
    =
    taskResultOption {
       let queryParams, queryString = transactionQuery query
 
       let! events =
-         pgQuery<AccountEvent> queryString (Some queryParams) (fun read ->
-            read.text Fields.event
-            |> Serialization.deserializeUnsafe<AccountEvent>)
+         pgQuery<History> queryString (Some queryParams) historyReader
 
-      return Transaction.fromAccountEvents events
+      return Transaction.fromHistory events
    }
 
 let getTransactionInfo
@@ -268,30 +339,66 @@ let getTransactionInfo
    : TaskResultOption<Transaction.TransactionWithAncillaryInfo, Err>
    =
    taskResultOption {
-      let fieldCorrelationId = $"{table}.{Fields.correlationId}"
+      let employeeEventTable = EmployeeEventSqlMapper.table
+
+      let employeeIdField =
+         EmployeeEventSqlMapper.EmployeeEventFields.employeeId
 
       let query =
          $"""
          SELECT
-            {fieldCorrelationId},
-            {table}.{Fields.event},
+            events.event_aggregate,
+            correlation_id,
+            employee_name,
+            events.event,
             {atiTable}.{atiFields.categoryId},
             {atiTable}.{atiFields.note},
             {CategorySqlMapper.table}.{CategoryFields.name} as category_name
-         FROM {table}
-            LEFT JOIN {atiTable}
-               ON {atiTable}.{atiFields.transactionId} = {fieldCorrelationId}
-            LEFT JOIN {CategorySqlMapper.table} using({atiFields.categoryId})
-         WHERE {fieldCorrelationId} = @transactionId
-         ORDER BY timestamp
+         FROM (
+            SELECT
+               'account' as event_aggregate,
+               '' as employee_name,
+               correlation_id,
+               event,
+               timestamp
+            FROM {table}
+            WHERE {table}.correlation_id = @transactionId
+
+            UNION ALL
+
+            SELECT
+               'employee' as event_aggregate,
+               e.first_name || ' ' || e.last_name AS employee_name,
+               correlation_id,
+               event,
+               timestamp
+            FROM {employeeEventTable}
+            JOIN {EmployeeSqlMapper.table} e using({employeeIdField})
+            WHERE {employeeEventTable}.correlation_id = @transactionId
+
+            UNION ALL
+
+            SELECT
+               'org' as event_aggregate,
+               '' AS employee_name,
+               correlation_id,
+               event,
+               timestamp
+            FROM {OrganizationEventSqlMapper.table}
+            WHERE {OrganizationEventSqlMapper.table}.correlation_id = @transactionId
+         ) AS events
+         LEFT JOIN {atiTable}
+            ON {atiTable}.{atiFields.transactionId} = events.correlation_id
+         LEFT JOIN {CategorySqlMapper.table} using({atiFields.categoryId})
+         ORDER BY events.timestamp
          """
 
       let! res =
-         pgQuery<AccountEvent * TransactionCategory option * string option>
+         pgQuery<History * TransactionCategory option * string option>
             query
             (Some [ "transactionId", atiWriter.transactionId txnId ])
             (fun read ->
-               Reader.event read,
+               historyReader read,
                atiReader.categoryId read
                |> Option.map (fun catId -> {
                   Id = catId
@@ -299,8 +406,8 @@ let getTransactionInfo
                }),
                atiReader.note read)
 
-      let events = res |> List.map (fun (e, _, _) -> e)
-      let txn = (Transaction.fromAccountEvents events).Head
+      let history = res |> List.map (fun (e, _, _) -> e)
+      let txn = (Transaction.fromHistory history).Head
       let _, category, note = List.head res
 
       return {

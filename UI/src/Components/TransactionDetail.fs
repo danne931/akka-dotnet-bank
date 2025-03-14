@@ -163,13 +163,16 @@ let update msg state =
 /// May edit transfer recipient if domestic and status is not Closed.
 let private canEditTransferRecipient
    (org: Org)
-   (txn: Transaction.T)
+   (txn: Transaction)
    : DomesticTransferRecipient option
    =
-   txn.Events
+   txn.History
    |> List.tryPick (function
-      | AccountEvent.DomesticTransferPending e ->
-         Some e.Data.BaseInfo.Recipient.RecipientAccountId
+      | History.Account accountHistory ->
+         match accountHistory.Event with
+         | AccountEvent.DomesticTransferPending e ->
+            Some e.Data.BaseInfo.Recipient.RecipientAccountId
+         | _ -> None
       | _ -> None)
    |> Option.bind (fun recipientId ->
       Map.tryFind recipientId org.DomesticTransferRecipients)
@@ -195,9 +198,12 @@ let renderTransactionInfo
    let txn = transactionUIFriendly merchants org txnInfo.Transaction
 
    let merchantNameFromPurchase =
-      txnInfo.Transaction.Events
+      txnInfo.Transaction.History
       |> List.tryPick (function
-         | AccountEvent.DebitedAccount e -> Some e.Data.Merchant
+         | History.Account accountHistory ->
+            match accountHistory.Event with
+            | AccountEvent.DebitedAccount e -> Some e.Data.Merchant
+            | _ -> None
          | _ -> None)
 
    let editableRecipient = canEditTransferRecipient org.Org txnInfo.Transaction
@@ -311,82 +317,107 @@ let renderTransactionInfo
          classyNode Html.section [ "transaction-detail-history" ] [
             Html.small "History:"
             Html.ul [
-               for t in txnInfo.Transaction.Events do
+               for t in txnInfo.Transaction.History do
                   Html.li [
                      match t with
-                     | AccountEvent.DomesticTransferPending e ->
-                        Html.p
-                           $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
-                     | AccountEvent.DomesticTransferProgress e ->
-                        Html.p $"Progress Update: {e.Data.InProgressInfo}"
-                     | AccountEvent.DomesticTransferFailed e ->
-                        Html.p $"Failed: {e.Data.Reason.Display}"
+                     | History.Org orgHistory ->
+                        match orgHistory.Event with
+                        | OrgEvent.CommandApprovalRequested e ->
+                           let requester = e.Data.Requester.EmployeeName
+                           Html.p $"Request by {requester} pending approval"
+                        | OrgEvent.CommandApprovalAcquired e ->
+                           let approver = e.Data.ApprovedBy.EmployeeName
+                           Html.p $"Approval acquired from {approver}"
+                        | OrgEvent.CommandApprovalProcessCompleted e ->
+                           let approver = e.Data.ApprovedBy.EmployeeName
 
-                        Html.p
-                           $"Refunded account: {e.Data.BaseInfo.Sender.Name}"
-                     | AccountEvent.DomesticTransferCompleted _ ->
-                        Html.p "ACH transfer processor completed transfer"
-                     | AccountEvent.DomesticTransferScheduled e ->
-                        let date =
-                           DateTime.dateUIFriendly e.Data.BaseInfo.ScheduledDate
+                           Html.p
+                              $"Approval completed with approval from {approver}"
+                        | _ -> ()
+                     | History.Employee employeeHistory ->
+                        match employeeHistory.Event with
+                        | EmployeeEvent.PurchasePending e ->
+                           Html.p
+                              $"Purchase requested by {employeeHistory.EmployeeName}'s 
+                              card **{e.Data.Info.CardNumberLast4}"
+                        | EmployeeEvent.PurchaseConfirmedByAccount _ ->
+                           Html.p $"Purchase confirmed by account."
+                        | EmployeeEvent.PurchaseRejectedByAccount e ->
+                           Html.p
+                              $"Purchase declined by account {e.Data.Reason}"
+                        | _ -> ()
+                     | History.Account accountHistory ->
+                        match accountHistory.Event with
+                        | AccountEvent.DomesticTransferPending e ->
+                           Html.p
+                              $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
+                        | AccountEvent.DomesticTransferProgress e ->
+                           Html.p $"Progress Update: {e.Data.InProgressInfo}"
+                        | AccountEvent.DomesticTransferFailed e ->
+                           Html.p $"Failed: {e.Data.Reason.Display}"
 
-                        Html.p $"Scheduled for {date}"
-                     | AccountEvent.PlatformPaymentRequested e ->
-                        Html.p (
-                           if e.OrgId = org.Org.OrgId then
-                              $"Payment request sent to {txn.Source}"
-                           else
-                              $"Received payment request from {txn.Destination}"
-                        )
-                     | AccountEvent.PlatformPaymentPaid _ ->
-                        Html.p $"Payment fulfilled by {txn.Source}"
-                     | AccountEvent.PlatformPaymentDeposited _ ->
-                        Html.p $"Deposit received by {txn.Destination}"
-                     | AccountEvent.DepositedCash e ->
-                        Html.p $"Deposited money via {e.Data.Origin}"
-                     | AccountEvent.DebitedAccount e ->
-                        let em = e.Data.EmployeePurchaseReference
+                           Html.p
+                              $"Refunded account: {e.Data.BaseInfo.Sender.Name}"
+                        | AccountEvent.DomesticTransferCompleted _ ->
+                           Html.p "ACH transfer processor completed transfer"
+                        | AccountEvent.DomesticTransferScheduled e ->
+                           let date =
+                              DateTime.dateUIFriendly
+                                 e.Data.BaseInfo.ScheduledDate
 
-                        Html.p
-                           $"Purchase by {em.EmployeeName}'s card **{em.EmployeeCardNumberLast4}"
-                     | AccountEvent.InternalTransferWithinOrgPending e ->
-                        Html.p
-                           $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
-                     | AccountEvent.InternalTransferWithinOrgCompleted _ ->
-                        Html.p "Deduction of funds finalized"
-                     | AccountEvent.InternalTransferWithinOrgDeposited e ->
-                        Html.p
-                           $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
-                     | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
-                        let date =
-                           DateTime.dateUIFriendly e.Data.BaseInfo.ScheduledDate
+                           Html.p $"Scheduled for {date}"
+                        | AccountEvent.PlatformPaymentRequested e ->
+                           Html.p (
+                              if e.OrgId = org.Org.OrgId then
+                                 $"Payment request sent to {txn.Source}"
+                              else
+                                 $"Received payment request from {txn.Destination}"
+                           )
+                        | AccountEvent.PlatformPaymentPaid _ ->
+                           Html.p $"Payment fulfilled by {txn.Source}"
+                        | AccountEvent.PlatformPaymentDeposited _ ->
+                           Html.p $"Deposit received by {txn.Destination}"
+                        | AccountEvent.DepositedCash e ->
+                           Html.p $"Deposited money via {e.Data.Origin}"
+                        | AccountEvent.DebitedAccount _ ->
+                           Html.p "Deducted funds from account."
+                        | AccountEvent.InternalTransferWithinOrgPending e ->
+                           Html.p
+                              $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
+                        | AccountEvent.InternalTransferWithinOrgCompleted _ ->
+                           Html.p "Deduction of funds finalized"
+                        | AccountEvent.InternalTransferWithinOrgDeposited e ->
+                           Html.p
+                              $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                        | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
+                           let date =
+                              DateTime.dateUIFriendly
+                                 e.Data.BaseInfo.ScheduledDate
 
-                        Html.p $"Scheduled for {date}"
-                     | AccountEvent.InternalTransferBetweenOrgsPending _ ->
-                        Html.p $"Funds deducted from {txn.Source}"
-                     | AccountEvent.InternalTransferBetweenOrgsCompleted _ ->
-                        Html.p "Deduction of funds finalized"
-                     | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
-                        Html.p
-                           $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
-                     | AccountEvent.InternalTransferBetweenOrgsFailed e ->
-                        Html.p $"Failed: {e.Data.Reason}"
-                     | AccountEvent.InternalAutomatedTransferPending _ ->
-                        Html.p $"Funds deducted from {txn.Source}"
-                     | AccountEvent.InternalAutomatedTransferCompleted _ ->
-                        Html.p "Deduction of funds finalized"
-                     | AccountEvent.InternalAutomatedTransferDeposited e ->
-                        Html.p
-                           $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
-                     | AccountEvent.InternalAutomatedTransferFailed e ->
-                        Html.p $"Failed: {e.Data.Reason}"
-                     | _ -> Html.p "Unknown"
+                           Html.p $"Scheduled for {date}"
+                        | AccountEvent.InternalTransferBetweenOrgsPending _ ->
+                           Html.p $"Funds deducted from {txn.Source}"
+                        | AccountEvent.InternalTransferBetweenOrgsCompleted _ ->
+                           Html.p "Deduction of funds finalized"
+                        | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
+                           Html.p
+                              $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                        | AccountEvent.InternalTransferBetweenOrgsFailed e ->
+                           Html.p $"Failed: {e.Data.Reason}"
+                        | AccountEvent.InternalAutomatedTransferPending _ ->
+                           Html.p $"Funds deducted from {txn.Source}"
+                        | AccountEvent.InternalAutomatedTransferCompleted _ ->
+                           Html.p "Deduction of funds finalized"
+                        | AccountEvent.InternalAutomatedTransferDeposited e ->
+                           Html.p
+                              $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                        | AccountEvent.InternalAutomatedTransferFailed e ->
+                           Html.p $"Failed: {e.Data.Reason}"
+                        | _ -> Html.p "Unknown"
 
-                     AccountEnvelope.unwrap t
-                     |> snd
-                     |> _.Timestamp
-                     |> DateTime.dateUIFriendlyWithSeconds
-                     |> Html.small
+                     Html.small (
+                        DateTime.dateUIFriendlyWithSeconds t.Envelope.Timestamp
+                     )
                   ]
             ]
          ]

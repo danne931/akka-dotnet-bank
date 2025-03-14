@@ -7,14 +7,13 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Lib.SharedTypes
 open Lib.NetworkQuery
-open Lib.Time
 open Transaction
 
 type AccountProfilesMaybe = Result<Map<AccountId, AccountProfile> option, Err>
 
 type AccountMaybe = Result<Account option, Err>
 
-type TransactionsMaybe = Result<Transaction.T list option, Err>
+type TransactionsMaybe = Result<Transaction list option, Err>
 
 type PaymentsMaybe = Result<PaymentSummary option, Err>
 
@@ -296,7 +295,7 @@ let autoTransferRuleDisplay (rule: AutomaticTransfer.AutomaticTransferRule) =
 let transactionUIFriendly
    (merchants: Map<string, Merchant>)
    (org: OrgWithAccountProfiles)
-   (txn: Transaction.T)
+   (txn: Transaction)
    : TransactionUIFriendly
    =
    let props = {
@@ -323,13 +322,16 @@ let transactionUIFriendly
    match txn.Type with
    | TransactionType.Deposit ->
       let origin, recipientAccount =
-         txn.Events
+         txn.History
          |> List.tryPick (function
-            | AccountEvent.DepositedCash e ->
-               Some(
-                  e.Data.Origin,
-                  accountName (AccountId.fromEntityId e.EntityId)
-               )
+            | History.Account accountHistory ->
+               match accountHistory.Event with
+               | AccountEvent.DepositedCash e ->
+                  Some(
+                     e.Data.Origin,
+                     accountName (AccountId.fromEntityId e.EntityId)
+                  )
+               | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown")
 
@@ -347,22 +349,25 @@ let transactionUIFriendly
       }
    | TransactionType.Purchase ->
       let employee, card, merchant, accountName =
-         txn.Events
+         txn.History
          |> List.tryPick (function
-            | AccountEvent.DebitedAccount e ->
-               let em = e.Data.EmployeePurchaseReference
+            | History.Account accountHistory ->
+               match accountHistory.Event with
+               | AccountEvent.DebitedAccount e ->
+                  let em = e.Data.EmployeePurchaseReference
 
-               let merchant =
-                  getMerchant e.Data.Merchant merchants
-                  |> Option.bind _.Alias
-                  |> Option.defaultValue e.Data.Merchant
+                  let merchant =
+                     getMerchant e.Data.Merchant merchants
+                     |> Option.bind _.Alias
+                     |> Option.defaultValue e.Data.Merchant
 
-               Some(
-                  em.EmployeeName,
-                  $"**{em.EmployeeCardNumberLast4}",
-                  merchant,
-                  accountName (AccountId.fromEntityId e.EntityId)
-               )
+                  Some(
+                     em.EmployeeName,
+                     $"**{em.EmployeeCardNumberLast4}",
+                     merchant,
+                     accountName (AccountId.fromEntityId e.EntityId)
+                  )
+               | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown", "Unknown", "Unknown")
 
@@ -380,11 +385,14 @@ let transactionUIFriendly
       }
    | TransactionType.InternalTransferWithinOrg ->
       let sender, recipient =
-         txn.Events
+         txn.History
          |> List.tryPick (function
-            | AccountEvent.InternalTransferWithinOrgPending e ->
-               let i = e.Data.BaseInfo
-               Some(i.Sender.Name, i.Recipient.Name)
+            | History.Account accountHistory ->
+               match accountHistory.Event with
+               | AccountEvent.InternalTransferWithinOrgPending e ->
+                  let i = e.Data.BaseInfo
+                  Some(i.Sender.Name, i.Recipient.Name)
+               | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown")
 
@@ -397,11 +405,14 @@ let transactionUIFriendly
       }
    | TransactionType.InternalTransferBetweenOrgs ->
       let sender, recipient =
-         txn.Events
+         txn.History
          |> List.tryPick (function
-            | AccountEvent.InternalTransferBetweenOrgsPending e ->
-               let sender = accountName (AccountId.fromEntityId e.EntityId)
-               Some(sender, e.Data.BaseInfo.Recipient.Name)
+            | History.Account accountHistory ->
+               match accountHistory.Event with
+               | AccountEvent.InternalTransferBetweenOrgsPending e ->
+                  let sender = accountName (AccountId.fromEntityId e.EntityId)
+                  Some(sender, e.Data.BaseInfo.Recipient.Name)
+               | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown")
 
@@ -419,16 +430,19 @@ let transactionUIFriendly
       }
    | TransactionType.DomesticTransfer ->
       let sender, recipient, payNetwork =
-         txn.Events
+         txn.History
          |> List.tryPick (function
-            | AccountEvent.DomesticTransferPending e ->
-               let i = e.Data.BaseInfo
+            | History.Account accountHistory ->
+               match accountHistory.Event with
+               | AccountEvent.DomesticTransferPending e ->
+                  let i = e.Data.BaseInfo
 
-               Some(
-                  i.Sender.Name,
-                  domesticRecipientName i.Recipient,
-                  string i.Recipient.PaymentNetwork
-               )
+                  Some(
+                     i.Sender.Name,
+                     domesticRecipientName i.Recipient,
+                     string i.Recipient.PaymentNetwork
+                  )
+               | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown", "Unknown")
 
@@ -447,26 +461,29 @@ let transactionUIFriendly
       }
    | TransactionType.Payment ->
       let sender, recipient, moneyFlow =
-         txn.Events
+         txn.History
          |> List.tryPick (function
-            | AccountEvent.PlatformPaymentDeposited e when
-               e.OrgId = org.Org.OrgId
-               ->
-               let i = e.Data.BaseInfo
+            | History.Account accountHistory ->
+               match accountHistory.Event with
+               | AccountEvent.PlatformPaymentDeposited e when
+                  e.OrgId = org.Org.OrgId
+                  ->
+                  let i = e.Data.BaseInfo
 
-               Some(
-                  i.Payer.OrgName,
-                  accountName i.Payee.AccountId,
-                  Some MoneyFlow.In
-               )
-            | AccountEvent.PlatformPaymentPaid e when e.OrgId = org.Org.OrgId ->
-               let i = e.Data.BaseInfo
+                  Some(
+                     i.Payer.OrgName,
+                     accountName i.Payee.AccountId,
+                     Some MoneyFlow.In
+                  )
+               | AccountEvent.PlatformPaymentPaid e when e.OrgId = org.Org.OrgId ->
+                  let i = e.Data.BaseInfo
 
-               Some(
-                  accountName (AccountId.fromEntityId e.EntityId),
-                  i.Payee.OrgName,
-                  Some MoneyFlow.Out
-               )
+                  Some(
+                     accountName (AccountId.fromEntityId e.EntityId),
+                     i.Payee.OrgName,
+                     Some MoneyFlow.Out
+                  )
+               | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown", None)
 
@@ -484,14 +501,17 @@ let transactionUIFriendly
       }
    | TransactionType.InternalAutomatedTransfer ->
       let sender, recipient, reason =
-         txn.Events
+         txn.History
          |> List.tryPick (function
-            | AccountEvent.InternalAutomatedTransferPending e ->
-               Some(
-                  e.Data.BaseInfo.Sender.Name,
-                  e.Data.BaseInfo.Recipient.Name,
-                  autoTransferRuleDisplay e.Data.Rule
-               )
+            | History.Account accountHistory ->
+               match accountHistory.Event with
+               | AccountEvent.InternalAutomatedTransferPending e ->
+                  Some(
+                     e.Data.BaseInfo.Sender.Name,
+                     e.Data.BaseInfo.Recipient.Name,
+                     autoTransferRuleDisplay e.Data.Rule
+                  )
+               | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown", "Unknown")
 
@@ -556,7 +576,7 @@ let private matchesTransactionGroupFilter
       | _ -> false
 
 /// Apply the selected filter logic to events arriving via SignalR.
-/// Events fetched from the network query will be filtered via the
+/// History fetched from the network query will be filtered via the
 /// database query but still need to apply an in-browser filter for
 /// events arriving via SignalR.
 let keepRealtimeEventsCorrespondingToSelectedFilter

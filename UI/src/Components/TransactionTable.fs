@@ -15,6 +15,7 @@ open Lib.NetworkQuery
 open TableControlPanel
 open EmployeeSearch
 open Pagination
+open Transaction
 
 [<RequireQualifiedAccess>]
 type TransactionFilterView =
@@ -39,18 +40,17 @@ type TransactionFilter =
 
 type State = {
    Query: TransactionQuery
-   Pagination: Pagination.State<TransactionCursor, Transaction.T>
+   Pagination: Pagination.State<TransactionCursor, Transaction>
 }
 
 type Msg =
    | UpdateFilter of TransactionFilter
-   | PaginationMsg of Pagination.Msg<Transaction.T>
+   | PaginationMsg of Pagination.Msg<Transaction>
    | RefreshTransactions of TransactionQuery
    | ViewTransaction of TransactionId
 
 let init (txnQuery: TransactionQuery) () =
-   let paginationState, cmd =
-      Pagination.init<TransactionCursor, Transaction.T> ()
+   let paginationState, cmd = Pagination.init<TransactionCursor, Transaction> ()
 
    {
       Query = txnQuery
@@ -58,7 +58,7 @@ let init (txnQuery: TransactionQuery) () =
    },
    Cmd.map PaginationMsg cmd
 
-let handlePaginationMsg (state: State) (msg: Pagination.Msg<Transaction.T>) =
+let handlePaginationMsg (state: State) (msg: Pagination.Msg<Transaction>) =
    let config = {
       PageLimit = state.Query.PageLimit
       loadPage =
@@ -339,7 +339,7 @@ let renderControlPanel
 
 let renderTableRow
    (selectedTxnId: TransactionId option)
-   (txn: Transaction.T)
+   (txn: Transaction)
    (txnDisplay: TransactionUIFriendly)
    dispatch
    =
@@ -347,9 +347,9 @@ let renderTableRow
       attr.key (string txn.Id)
 
       match txn.Status with
-      | Transaction.TransactionStatus.Complete -> ()
-      | Transaction.TransactionStatus.InProgress -> attr.classes [ "warning" ]
-      | Transaction.TransactionStatus.Failed -> attr.classes [ "error" ]
+      | TransactionStatus.Complete -> ()
+      | TransactionStatus.InProgress -> attr.classes [ "warning" ]
+      | TransactionStatus.Failed -> attr.classes [ "error" ]
 
       match selectedTxnId with
       | Some txnId when txnId = txn.Id -> attr.classes [ "selected" ]
@@ -380,9 +380,9 @@ let renderTableRow
    ]
 
 let renderTable
-   (txns: Transaction.T seq)
+   (txns: Transaction seq)
    (selectedTxnId: TransactionId option)
-   (displayTransaction: Transaction.T -> TransactionUIFriendly)
+   (displayTransaction: Transaction -> TransactionUIFriendly)
    dispatch
    =
    Html.table [
@@ -463,7 +463,21 @@ let TransactionTableComponent
                      keepRealtimeEventsCorrespondingToSelectedFilter state.Query
                   )
                   |> List.rev
-                  |> List.fold Transaction.applyAccountEvent txns
+                  |> List.fold
+                        (fun acc evt ->
+                           if Transaction.isOriginatingAccountEvent evt then
+                              let _, envelope = AccountEnvelope.unwrap evt
+
+                              let history =
+                                 History.Account {
+                                    InitiatedByName = envelope.InitiatedBy.Name
+                                    Event = evt
+                                 }
+
+                              Transaction.applyHistory acc history
+                           else
+                              acc)
+                        txns
                   |> _.Values
                   |> List.ofSeq
                   |> List.sortByDescending _.Timestamp
