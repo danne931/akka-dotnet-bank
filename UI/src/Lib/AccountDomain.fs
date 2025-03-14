@@ -245,19 +245,19 @@ module AccountBrowserQuery =
 type TransactionUIFriendly = {
    Name: string
    Date: string
-   Amount: string option
+   Amount: string
    Info: string
    MoneyFlow: MoneyFlow option
-   Source: string option
-   Destination: string option
+   Source: string
+   Destination: string
 }
 
-let getMerchantAlias
-   (merchant: string)
+let getMerchant
+   (merchantName: string)
    (merchants: Map<string, Merchant>)
-   : string option
+   : Merchant option
    =
-   merchants |> Map.tryFind (merchant.ToLower()) |> Option.bind _.Alias
+   merchants |> Map.tryFind (merchantName.ToLower())
 
 let debitWithMerchantAlias
    (evt: BankEvent<DebitedAccount>)
@@ -266,7 +266,8 @@ let debitWithMerchantAlias
    {
       evt with
          Data.Merchant =
-            getMerchantAlias evt.Data.Merchant merchants
+            getMerchant evt.Data.Merchant merchants
+            |> Option.bind _.Alias
             |> Option.defaultValue evt.Data.Merchant
    }
 
@@ -292,382 +293,8 @@ let autoTransferRuleDisplay (rule: AutomaticTransfer.AutomaticTransferRule) =
       let rule = AutomaticTransfer.PercentDistributionRule.get rule
       $"Maintain a zero balance by distributing it between {rule.DestinationAccounts.Length} accounts."
 
-let transactionUIFriendlyFromAccountEvent
-   (org: OrgWithAccountProfiles)
-   (evt: AccountEvent)
-   : TransactionUIFriendly
-   =
-   let _, envelope = AccountEnvelope.unwrap evt
-
-   let props = {
-      Name = envelope.EventName
-      Date = DateTime.dateUIFriendlyWithSeconds envelope.Timestamp
-      Amount = None
-      Info = ""
-      MoneyFlow = None
-      Source = None
-      Destination = None
-   }
-
-   let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      org.Org.DomesticTransferRecipients
-      |> Map.tryFind recipientFromEvt.RecipientAccountId
-      |> Option.map _.FullName
-      |> Option.defaultValue recipientFromEvt.FullName
-
-   let accountName =
-      org.AccountProfiles.TryFind(AccountId.fromEntityId envelope.EntityId)
-      |> Option.map (fun a -> a.Account.Name)
-      |> Option.defaultValue "Account"
-
-   match evt with
-   | CreatedAccount _ -> { props with Info = "Created Account" }
-   | DepositedCash evt -> {
-      props with
-         Name = "Deposit Received"
-         Info = $"Deposited money into {accountName}."
-         MoneyFlow = Some MoneyFlow.In
-         Source = Some evt.Data.Origin
-         Destination = Some accountName
-         Amount = Some <| Money.format evt.Data.Amount
-     }
-   | DebitedAccount evt ->
-      let purchaseReference = evt.Data.EmployeePurchaseReference
-
-      let card =
-         $"**{evt.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
-
-      let employeeAndCard = $"{purchaseReference.EmployeeName} {card}"
-
-      {
-         props with
-            Name = "Purchase"
-            Info =
-               $"Purchase from {evt.Data.Merchant} with card {card} ({accountName})"
-            Amount = Some <| Money.format evt.Data.Amount
-            MoneyFlow = Some MoneyFlow.Out
-            Source = Some $"{accountName} via {employeeAndCard}"
-            Destination = Some evt.Data.Merchant
-      }
-   | MaintenanceFeeDebited evt -> {
-      props with
-         Info = "Maintenance Fee"
-         Amount = Some <| Money.format evt.Data.Amount
-         MoneyFlow = Some MoneyFlow.Out
-     }
-   | MaintenanceFeeSkipped _ -> {
-      props with
-         Info = "Skipped Maintenance Fee"
-     }
-   | InternalTransferWithinOrgPending evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Internal Transfer"
-            Info =
-               $"Moved money from {info.Sender.Name} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.Out
-            Source = Some accountName
-            Destination = Some info.Recipient.Name
-      }
-   | InternalTransferWithinOrgCompleted evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Internal Transfer Completed"
-            Info =
-               $"Completed money movement from {info.Sender.Name} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
-      }
-   | InternalTransferWithinOrgFailed evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Internal Transfer Failed"
-            Info =
-               $"Failed money movement from {info.Sender.Name} to {info.Recipient.Name} 
-              - Reason: {evt.Data.Reason} 
-              - Account refunded"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-      }
-   | InternalTransferBetweenOrgsPending evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Transfer Between Orgs"
-            Info = $"Transfer from {accountName} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.Out
-            Source = Some accountName
-            Destination = Some info.Recipient.Name
-      }
-   | InternalTransferBetweenOrgsScheduled evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Transfer Between Orgs Scheduled"
-            Info =
-               $"Transfer from {accountName} to {info.Recipient.Name} scheduled for {DateTime.formatShort info.ScheduledDate}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = None
-            Source = Some accountName
-            Destination = Some info.Recipient.Name
-      }
-   | InternalTransferBetweenOrgsCompleted evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Transfer Between Orgs Completed"
-            Info =
-               $"Completed transfer from {accountName} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
-      }
-   | InternalTransferBetweenOrgsFailed evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Transfer Between Orgs Failed"
-            Info =
-               $"Failed transfer from {accountName} to {info.Recipient.Name} 
-              - Reason: {evt.Data.Reason} 
-              - Account refunded"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-      }
-   | DomesticTransferPending evt ->
-      let info = evt.Data.BaseInfo
-      let recipientName = domesticRecipientName info.Recipient
-      let payNetwork = info.Recipient.PaymentNetwork
-
-      {
-         props with
-            Name = "Domestic Transfer"
-            Info =
-               $"{payNetwork} transfer processing from {info.Sender.Name} to {recipientName}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.Out
-            Source = Some accountName
-            Destination = Some recipientName
-      }
-   | DomesticTransferScheduled evt ->
-      let info = evt.Data.BaseInfo
-      let recipientName = domesticRecipientName info.Recipient
-      let payNetwork = info.Recipient.PaymentNetwork
-
-      {
-         props with
-            Name = "Domestic Transfer"
-            Info =
-               $"{payNetwork} transfer from {info.Sender.Name} to {recipientName} scheduled for {DateTime.formatShort info.ScheduledDate}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = None
-            Source = Some accountName
-            Destination = Some recipientName
-      }
-   | DomesticTransferCompleted evt ->
-      let info = evt.Data.BaseInfo
-      let payNetwork = info.Recipient.PaymentNetwork
-
-      {
-         props with
-            Name = "Domestic Transfer Completed"
-            Info =
-               $"{payNetwork} transfer completed from {info.Sender.Name} to {domesticRecipientName info.Recipient}"
-            Amount = Some <| Money.format info.Amount
-      }
-   | DomesticTransferFailed evt ->
-      let info = evt.Data.BaseInfo
-
-      let recipientName = domesticRecipientName info.Recipient
-      let payNetwork = info.Recipient.PaymentNetwork
-
-      {
-         props with
-            Name = "Domestic Transfer Failed"
-            Info =
-               $"{payNetwork} transfer from {accountName} to {recipientName} failed
-               - Reason: {evt.Data.Reason.Display}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-            Source = Some accountName
-            Destination = Some recipientName
-      }
-   | DomesticTransferProgress evt ->
-      let info = evt.Data.BaseInfo
-      let payNetwork = info.Recipient.PaymentNetwork
-
-      {
-         props with
-            Info =
-               $"Progress update received for {payNetwork} transfer 
-                 to {domesticRecipientName info.Recipient} from {accountName}
-                 - {evt.Data.InProgressInfo}"
-            Amount = Some <| Money.format info.Amount
-      }
-   | InternalTransferWithinOrgDeposited evt ->
-      let info = evt.Data.BaseInfo
-      let sender = info.Sender.Name
-
-      {
-         props with
-            Name = "Transfer Deposit Within Org"
-            Info = $"{accountName} received transfer from {sender}."
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-            Source = Some sender
-            Destination = Some accountName
-      }
-   | InternalTransferBetweenOrgsDeposited evt ->
-      let info = evt.Data.BaseInfo
-      let sender = info.Sender.Name
-
-      {
-         props with
-            Name = "Transfer Deposit Between Orgs"
-            Info = $"{accountName} received transfer from {sender}."
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-            Source = Some sender
-            Destination = Some accountName
-      }
-   | BillingCycleStarted _ -> {
-      props with
-         Info = "New billing cycle.."
-     }
-   | AccountClosed evt -> {
-      props with
-         Info = $"Closed Account - Reference: {evt.Data.Reference}"
-     }
-   | PlatformPaymentRequested evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Requested"
-            Info =
-               $"Requested payment from {p.Payer.OrgName} into {accountName}"
-            Amount = Some <| Money.format p.Amount
-            MoneyFlow = None
-            Source = Some p.Payer.OrgName
-            Destination = Some accountName
-      }
-   | PlatformPaymentPaid evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Fulfilled"
-            Info = $"Fulfilled payment to {p.Payee.OrgName} from {accountName}."
-            Amount = Some <| Money.format p.Amount
-            MoneyFlow = Some MoneyFlow.Out
-            Source = Some accountName
-            Destination = Some p.Payee.OrgName
-      }
-   | PlatformPaymentDeposited evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment"
-            Info = $"{accountName} received payment from {p.Payer.OrgName}."
-            Amount = Some <| Money.format p.Amount
-            MoneyFlow = Some MoneyFlow.In
-            Source = Some p.Payer.OrgName
-            Destination = Some accountName
-      }
-   | PlatformPaymentCancelled evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Cancelled"
-            Info = $"Cancelled payment request to {p.Payer.OrgName}"
-            Amount = Some <| Money.format p.Amount
-            MoneyFlow = None
-      }
-   | PlatformPaymentDeclined evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Declined"
-            Info = $"{p.Payer.OrgName} declined payment request"
-            Amount = Some <| Money.format p.Amount
-            MoneyFlow = None
-      }
-   | AutoTransferRuleConfigured evt -> {
-      props with
-         Name = "Auto Transfer Rule Configured"
-         Info = $"Created auto transfer rule {evt.Data.Config.Info.Display}"
-     }
-   | AutoTransferRuleDeleted _ -> {
-      props with
-         Name = "Auto Transfer Rule Deleted"
-         Info = $"Deleted auto transfer rule"
-     }
-   | InternalAutomatedTransferPending evt ->
-      let info = evt.Data.BaseInfo
-      let reason = autoTransferRuleDisplay evt.Data.Rule
-
-      {
-         props with
-            Name = "Auto Balance Management"
-            Info =
-               $"Automatically moved money from {info.Sender.Name} to {info.Recipient.Name}
-               - Reason: {reason}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.Out
-            Source = Some accountName
-            Destination = Some info.Recipient.Name
-      }
-   | InternalAutomatedTransferCompleted evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Internal Automated Transfer Completed"
-            Info =
-               $"Auto Balance Management: completed transfer from {info.Sender.Name} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
-      }
-   | InternalAutomatedTransferFailed evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Internal Automated Transfer Failed"
-            Info =
-               $"Auto Balance Management: failed transfer from {info.Sender.Name} to {info.Recipient.Name} 
-              - Reason: {evt.Data.Reason} 
-              - Account refunded"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-      }
-   | InternalAutomatedTransferDeposited evt ->
-      let info = evt.Data.BaseInfo
-      let sender = info.Sender.Name
-
-      {
-         props with
-            Name = "Internal Automated Transfer Deposit"
-            Info =
-               $"Auto Balance Management: {accountName} received transfer from {sender}."
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-            Source = Some sender
-            Destination = Some accountName
-      }
-
 let transactionUIFriendly
+   (merchants: Map<string, Merchant>)
    (org: OrgWithAccountProfiles)
    (txn: Transaction.T)
    : TransactionUIFriendly
@@ -675,11 +302,11 @@ let transactionUIFriendly
    let props = {
       Name = ""
       Date = DateTime.dateUIFriendly txn.Timestamp
-      Amount = Some(Money.format txn.Amount)
+      Amount = Money.format txn.Amount
       Info = ""
       MoneyFlow = None
-      Source = None
-      Destination = None
+      Source = ""
+      Destination = ""
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
@@ -715,8 +342,8 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.In
                | TransactionStatus.Failed -> None
-            Source = Some origin
-            Destination = Some recipientAccount
+            Source = origin
+            Destination = recipientAccount
       }
    | TransactionType.Purchase ->
       let employee, card, merchant, accountName =
@@ -725,10 +352,15 @@ let transactionUIFriendly
             | AccountEvent.DebitedAccount e ->
                let em = e.Data.EmployeePurchaseReference
 
+               let merchant =
+                  getMerchant e.Data.Merchant merchants
+                  |> Option.bind _.Alias
+                  |> Option.defaultValue e.Data.Merchant
+
                Some(
                   em.EmployeeName,
                   $"**{em.EmployeeCardNumberLast4}",
-                  e.Data.Merchant,
+                  merchant,
                   accountName (AccountId.fromEntityId e.EntityId)
                )
             | _ -> None)
@@ -743,8 +375,8 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
-            Source = Some $"{accountName} via {employee} **{card}"
-            Destination = Some merchant
+            Source = $"{accountName} via {employee} **{card}"
+            Destination = merchant
       }
    | TransactionType.InternalTransferWithinOrg ->
       let sender, recipient =
@@ -760,8 +392,8 @@ let transactionUIFriendly
          props with
             Name = "Move Money Between Accounts"
             Info = $"Moved money from {sender} to {recipient}"
-            Source = Some sender
-            Destination = Some recipient
+            Source = sender
+            Destination = recipient
       }
    | TransactionType.InternalTransferBetweenOrgs ->
       let sender, recipient =
@@ -782,8 +414,8 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
-            Source = Some sender
-            Destination = Some recipient
+            Source = sender
+            Destination = recipient
       }
    | TransactionType.DomesticTransfer ->
       let sender, recipient, payNetwork =
@@ -810,8 +442,8 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
-            Source = Some sender
-            Destination = Some recipient
+            Source = sender
+            Destination = recipient
       }
    | TransactionType.Payment ->
       let sender, recipient, moneyFlow =
@@ -847,8 +479,8 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> moneyFlow
                | TransactionStatus.Failed -> None
-            Source = Some sender
-            Destination = Some recipient
+            Source = sender
+            Destination = recipient
       }
    | TransactionType.InternalAutomatedTransfer ->
       let sender, recipient, reason =
@@ -869,8 +501,8 @@ let transactionUIFriendly
             Info =
                $"Automatically moved money from {sender} to {recipient}
                - Reason: {reason}"
-            Source = Some sender
-            Destination = Some recipient
+            Source = sender
+            Destination = recipient
       }
 
 let private matchesTransactionGroupFilter

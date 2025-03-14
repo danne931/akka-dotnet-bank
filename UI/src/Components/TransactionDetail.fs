@@ -4,13 +4,11 @@ open Feliz
 open Feliz.UseElmish
 open Feliz.Router
 open Elmish
-open System
 
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
-open UIDomain.Org
 open Bank.Transfer.Domain
 open Lib.SharedTypes
 open Dropdown
@@ -22,10 +20,9 @@ type private TransactionMaybe =
 type State = {
    TransactionId: TransactionId
    Transaction: TransactionMaybe
-   // Nickname may refer to transfer recipient or merchant
-   // depending on the AccountEvent rendered.
+   // Nickname may refer to domestic transfer recipient or
+   // merchant of purchase depending on the AccountEvent rendered.
    EditingNickname: bool
-   NicknamePersistence: Deferred<Result<EventId, Err>>
    // Sometimes the user clicks on a persisted event in the table
    // before the read model is synced, resulting in a 404 and
    // nothing to display in this view.  Reattempt fetching the
@@ -45,12 +42,6 @@ let private updateTransaction
                state.Transaction
    }
 
-type RecipientNicknameEditMsg = {
-   CommandInput: NicknamedDomesticTransferRecipient
-   Org: Org
-   InitiatedBy: Initiator
-}
-
 type Msg =
    | GetTransactionInfo of
       AsyncOperationStatus<Result<TransactionWithAncillaryInfo option, Err>>
@@ -59,10 +50,6 @@ type Msg =
       AsyncOperationStatus<Result<int, Err>>
    | SaveNote of note: string * AsyncOperationStatus<Result<int, Err>>
    | ToggleNicknameEdit
-   | SaveRecipientNickname of
-      RecipientNicknameEditMsg *
-      AsyncOperationStatus<Result<OrgCommandReceipt, Err>>
-   | SaveMerchantNickname of Merchant * AsyncOperationStatus<Result<int, Err>>
    | EditTransferRecipient of recipientId: AccountId
 
 let init txnId () =
@@ -70,12 +57,11 @@ let init txnId () =
       TransactionId = txnId
       Transaction = Deferred.Idle
       EditingNickname = false
-      NicknamePersistence = Deferred.Idle
       GetTxnAttempt = 1
    },
    Cmd.ofMsg (GetTransactionInfo Started)
 
-let update (merchantDispatch: MerchantProvider.Dispatch) msg state =
+let update msg state =
    match msg with
    | GetTransactionInfo Started ->
       let getInfo = async {
@@ -160,64 +146,6 @@ let update (merchantDispatch: MerchantProvider.Dispatch) msg state =
             EditingNickname = not state.EditingNickname
       },
       Cmd.none
-   | SaveRecipientNickname(edit, Started) ->
-      let command =
-         NicknameDomesticTransferRecipientCommand.create
-            edit.Org.OrgId
-            edit.InitiatedBy
-            edit.CommandInput
-         |> OrgCommand.NicknameDomesticTransferRecipient
-
-      let submitCommand = async {
-         let! res = OrgService.submitCommand edit.Org command
-         return Msg.SaveRecipientNickname(edit, Finished res)
-      }
-
-      {
-         state with
-            NicknamePersistence = Deferred.InProgress
-      },
-      Cmd.fromAsync submitCommand
-   | SaveRecipientNickname(_, Finished(Ok _)) ->
-      {
-         state with
-            EditingNickname = false
-            NicknamePersistence = Deferred.Idle
-      },
-      Cmd.none
-   | SaveRecipientNickname(_, Finished(Error err)) ->
-      {
-         state with
-            NicknamePersistence = Deferred.Resolved(Error err)
-      },
-      Alerts.toastCommand err
-   | SaveMerchantNickname(merchant, Started) ->
-      let updateMerchant = async {
-         let! res = OrgService.updateMerchant merchant
-         return SaveMerchantNickname(merchant, Finished res)
-      }
-
-      {
-         state with
-            NicknamePersistence = Deferred.InProgress
-      },
-      Cmd.fromAsync updateMerchant
-   | SaveMerchantNickname(merchant, Finished(Ok _)) ->
-      // Update parent context of merchant aliases via context reducer.
-      merchantDispatch (MerchantProvider.Action.UpdateMerchantAlias merchant)
-
-      {
-         state with
-            EditingNickname = false
-            NicknamePersistence = Deferred.Idle
-      },
-      Cmd.none
-   | SaveMerchantNickname(_, Finished(Error err)) ->
-      {
-         state with
-            NicknamePersistence = Deferred.Resolved(Error err)
-      },
-      Alerts.toastCommand err
    | EditTransferRecipient recipientId ->
       let browserQuery = Routes.IndexUrl.accountBrowserQuery ()
 
@@ -232,177 +160,17 @@ let update (merchantDispatch: MerchantProvider.Dispatch) msg state =
 
       state, Cmd.navigate path
 
-let private nicknameCancelButton dispatch =
-   Html.a [
-      attr.href ""
-      attr.text "Cancel"
-      attr.style [ style.padding 10 ]
-      attr.classes [ "secondary" ]
-      attr.onClick (fun e ->
-         e.preventDefault ()
-         dispatch Msg.ToggleNicknameEdit)
-   ]
-
-let private nicknameSaveButton onClick =
-   Html.a [
-      attr.href ""
-      attr.text "Save"
-      attr.style [ style.padding 10 ]
-      attr.onClick (fun e ->
-         e.preventDefault ()
-         onClick ())
-   ]
-
-[<ReactComponent>]
-let RecipientNicknameEditComponent
-   (session: UserSession)
-   (org: Org)
-   dispatch
-   (recipientId: AccountId)
-   (recipientEnv: RecipientAccountEnvironment)
-   =
-   let name, nickname =
-      org.DomesticTransferRecipients
-      |> Map.tryFind recipientId
-      |> Option.map (fun r -> r.Name, r.Nickname)
-      |> Option.defaultValue ("", None)
-
-   let pendingNickname, setNickname = React.useState nickname
-
-   let nicknameInputRef = React.useInputRef ()
-
-   React.useEffectOnce (fun () ->
-      match nicknameInputRef.current with
-      | None -> ()
-      | Some input -> input.focus ())
-
-   classyNode Html.div [ "nickname" ] [
-      Html.input [
-         attr.ref nicknameInputRef
-         attr.ariaLabel "Transfer Recipient Nickname"
-         attr.type' "text"
-         attr.placeholder "Edit recipient nickname"
-
-         attr.value (pendingNickname |> Option.defaultValue "")
-
-         attr.onChange (fun input ->
-            if String.IsNullOrWhiteSpace input then None else Some input
-            |> setNickname)
-      ]
-
-      if pendingNickname = (Some name) then
-         Html.small $"No change from original name {name}."
-      elif pendingNickname <> nickname then
-         match pendingNickname with
-         | None ->
-            Html.small
-               $"Transactions will display as {name} for past and future transactions."
-         | Some alias ->
-            Html.small
-               $"Transactions for {name} will display as {alias} for past and future transactions."
-
-      classyNode Html.div [ "nickname-controls" ] [
-         if pendingNickname = (Some name) then
-            nicknameCancelButton dispatch
-         elif pendingNickname <> nickname then
-            nicknameCancelButton dispatch
-
-            nicknameSaveButton (fun () ->
-               let msg =
-                  Msg.SaveRecipientNickname(
-                     {
-                        CommandInput = {
-                           RecipientId = recipientId
-                           RecipientAccountEnvironment = recipientEnv
-                           Nickname = pendingNickname
-                        }
-                        Org = org
-                        InitiatedBy = session.AsInitiator
-                     },
-                     Started
-                  )
-
-               dispatch msg)
-      ]
-   ]
-
-[<ReactComponent>]
-let MerchantNicknameEditComponent
-   (orgId: OrgId)
-   (debitMerchant: string)
-   (merchants: Map<string, Merchant>)
-   dispatch
-   =
-   let merchantAlias = getMerchantAlias debitMerchant merchants
-   let pendingNickname, setNickname = React.useState merchantAlias
-
-   let nicknameInputRef = React.useInputRef ()
-
-   React.useEffectOnce (fun () ->
-      match nicknameInputRef.current with
-      | None -> ()
-      | Some input -> input.focus ())
-
-   classyNode Html.div [ "nickname" ] [
-      Html.input [
-         attr.ref nicknameInputRef
-         attr.ariaLabel "Merchant Recipient Nickname"
-         attr.type' "text"
-         attr.placeholder "Edit merchant nickname"
-
-         attr.value (pendingNickname |> Option.defaultValue "")
-
-         attr.onChange (fun input ->
-            if String.IsNullOrWhiteSpace input then None else Some input
-            |> setNickname)
-      ]
-
-      if pendingNickname = (Some debitMerchant) then
-         Html.small $"No change from original name {debitMerchant}."
-      elif pendingNickname <> merchantAlias then
-         match pendingNickname with
-         | None ->
-            Html.small
-               $"Transactions will display with the original name {debitMerchant} for past and future transactions."
-         | Some name ->
-            Html.small
-               $"Transactions for {debitMerchant} will display as {name} for past and future transactions."
-
-      classyNode Html.div [ "nickname-controls" ] [
-         if pendingNickname = (Some debitMerchant) then
-            nicknameCancelButton dispatch
-         elif pendingNickname <> merchantAlias then
-            nicknameCancelButton dispatch
-
-            nicknameSaveButton (fun () ->
-               let msg =
-                  Msg.SaveMerchantNickname(
-                     {
-                        OrgId = orgId
-                        Name = debitMerchant.ToLower()
-                        Alias = pendingNickname
-                     },
-                     Started
-                  )
-
-               dispatch msg)
-      ]
-   ]
-
 /// May edit transfer recipient if domestic and status is not Closed.
 let private canEditTransferRecipient
    (org: Org)
    (txn: Transaction.T)
    : DomesticTransferRecipient option
    =
-   let recipientIdOpt =
-      txn.Events
-      |> List.tryPick (function
-         | AccountEvent.DomesticTransferPending e ->
-            Some e.Data.BaseInfo.Recipient.RecipientAccountId
-         | _ -> None)
-
-   recipientIdOpt
+   txn.Events
+   |> List.tryPick (function
+      | AccountEvent.DomesticTransferPending e ->
+         Some e.Data.BaseInfo.Recipient.RecipientAccountId
+      | _ -> None)
    |> Option.bind (fun recipientId ->
       Map.tryFind recipientId org.DomesticTransferRecipients)
    |> Option.filter (fun r -> r.Status <> RecipientRegistrationStatus.Closed)
@@ -420,21 +188,25 @@ let renderTransactionInfo
    (txnInfo: TransactionWithAncillaryInfo)
    (isEditingNickname: bool)
    (merchants: Map<string, Merchant>)
+   (merchantDispatch: MerchantProvider.Dispatch)
    (session: UserSession)
    dispatch
    =
-   let txn = transactionUIFriendly org txnInfo.Transaction
+   let txn = transactionUIFriendly merchants org txnInfo.Transaction
 
-   let RecipientNicknameEditComponent =
-      RecipientNicknameEditComponent session org.Org dispatch
+   let merchantNameFromPurchase =
+      txnInfo.Transaction.Events
+      |> List.tryPick (function
+         | AccountEvent.DebitedAccount e -> Some e.Data.Merchant
+         | _ -> None)
+
+   let editableRecipient = canEditTransferRecipient org.Org txnInfo.Transaction
 
    React.fragment [
       Html.h6 txn.Name
 
       Html.section [
-         match txn.Amount with
-         | Some amount -> Html.h3 amount
-         | None -> ()
+         Html.h3 txn.Amount
 
          Html.small [
             attr.text txn.Date
@@ -451,58 +223,90 @@ let renderTransactionInfo
             ]
          ]
 
-         match txn.Source with
-         | Some source ->
+         Html.div [
+            Html.small "From:"
+            Html.p [
+               attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
+               attr.text txn.Source
+            ]
+         ]
+
+         match
+            isEditingNickname,
+            txnInfo.Transaction.Type,
+            merchantNameFromPurchase,
+            editableRecipient
+         with
+         | true, TransactionType.DomesticTransfer, _, Some recipient ->
+            let recipientId = recipient.RecipientAccountId
+            let org = org.Org
+
+            let originalName, nickname =
+               org.DomesticTransferRecipients
+               |> Map.tryFind recipientId
+               |> Option.map (fun r -> r.Name, r.Nickname)
+               |> Option.defaultValue ("", None)
+
+            Nickname.NicknameEditComponent {|
+               OriginalName = originalName
+               Alias = nickname
+               onCancel = fun () -> dispatch Msg.ToggleNicknameEdit
+               persistNickname =
+                  fun alias -> async {
+                     let command =
+                        NicknameDomesticTransferRecipientCommand.create
+                           org.OrgId
+                           session.AsInitiator
+                           {
+                              RecipientId = recipientId
+                              RecipientAccountEnvironment =
+                                 RecipientAccountEnvironment.Domestic
+                              Nickname = alias |> Option.map _.Trim()
+                           }
+                        |> OrgCommand.NicknameDomesticTransferRecipient
+
+                     let! res = OrgService.submitCommand org command
+                     return res |> Result.map ignore
+                  }
+               onNicknameSaved = ignore
+            |}
+         | true, TransactionType.Purchase, Some merchant, _ ->
+            let merchantAlias =
+               getMerchant merchant merchants |> Option.bind _.Alias
+
+            let merchantFromNickname (nickname: string option) = {
+               OrgId = session.OrgId
+               Name = merchant.ToLower()
+               Alias = nickname |> Option.map _.Trim()
+            }
+
+            Nickname.NicknameEditComponent {|
+               OriginalName = merchant
+               Alias = merchantAlias
+               onCancel = fun () -> dispatch Msg.ToggleNicknameEdit
+               persistNickname =
+                  fun alias -> async {
+                     let! res =
+                        OrgService.updateMerchant (merchantFromNickname alias)
+
+                     return res |> Result.map ignore
+                  }
+               onNicknameSaved =
+                  fun alias ->
+                     let merchant = merchantFromNickname alias
+                     // Update parent context of merchant aliases via context reducer.
+                     merchantDispatch (
+                        MerchantProvider.Action.UpdateMerchantAlias merchant
+                     )
+            |}
+         | _ ->
             Html.div [
-               Html.small "From:"
+               Html.small "To:"
                Html.p [
                   attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
-                  attr.text source
+                  attr.text txn.Destination
                ]
             ]
-         | None -> ()
-
-         match txnInfo.Transaction.Type with
-         | TransactionType.DomesticTransfer when isEditingNickname ->
-            match canEditTransferRecipient org.Org txnInfo.Transaction with
-            | Some recipient ->
-               RecipientNicknameEditComponent
-                  recipient.RecipientAccountId
-                  RecipientAccountEnvironment.Domestic
-            | None -> ()
-         | TransactionType.Purchase when isEditingNickname ->
-            let merchant =
-               txnInfo.Transaction.Events
-               |> List.tryLast
-               |> Option.bind (function
-                  | AccountEvent.DebitedAccount e ->
-                     getMerchantAlias e.Data.Merchant merchants
-                     |> Option.defaultValue e.Data.Merchant
-                     |> Some
-                  | _ -> None)
-
-            match merchant with
-            | Some merchant ->
-               MerchantNicknameEditComponent
-                  txnInfo.Transaction.OrgId
-                  merchant
-                  merchants
-                  dispatch
-            | None -> ()
-         | _ ->
-            match txn.Destination with
-            | Some destination ->
-               Html.div [
-                  Html.small "To:"
-                  Html.p [
-                     attr.style [
-                        style.display.inlineBlock
-                        style.marginLeft 10
-                     ]
-                     attr.text destination
-                  ]
-               ]
-            | None -> ()
 
          classyNode Html.section [ "transaction-detail-history" ] [
             Html.small "History:"
@@ -699,13 +503,11 @@ let TransactionDetailComponent
    (org: OrgWithAccountProfiles)
    (txnId: TransactionId)
    =
-   let merchants = React.useContext MerchantProvider.stateContext
-   let merchantDispatchCtx = React.useContext MerchantProvider.dispatchContext
-
-   let state, dispatch =
-      React.useElmish (init txnId, update merchantDispatchCtx, [| box txnId |])
+   let state, dispatch = React.useElmish (init txnId, update, [| box txnId |])
 
    let categories = React.useContext TransactionCategoryProvider.context
+   let merchants = React.useContext MerchantProvider.stateContext
+   let merchantProvider = React.useContext MerchantProvider.dispatchContext
 
    classyNode Html.article [ "transaction-detail" ] [
       CloseButton.render (fun _ ->
@@ -723,6 +525,7 @@ let TransactionDetailComponent
             txn
             state.EditingNickname
             merchants
+            merchantProvider
             session
             dispatch
       | Deferred.Resolved(Ok None) -> Html.p "No transaction found."

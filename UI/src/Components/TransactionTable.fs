@@ -368,7 +368,7 @@ let renderTableRow
                | Some MoneyFlow.Out -> "debit"
             ]
 
-            attr.text (txnDisplay.Amount |> Option.defaultValue "-")
+            attr.text txnDisplay.Amount
          ]
 
          Html.td txnDisplay.Info
@@ -438,20 +438,6 @@ let TransactionTableComponent
 
    let txns = Map.tryFind state.Pagination.Page state.Pagination.Items
 
-   let displayTransaction (txn: Transaction.T) =
-      let txn = {
-         txn with
-            Events =
-               txn.Events
-               |> List.map (function
-                  | AccountEvent.DebitedAccount e ->
-                     debitWithMerchantAlias e merchants
-                     |> AccountEvent.DebitedAccount
-                  | evt -> evt)
-      }
-
-      transactionUIFriendly org txn
-
    React.fragment [
       Html.progress [
          attr.style [ style.marginBottom 5 ]
@@ -487,7 +473,7 @@ let TransactionTableComponent
             renderTable
                txns
                browserQuery.Transaction
-               displayTransaction
+               (transactionUIFriendly merchants org)
                dispatch
 
             renderPagination state dispatch

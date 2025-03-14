@@ -31,6 +31,7 @@ type SqlParamsDerivedFromOrgEvents = {
    CommandApprovalTerminated: (string * SqlValue) list list
    DomesticTransferRecipient: (string * SqlValue) list list
    UpdatedDomesticTransferRecipientStatus: (string * SqlValue) list list
+   UpdatedDomesticTransferRecipientNickname: (string * SqlValue) list list
 }
 
 let private domesticRecipientReducer
@@ -335,7 +336,7 @@ let sqlParamReducer
       domesticRecipientReducer acc e.Data.Recipient
    | OrgEvent.NicknamedDomesticTransferRecipient e ->
       let qParams = [
-         "accountId",
+         "recipientAccountId",
          TransferSqlWriter.DomesticRecipient.recipientAccountId
             e.Data.RecipientId
          "nickname",
@@ -344,7 +345,8 @@ let sqlParamReducer
 
       {
          acc with
-            DomesticTransferRecipient = qParams :: acc.DomesticTransferRecipient
+            UpdatedDomesticTransferRecipientNickname =
+               qParams :: acc.UpdatedDomesticTransferRecipientNickname
       }
    | OrgEvent.DomesticTransferRecipientFailed e ->
       let updatedStatus =
@@ -410,6 +412,7 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
          CommandApprovalTerminated = []
          DomesticTransferRecipient = []
          UpdatedDomesticTransferRecipientStatus = []
+         UpdatedDomesticTransferRecipientNickname = []
       }
 
    let query = [
@@ -657,6 +660,14 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
          WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
          """,
          sqlParams.UpdatedDomesticTransferRecipientStatus
+
+      if not sqlParams.UpdatedDomesticTransferRecipientNickname.IsEmpty then
+         $"""
+         UPDATE {TransferSqlMapper.Table.domesticRecipient}
+         SET {TransferFields.DomesticRecipient.nickname} = @nickname
+         WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
+         """,
+         sqlParams.UpdatedDomesticTransferRecipientNickname
    ]
 
    pgTransaction query
