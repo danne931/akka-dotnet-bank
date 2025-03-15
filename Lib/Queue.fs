@@ -358,7 +358,10 @@ let consumerActorProps
          | LifecycleEvent e ->
             match e with
             | PostStop ->
-               logWarning ctx "PostStop ({opts.Service})"
+               logWarning
+                  ctx
+                  $"PostStop RabbitMq Queue Consumer ({opts.Service})"
+
                killSwitch.Shutdown()
                return ignored ()
             | _ -> return ignored ()

@@ -193,6 +193,12 @@ let actorProps<'TAggregate, 'TEvent>
                         RecoveryCompleted =
                            fun mailbox ->
                               startProjection conf mailbox state |> ignored
+                        LifecyclePostStop =
+                           fun _ ->
+                              logInfo
+                                 $"PostStop ReadModelSync ({conf.EventJournalTag})"
+
+                              SaveSnapshot state
                   }
                   mailbox
                   msg
