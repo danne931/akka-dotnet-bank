@@ -9,6 +9,7 @@
     <Compile Include="Commands.fs" />
     <Compile Include="AggregateTypes.fs" />
     <Compile Include="Employee.fs" />
+    <Compile Include="Query.fs" />
   </ItemGroup>
 
   <ItemGroup>

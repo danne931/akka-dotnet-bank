@@ -3,7 +3,6 @@ module TransactionCategoryFilter
 open Feliz
 open System
 
-open Bank.Account.Domain
 open Lib.NetworkQuery
 
 let renderCategoryAssignmentStatusFilter
@@ -55,7 +54,7 @@ let renderCategoryAssignmentStatusFilter
 [<ReactComponent>]
 let TransactionCategoryFilterComponent
    (category: CategoryFilter option)
-   (categories: Map<int, TransactionCategory>)
+   (categories: Map<int, Transaction.TransactionCategory>)
    (onChange: CategoryFilter option -> unit)
    =
    let searchInput, setSearchInput = React.useState ""

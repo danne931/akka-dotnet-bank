@@ -328,11 +328,15 @@ let renderTransactionInfo
                         | OrgEvent.CommandApprovalAcquired e ->
                            let approver = e.Data.ApprovedBy.EmployeeName
                            Html.p $"Approval acquired from {approver}"
-                        | OrgEvent.CommandApprovalProcessCompleted e ->
-                           let approver = e.Data.ApprovedBy.EmployeeName
-
+                        | OrgEvent.CommandApprovalDeclined e ->
                            Html.p
-                              $"Approval completed with approval from {approver}"
+                              $"Approval declined by {e.Data.DeclinedBy.EmployeeName}"
+                        | OrgEvent.CommandApprovalTerminated e ->
+                           Html.p
+                              $"Approval terminated early due to {e.Data.Reason}"
+                        | OrgEvent.CommandApprovalProcessCompleted e ->
+                           Html.p
+                              $"Approval completed with approval from {e.Data.ApprovedBy.EmployeeName}"
                         | _ -> ()
                      | History.Employee employeeHistory ->
                         match employeeHistory.Event with

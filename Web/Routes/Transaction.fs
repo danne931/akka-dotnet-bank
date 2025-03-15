@@ -7,6 +7,7 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
 
 open Bank.Account.Domain
+open Bank.Org.Domain
 open Bank.Transaction.Api
 open RoutePaths
 open Lib.NetworkQuery

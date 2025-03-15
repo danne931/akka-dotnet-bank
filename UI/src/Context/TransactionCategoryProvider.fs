@@ -2,10 +2,8 @@ module TransactionCategoryProvider
 
 open Feliz
 
-open Bank.Account.Domain
-
 let context =
-   React.createContext<Map<int, TransactionCategory>> (
+   React.createContext<Map<int, Transaction.TransactionCategory>> (
       name = "TransactionCategoryContext",
       defaultValue = Map.empty
    )

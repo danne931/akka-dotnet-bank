@@ -433,10 +433,74 @@ let TransactionTableComponent
 
    React.useEffect (
       fun () -> dispatch (Msg.RefreshTransactions txnQuery)
-      , [| box org.Org.OrgId; box browserQuery.ChangeDetection |]
+      , [| box browserQuery.ChangeDetection |]
    )
 
    let txns = Map.tryFind state.Pagination.Page state.Pagination.Items
+
+   let txns =
+      React.useMemo (
+         fun () ->
+            match txns with
+            | Some(Resolved(Ok(Some txns))) ->
+               let txns =
+                  if state.Pagination.Page = 1 then
+                     let txns = [ for txn in txns -> txn.Id, txn ] |> Map.ofList
+
+                     signalRCtx.RealtimeAccountEvents
+                     |> List.filter (
+                        keepRealtimeEventsCorrespondingToSelectedFilter
+                           state.Query
+                     )
+                     |> List.rev
+                     |> List.fold
+                           (fun acc evt ->
+                              let _, envelope = AccountEnvelope.unwrap evt
+                              let txnId = TransactionId envelope.CorrelationId
+
+                              let history =
+                                 History.Account {
+                                    InitiatedByName = envelope.InitiatedBy.Name
+                                    Event = evt
+                                 }
+
+                              let isTxnOnPage =
+                                 txns.TryFind(txnId).IsSome
+                                 || signalRCtx.RealtimeAccountEvents
+                                    |> List.exists (fun e ->
+                                       let _, env = AccountEnvelope.unwrap e
+                                       env.CorrelationId = envelope.CorrelationId)
+
+                              if isTxnOnPage then
+                                 Transaction.applyHistory acc history
+                              else
+                                 // Should this real-time event be added as a new item in the table?
+                                 // Ex: If we receive a DomesticTransferFailed AccountEvent
+                                 // for a transaction which is not displayed then we do not
+                                 // care to display it.  If on the other hand it was a
+                                 // DomesticTransferPending then we will.
+                                 match evt with
+                                 | AccountEvent.DepositedCash _
+                                 | AccountEvent.DebitedAccount _
+                                 | AccountEvent.InternalTransferWithinOrgPending _
+                                 | AccountEvent.InternalTransferBetweenOrgsPending _
+                                 | AccountEvent.InternalAutomatedTransferPending _
+                                 | AccountEvent.DomesticTransferPending _
+                                 | AccountEvent.PlatformPaymentPaid _
+                                 | AccountEvent.PlatformPaymentDeposited _ ->
+                                    Transaction.applyHistory acc history
+                                 | _ -> acc)
+                           txns
+                     |> _.Values
+                     |> List.ofSeq
+                     |> List.sortByDescending _.Timestamp
+                  else
+                     txns
+
+               Some(Resolved(Ok(Some txns)))
+            | _ -> txns
+         , [| box txns; box signalRCtx.RealtimeAccountEvents |]
+      )
 
    React.fragment [
       Html.progress [
@@ -454,36 +518,6 @@ let TransactionTableComponent
          match txns with
          | Some(Resolved(Ok None)) -> Html.p "No transactions found."
          | Some(Resolved(Ok(Some txns))) ->
-            let txns =
-               if state.Pagination.Page = 1 then
-                  let txns = [ for txn in txns -> txn.Id, txn ] |> Map.ofList
-
-                  signalRCtx.RealtimeAccountEvents
-                  |> List.filter (
-                     keepRealtimeEventsCorrespondingToSelectedFilter state.Query
-                  )
-                  |> List.rev
-                  |> List.fold
-                        (fun acc evt ->
-                           if Transaction.isOriginatingAccountEvent evt then
-                              let _, envelope = AccountEnvelope.unwrap evt
-
-                              let history =
-                                 History.Account {
-                                    InitiatedByName = envelope.InitiatedBy.Name
-                                    Event = evt
-                                 }
-
-                              Transaction.applyHistory acc history
-                           else
-                              acc)
-                        txns
-                  |> _.Values
-                  |> List.ofSeq
-                  |> List.sortByDescending _.Timestamp
-               else
-                  txns
-
             renderTable
                txns
                browserQuery.Transaction

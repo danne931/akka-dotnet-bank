@@ -13,6 +13,7 @@
     <Compile Include="SignalRBroadcast.fs" />
     <Compile Include="AnalyticsTypes.fs" /> 
     <Compile Include="Org.fs" />
+    <Compile Include="Query.fs" /> 
   </ItemGroup>
 
   <ItemGroup>

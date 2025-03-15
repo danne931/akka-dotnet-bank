@@ -1,5 +1,7 @@
 module Transaction
 
+open System
+
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
@@ -32,12 +34,14 @@ type Transaction = {
    Type: TransactionType
    Status: TransactionStatus
    History: History list
-   Timestamp: System.DateTime
+   Timestamp: DateTime
    Amount: decimal
    Id: TransactionId
    OrgId: OrgId
    InitiatedBy: Initiator
 }
+
+type TransactionCategory = { Id: int; Name: string }
 
 type TransactionWithAncillaryInfo = {
    Id: TransactionId
@@ -67,20 +71,24 @@ let transactionInfoFromHistory
    =
    match history with
    | History.Org orgHistory ->
-      match orgHistory.Event with
-      | OrgEvent.CommandApprovalRequested e ->
-         transactionInfoFromApprovableCommand e.Data.Command.CommandType
-         |> Option.map (fun (txnType, status) ->
-            (txnType, status, e.Data.Command.Amount))
-      | OrgEvent.CommandApprovalAcquired e ->
-         transactionInfoFromApprovableCommand e.Data.Command.CommandType
-         |> Option.map (fun (txnType, status) ->
-            (txnType, status, e.Data.Command.Amount))
-      | OrgEvent.CommandApprovalProcessCompleted e ->
-         transactionInfoFromApprovableCommand e.Data.Command.CommandType
-         |> Option.map (fun (txnType, status) ->
-            (txnType, status, e.Data.Command.Amount))
-      | _ -> None
+      let info =
+         match orgHistory.Event with
+         | OrgEvent.CommandApprovalRequested e ->
+            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+         | OrgEvent.CommandApprovalAcquired e ->
+            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+         | OrgEvent.CommandApprovalProcessCompleted e ->
+            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+         | OrgEvent.CommandApprovalDeclined e ->
+            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+         | OrgEvent.CommandApprovalTerminated e ->
+            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+         | _ -> None
+
+      info
+      |> Option.bind (fun (cmdType, amount) ->
+         transactionInfoFromApprovableCommand cmdType
+         |> Option.map (fun (txnType, txnStatus) -> txnType, txnStatus, amount))
    | History.Employee employeeHistory ->
       match employeeHistory.Event with
       | EmployeeEvent.PurchasePending e ->
@@ -244,25 +252,6 @@ let transactionInfoFromHistory
          )
       | _ -> None
 
-/// Is this this AccountEvent an originating member of
-/// a transaction?  Used to determine if a real-time event
-/// should be included on the page.
-/// Ex: If we receive a DomesticTransferFailed AccountEvent
-/// for a transaction which is not displayed then we do not
-/// care to display it.  If on the other hand it was a
-/// DomesticTransferPending, an originating event, then we will.
-let isOriginatingAccountEvent =
-   function
-   | AccountEvent.DepositedCash _
-   | AccountEvent.DebitedAccount _
-   | AccountEvent.InternalTransferWithinOrgPending _
-   | AccountEvent.InternalTransferBetweenOrgsPending _
-   | AccountEvent.InternalAutomatedTransferPending _
-   | AccountEvent.DomesticTransferPending _
-   | AccountEvent.PlatformPaymentPaid _
-   | AccountEvent.PlatformPaymentDeposited _ -> true
-   | _ -> false
-
 let applyHistory
    (txns: Map<TransactionId, Transaction>)
    (history: History)
@@ -275,34 +264,34 @@ let applyHistory
 
       match txns.TryFind txnId with
       | Some _ ->
-         txns
-         |> Map.change
-               txnId
-               (Option.map (fun txn ->
-                  let txn = {
-                     txn with
-                        Status = status
-                        History = history :: txn.History
-                  }
+         Map.change
+            txnId
+            (Option.map (fun txn ->
+               let txn = {
+                  txn with
+                     Status = status
+                     History = history :: txn.History
+               }
 
-                  // For most transactions the timestamp shown will be the
-                  // timestamp of the start of a transaction's lifecycle.
-                  // (ex: The timestamp of a domestic transfer initiating
-                  //      processing rather than when it finished potentially
-                  //      days later.)
-                  // An exception will be made for payments received.  We will
-                  // show the timestamp of when an incoming payment was received,
-                  // rather than their respective lifecycle start "PaymentRequested"
-                  // timestamps.
-                  match history with
-                  | History.Account accountHistory ->
-                     match accountHistory.Event with
-                     | AccountEvent.PlatformPaymentDeposited e -> {
-                        txn with
-                           Timestamp = e.Timestamp
-                       }
-                     | _ -> txn
-                  | _ -> txn))
+               // For most transactions the timestamp shown will be the
+               // timestamp of the start of a transaction's lifecycle.
+               // (ex: The timestamp of a domestic transfer initiating
+               //      processing rather than when it finished potentially
+               //      days later.)
+               // An exception will be made for payments received.  We will
+               // show the timestamp of when an incoming payment was received,
+               // rather than their respective lifecycle start "PaymentRequested"
+               // timestamps.
+               match history with
+               | History.Account accountHistory ->
+                  match accountHistory.Event with
+                  | AccountEvent.PlatformPaymentDeposited e -> {
+                     txn with
+                        Timestamp = e.Timestamp
+                    }
+                  | _ -> txn
+               | _ -> txn))
+            txns
       | None ->
          txns
          |> Map.add txnId {

@@ -4,8 +4,8 @@ open Feliz
 open Feliz.Router
 
 open CommandApproval
+open Bank.Org.Domain
 open Bank.Employee.Domain
-open Bank.Account.Domain
 open Lib.SharedTypes
 open History
 open UIDomain.Account

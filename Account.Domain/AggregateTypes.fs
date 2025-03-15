@@ -360,8 +360,8 @@ type Account = {
       x.autoTransferManagement AutomaticTransfer.computeTransfer
 
    static member empty: Account = {
-      AccountId = AccountId System.Guid.Empty
-      OrgId = OrgId System.Guid.Empty
+      AccountId = AccountId Guid.Empty
+      OrgId = OrgId Guid.Empty
       Name = ""
       Depository = AccountDepository.Checking
       Currency = Currency.USD
@@ -372,7 +372,7 @@ type Account = {
          QualifyingDepositFound = false
          DailyBalanceThreshold = false
       }
-      AccountNumber = AccountNumber <| System.Int64.Parse "123456789123456"
+      AccountNumber = AccountNumber <| Int64.Parse "123456789123456"
       RoutingNumber = RoutingNumber 123456789
       AutoTransferRule = None
    }

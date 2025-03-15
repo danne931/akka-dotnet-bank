@@ -5,17 +5,18 @@ open System
 open Lib.NetworkQuery
 open Lib.Time
 
-type private Cat = Bank.Account.Domain.TransactionCategory
-
 module CategoryFilter =
-   let rec private parse (catIds: Cat list) =
+   let rec private parse (catIds: Transaction.TransactionCategory list) =
       match catIds with
       | [] -> ""
       | [ s ] -> s.Name
       | [ first; second ] -> $"{parse [ first ]}, {second.Name}"
       | first :: second :: rest -> $"{parse [ first; second ]}, +{rest.Length}"
 
-   let display (categories: Map<int, Cat>) (filter: CategoryFilter) =
+   let display
+      (categories: Map<int, Transaction.TransactionCategory>)
+      (filter: CategoryFilter)
+      =
       match filter with
       | CategoryFilter.IsCategorized isCat ->
          Some <| if isCat then "Categorized" else "Uncategorized"
