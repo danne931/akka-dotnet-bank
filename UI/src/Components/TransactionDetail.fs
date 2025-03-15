@@ -52,10 +52,29 @@ type Msg =
    | ToggleNicknameEdit
    | EditTransferRecipient of recipientId: AccountId
 
-let init txnId () =
+// If we arrived at this TransactionDetail component by clicking on a
+// transaction table row then we want it to display immediately
+// while fetching the ancillary info (category & note) in the background.
+// If we arrived at this TransactionDetail component by a link from
+// somewhere else in the app or elsewhere then the Transaction data
+// will not be immediately available and we will display loading progress
+// while retrieving the TransactionWithAncillaryInfo.
+let init txnId (txn: Transaction option) () =
    {
       TransactionId = txnId
-      Transaction = Deferred.Idle
+      Transaction =
+         match txn with
+         | Some txn ->
+            {
+               Id = txnId
+               Transaction = txn
+               Category = None
+               Note = None
+            }
+            |> Some
+            |> Ok
+            |> Deferred.Resolved
+         | None -> Deferred.Idle
       EditingNickname = false
       GetTxnAttempt = 1
    },
@@ -65,6 +84,7 @@ let update msg state =
    match msg with
    | GetTransactionInfo Started ->
       let getInfo = async {
+         do! Async.Sleep(3400)
          let! res = TransactionService.getTransactionInfo state.TransactionId
 
          return GetTransactionInfo(Finished res)
@@ -537,8 +557,10 @@ let TransactionDetailComponent
    (session: UserSession)
    (org: OrgWithAccountProfiles)
    (txnId: TransactionId)
+   (txn: Transaction option)
    =
-   let state, dispatch = React.useElmish (init txnId, update, [| box txnId |])
+   let state, dispatch =
+      React.useElmish (init txnId txn, update, [| box txnId |])
 
    let categories = React.useContext TransactionCategoryProvider.context
    let merchants = React.useContext MerchantProvider.stateContext
