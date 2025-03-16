@@ -52,29 +52,10 @@ type Msg =
    | ToggleNicknameEdit
    | EditTransferRecipient of recipientId: AccountId
 
-// If we arrived at this TransactionDetail component by clicking on a
-// transaction table row then we want it to display immediately
-// while fetching the ancillary info (category & note) in the background.
-// If we arrived at this TransactionDetail component by a link from
-// somewhere else in the app or elsewhere then the Transaction data
-// will not be immediately available and we will display loading progress
-// while retrieving the TransactionWithAncillaryInfo.
-let init txnId (txn: Transaction option) () =
+let init txnId () =
    {
       TransactionId = txnId
-      Transaction =
-         match txn with
-         | Some txn ->
-            {
-               Id = txnId
-               Transaction = txn
-               Category = None
-               Note = None
-            }
-            |> Some
-            |> Ok
-            |> Deferred.Resolved
-         | None -> Deferred.Idle
+      Transaction = Deferred.Idle
       EditingNickname = false
       GetTxnAttempt = 1
    },
@@ -90,7 +71,11 @@ let update msg state =
          return GetTransactionInfo(Finished res)
       }
 
-      state, Cmd.fromAsync getInfo
+      {
+         state with
+            Transaction = Deferred.InProgress
+      },
+      Cmd.fromAsync getInfo
    | GetTransactionInfo(Finished(Ok(Some res))) ->
       {
          state with
@@ -321,9 +306,8 @@ let renderTransactionInfo
                   fun alias ->
                      let merchant = merchantFromNickname alias
                      // Update parent context of merchant aliases via context reducer.
-                     merchantDispatch (
-                        MerchantProvider.Action.UpdateMerchantAlias merchant
-                     )
+                     MerchantProvider.Action.UpdateMerchantAlias merchant
+                     |> merchantDispatch
             |}
          | _ ->
             Html.div [
@@ -559,12 +543,38 @@ let TransactionDetailComponent
    (txnId: TransactionId)
    (txn: Transaction option)
    =
-   let state, dispatch =
-      React.useElmish (init txnId txn, update, [| box txnId |])
+   let state, dispatch = React.useElmish (init txnId, update, [| box txnId |])
 
    let categories = React.useContext TransactionCategoryProvider.context
    let merchants = React.useContext MerchantProvider.stateContext
    let merchantProvider = React.useContext MerchantProvider.dispatchContext
+
+   // If we arrived at this TransactionDetail component by clicking on a
+   // transaction table row then we want it to display immediately
+   // while fetching the ancillary info (category & note) in the background.
+   // If we arrived at this TransactionDetail component by a link from
+   // somewhere else in the app or elsewhere then the Transaction data
+   // will not be immediately available and we will display loading progress
+   // while retrieving the TransactionWithAncillaryInfo.
+   let txnFromTable =
+      match txn with
+      | Some txn ->
+         {
+            Id = txnId
+            Transaction = txn
+            Category = None
+            Note = None
+         }
+         |> Some
+         |> Ok
+         |> Deferred.Resolved
+      | None -> Deferred.Idle
+
+   let txnFromQueryOrTable =
+      if Deferred.resolved state.Transaction then
+         state.Transaction
+      else
+         txnFromTable
 
    classyNode Html.article [ "transaction-detail" ] [
       CloseButton.render (fun _ ->
@@ -575,7 +585,7 @@ let TransactionDetailComponent
          |> Routes.TransactionsUrl.queryPath
          |> Router.navigate)
 
-      match state.Transaction with
+      match txnFromQueryOrTable with
       | Deferred.Resolved(Ok(Some txn)) ->
          renderTransactionInfo
             org
@@ -595,6 +605,11 @@ let TransactionDetailComponent
                renderCategorySelect categories txnInfo dispatch
                renderNoteInput state.Transaction dispatch
             ]
+      | Deferred.InProgress ->
+         // Show progress of fetching TransactionWithAncillaryInfo while
+         // showing transaction data immediately available from table.
+         if txn.IsSome then
+            Html.progress []
       | _ -> ()
 
       Html.section [
