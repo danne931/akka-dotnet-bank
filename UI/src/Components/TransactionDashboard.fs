@@ -550,6 +550,23 @@ let transactions
    let filterRealtimeEvents =
       keepRealtimeEventsCorrespondingToSelectedFilter txnQuery
 
+   // Should this real-time event be added as a new item in the table?
+   // Ex: If we receive a DomesticTransferFailed AccountEvent
+   // for a transaction which is not displayed then we do not
+   // care to display it.  If on the other hand it was a
+   // DomesticTransferPending then we will.
+   let mayBeDisplayedAsNewTransaction evt =
+      match evt with
+      | AccountEvent.DepositedCash _
+      | AccountEvent.DebitedAccount _
+      | AccountEvent.InternalTransferWithinOrgPending _
+      | AccountEvent.InternalTransferBetweenOrgsPending _
+      | AccountEvent.InternalAutomatedTransferPending _
+      | AccountEvent.DomesticTransferPending _
+      | AccountEvent.PlatformPaymentPaid _
+      | AccountEvent.PlatformPaymentDeposited _ -> true
+      | _ -> false
+
    realtimeAccountEvents
    |> List.filter filterRealtimeEvents
    |> List.rev
@@ -558,38 +575,34 @@ let transactions
             let _, envelope = AccountEnvelope.unwrap evt
             let txnId = TransactionId envelope.CorrelationId
 
-            let history =
-               History.Account {
-                  InitiatedByName = envelope.InitiatedBy.Name
-                  Event = evt
-               }
+            // Real-time event received for a currently displayed transaction
+            let correspondsToDisplayedTransaction = txns.TryFind(txnId).IsSome
 
-            let isTxnOnPage =
-               txns.TryFind(txnId).IsSome
-               || realtimeAccountEvents
+            // Real-time event received for a currently displayed
+            // transaction that was synthesized from a real-time event.
+            let correspondsToDisplayedRealtimeEvent =
+               (not (mayBeDisplayedAsNewTransaction evt))
+               && realtimeAccountEvents
                   |> List.exists (fun e ->
                      let _, env = AccountEnvelope.unwrap e
-                     env.CorrelationId = envelope.CorrelationId)
 
-            if isTxnOnPage then
+                     env.CorrelationId = envelope.CorrelationId
+                     && (mayBeDisplayedAsNewTransaction e))
+
+            if
+               correspondsToDisplayedTransaction
+               || mayBeDisplayedAsNewTransaction evt
+               || correspondsToDisplayedRealtimeEvent
+            then
+               let history =
+                  History.Account {
+                     InitiatedByName = envelope.InitiatedBy.Name
+                     Event = evt
+                  }
+
                Transaction.applyHistory acc history
             else
-               // Should this real-time event be added as a new item in the table?
-               // Ex: If we receive a DomesticTransferFailed AccountEvent
-               // for a transaction which is not displayed then we do not
-               // care to display it.  If on the other hand it was a
-               // DomesticTransferPending then we will.
-               match evt with
-               | AccountEvent.DepositedCash _
-               | AccountEvent.DebitedAccount _
-               | AccountEvent.InternalTransferWithinOrgPending _
-               | AccountEvent.InternalTransferBetweenOrgsPending _
-               | AccountEvent.InternalAutomatedTransferPending _
-               | AccountEvent.DomesticTransferPending _
-               | AccountEvent.PlatformPaymentPaid _
-               | AccountEvent.PlatformPaymentDeposited _ ->
-                  Transaction.applyHistory acc history
-               | _ -> acc)
+               acc)
          txns
    |> _.Values
    |> List.ofSeq
