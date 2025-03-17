@@ -571,10 +571,24 @@ let TransactionDetailComponent
       | None -> Deferred.Idle
 
    let txnFromQueryOrTable =
-      if Deferred.resolved state.Transaction then
-         state.Transaction
-      else
-         txnFromTable
+      match state.Transaction, txnFromTable with
+      | Deferred.Resolved(Ok(Some fromQuery)),
+        Deferred.Resolved(Ok(Some fromTable)) ->
+         // Ensure incoming real-time events are displayed
+         if
+            fromQuery.Transaction.History.Length < fromTable.Transaction.History.Length
+         then
+            {
+               fromQuery with
+                  Transaction = fromTable.Transaction
+            }
+            |> Some
+            |> Ok
+            |> Deferred.Resolved
+         else
+            state.Transaction
+      | _, Deferred.Resolved(Ok(Some _)) -> txnFromTable
+      | _ -> state.Transaction
 
    classyNode Html.article [ "transaction-detail" ] [
       CloseButton.render (fun _ ->
