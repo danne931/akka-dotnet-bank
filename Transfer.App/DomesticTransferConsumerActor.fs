@@ -66,94 +66,115 @@ let private networkRecipient
          | DomesticRecipientAccountDepository.Savings -> "savings"
    }
 
+// Notify account actor of DomesticTransfer Progress, Completed, or Failed.
+let onSuccessfulServiceResponse
+   (mailbox: Actor<_>)
+   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
+   (action: DomesticTransferServiceAction)
+   (txn: DomesticTransfer)
+   (res: DomesticTransferServiceResponse)
+   =
+   let accountRef = getAccountRef txn.Sender.AccountId
+
+   if res.Ok then
+      let progress = progressFromResponse res
+
+      match progress with
+      | DomesticTransferProgress.Completed ->
+         let msg =
+            Command.complete txn
+            |> AccountCommand.CompleteDomesticTransfer
+            |> AccountMessage.StateChange
+
+         accountRef <! msg
+      | DomesticTransferProgress.InProgress progress ->
+         let msg =
+            Command.progress txn progress
+            |> AccountCommand.UpdateDomesticTransferProgress
+            |> AccountMessage.StateChange
+
+         match action with
+         | DomesticTransferServiceAction.TransferAck -> accountRef <! msg
+         | DomesticTransferServiceAction.ProgressCheck ->
+            let previousProgress = txn.Status
+
+            if
+               (DomesticTransferProgress.InProgress progress)
+               <> previousProgress
+            then
+               accountRef <! msg
+      | _ -> ()
+   else
+      let err = failReasonFromError res.Reason
+
+      match err with
+      | FailReason.CorruptData
+      | FailReason.InvalidPaymentNetwork
+      | FailReason.InvalidDepository
+      | FailReason.InvalidAction ->
+         logError mailbox $"Transfer API requires code update: {err}"
+
+         getEmailRef mailbox.System
+         <! EmailMessage.ApplicationErrorRequiresSupport(
+            string err,
+            txn.Sender.OrgId
+         )
+      | FailReason.InvalidAmount
+      | FailReason.InvalidAccountInfo
+      | FailReason.AccountClosed
+      | _ ->
+         let msg =
+            Command.fail txn err
+            |> AccountCommand.FailDomesticTransfer
+            |> AccountMessage.StateChange
+
+         accountRef <! msg
+
 let protectedAction
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (networkRequest: DomesticTransferRequest)
    (mailbox: Actor<_>)
    (msg: DomesticTransferMessage)
-   : Task<unit>
+   : TaskResult<DomesticTransferServiceResponse, Err>
    =
-   match msg with
-   | DomesticTransferMessage.TransferRequest(action, txn) -> task {
-      let! result = networkRequest action txn
+   task {
+      match msg with
+      | DomesticTransferMessage.TransferRequest(action, txn) ->
+         let! result = networkRequest action txn
 
-      let onOk res =
-         let accountRef = getAccountRef txn.Sender.AccountId
+         let result =
+            match result with
+            | Ok res -> Ok res
+            | Error err ->
+               match err with
+               | Err.SerializationError errMsg ->
+                  let errMsg = $"Corrupt data: {errMsg}"
+                  logError mailbox errMsg
 
-         if res.Ok then
-            let progress = progressFromResponse res
+                  Ok {
+                     Sender = networkSender txn.Sender
+                     Recipient = networkRecipient txn.Recipient
+                     Ok = false
+                     Status = ""
+                     Reason = "CorruptData"
+                     TransactionId = string txn.TransferId
+                  }
+               | err -> Error err
 
-            match progress with
-            | DomesticTransferProgress.Completed ->
-               let msg =
-                  Command.complete txn
-                  |> AccountCommand.CompleteDomesticTransfer
-                  |> AccountMessage.StateChange
+         result
+         |> Result.iter (
+            onSuccessfulServiceResponse
+               mailbox
+               getAccountRef
+               getEmailRef
+               action
+               txn
+         )
 
-               accountRef <! msg
-            | DomesticTransferProgress.InProgress progress ->
-               let msg =
-                  Command.progress txn progress
-                  |> AccountCommand.UpdateDomesticTransferProgress
-                  |> AccountMessage.StateChange
-
-               match action with
-               | DomesticTransferServiceAction.TransferAck -> accountRef <! msg
-               | DomesticTransferServiceAction.ProgressCheck ->
-                  let previousProgress = txn.Status
-
-                  if
-                     (DomesticTransferProgress.InProgress progress)
-                     <> previousProgress
-                  then
-                     accountRef <! msg
-            | _ -> ()
-         else
-            let err = failReasonFromError res.Reason
-
-            match err with
-            | FailReason.CorruptData
-            | FailReason.InvalidPaymentNetwork
-            | FailReason.InvalidDepository
-            | FailReason.InvalidAction ->
-               logError mailbox $"Transfer API requires code update: {err}"
-
-               getEmailRef mailbox.System
-               <! EmailMessage.ApplicationErrorRequiresSupport(
-                  string err,
-                  txn.Sender.OrgId
-               )
-            | FailReason.InvalidAmount
-            | FailReason.InvalidAccountInfo
-            | FailReason.AccountClosed
-            | _ ->
-               let msg =
-                  Command.fail txn err
-                  |> AccountCommand.FailDomesticTransfer
-                  |> AccountMessage.StateChange
-
-               accountRef <! msg
-
-      match result with
-      | Ok res -> onOk res
-      | Error err ->
-         match err with
-         | Err.SerializationError errMsg ->
-            let errMsg = $"Corrupt data: {errMsg}"
-            logError mailbox errMsg
-
-            onOk {
-               Sender = networkSender txn.Sender
-               Recipient = networkRecipient txn.Recipient
-               Ok = false
-               Status = ""
-               Reason = "CorruptData"
-               TransactionId = string txn.TransferId
-            }
-         | Err.NetworkError err -> failwith err.Message
-         | err -> failwith (string err)
-     }
+         return result
+   }
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
@@ -173,7 +194,10 @@ let actorProps
          > = {
       Service = CircuitBreakerService.DomesticTransfer
       onCircuitBreakerEvent = broadcaster.circuitBreaker
-      protectedAction = protectedAction getAccountRef getEmailRef networkRequest
+      protectedAction =
+         fun mailbox msg ->
+            protectedAction getAccountRef getEmailRef networkRequest mailbox msg
+            |> TaskResult.ignore
       queueMessageToActionRequests = fun _ msg -> Task.FromResult(Some [ msg ])
    }
 

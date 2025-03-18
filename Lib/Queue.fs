@@ -126,7 +126,7 @@ type QueueConsumerOptions<'QueueMessage, 'ActionRequest> = {
    queueMessageToActionRequests:
       Actor<obj> -> 'QueueMessage -> Task<'ActionRequest list option>
    /// The action to protect with circuit breaker
-   protectedAction: Actor<obj> -> 'ActionRequest -> Task<unit>
+   protectedAction: Actor<obj> -> 'ActionRequest -> Task<Result<unit, Err>>
 }
 
 let private initConsumerStream
@@ -227,8 +227,12 @@ let private initConsumerStream
          else
             try
                do!
-                  breaker.WithCircuitBreaker(fun () ->
-                     opts.protectedAction mailbox request)
+                  breaker.WithCircuitBreaker(fun () -> task {
+                     match! opts.protectedAction mailbox request with
+                     | Ok() -> return ()
+                     // Raise exception to trip the circuit breaker
+                     | Error e -> return failwith (string e)
+                  })
                   |> Async.AwaitTask
 
                do! committable.Ack() |> Async.AwaitTask
@@ -238,7 +242,7 @@ let private initConsumerStream
                logError
                   $"Error Processing Protected Action ({opts.Service}): {request} {e.Message}"
 
-         return 100
+         return Akka.NotUsed.Instance
       })
    |> Source.toMat sink Keep.none
    |> Graph.run materializer

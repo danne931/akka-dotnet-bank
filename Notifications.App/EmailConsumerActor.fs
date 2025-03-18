@@ -17,8 +17,6 @@ open Bank.Employee.Domain
 open SignalRBroadcast
 open Email
 
-let mutable cnt = 0
-
 module private EmailRequest =
    type PreliminaryT = {
       OrgId: OrgId
@@ -103,28 +101,36 @@ let private emailPropsFromMessage
       |}
      }
 
-// NOTE
-// Raise an exception instead of returning Result.Error to trip circuit breaker.
-let private sendEmail (client: HttpClient) (data: EmailRequest.T) = task {
-   use! response =
-      client.PostAsJsonAsync(
-         "track",
-         {|
-            orgId = data.OrgId
-            event = data.Event
-            email = data.Email
-            data = data.Data
-         |}
-      )
+let private sendEmail
+   (client: HttpClient)
+   (data: EmailRequest.T)
+   : TaskResult<HttpResponseMessage, Err>
+   =
+   task {
+      try
+         use! response =
+            client.PostAsJsonAsync(
+               "track",
+               {|
+                  orgId = data.OrgId
+                  event = data.Event
+                  email = data.Email
+                  data = data.Data
+               |}
+            )
 
-   if not response.IsSuccessStatusCode then
-      let! content = response.Content.ReadFromJsonAsync()
+         if not response.IsSuccessStatusCode then
+            let! content = response.Content.ReadFromJsonAsync()
 
-      return
-         failwith $"Error sending email: {response.ReasonPhrase} - {content}"
-   else
-      return response
-}
+            let errMsg =
+               $"Error sending email: {response.ReasonPhrase} - {content}"
+
+            return Error(Err.UnexpectedError errMsg)
+         else
+            return Ok response
+      with e ->
+         return Error(Err.UnexpectedError e.Message)
+   }
 
 let private createClient (bearerToken: string) =
    let client =
@@ -135,10 +141,15 @@ let private createClient (bearerToken: string) =
 
    client
 
+// Formulate an EmailRequest configured with the specified Email
+// from the EmailMessage.
+// If no specified Email then formulate an EmailRequest for each
+// admin of the organization.
 let private queueMessageToActionRequest
    (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
    (mailbox: Actor<_>)
    (msg: EmailMessage)
+   : EmailRequest.T list option Task
    =
    task {
       let preliminaryInfo = emailPropsFromMessage msg
@@ -184,9 +195,7 @@ let actorProps
       Service = CircuitBreakerService.Email
       onCircuitBreakerEvent = broadcaster.circuitBreaker
       protectedAction =
-         fun _ emailData ->
-            cnt <- cnt + 1
-            sendEmail client emailData |> Task.map ignore
+         fun _ emailData -> sendEmail client emailData |> TaskResult.ignore
       queueMessageToActionRequests =
          queueMessageToActionRequest getAdminEmailsForOrg
    }
