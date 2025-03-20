@@ -34,7 +34,7 @@ module.exports = (env, argv) => {
     plugins: [
       new Dotenv(),
       new HtmlWebpackPlugin({
-        title: 'Bank',
+        title: 'Phoenix Banking',
         template: './src/index.html',
         meta: {
           viewport: 'width=device-width, initial-scale=1'
@@ -57,6 +57,10 @@ module.exports = (env, argv) => {
         {
           test: /\.css$/i,
           use: ['style-loader', 'css-loader']
+        },
+        {
+          test: /\.svg$/i,
+          type: 'asset/resource'
         }
       ]
     },

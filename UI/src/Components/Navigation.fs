@@ -2,9 +2,13 @@
 module Navigation
 
 open Feliz
+open Feliz.Router
+open Fable.Core.JsInterop
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
+
+let logoSrc: string = importDefault "../../assets/logo.svg"
 
 type UserSessionMsg = UserSessionProvider.Msg
 
@@ -89,11 +93,20 @@ let NavigationComponent () =
 
    classyNode Html.nav [ "container-fluid" ] [
       Html.ul [
+         Html.img [
+            attr.src logoSrc
+            attr.alt "Phoenix Logo"
+            attr.width 80
+            attr.height 80
+         ]
+
          Html.li [
             Html.a [
                attr.href ""
-               attr.onClick (fun e -> e.preventDefault ())
-               attr.children [ Html.strong "Bank" ]
+               attr.onClick (fun e ->
+                  e.preventDefault ()
+                  Router.navigate Routes.AnalyticsUrl.BasePath)
+               attr.children [ Html.strong "Phoenix Banking" ]
             ]
          ]
       ]
