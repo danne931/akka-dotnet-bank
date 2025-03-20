@@ -51,14 +51,8 @@ let positiveAmountParser
    amountValidatorFromString field amt
    |> Result.bind (
       PositiveAmount.create
-      >> function
-         | Some amt -> Ok amt
-         | None ->
-            Error(
-               ValidationErrors.create field [
-                  "amount should be greater than 0"
-               ]
-            )
+      >> Result.mapError (fun _ ->
+         ValidationErrors.create field [ "amount should be greater than 0" ])
    )
 
 let rec trimLeadingZeros (input: string) : string =

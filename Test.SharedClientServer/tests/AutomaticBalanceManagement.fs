@@ -50,7 +50,8 @@ module Stub =
          AccountId = accountB
          OrgId = orgId
       }
-      TargetAccountBalance = (PositiveAmount.create 113_000m).Value
+      TargetAccountBalance =
+         PositiveAmount.create 113_000m |> Result.toOption |> _.Value
       TargetBalanceRange = None
    }
 
@@ -80,7 +81,8 @@ module Stub =
             AccountId = accountIdB
             OrgId = orgId
          }
-         TargetAccountBalance = (PositiveAmount.create 113_000m).Value
+         TargetAccountBalance =
+            PositiveAmount.create 113_000m |> Result.toOption |> _.Value
          TargetBalanceRange = None
       }
 
@@ -261,17 +263,27 @@ let tests =
 
          let rule = Expect.wantOk res ""
 
-         let balance = (PositiveAmount.create 1_000m).Value
+         let balance =
+            PositiveAmount.create 1_000m |> Result.toOption |> _.Value
+
          let computed = PercentDistributionRule.computeTransfer rule balance
 
          let findComputed (accountId: AccountId) =
             computed |> List.find (fun t -> t.Recipient.AccountId = accountId)
 
          let compute1 = findComputed recipient1.AccountId
-         Expect.equal compute1.Amount (PositiveAmount.create 750m).Value ""
+
+         Expect.equal
+            compute1.Amount
+            (Result.toOption (PositiveAmount.create 750m)).Value
+            ""
 
          let compute2 = findComputed recipient2.AccountId
-         Expect.equal compute2.Amount (PositiveAmount.create 250m).Value ""
+
+         Expect.equal
+            compute2.Amount
+            (Result.toOption (PositiveAmount.create 250m)).Value
+            ""
       }
 
       test "Zero balance rule computeTransfer" {
@@ -280,7 +292,7 @@ let tests =
             Recipient = Stub.recipient
          }
 
-         let balance = (PositiveAmount.create 1500m).Value
+         let balance = (Result.toOption (PositiveAmount.create 1500m)).Value
          let compute = ZeroBalanceRule.computeTransfer rule balance
 
          Expect.equal compute.Amount balance ""
@@ -311,8 +323,14 @@ let tests =
             rule with
                TargetBalanceRange =
                   Some {
-                     LowerBound = (PositiveAmount.create (balance - 100m)).Value
-                     UpperBound = (PositiveAmount.create (balance + 150m)).Value
+                     LowerBound =
+                        PositiveAmount.create (balance - 100m)
+                        |> Result.toOption
+                        |> _.Value
+                     UpperBound =
+                        PositiveAmount.create (balance + 150m)
+                        |> Result.toOption
+                        |> _.Value
                   }
          }
 

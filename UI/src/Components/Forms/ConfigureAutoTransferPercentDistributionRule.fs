@@ -235,11 +235,11 @@ let renderCalculationDisplay (target: Account) (r: PercentDistributionRule.T) =
       Html.hr []
 
       match PositiveAmount.create target.Balance with
-      | None ->
+      | Error _ ->
          Html.p
             $"Balance of {targetName} is too low for distribution,
               so no transfer needed."
-      | Some balance ->
+      | Ok balance ->
          let computed = PercentDistributionRule.computeTransfer r balance
 
          let totalAmount =

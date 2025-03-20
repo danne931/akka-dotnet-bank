@@ -551,12 +551,15 @@ module PositiveAmount =
    type T = private PositiveAmount of decimal
 
    let create (value: decimal) =
-      if value > 0m then Some(PositiveAmount value) else None
+      if value > 0m then
+         Ok(PositiveAmount value)
+      else
+         Error "Non-Positive Amount"
 
    let get (PositiveAmount v) = v
 
-   let map (transform: decimal -> decimal) (amount: T) : T =
-      amount |> get |> transform |> PositiveAmount
+   let tryMap (transform: decimal -> decimal) (amount: T) : Result<T, string> =
+      amount |> get |> transform |> create
 
    let map2
       (transform: decimal * decimal -> decimal)

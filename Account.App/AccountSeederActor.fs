@@ -908,11 +908,19 @@ let configureAutoTransferRules
                   AutomaticTransferRule.TargetBalance {
                      TargetAccount = target
                      TargetAccountBalance =
-                        (PositiveAmount.create 40_000m).Value
+                        PositiveAmount.create 40_000m
+                        |> Result.toOption
+                        |> _.Value
                      TargetBalanceRange =
                         Some {
-                           LowerBound = (PositiveAmount.create 30_000m).Value
-                           UpperBound = (PositiveAmount.create 50_000m).Value
+                           LowerBound =
+                              PositiveAmount.create 30_000m
+                              |> Result.toOption
+                              |> _.Value
+                           UpperBound =
+                              PositiveAmount.create 50_000m
+                              |> Result.toOption
+                              |> _.Value
                         }
                      ManagingPartnerAccount = {
                         OrgId = partner.OrgId

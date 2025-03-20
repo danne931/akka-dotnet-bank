@@ -143,10 +143,11 @@ module PercentDistributionRule =
             destination
             |> List.choose (fun o ->
                PositiveAmount.create o.ProposedPercentAllocated
-               |> Option.map (fun allocated -> {
+               |> Result.map (fun allocated -> {
                   Recipient = o.Recipient
                   PercentAllocated = allocated
-               }))
+               })
+               |> Result.toOption)
 
          let! destination =
             if destination.Length = unvalidatedDestination.Length then
@@ -228,12 +229,10 @@ module TargetBalanceRule =
          rangeSatisfied
          && currBalance < (PositiveAmount.get rule.TargetAccountBalance)
       then
-         let transferAmount =
-            PositiveAmount.map
-               (fun target -> target - currBalance)
-               rule.TargetAccountBalance
-
-         Some {
+         PositiveAmount.tryMap
+            (fun target -> target - currBalance)
+            rule.TargetAccountBalance
+         |> Result.map (fun transferAmount -> {
             Amount = transferAmount
             Sender = {
                Name = partner.Name
@@ -245,17 +244,16 @@ module TargetBalanceRule =
                AccountId = target.AccountId
                OrgId = target.OrgId
             }
-         }
+         })
+         |> Result.toOption
       elif
          rangeSatisfied
          && currBalance > (PositiveAmount.get rule.TargetAccountBalance)
       then
-         let transferAmount =
-            PositiveAmount.map
-               (fun target -> currBalance - target)
-               rule.TargetAccountBalance
-
-         Some {
+         PositiveAmount.tryMap
+            (fun target -> currBalance - target)
+            rule.TargetAccountBalance
+         |> Result.map (fun transferAmount -> {
             Amount = transferAmount
             Sender = {
                Name = target.Name
@@ -267,7 +265,8 @@ module TargetBalanceRule =
                AccountId = partner.AccountId
                OrgId = partner.OrgId
             }
-         }
+         })
+         |> Result.toOption
       else
          None
 
@@ -300,17 +299,19 @@ let computeTransfer
    match rule with
    | AutomaticTransferRule.ZeroBalance r ->
       PositiveAmount.create currBalance
-      |> Option.map (fun balance -> [
+      |> Result.map (fun balance -> [
          {
             Rule = rule
             Transfer = ZeroBalanceRule.computeTransfer r balance
          }
       ])
+      |> Result.toOption
    | AutomaticTransferRule.TargetBalance r ->
       TargetBalanceRule.computeTransfer r currBalance
       |> Option.map (fun transfer -> [ { Rule = rule; Transfer = transfer } ])
    | AutomaticTransferRule.PercentDistribution r ->
       PositiveAmount.create currBalance
+      |> Result.toOption
       |> Option.map (fun balance ->
          PercentDistributionRule.computeTransfer r balance
          |> List.map (fun t -> { Transfer = t; Rule = rule }))

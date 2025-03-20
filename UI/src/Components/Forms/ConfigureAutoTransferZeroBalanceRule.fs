@@ -116,11 +116,11 @@ let renderCalculationDisplay (target: Account) (rule: ZeroBalanceRule) =
       Html.hr []
 
       match PositiveAmount.create target.Balance with
-      | None ->
+      | Error _ ->
          Html.p
             $"Balance of {targetName} is currently zero, 
               so no initial transfer is needed."
-      | Some balance ->
+      | Ok balance ->
          let amount =
             ZeroBalanceRule.computeTransfer rule balance
             |> _.Amount
