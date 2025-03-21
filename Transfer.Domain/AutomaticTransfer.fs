@@ -11,7 +11,7 @@ open Bank.Transfer.Domain
 type AutoTransfer = {
    Sender: InternalTransferSender
    Recipient: InternalTransferRecipient
-   Amount: PositiveAmount.T
+   Amount: PositiveAmount
 }
 
 /// Move 100% of account balance to an account within the org after each transaction.
@@ -23,7 +23,7 @@ type ZeroBalanceRule = {
 module ZeroBalanceRule =
    let computeTransfer
       (rule: ZeroBalanceRule)
-      (fromBalance: PositiveAmount.T)
+      (fromBalance: PositiveAmount)
       : AutoTransfer
       =
       {
@@ -76,7 +76,7 @@ type UnvalidatedDistributionDestinationAccount = {
 
 type PercentDistributionDestinationAccount = {
    Recipient: InternalTransferRecipient
-   PercentAllocated: PositiveAmount.T
+   PercentAllocated: PositiveAmount
 }
 
 /// Allocate 100% of account balance split amongst accounts within the org.
@@ -165,7 +165,7 @@ module PercentDistributionRule =
 
    let computeTransfer
       (rule: T)
-      (fromBalance: PositiveAmount.T)
+      (fromBalance: PositiveAmount)
       : AutoTransfer list
       =
       let rule = get rule
@@ -175,16 +175,15 @@ module PercentDistributionRule =
          Sender = rule.Sender
          Recipient = o.Recipient
          Amount =
-            PositiveAmount.map2
-               (fun (fromBalance, percentAllocated) ->
-                  fromBalance * percentAllocated / 100m)
-               fromBalance
-               o.PercentAllocated
+            let hundred =
+               PositiveAmount.create 100m |> Result.toOption |> _.Value
+
+            fromBalance * o.PercentAllocated / hundred
       })
 
 type TargetBalanceRange = {
-   LowerBound: PositiveAmount.T
-   UpperBound: PositiveAmount.T
+   LowerBound: PositiveAmount
+   UpperBound: PositiveAmount
 }
 
 type BiDirectionalTransferContact = {
@@ -203,7 +202,7 @@ type TargetBalanceRule = {
    /// pulling funds from ManagingPartnerAccount.
    /// If the balance rises above this target, we will restore it by
    /// transferring funds to ManagingPartnerAccount.
-   TargetAccountBalance: PositiveAmount.T
+   TargetAccountBalance: PositiveAmount
    /// If the balance is below the lower bound or above the
    /// upper bound then it will be restored to the target balance.
    TargetBalanceRange: TargetBalanceRange option

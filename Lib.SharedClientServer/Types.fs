@@ -547,26 +547,36 @@ type Email = private {
 
    static member empty = { Email = "" }
 
-module PositiveAmount =
-   type T = private PositiveAmount of decimal
+type PositiveAmount =
+   private
+   | PositiveAmount of decimal
 
-   let create (value: decimal) =
+   static member create(value: decimal) =
       if value > 0m then
          Ok(PositiveAmount value)
       else
          Error "Non-Positive Amount"
 
-   let get (PositiveAmount v) = v
+   static member get(PositiveAmount v) = v
 
-   let tryMap (transform: decimal -> decimal) (amount: T) : Result<T, string> =
-      amount |> get |> transform |> create
-
-   let map2
-      (transform: decimal * decimal -> decimal)
-      (amount: T)
-      (amount2: T)
-      : T
+   /// Have yet to refactor the codebase to use PositiveAmount more often.
+   /// When a PositiveAmount interacts with a decimal we should
+   /// use this tryMap to ensure the result of the transform is still a valid
+   /// PositiveAmount.
+   static member tryMap
+      (transform: decimal -> decimal)
+      (PositiveAmount amount)
       =
-      let amount = get amount
-      let amount2 = get amount2
-      (amount, amount2) |> transform |> PositiveAmount
+      PositiveAmount.create (transform amount)
+
+   static member (-)(PositiveAmount amt1, PositiveAmount amt2) =
+      PositiveAmount.create (amt1 - amt2)
+
+   static member (+)(PositiveAmount amt1, PositiveAmount amt2) =
+      PositiveAmount(amt1 + amt2)
+
+   static member (/)(PositiveAmount amt1, PositiveAmount amt2) =
+      PositiveAmount(amt1 / amt2)
+
+   static member (*)(PositiveAmount amt1, PositiveAmount amt2) =
+      PositiveAmount(amt1 * amt2)

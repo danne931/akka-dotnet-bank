@@ -46,7 +46,7 @@ let accountParser
 let positiveAmountParser
    (field: string)
    (amt: string)
-   : Result<PositiveAmount.T, ValidationErrors>
+   : Result<PositiveAmount, ValidationErrors>
    =
    amountValidatorFromString field amt
    |> Result.bind (

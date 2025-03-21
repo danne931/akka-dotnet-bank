@@ -55,9 +55,7 @@ let rangeLowerField (values: Values) =
             do!
                match targetBalanceParser values.TargetBalance with
                | Ok target ->
-                  if
-                     (PositiveAmount.get lower) < (PositiveAmount.get target)
-                  then
+                  if lower < target then
                      Ok()
                   else
                      Error "Lower bound should be less than target balance"
@@ -66,9 +64,7 @@ let rangeLowerField (values: Values) =
             do!
                match rangeUpperBoundParser values.RangeUpperBound with
                | Ok upper ->
-                  if
-                     (PositiveAmount.get lower) < (PositiveAmount.get upper)
-                  then
+                  if lower < upper then
                      Ok()
                   else
                      Error "Lower bound should be less than upper bound"
@@ -99,9 +95,7 @@ let rangeUpperField (values: Values) =
             do!
                match targetBalanceParser values.TargetBalance with
                | Ok target ->
-                  if
-                     (PositiveAmount.get upper) > (PositiveAmount.get target)
-                  then
+                  if upper > target then
                      Ok()
                   else
                      Error "Upper bound should be greater than target balance"
@@ -194,7 +188,7 @@ let form
 
    let renderCalculation
       (selectedAccounts: Account * Account)
-      (targetAccountBalance: PositiveAmount.T)
+      (targetAccountBalance: PositiveAmount)
       (range: TargetBalanceRange option)
       =
       let target, partner = selectedAccounts
