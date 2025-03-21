@@ -191,13 +191,17 @@ let actorProps
    : Props<obj>
    =
    let consumerQueueOpts
-      : Lib.Queue.QueueConsumerOptions<EmailMessage, EmailRequest.T> = {
+      : Lib.Queue.QueueConsumerOptions<
+           EmailMessage,
+           EmailRequest.T,
+           HttpResponseMessage
+         > = {
       Service = CircuitBreakerService.Email
       onCircuitBreakerEvent = broadcaster.circuitBreaker
-      protectedAction =
-         fun _ emailData -> sendEmail client emailData |> TaskResult.ignore
+      protectedAction = fun _ emailData -> sendEmail client emailData
       queueMessageToActionRequests =
          queueMessageToActionRequest getAdminEmailsForOrg
+      onSuccessFlow = None
    }
 
    Lib.Queue.consumerActorProps

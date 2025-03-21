@@ -119,14 +119,23 @@ let private deserializeFromQueue<'QueueMessage>
    with ex ->
       Error ex
 
-type QueueConsumerOptions<'QueueMessage, 'ActionRequest> = {
+type QueueConsumerOptions<'QueueMessage, 'ActionRequest, 'ActionResponse> = {
    Service: CircuitBreakerService
    onCircuitBreakerEvent: CircuitBreakerEvent -> unit
-   /// One rabbit message to potentially multiple protected actions
+   /// One rabbit message to potentially multiple protected action requests.
    queueMessageToActionRequests:
       Actor<obj> -> 'QueueMessage -> Task<'ActionRequest list option>
    /// The action to protect with circuit breaker
-   protectedAction: Actor<obj> -> 'ActionRequest -> Task<Result<unit, Err>>
+   protectedAction:
+      Actor<obj> -> 'ActionRequest -> Task<Result<'ActionResponse, Err>>
+   /// Allow user to specify stream-based post-processing
+   /// for successful 'ActionResponse items.
+   onSuccessFlow:
+      Akka.Streams.Dsl.Flow<
+         Actor<obj> * 'QueueMessage * 'ActionResponse,
+         'ActionResponse,
+         unit
+       > option
 }
 
 let private initConsumerStream
@@ -134,7 +143,7 @@ let private initConsumerStream
    (queueSettings: QueueSettings)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
-   (opts: QueueConsumerOptions<'QueueMessage, 'ActionRequest>)
+   (opts: QueueConsumerOptions<'QueueMessage, 'ActionRequest, 'ActionResponse>)
    (killSwitch: Akka.Streams.SharedKillSwitch)
    (mailbox: Actor<obj>)
    (maxParallel: int)
@@ -205,7 +214,7 @@ let private initConsumerStream
                | Some requests ->
                   return
                      requests
-                     |> List.map (fun info -> committable, info)
+                     |> List.map (fun info -> committable, msg, info)
                      |> Some
       })
    // Filter out items that were nacked due to circuit breaker being open,
@@ -216,9 +225,16 @@ let private initConsumerStream
    // Initiate action with circuit breaker integration.  If the action
    // fails then the message will be Nacked and attempted later when
    // the breaker transitions to HalfOpen or Closed.
-   |> Source.asyncMapUnordered
+   |> Source.asyncMap
       maxParallel
-      (fun (committable: CommittableIncomingMessage, request: 'ActionRequest) -> async {
+      (fun
+           (committable: CommittableIncomingMessage,
+            queueMessage: 'QueueMessage,
+            request: 'ActionRequest) -> async {
+         let mutable response
+            : (Actor<obj> * 'QueueMessage * 'ActionResponse) option =
+            None
+
          if breaker.IsOpen then
             logWarning
                $"CircuitBreakerOpen ({opts.Service}): Will dequeue on HalfOpen"
@@ -229,7 +245,9 @@ let private initConsumerStream
                do!
                   breaker.WithCircuitBreaker(fun () -> task {
                      match! opts.protectedAction mailbox request with
-                     | Ok() -> return ()
+                     | Ok res ->
+                        response <- Some(mailbox, queueMessage, res)
+                        return ()
                      // Raise exception to trip the circuit breaker
                      | Error e -> return failwith (string e)
                   })
@@ -242,8 +260,16 @@ let private initConsumerStream
                logError
                   $"Error Processing Protected Action ({opts.Service}): {request} {e.Message}"
 
-         return Akka.NotUsed.Instance
+         return response
       })
+   |> Source.choose id
+   |> Source.via (
+      opts.onSuccessFlow
+      |> Option.defaultValue (
+         Flow.map (fun (_, _, response) -> response) Flow.id
+      )
+   )
+   |> Source.map (fun _ -> Akka.NotUsed.Instance)
    |> Source.toMat sink Keep.none
    |> Graph.run materializer
 
@@ -259,7 +285,7 @@ let consumerActorProps
    (queueSettings: QueueSettings)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
-   (opts: QueueConsumerOptions<'QueueMessage, 'ActionRequest>)
+   (opts: QueueConsumerOptions<'QueueMessage, 'ActionRequest, 'ActionResponse>)
    : Props<obj>
    =
    let createKillSwitch () =

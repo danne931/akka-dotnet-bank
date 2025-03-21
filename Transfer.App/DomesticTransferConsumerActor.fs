@@ -6,6 +6,7 @@ open System.Text.Json
 open System.Threading.Tasks
 open Akkling
 open Akkling.Cluster.Sharding
+open Akkling.Streams
 open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
 open FsToolkit.ErrorHandling
@@ -132,8 +133,6 @@ let onSuccessfulServiceResponse
          accountRef <! msg
 
 let protectedAction
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (networkRequest: DomesticTransferRequest)
    (mailbox: Actor<_>)
    (msg: DomesticTransferMessage)
@@ -144,7 +143,7 @@ let protectedAction
       | DomesticTransferMessage.TransferRequest(action, txn) ->
          let! result = networkRequest action txn
 
-         let result =
+         return
             match result with
             | Ok res -> Ok res
             | Error err ->
@@ -162,18 +161,6 @@ let protectedAction
                      TransactionId = string txn.TransferId
                   }
                | err -> Error err
-
-         result
-         |> Result.iter (
-            onSuccessfulServiceResponse
-               mailbox
-               getAccountRef
-               getEmailRef
-               action
-               txn
-         )
-
-         return result
    }
 
 let actorProps
@@ -190,15 +177,30 @@ let actorProps
    let consumerQueueOpts
       : Lib.Queue.QueueConsumerOptions<
            DomesticTransferMessage,
-           DomesticTransferMessage
+           DomesticTransferMessage,
+           DomesticTransferServiceResponse
          > = {
       Service = CircuitBreakerService.DomesticTransfer
       onCircuitBreakerEvent = broadcaster.circuitBreaker
       protectedAction =
-         fun mailbox msg ->
-            protectedAction getAccountRef getEmailRef networkRequest mailbox msg
-            |> TaskResult.ignore
+         fun mailbox msg -> protectedAction networkRequest mailbox msg
       queueMessageToActionRequests = fun _ msg -> Task.FromResult(Some [ msg ])
+      onSuccessFlow =
+         Flow.map
+            (fun (mailbox, queueMessage, transferResponse) ->
+               match queueMessage with
+               | DomesticTransferMessage.TransferRequest(action, txn) ->
+                  onSuccessfulServiceResponse
+                     mailbox
+                     getAccountRef
+                     getEmailRef
+                     action
+                     txn
+                     transferResponse
+
+                  transferResponse)
+            Flow.id
+         |> Some
    }
 
    Lib.Queue.consumerActorProps
