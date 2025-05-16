@@ -10,7 +10,8 @@ open Bank.Org.Domain
 open Bank.Account.Domain
 open UIDomain
 open UIDomain.Employee
-open History
+open UIDomain.History
+open Transaction
 open TableControlPanel
 open EmployeeSearch
 open Lib.SharedTypes
@@ -46,7 +47,9 @@ type Msg =
    | RealtimeHistoryReceived of History
 
 let init (browserQuery: HistoryBrowserQuery) () =
-   let query = OrgService.networkQueryFromHistoryBrowserQuery browserQuery
+   let query =
+      TransactionService.networkQueryFromHistoryBrowserQuery browserQuery
+
    let paginationState, cmd = Pagination.init<HistoryCursor, History> ()
 
    {
@@ -62,7 +65,7 @@ let handlePaginationMsg orgId (state: State) (msg: Pagination.Msg<History>) =
       loadPage =
          fun cursor -> async {
             let query = { state.Query with Cursor = cursor }
-            return! OrgService.getHistory orgId query
+            return! TransactionService.getHistory orgId query
          }
       getCursor =
          fun history -> {
@@ -131,8 +134,7 @@ let renderTableRow (org: OrgWithAccountProfiles) (history: History) =
          let _, envelope = EmployeeEnvelope.unwrap h.Event
 
          match h.Event with
-         | EmployeeEvent.PurchasePending _
-         | EmployeeEvent.PurchaseConfirmedByAccount _ ->
+         | EmployeeEvent.PurchaseApplied _ ->
             Some(TransactionId envelope.CorrelationId)
          | _ -> None
       | History.Org _ -> None

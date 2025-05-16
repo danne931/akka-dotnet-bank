@@ -7,7 +7,6 @@
     <Compile Include="Environment.fs" />
     <Compile Include="InternalTransferRecipientActor.fs" />
     <Compile Include="DomesticTransferConsumerActor.fs" />
-    <Compile Include="TransferProgressTrackingActor.fs" />
     <Compile Include="AutomaticTransferSchedulingActor.fs" />
     <Compile Include="Api.fs" />
   </ItemGroup>
@@ -21,7 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../Database/Database.fsproj" />
-    <ProjectReference Include="../Notifications.App/Notifications.App.fsproj" />
+    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />
+    <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
     <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
     <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
   </ItemGroup>

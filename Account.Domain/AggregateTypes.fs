@@ -12,6 +12,7 @@ type AccountCommand =
    | CreateAccount of CreateAccountCommand
    | DepositCash of DepositCashCommand
    | Debit of DebitCommand
+   | RefundDebit of RefundDebitCommand
    | MaintenanceFee of MaintenanceFeeCommand
    | SkipMaintenanceFee of SkipMaintenanceFeeCommand
    | InternalTransfer of InternalTransferWithinOrgCommand
@@ -35,6 +36,7 @@ type AccountCommand =
    | DeclinePlatformPayment of DeclinePlatformPaymentCommand
    | FulfillPlatformPayment of FulfillPlatformPaymentCommand
    | DepositPlatformPayment of DepositPlatformPaymentCommand
+   | RefundPlatformPayment of RefundPlatformPaymentCommand
    | CloseAccount of CloseAccountCommand
    | StartBillingCycle of StartBillingCycleCommand
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
@@ -49,6 +51,7 @@ type AccountCommand =
       | CreateAccount cmd -> Command.envelope cmd
       | DepositCash cmd -> Command.envelope cmd
       | Debit cmd -> Command.envelope cmd
+      | RefundDebit cmd -> Command.envelope cmd
       | MaintenanceFee cmd -> Command.envelope cmd
       | SkipMaintenanceFee cmd -> Command.envelope cmd
       | InternalTransfer cmd -> Command.envelope cmd
@@ -70,6 +73,7 @@ type AccountCommand =
       | DeclinePlatformPayment cmd -> Command.envelope cmd
       | FulfillPlatformPayment cmd -> Command.envelope cmd
       | DepositPlatformPayment cmd -> Command.envelope cmd
+      | RefundPlatformPayment cmd -> Command.envelope cmd
       | CloseAccount cmd -> Command.envelope cmd
       | StartBillingCycle cmd -> Command.envelope cmd
       | ConfigureAutoTransferRule cmd -> Command.envelope cmd
@@ -83,6 +87,7 @@ type AccountEvent =
    | CreatedAccount of BankEvent<CreatedAccount>
    | DepositedCash of BankEvent<DepositedCash>
    | DebitedAccount of BankEvent<DebitedAccount>
+   | RefundedDebit of BankEvent<RefundedDebit>
    | MaintenanceFeeDebited of BankEvent<MaintenanceFeeDebited>
    | MaintenanceFeeSkipped of BankEvent<MaintenanceFeeSkipped>
    | InternalTransferWithinOrgPending of
@@ -113,6 +118,7 @@ type AccountEvent =
    | PlatformPaymentDeclined of BankEvent<PlatformPaymentDeclined>
    | PlatformPaymentPaid of BankEvent<PlatformPaymentPaid>
    | PlatformPaymentDeposited of BankEvent<PlatformPaymentDeposited>
+   | PlatformPaymentRefunded of BankEvent<PlatformPaymentRefunded>
    | AccountClosed of BankEvent<AccountClosed>
    | BillingCycleStarted of BankEvent<BillingCycleStarted>
    | AutoTransferRuleConfigured of BankEvent<AutomaticTransferRuleConfigured>
@@ -133,6 +139,8 @@ module AccountEvent =
          Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Origin
       | AccountEvent.DebitedAccount evt ->
          Some evt.Data.Amount, Some MoneyFlow.Out, Some evt.Data.Merchant
+      | AccountEvent.RefundedDebit evt ->
+         Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Merchant
       | AccountEvent.InternalTransferWithinOrgPending evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
@@ -205,6 +213,9 @@ module AccountEvent =
       | AccountEvent.PlatformPaymentDeposited evt ->
          let p = evt.Data.BaseInfo
          Some p.Amount, Some MoneyFlow.In, Some p.Payer.OrgName
+      | AccountEvent.PlatformPaymentRefunded evt ->
+         let p = evt.Data.BaseInfo
+         Some p.Amount, Some MoneyFlow.In, Some p.Payee.OrgName
       | _ -> None, None, None
 
 type OpenEventEnvelope = AccountEvent * Envelope
@@ -226,6 +237,7 @@ module AccountEnvelope =
       | :? BankEvent<CreatedAccount> as evt -> CreatedAccount evt
       | :? BankEvent<DepositedCash> as evt -> DepositedCash evt
       | :? BankEvent<DebitedAccount> as evt -> DebitedAccount evt
+      | :? BankEvent<RefundedDebit> as evt -> RefundedDebit evt
       | :? BankEvent<MaintenanceFeeDebited> as evt -> MaintenanceFeeDebited evt
       | :? BankEvent<MaintenanceFeeSkipped> as evt -> MaintenanceFeeSkipped evt
       | :? BankEvent<InternalTransferWithinOrgPending> as evt ->
@@ -265,6 +277,8 @@ module AccountEnvelope =
       | :? BankEvent<PlatformPaymentPaid> as evt -> PlatformPaymentPaid evt
       | :? BankEvent<PlatformPaymentDeposited> as evt ->
          PlatformPaymentDeposited evt
+      | :? BankEvent<PlatformPaymentRefunded> as evt ->
+         PlatformPaymentRefunded evt
       | :? BankEvent<AccountClosed> as evt -> AccountClosed evt
       | :? BankEvent<BillingCycleStarted> as evt -> BillingCycleStarted evt
       | :? BankEvent<AutomaticTransferRuleConfigured> as evt ->
@@ -286,6 +300,7 @@ module AccountEnvelope =
       | CreatedAccount evt -> wrap evt, get evt
       | DepositedCash evt -> wrap evt, get evt
       | DebitedAccount evt -> wrap evt, get evt
+      | RefundedDebit evt -> wrap evt, get evt
       | MaintenanceFeeDebited evt -> wrap evt, get evt
       | MaintenanceFeeSkipped evt -> wrap evt, get evt
       | InternalTransferWithinOrgPending evt -> wrap evt, get evt
@@ -307,6 +322,7 @@ module AccountEnvelope =
       | PlatformPaymentDeclined evt -> wrap evt, get evt
       | PlatformPaymentPaid evt -> wrap evt, get evt
       | PlatformPaymentDeposited evt -> wrap evt, get evt
+      | PlatformPaymentRefunded evt -> wrap evt, get evt
       | AccountClosed evt -> wrap evt, get evt
       | BillingCycleStarted evt -> wrap evt, get evt
       | AutoTransferRuleConfigured evt -> wrap evt, get evt

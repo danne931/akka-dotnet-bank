@@ -223,9 +223,20 @@ module private RetryDomesticTransfers =
             return unhandled ()
          | Ok None -> return ignored ()
          | Ok(Some transfers) ->
-            for transfer in transfers do
+            for (transfer: DomesticTransfer) in transfers do
                let msg =
-                  DomesticTransferToCommand.retry transfer
+                  DomesticTransferCommand.create
+                     (transfer.Sender.AccountId, transfer.Sender.OrgId)
+                     (transfer.TransferId |> TransferId.get |> CorrelationId)
+                     transfer.InitiatedBy
+                     {
+                        Amount = transfer.Amount
+                        Sender = transfer.Sender
+                        Recipient = transfer.Recipient
+                        Memo = transfer.Memo
+                        ScheduledDateSeedOverride = None
+                        OriginatedFromSchedule = false
+                     }
                   |> AccountCommand.DomesticTransfer
                   |> AccountMessage.StateChange
 

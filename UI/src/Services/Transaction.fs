@@ -4,16 +4,32 @@ module TransactionService
 open Fable.SimpleHttp
 open Feliz.Router
 
-open Bank.Account.Domain
 open Bank.Org.Domain
-open SignalRBroadcast
 open UIDomain
 open UIDomain.Account
+open UIDomain.History
+open Transaction
 open Lib.SharedTypes
 open RoutePaths
 open Lib.NetworkQuery
 
 let private serviceName = "TransactionService"
+
+let networkQueryFromHistoryBrowserQuery
+   (query: HistoryBrowserQuery)
+   : HistoryQuery
+   =
+   {
+      PageLimit = 40
+      Cursor = None
+      DateRange = query.Date |> Option.map UIDomain.DateFilter.toDateRange
+      EmployeeEventType = query.EmployeeEventType
+      AccountEventType = query.AccountEventType
+      OrgEventType = query.OrgEventType
+      InitiatedByIds =
+         query.SelectedInitiatedBy
+         |> Option.map (List.map (_.Id >> InitiatedById))
+   }
 
 let transactionQueryFromAccountBrowserQuery
    (orgId: OrgId)
@@ -83,7 +99,53 @@ let transactionQueryParams (query: TransactionQuery) : (string * string) list =
    | Some(startDate, endDate) ->
       ("date", DateTime.rangeAsQueryString startDate endDate) :: queryParams
 
-open Transaction
+let getHistory (orgId: OrgId) (query: HistoryQuery) : Async<HistoryMaybe> = async {
+   let queryParams =
+      [
+         "pageLimit", string query.PageLimit
+
+         match query.Cursor with
+         | Some cursor ->
+            "cursorTimestamp", DateTime.toISOString cursor.Timestamp
+            "cursorEventId", string cursor.EventId
+         | None -> ()
+
+         match query.InitiatedByIds with
+         | None -> ()
+         | Some ids -> "initiatedByIds", listToQueryString ids
+
+         match query.EmployeeEventType with
+         | None -> ()
+         | Some filters -> "employeeEventFilters", listToQueryString filters
+
+         match query.AccountEventType with
+         | None -> ()
+         | Some filters -> "accountEventFilters", listToQueryString filters
+
+         match query.OrgEventType with
+         | None -> ()
+         | Some filters -> "orgEventFilters", listToQueryString filters
+
+         match query.DateRange with
+         | None -> ()
+         | Some(startDate, endDate) ->
+            "date", DateTime.rangeAsQueryString startDate endDate
+      ]
+      |> Router.encodeQueryString
+
+   let path = TransactionPath.history orgId + queryParams
+   let! (code, responseText) = Http.get path
+
+   if code = 404 then
+      return Ok None
+   elif code <> 200 then
+      return Error <| Err.InvalidStatusCodeError(serviceName, code)
+   else
+      return
+         responseText
+         |> Serialization.deserialize<Transaction.History list>
+         |> Result.map Some
+}
 
 let getTransactions (query: TransactionQuery) : Async<TransactionsMaybe> = async {
    let basePath = TransactionPath.transactions query.OrgId

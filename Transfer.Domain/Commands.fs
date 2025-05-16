@@ -13,6 +13,8 @@ type InternalTransferInput = {
    Recipient: InternalTransferRecipient
    Sender: InternalTransferSender
    ScheduledDateSeedOverride: DateTime option
+   /// Indicates whether this transfer originated from a scheduled job.
+   OriginatedFromSchedule: bool
 }
 
 type ScheduleInternalTransferInput = {
@@ -60,6 +62,7 @@ module InternalTransferWithinOrgCommand =
                         info.ScheduledDateSeedOverride
                         |> Option.defaultValue cmd.Timestamp
                      Sender = info.Sender
+                     Memo = info.Memo
                   }
                }
       }
@@ -140,7 +143,7 @@ module InternalTransferBetweenOrgsCommand =
              >
                cmd
                {
-                  Memo = info.Memo
+                  FromSchedule = info.OriginatedFromSchedule
                   BaseInfo = {
                      TransferId =
                         cmd.CorrelationId |> CorrelationId.get |> TransferId
@@ -151,6 +154,7 @@ module InternalTransferBetweenOrgsCommand =
                         info.ScheduledDateSeedOverride
                         |> Option.defaultValue cmd.Timestamp
                      Sender = info.Sender
+                     Memo = info.Memo
                   }
                }
       }
@@ -189,7 +193,6 @@ module ScheduleInternalTransferBetweenOrgsCommand =
              >
                cmd
                {
-                  Memo = info.Memo
                   BaseInfo = {
                      TransferId =
                         cmd.CorrelationId |> CorrelationId.get |> TransferId
@@ -198,31 +201,9 @@ module ScheduleInternalTransferBetweenOrgsCommand =
                      Amount = info.Amount
                      ScheduledDate = cmd.Data.ScheduledDate
                      Sender = info.Sender
+                     Memo = info.Memo
                   }
                }
-      }
-
-   let initiateTransferCommand
-      (data: InternalTransferBetweenOrgsScheduled)
-      : InternalTransferBetweenOrgsCommand
-      =
-      let info = data.BaseInfo
-
-      let cmd =
-         InternalTransferBetweenOrgsCommand.create
-            (info.Sender.AccountId, info.Sender.OrgId)
-            info.InitiatedBy
-            {
-               Amount = info.Amount
-               Sender = info.Sender
-               Recipient = info.Recipient
-               Memo = data.Memo
-               ScheduledDateSeedOverride = None
-            }
-
-      {
-         cmd with
-            CorrelationId = info.TransferId |> TransferId.get |> CorrelationId
       }
 
 type CompleteInternalTransferBetweenOrgsCommand =
@@ -511,6 +492,7 @@ type DomesticTransferInput = {
    Recipient: DomesticTransferRecipient
    Memo: string option
    ScheduledDateSeedOverride: DateTime option
+   OriginatedFromSchedule: bool
 }
 
 type ScheduleDomesticTransferInput = {
@@ -547,6 +529,7 @@ module DomesticTransferCommand =
             BankEvent.create2<DomesticTransferInput, DomesticTransferPending>
                cmd
                {
+                  FromSchedule = input.OriginatedFromSchedule
                   BaseInfo = {
                      TransferId =
                         cmd.CorrelationId |> CorrelationId.get |> TransferId
@@ -608,24 +591,6 @@ module ScheduleDomesticTransferCommand =
                   }
                }
       }
-
-   let initiateTransferCommand
-      (data: DomesticTransferScheduled)
-      : DomesticTransferCommand
-      =
-      let info = data.BaseInfo
-
-      DomesticTransferCommand.create
-         (info.Sender.AccountId, info.Sender.OrgId)
-         (info.TransferId |> TransferId.get |> CorrelationId)
-         info.InitiatedBy
-         {
-            Amount = info.Amount
-            Sender = info.Sender
-            Recipient = info.Recipient
-            Memo = info.Memo
-            ScheduledDateSeedOverride = None
-         }
 
 type CompleteDomesticTransferCommand = Command<DomesticTransferCompleted>
 
@@ -693,80 +658,6 @@ module UpdateDomesticTransferProgressCommand =
       : ValidationResult<BankEvent<DomesticTransferProgressUpdate>>
       =
       BankEvent.create<DomesticTransferProgressUpdate> cmd |> Ok
-
-module DomesticTransferToCommand =
-   /// Received a "InProgress" progress response from domestic transfer service.
-   let progress (txn: DomesticTransfer) (progress: DomesticTransferInProgress) =
-      UpdateDomesticTransferProgressCommand.create
-         (txn.Sender.AccountId, txn.Sender.OrgId)
-         (txn.TransferId |> TransferId.get |> CorrelationId)
-         txn.InitiatedBy
-         {
-            BaseInfo = {
-               TransferId = txn.TransferId
-               InitiatedBy = txn.InitiatedBy
-               Sender = txn.Sender
-               Recipient = txn.Recipient
-               ScheduledDate = txn.ScheduledDate
-               Amount = txn.Amount
-               Memo = txn.Memo
-            }
-            InProgressInfo = progress
-         }
-
-   /// Received a "Complete" progress response from domestic transfer service.
-   let complete (txn: DomesticTransfer) =
-      CompleteDomesticTransferCommand.create
-         (txn.Sender.AccountId, txn.Sender.OrgId)
-         (txn.TransferId |> TransferId.get |> CorrelationId)
-         txn.InitiatedBy
-         {
-            BaseInfo = {
-               TransferId = txn.TransferId
-               InitiatedBy = txn.InitiatedBy
-               Sender = txn.Sender
-               Recipient = txn.Recipient
-               ScheduledDate = txn.ScheduledDate
-               Amount = txn.Amount
-               Memo = txn.Memo
-            }
-            // Will be overwritten during the account actor state transition
-            // upon detecting a previously failed transfer by txn.TransferId.
-            FromRetry = None
-         }
-
-   /// Received a "Failed" response from domestic transfer service.
-   let fail (txn: DomesticTransfer) (reason: DomesticTransferFailReason) =
-      FailDomesticTransferCommand.create
-         (txn.Sender.AccountId, txn.Sender.OrgId)
-         (txn.TransferId |> TransferId.get |> CorrelationId)
-         txn.InitiatedBy
-         {
-            BaseInfo = {
-               TransferId = txn.TransferId
-               InitiatedBy = txn.InitiatedBy
-               Sender = txn.Sender
-               Recipient = txn.Recipient
-               ScheduledDate = txn.ScheduledDate
-               Amount = txn.Amount
-               Memo = txn.Memo
-            }
-            Reason = reason
-         }
-
-   let retry (txn: DomesticTransfer) =
-      Command.create
-         (AccountId.toEntityId txn.Sender.AccountId)
-         txn.Sender.OrgId
-         (txn.TransferId |> TransferId.get |> CorrelationId)
-         txn.InitiatedBy
-         {
-            Amount = txn.Amount
-            Sender = txn.Sender
-            Recipient = txn.Recipient
-            Memo = txn.Memo
-            ScheduledDateSeedOverride = None
-         }
 
 type PlatformPaymentRequestInput = {
    BaseInfo: PlatformPaymentBaseInfo
@@ -930,6 +821,27 @@ module DepositPlatformPaymentCommand =
       =
       BankEvent.create<PlatformPaymentDeposited> cmd |> Ok
 
+type RefundPlatformPaymentCommand = Command<PlatformPaymentRefunded>
+
+module RefundPlatformPaymentCommand =
+   let create
+      (accountId: AccountId, orgId: OrgId)
+      (initiatedBy: Initiator)
+      (data: PlatformPaymentRefunded)
+      =
+      Command.create
+         (AccountId.toEntityId accountId)
+         orgId
+         (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
+         initiatedBy
+         data
+
+   let toEvent
+      (cmd: RefundPlatformPaymentCommand)
+      : ValidationResult<BankEvent<PlatformPaymentRefunded>>
+      =
+      BankEvent.create<PlatformPaymentRefunded> cmd |> Ok
+
 type ConfigureAutoTransferRuleInput = {
    RuleIdToUpdate: Guid option
    Rule: AutomaticTransferRule
@@ -1001,10 +913,7 @@ module InternalAutoTransferCommand =
          (AccountId.toEntityId t.Sender.AccountId)
          t.Sender.OrgId
          (CorrelationId.create ())
-         {
-            Id = InitiatedById Constants.SYSTEM_USER_ID
-            Name = "System"
-         }
+         Initiator.System
          data
 
    let toEvent
@@ -1031,6 +940,7 @@ module InternalAutoTransferCommand =
                      Amount = PositiveAmount.get t.Amount
                      ScheduledDate = cmd.Timestamp
                      Sender = t.Sender
+                     Memo = None
                   }
                }
       }

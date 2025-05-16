@@ -3,6 +3,7 @@ namespace Bank.Employee.Domain
 open System
 
 open Lib.SharedTypes
+open Bank.Account.Domain
 
 type CreatedAccountOwner = {
    Email: Email
@@ -35,13 +36,11 @@ type InvitationCancelled = { Reason: string option }
 
 type CreatedCard = { PersonName: string; Card: Card }
 
-type PurchasePending = { Info: PurchaseInfo }
+type PurchaseApplied = { Info: PurchaseInfo }
 
-type PurchaseConfirmedByAccount = { Info: PurchaseInfo }
-
-type PurchaseRejectedByAccount = {
+type PurchaseRefunded = {
    Info: PurchaseInfo
-   Reason: PurchaseFailReason
+   Reason: PurchaseRefundReason
 }
 
 type DailyDebitLimitUpdated = {

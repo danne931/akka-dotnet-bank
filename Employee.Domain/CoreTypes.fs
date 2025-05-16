@@ -153,36 +153,6 @@ type EmployeeStatus =
       | PendingRestoreAccessApproval -> "PendingRestoreAccessApproval"
       | ReadyForDelete -> "ReadyForDelete"
 
-type PurchaseInfo = {
-   AccountId: AccountId
-   InitiatedBy: Initiator
-   CorrelationId: CorrelationId
-   CardId: CardId
-   CardNumberLast4: string
-   Date: DateTime
-   Amount: decimal
-   Merchant: string
-   Reference: string option
-}
-
-[<RequireQualifiedAccess>]
-type PurchaseFailReason =
-   | InsufficientAccountFunds of balance: decimal * accountName: string
-   | ExceededDailyCardLimit of limit: decimal * accrued: decimal
-   | ExceededMonthlyCardLimit of limit: decimal * accrued: decimal
-
-module PurchaseFailReason =
-   let display =
-      function
-      | PurchaseFailReason.InsufficientAccountFunds(balance, accountName) ->
-         $"Account {accountName} has insufficient funds.  The current balance is ${balance}."
-      | PurchaseFailReason.ExceededDailyCardLimit(limit, accrued) ->
-         $"You have spent ${accrued} today. 
-           Your daily purchase limit is set to ${limit}."
-      | PurchaseFailReason.ExceededMonthlyCardLimit(limit, accrued) ->
-         $"You have spent ${accrued} this month. 
-           Your monthly purchase limit is set to ${limit}."
-
 /// Tasks to initiate upon employee invite confirmation.
 type EmployeeOnboardingTask = CreateCard of EmployeeInviteSupplementaryCardInfo
 

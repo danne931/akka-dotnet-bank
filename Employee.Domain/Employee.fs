@@ -17,11 +17,18 @@ let private purchaseAccrued
    List.fold
       (fun acc evt ->
          match evt with
-         | PurchaseConfirmedByAccount e ->
+         | PurchaseApplied e ->
             let e = e.Data.Info
 
             if e.CardId = cardId && satisfiesDate e.Date then
                acc + e.Amount
+            else
+               acc
+         | PurchaseRefunded e ->
+            let e = e.Data.Info
+
+            if e.CardId = cardId && satisfiesDate e.Date then
+               acc - e.Amount
             else
                acc
          | _ -> acc)
@@ -49,7 +56,6 @@ let applyEvent
          LastName = e.Data.LastName
          Cards = Map.empty
          Status = EmployeeStatus.PendingInviteConfirmation e.Data.InviteToken
-         PendingPurchases = Map.empty
          OnboardingTasks = []
          AuthProviderUserId = None
         }
@@ -72,7 +78,6 @@ let applyEvent
                )
             | None ->
                EmployeeStatus.PendingInviteConfirmation(InviteToken.generate ())
-         PendingPurchases = Map.empty
          OnboardingTasks =
             match e.Data.CardInfo with
             | Some cardInfo -> [ EmployeeOnboardingTask.CreateCard cardInfo ]
@@ -90,14 +95,8 @@ let applyEvent
                   |> List.filter (function
                      | EmployeeOnboardingTask.CreateCard _ -> false)
          }
-      | PurchasePending e -> {
+      | PurchaseApplied e -> {
          em with
-            PendingPurchases =
-               em.PendingPurchases |> Map.add e.CorrelationId e.Data.Info
-        }
-      | PurchaseConfirmedByAccount e -> {
-         em with
-            PendingPurchases = em.PendingPurchases |> Map.remove e.CorrelationId
             Cards =
                Map.change
                   e.Data.Info.CardId
@@ -108,10 +107,7 @@ let applyEvent
                   em.Cards
 
         }
-      | PurchaseRejectedByAccount e -> {
-         em with
-            PendingPurchases = em.PendingPurchases |> Map.remove e.CorrelationId
-        }
+      | PurchaseRefunded _ -> em
       | DailyDebitLimitUpdated e -> {
          em with
             Cards =
@@ -270,7 +266,7 @@ module private StateTransition =
       else
          map UnlockedCard state (UnlockCardCommand.toEvent cmd)
 
-   let purchasePending (state: EmployeeSnapshot) (cmd: PurchasePendingCommand) =
+   let purchase (state: EmployeeSnapshot) (cmd: PurchaseCommand) =
       let em = state.Info
       let info = cmd.Data
 
@@ -299,43 +295,15 @@ module private StateTransition =
                transitionErr
                <| ExceededMonthlyDebit(card.DailyPurchaseLimit, dpa)
             else
-               map PurchasePending state (PurchasePendingCommand.toEvent cmd)
+               map PurchaseApplied state (PurchaseCommand.toEvent cmd)
 
-   let accountConfirmsPurchase
-      (state: EmployeeSnapshot)
-      (cmd: AccountConfirmsPurchaseCommand)
-      =
+   let refundPurchase (state: EmployeeSnapshot) (cmd: RefundPurchaseCommand) =
       let em = state.Info
 
       if em.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotActive
-      elif
-         Option.isNone <| Map.tryFind cmd.CorrelationId em.PendingPurchases
-      then
-         transitionErr DebitAlreadyProgressedToCompletedOrFailed
       else
-         map
-            PurchaseConfirmedByAccount
-            state
-            (AccountConfirmsPurchaseCommand.toEvent cmd)
-
-   let accountRejectsPurchase
-      (state: EmployeeSnapshot)
-      (cmd: AccountRejectsPurchaseCommand)
-      =
-      let em = state.Info
-
-      if em.Status <> EmployeeStatus.Active then
-         transitionErr EmployeeNotActive
-      elif
-         Option.isNone <| Map.tryFind cmd.CorrelationId em.PendingPurchases
-      then
-         transitionErr DebitAlreadyProgressedToCompletedOrFailed
-      else
-         map
-            PurchaseRejectedByAccount
-            state
-            (AccountRejectsPurchaseCommand.toEvent cmd)
+         map PurchaseRefunded state (RefundPurchaseCommand.toEvent cmd)
 
    let updateRole (state: EmployeeSnapshot) (cmd: UpdateRoleCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
@@ -416,12 +384,9 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
       StateTransition.createAccountOwner state cmd
    | EmployeeCommand.CreateEmployee cmd -> StateTransition.create state cmd
    | EmployeeCommand.CreateCard cmd -> StateTransition.createCard state cmd
-   | EmployeeCommand.PurchasePending cmd ->
-      StateTransition.purchasePending state cmd
-   | EmployeeCommand.AccountConfirmsPurchase cmd ->
-      StateTransition.accountConfirmsPurchase state cmd
-   | EmployeeCommand.AccountRejectsPurchase cmd ->
-      StateTransition.accountRejectsPurchase state cmd
+   | EmployeeCommand.Purchase cmd -> StateTransition.purchase state cmd
+   | EmployeeCommand.RefundPurchase cmd ->
+      StateTransition.refundPurchase state cmd
    | EmployeeCommand.LimitDailyDebits cmd ->
       StateTransition.limitDailyDebits state cmd
    | EmployeeCommand.LimitMonthlyDebits cmd ->
@@ -451,7 +416,6 @@ let empty: Employee = {
    LastName = ""
    Status = EmployeeStatus.InitialEmptyState
    Cards = Map.empty
-   PendingPurchases = Map.empty
    OnboardingTasks = []
    AuthProviderUserId = None
 }

@@ -76,7 +76,7 @@ module Writer =
       approvers
       |> List.map (function
          // NOTE: SYSTEM_USER_ID used in the DB to indicate "AnyAdmin".
-         | CommandApprover.AnyAdmin -> EmployeeId.get Constants.SYSTEM_USER_ID
+         | CommandApprover.AnyAdmin -> InitiatedById.get Initiator.System.Id
          | CommandApprover.Admin a -> EmployeeId.get a.EmployeeId)
       |> Array.ofList
       |> Sql.uuidArray

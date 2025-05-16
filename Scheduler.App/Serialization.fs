@@ -8,14 +8,27 @@ open Akka.Actor
 open Lib.SharedTypes
 
 open Bank.Account.Domain
-open Bank.Transfer.Domain
 open BillingStatement
+open Bank.Scheduler
 
 // NOTE:
 // Using a QuartzMessageEnvelope type for messages serialized with
 // Akka.Quartz.Actor until serialization PR merged.  Akka.Quartz.Actor
 // is always passing in Object as manifest unless this PR merged:
 // https://github.com/akkadotnet/Akka.Quartz.Actor/pull/335
+
+type private QuartzSagaMessageEnvelope = {
+   Manifest: string
+   Message: {|
+      SagaMessage: Lib.Saga.SagaMessage<AppSaga.Event>
+      CorrelationId: CorrelationId
+   |}
+}
+
+type private QuartzSagaAlarmClockMessageEnvelope = {
+   Manifest: string
+   Message: Lib.Saga.SagaAlarmClockMessage
+}
 
 type private QuartzAccountMessageEnvelope = {
    Manifest: string
@@ -40,14 +53,9 @@ type private QuartzAccountClosureMessageEnvelope = {
    Message: AccountClosureMessage
 }
 
-type private QuartzTransferProgressMessageEnvelope = {
-   Manifest: string
-   Message: TransferProgressTrackingMessage
-}
-
 type private SchedulingActorMessageEnvelope = {
    Manifest: string
-   Message: SchedulingActor.Message
+   Message: SchedulerMessage
 }
 
 type QuartzSerializer(system: ExtendedActorSystem) =
@@ -61,7 +69,7 @@ type QuartzSerializer(system: ExtendedActorSystem) =
 
    override x.ToBinary(o: obj) =
       match o with
-      | :? SchedulingActor.QuartzMessageEnvelope as msg ->
+      | :? QuartzMessageEnvelope as msg ->
          JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       | _ -> raise <| NotImplementedException()
 
@@ -81,7 +89,7 @@ type QuartzSerializer(system: ExtendedActorSystem) =
    override x.FromBinary(bytes: byte[], manifest: Type) : obj =
       let deserialized =
          try
-            JsonSerializer.Deserialize<SchedulingActor.QuartzMessageEnvelope>(
+            JsonSerializer.Deserialize<QuartzMessageEnvelope>(
                bytes,
                Serialization.jsonOptions
             )
@@ -108,14 +116,6 @@ type QuartzSerializer(system: ExtendedActorSystem) =
       | "BalanceManagementMessage" ->
          let deseri =
             JsonSerializer.Deserialize<QuartzBalanceManagementMessageEnvelope>(
-               bytes,
-               Serialization.jsonOptions
-            )
-
-         deseri.Message
-      | "TransferProgressTrackingActorMessage" ->
-         let deseri =
-            JsonSerializer.Deserialize<QuartzTransferProgressMessageEnvelope>(
                bytes,
                Serialization.jsonOptions
             )
@@ -150,4 +150,33 @@ type QuartzSerializer(system: ExtendedActorSystem) =
          }
 
          msg
+      | "SagaActorMessage" ->
+         let deseri =
+            JsonSerializer.Deserialize<QuartzSagaMessageEnvelope>(
+               bytes,
+               Serialization.jsonOptions
+            )
+
+         let entityId = string deseri.Message.CorrelationId
+
+         let msg: Akkling.Cluster.Sharding.ShardEnvelope = {
+            ShardId =
+               ActorUtil
+                  .ClusterMetadata
+                  .sagaShardRegion
+                  .messageExtractor
+                  .ShardId(entityId)
+            EntityId = entityId
+            Message = deseri.Message.SagaMessage
+         }
+
+         msg
+      | "SagaAlarmClockActorMessage" ->
+         let deseri =
+            JsonSerializer.Deserialize<QuartzSagaAlarmClockMessageEnvelope>(
+               bytes,
+               Serialization.jsonOptions
+            )
+
+         deseri.Message
       | _ -> raise <| SerializationException()

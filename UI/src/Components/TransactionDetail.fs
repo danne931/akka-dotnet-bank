@@ -344,15 +344,12 @@ let renderTransactionInfo
                         | _ -> ()
                      | History.Employee employeeHistory ->
                         match employeeHistory.Event with
-                        | EmployeeEvent.PurchasePending e ->
+                        | EmployeeEvent.PurchaseApplied e ->
                            Html.p
                               $"Purchase requested by {employeeHistory.EmployeeName}'s 
                               card **{e.Data.Info.CardNumberLast4}"
-                        | EmployeeEvent.PurchaseConfirmedByAccount _ ->
-                           Html.p $"Purchase confirmed by account."
-                        | EmployeeEvent.PurchaseRejectedByAccount e ->
-                           Html.p
-                              $"Purchase declined by account {e.Data.Reason}"
+                        | EmployeeEvent.PurchaseRefunded e ->
+                           Html.p $"Purchase refunded due to {e.Data.Reason}"
                         | _ -> ()
                      | History.Account accountHistory ->
                         match accountHistory.Event with

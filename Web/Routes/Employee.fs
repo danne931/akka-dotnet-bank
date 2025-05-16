@@ -152,15 +152,17 @@ let startEmployeeRoutes (app: WebApplication) =
                      | Ok _ -> return Results.Ok()
                      | Error e -> return RouteUtil.badRequest e
                   else
-                     let invite: EmployeeInviteEmailInfo = {
-                        OrgId = employee.OrgId
-                        Name = employee.Name
-                        Email = employee.Email
-                        Token = token
-                     }
+                     let msg =
+                        EmailMessage.create
+                           employee.OrgId
+                           (Guid.NewGuid() |> CorrelationId)
+                           (EmailInfo.EmployeeInvite {
+                              Name = employee.Name
+                              Email = employee.Email
+                              Token = token
+                           })
 
-                     EmailConsumerActor.getProducerProxy sys
-                     <! EmailMessage.EmployeeInvite invite
+                     EmailConsumerActor.getProducerProxy sys <! msg
 
                      return Results.Ok()
                | _ ->

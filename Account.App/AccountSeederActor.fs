@@ -242,11 +242,6 @@ let enableUpdatePreventionTriggers () =
       "ALTER TABLE organization_event ENABLE TRIGGER prevent_update;", []
    ]
 
-let systemUser: Initiator = {
-   Id = InitiatedById Constants.SYSTEM_USER_ID
-   Name = "System"
-}
-
 let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
    let myOrg = orgId, orgName
 
@@ -260,8 +255,13 @@ let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
          {
             CreateOrgCommand.create {
                Name = name
+               // TODO: Allow the org to set this.
+               AdminTeamEmail =
+                  $"adminteam@{name}.com"
+                  |> _.ToLower().Replace(" ", "")
+                  |> Email.deserialize
                OrgId = orgId
-               InitiatedBy = systemUser
+               InitiatedBy = Initiator.System
             } with
                Timestamp = DateTime.UtcNow.AddMonths -4
          }
@@ -276,7 +276,7 @@ let enableOrgSocialTransferDiscovery
    =
    for org in otherOrgs do
       let cmd =
-         ConfigureFeatureFlagCommand.create org.OrgId systemUser {
+         ConfigureFeatureFlagCommand.create org.OrgId Initiator.System {
             Config = {
                SocialTransferDiscoveryPrimaryAccountId =
                   Some org.PrimaryAccountId
@@ -729,36 +729,38 @@ let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task
 
       (getAccountRef request.Data.BaseInfo.Payee.AccountId) <! msg
 
+   do! Async.Sleep 2000
+
    // Some payment requests fulfilled
-   for payer, request in [ List.head requestsFromDemoAccount ] do
-      let info = request.Data.BaseInfo
-      let accountId = payer.PrimaryAccountId
+   let payer, request = List.head requestsFromDemoAccount
+   let info = request.Data.BaseInfo
+   let accountId = payer.PrimaryAccountId
 
-      let msg =
-         {
-            FulfillPlatformPaymentCommand.create
-               {
-                  Id = InitiatedById payer.AccountOwnerId
-                  Name = payer.BusinessName
+   let msg =
+      {
+         FulfillPlatformPaymentCommand.create
+            {
+               Id = InitiatedById payer.AccountOwnerId
+               Name = payer.BusinessName
+            }
+            {
+               RequestedPayment = {
+                  Memo = request.Data.Memo
+                  Expiration =
+                     request
+                     |> RequestPlatformPaymentCommand.toEvent
+                     |> Result.toValueOption
+                     |> fun p -> p.Value.Data.Expiration
+                  BaseInfo = info
                }
-               {
-                  RequestedPayment = {
-                     Memo = request.Data.Memo
-                     Expiration =
-                        request
-                        |> RequestPlatformPaymentCommand.toEvent
-                        |> Result.toValueOption
-                        |> fun p -> p.Value.Data.Expiration
-                     BaseInfo = info
-                  }
-                  PaymentMethod = accountId
-               } with
-               Timestamp = buffer.AddHours 2
-         }
-         |> AccountCommand.FulfillPlatformPayment
-         |> AccountMessage.StateChange
+               PaymentMethod = accountId
+            } with
+            Timestamp = buffer.AddHours 2
+      }
+      |> AccountCommand.FulfillPlatformPayment
+      |> AccountMessage.StateChange
 
-      (getAccountRef accountId) <! msg
+   (getAccountRef accountId) <! msg
 
    // Payment requests from other orgs to main demo org
    for payee in paymentRequesters do
@@ -1023,6 +1025,7 @@ let seedAccountOwnerActions
             (Guid.NewGuid() |> CorrelationId)
             mockAccountOwner
             {
+               OriginatedFromSchedule = false
                ScheduledDateSeedOverride = Some timestamp
                Amount = 30_000m + (randomAmount 1000 7000)
                Recipient = domesticRecipient
@@ -1090,6 +1093,7 @@ let seedAccountOwnerActions
                      }
                      {
                         Memo = None
+                        OriginatedFromSchedule = false
                         Amount = 10_000m + randomAmount 1000 10_000
                         Recipient = {
                            OrgId = orgId
@@ -1120,6 +1124,7 @@ let seedAccountOwnerActions
                      mockAccountOwner
                      {
                         Memo = None
+                        OriginatedFromSchedule = false
                         Recipient =
                            let ind =
                               randomAmount
@@ -1148,7 +1153,7 @@ let seedAccountOwnerActions
                |> AccountCommand.InternalTransferBetweenOrgs
                |> AccountMessage.StateChange
 
-            accountRef <! msg
+            (getAccountRef apCheckingAccountId) <! msg
 
             let msg =
                {
@@ -1157,6 +1162,7 @@ let seedAccountOwnerActions
                      mockAccountOwner
                      {
                         Memo = None
+                        OriginatedFromSchedule = false
                         Recipient =
                            let recipient = mockAccounts[opsCheckingAccountId]
 
@@ -1178,7 +1184,7 @@ let seedAccountOwnerActions
                |> AccountCommand.InternalTransfer
                |> AccountMessage.StateChange
 
-            accountRef <! msg
+            (getAccountRef apCheckingAccountId) <! msg
 
 let seedEmployeeActions
    (card: Card)
@@ -1249,23 +1255,32 @@ let seedEmployeeActions
             Name = employee.Name
          }
 
+         let correlationId = CorrelationId(Guid.NewGuid())
+
          let purchaseCmd = {
-            PurchasePendingCommand.create initiator orgId {
+            PurchaseCommand.create {
+               CorrelationId = correlationId
+               OrgId = employee.OrgId
+               EmployeeId = employee.EmployeeId
+               InitiatedBy = initiator
                AccountId = card.AccountId
                CardId = card.CardId
                CardNumberLast4 = card.CardNumberLast4
+               EmployeeName = employee.Name
+               EmployeeEmail = employee.Email
                Date = purchaseDate
                Amount = randomAmount 50 333
                Merchant =
                   purchaseMerchants[rnd.Next(0, purchaseMerchants.Length)]
                Reference = None
+               CardNetworkTransactionId = Guid.NewGuid()
             } with
                Timestamp = purchaseDate
          }
 
          let msg =
             purchaseCmd
-            |> EmployeeCommand.PurchasePending
+            |> EmployeeCommand.Purchase
             |> EmployeeMessage.StateChange
 
          employeeRef <! msg

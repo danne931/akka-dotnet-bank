@@ -7,8 +7,10 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
 
 open Bank.Account.Domain
+open Bank.Employee.Domain
 open Bank.Org.Domain
 open Bank.Transaction.Api
+open Bank.History.Api
 open RoutePaths
 open Lib.NetworkQuery
 open Lib.SharedTypes
@@ -16,6 +18,63 @@ open Lib.Time
 open Bank.UserSession.Middleware
 
 let startTransactionRoutes (app: WebApplication) =
+   app
+      .MapGet(
+         TransactionPath.History,
+         Func<
+            Guid,
+            Nullable<int>,
+            string,
+            Nullable<Guid>,
+            string,
+            string,
+            string,
+            string,
+            string,
+            Task<IResult>
+          >
+            (fun
+                 orgId
+                 ([<FromQuery>] pageLimit: Nullable<int>)
+                 ([<FromQuery>] cursorTimestamp: string)
+                 ([<FromQuery>] cursorEventId: Nullable<Guid>)
+                 ([<FromQuery>] date)
+                 ([<FromQuery>] employeeEventFilters)
+                 ([<FromQuery>] accountEventFilters)
+                 ([<FromQuery>] orgEventFilters)
+                 ([<FromQuery>] initiatedByIds) ->
+               let query = {
+                  DateRange = dateRangeFromQueryString date
+                  PageLimit =
+                     if pageLimit.HasValue then pageLimit.Value else 40
+                  Cursor =
+                     match
+                        cursorEventId.HasValue,
+                        DateTime.parseOptional cursorTimestamp
+                     with
+                     | true, Some ts ->
+                        Some {
+                           EventId = EventId cursorEventId.Value
+                           Timestamp = ts
+                        }
+                     | _ -> None
+                  OrgEventType =
+                     OrgEventGroupFilter.fromQueryString orgEventFilters
+                  EmployeeEventType =
+                     EmployeeEventGroupFilter.fromQueryString
+                        employeeEventFilters
+                  AccountEventType =
+                     TransactionGroupFilter.fromQueryString accountEventFilters
+                  InitiatedByIds =
+                     HistoryQuery.initiatedByIdsFromQueryString initiatedByIds
+               }
+
+               getHistory (OrgId orgId) query
+               |> RouteUtil.unwrapTaskResultOption)
+      )
+      .RBAC(Permissions.GetTransactions)
+   |> ignore
+
    app
       .MapGet(
          TransactionPath.Transactions,

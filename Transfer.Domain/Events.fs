@@ -15,12 +15,12 @@ type InternalTransferWithinOrgFailed = {
 
 type InternalTransferBetweenOrgsScheduled = {
    BaseInfo: BaseInternalTransferInfo
-   Memo: string option
 }
 
 type InternalTransferBetweenOrgsPending = {
    BaseInfo: BaseInternalTransferInfo
-   Memo: string option
+   /// Indicates whether this transfer originated from a scheduled job.
+   FromSchedule: bool
 }
 
 type InternalTransferBetweenOrgsCompleted = {
@@ -34,11 +34,15 @@ type InternalTransferBetweenOrgsFailed = {
 
 type DomesticTransferScheduled = { BaseInfo: BaseDomesticTransferInfo }
 
-type DomesticTransferPending = { BaseInfo: BaseDomesticTransferInfo }
+type DomesticTransferPending = {
+   /// Indicates whether this transfer originated from a scheduled job.
+   FromSchedule: bool
+   BaseInfo: BaseDomesticTransferInfo
+}
 
 type DomesticTransferProgressUpdate = {
    BaseInfo: BaseDomesticTransferInfo
-   InProgressInfo: DomesticTransferInProgress
+   InProgressInfo: DomesticTransferServiceProgress
 }
 
 type DomesticTransferCompleted = {
@@ -99,7 +103,7 @@ module TransferEventToDomesticTransfer =
          Amount = info.Amount
          ScheduledDate = info.ScheduledDate
          Memo = info.Memo
-         Status = DomesticTransferProgress.Outgoing
+         Status = DomesticTransferProgress.WaitingForTransferServiceAck
       }
 
    let fromFailure (evt: BankEvent<DomesticTransferFailed>) : DomesticTransfer =
@@ -180,6 +184,11 @@ type PlatformPaymentCancelled = {
 type PlatformPaymentDeclined = {
    BaseInfo: PlatformPaymentBaseInfo
    Reason: string option
+}
+
+type PlatformPaymentRefunded = {
+   BaseInfo: PlatformPaymentBaseInfo
+   Reason: PlatformPaymentRefundReason
 }
 
 type ThirdPartyPaymentBaseInfo = {

@@ -8,6 +8,34 @@ open Bank.Employee.Domain
 open Lib.SharedTypes
 open CommandApproval
 
+type OrgHistory = {
+   InitiatedByName: string
+   Event: OrgEvent
+}
+
+type AccountHistory = {
+   InitiatedByName: string
+   Event: AccountEvent
+}
+
+type EmployeeHistory = {
+   InitiatedByName: string
+   EmployeeName: string
+   Event: EmployeeEvent
+}
+
+[<RequireQualifiedAccess>]
+type History =
+   | Org of OrgHistory
+   | Account of AccountHistory
+   | Employee of EmployeeHistory
+
+   member x.Envelope =
+      match x with
+      | Org h -> OrgEnvelope.unwrap h.Event |> snd
+      | Account h -> AccountEnvelope.unwrap h.Event |> snd
+      | Employee h -> EmployeeEnvelope.unwrap h.Event |> snd
+
 [<RequireQualifiedAccess>]
 type TransactionStatus =
    | InProgress
@@ -91,19 +119,13 @@ let transactionInfoFromHistory
          |> Option.map (fun (txnType, txnStatus) -> txnType, txnStatus, amount))
    | History.Employee employeeHistory ->
       match employeeHistory.Event with
-      | EmployeeEvent.PurchasePending e ->
+      | EmployeeEvent.PurchaseApplied e ->
          Some(
             TransactionType.Purchase,
             TransactionStatus.InProgress,
             e.Data.Info.Amount
          )
-      | EmployeeEvent.PurchaseConfirmedByAccount e ->
-         Some(
-            TransactionType.Purchase,
-            TransactionStatus.Complete,
-            e.Data.Info.Amount
-         )
-      | EmployeeEvent.PurchaseRejectedByAccount e ->
+      | EmployeeEvent.PurchaseRefunded e ->
          Some(
             TransactionType.Purchase,
             TransactionStatus.Failed,
@@ -151,13 +173,13 @@ let transactionInfoFromHistory
       | AccountEvent.InternalTransferBetweenOrgsCompleted e ->
          Some(
             TransactionType.InternalTransferBetweenOrgs,
-            TransactionStatus.InProgress,
+            TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
          Some(
             TransactionType.InternalTransferBetweenOrgs,
-            TransactionStatus.Complete,
+            TransactionStatus.InProgress,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalAutomatedTransferPending e ->
@@ -193,7 +215,7 @@ let transactionInfoFromHistory
       | AccountEvent.DebitedAccount e ->
          Some(
             TransactionType.Purchase,
-            TransactionStatus.InProgress,
+            TransactionStatus.Complete,
             e.Data.Amount
          )
       | AccountEvent.DomesticTransferPending e ->

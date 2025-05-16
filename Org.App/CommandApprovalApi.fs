@@ -59,7 +59,7 @@ let getApprovalRules
             |> List.map (fun o ->
                let eId = EmployeeId o.EmployeeId
 
-               if eId = Constants.SYSTEM_USER_ID then
+               if (InitiatedById eId) = Initiator.System.Id then
                   CommandApprover.AnyAdmin
                else
                   CommandApprover.Admin {

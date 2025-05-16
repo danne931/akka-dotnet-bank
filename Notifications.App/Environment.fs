@@ -9,8 +9,10 @@ open Lib.Types
 let builder = Env.builder
 
 // NOTE:
-// For local development, EmailBearerToken & SupportEmail are set in ~/.microsoft/usersecrets.
+// For local development, EmailBearerToken, SupportEmail & OverrideEmailRecipient are set in ~/.microsoft/usersecrets.
 // See https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-7.0&tabs=linux#set-a-secret
+// In Account.Service directory run:
+// dotnet user-secrets set "EmailBearerToken" "YOUR_API_TOKEN"
 
 type NotificationsInput = {
    EmailServiceUri: string
@@ -25,6 +27,8 @@ type NotificationsInput = {
       Name: string option
       MaxParallelism: int option
    |}
+   MockSendingEmail: bool option
+   OverrideEmailRecipient: string option
 }
 
 type NotificationsConfig = {
@@ -33,8 +37,12 @@ type NotificationsConfig = {
    SupportEmail: string option
    circuitBreaker: Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
    Queue: QueueSettings
+   // If true, will pretend to send emails rather than hitting the email
+   // third party API.
+   MockSendingEmail: bool
+   // Will redirect all emails to this.  Useful in development.
+   OverrideEmailRecipient: string option
 }
-
 
 let private errorMessage missing =
    $"""
@@ -45,24 +53,32 @@ let private errorMessage missing =
    ========================================================
    """
 
+let private throwInProductionIfMissingEnvVars (input: NotificationsInput) =
+   let missing =
+      [
+         "EmailBearerToken", Option.isNone input.EmailBearerToken
+         "SupportEmail", Option.isNone input.SupportEmail
+      ]
+      |> List.fold (fun acc (key, isNone) -> if isNone then key :: acc else acc) []
+
+   if not missing.IsEmpty then
+      let errMsg = errorMessage missing
+
+      if Env.isProd then failwith errMsg else printfn "%A" errMsg
+
 let config =
    match AppConfig(builder.Configuration).Get<NotificationsInput>() with
    | Ok input ->
-      let missing =
-         [
-            "EmailBearerToken", Option.isNone input.EmailBearerToken
-            "SupportEmail", Option.isNone input.SupportEmail
-         ]
-         |> List.fold
-            (fun acc (key, isNone) -> if isNone then key :: acc else acc)
-            []
+      throwInProductionIfMissingEnvVars input
 
-      if not missing.IsEmpty then
-         let errMsg = errorMessage missing
-
-         if Env.isProd then failwith errMsg else printfn "%A" errMsg
+      let mockEmail = input.MockSendingEmail |> Option.defaultValue false
 
       {
+         MockSendingEmail = (not Env.isProd) && mockEmail
+         OverrideEmailRecipient =
+            input.OverrideEmailRecipient
+            |> Option.bind (fun email ->
+               if not Env.isProd then Some email else None)
          EmailServiceUri = input.EmailServiceUri
          EmailBearerToken = input.EmailBearerToken
          SupportEmail = input.SupportEmail

@@ -106,7 +106,7 @@ let sqlParamReducer
 
    match evt with
    | EmployeeEvent.CreatedCard e -> cardReducer e.EntityId e.Data.Card.CardId
-   | EmployeeEvent.PurchaseConfirmedByAccount e ->
+   | EmployeeEvent.PurchaseApplied e ->
       cardReducer e.EntityId e.Data.Info.CardId
    | EmployeeEvent.LockedCard e -> cardReducer e.EntityId e.Data.CardId
    | EmployeeEvent.UnlockedCard e -> cardReducer e.EntityId e.Data.CardId
@@ -127,8 +127,6 @@ let sqlParamsFromEmployee (employee: Employee) : (string * SqlValue) list = [
    "statusDetail", EmployeeSqlWriter.statusDetail employee.Status
    "role", EmployeeSqlWriter.role employee.Role
    "cards", EmployeeSqlWriter.cards employee.Cards
-   "pendingPurchases",
-   EmployeeSqlWriter.pendingPurchases employee.PendingPurchases
    "onboardingTasks", EmployeeSqlWriter.onboardingTasks employee.OnboardingTasks
    "inviteToken", EmployeeSqlWriter.inviteTokenFromStatus employee.Status
    "inviteExpiration",
@@ -163,7 +161,6 @@ let upsertReadModels
           {EmployeeFields.cards},
           {EmployeeFields.status},
           {EmployeeFields.statusDetail},
-          {EmployeeFields.pendingPurchases},
           {EmployeeFields.onboardingTasks},
           {EmployeeFields.inviteToken},
           {EmployeeFields.inviteExpiration},
@@ -178,7 +175,6 @@ let upsertReadModels
           @cards,
           @status::{EmployeeTypeCast.status},
           @statusDetail,
-          @pendingPurchases,
           @onboardingTasks,
           @inviteToken,
           @inviteExpiration,
@@ -188,7 +184,6 @@ let upsertReadModels
          {EmployeeFields.status} = @status::{EmployeeTypeCast.status},
          {EmployeeFields.statusDetail} = @statusDetail,
          {EmployeeFields.cards} = @cards,
-         {EmployeeFields.pendingPurchases} = @pendingPurchases,
          {EmployeeFields.onboardingTasks} = @onboardingTasks,
          {EmployeeFields.role} = @role::{EmployeeTypeCast.role},
          {EmployeeFields.inviteToken} = @inviteToken,

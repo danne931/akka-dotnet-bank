@@ -103,6 +103,20 @@ module DebitCommand =
          initiator
          data
 
+   let fromPurchase (info: PurchaseInfo) =
+      create (info.AccountId, info.OrgId) info.CorrelationId info.InitiatedBy {
+         Date = info.Date
+         Amount = info.Amount
+         Merchant = info.Merchant
+         Reference = info.Reference
+         EmployeePurchaseReference = {
+            EmployeeName = info.EmployeeName
+            EmployeeCardNumberLast4 = info.CardNumberLast4
+            EmployeeId = InitiatedById.toEmployeeId info.InitiatedBy.Id
+            CardId = info.CardId
+         }
+      }
+
    let toEvent
       (cmd: DebitCommand)
       : ValidationResult<BankEvent<DebitedAccount>>
@@ -116,6 +130,48 @@ module DebitCommand =
          return BankEvent.create<DebitedAccount> cmd
       }
 
+type RefundDebitCommand = Command<RefundedDebit>
+
+module RefundDebitCommand =
+   let create
+      (accountId: AccountId, orgId: OrgId)
+      (correlationId: CorrelationId)
+      (initiator: Initiator)
+      (data: RefundedDebit)
+      =
+      Command.create
+         (AccountId.toEntityId accountId)
+         orgId
+         correlationId
+         initiator
+         data
+
+   let fromPurchase
+      (purchaseInfo: PurchaseInfo)
+      (reason: PurchaseRefundReason)
+      =
+      create
+         (purchaseInfo.AccountId, purchaseInfo.OrgId)
+         purchaseInfo.CorrelationId
+         purchaseInfo.InitiatedBy
+         {
+            EmployeePurchaseReference = {
+               EmployeeName = purchaseInfo.EmployeeName
+               EmployeeId = purchaseInfo.EmployeeId
+               EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
+               CardId = purchaseInfo.CardId
+            }
+            Merchant = purchaseInfo.Merchant
+            Amount = purchaseInfo.Amount
+            Reason = reason
+         }
+
+   let toEvent
+      (cmd: RefundDebitCommand)
+      : ValidationResult<BankEvent<RefundedDebit>>
+      =
+      BankEvent.create<RefundedDebit> cmd |> Ok
+
 type MaintenanceFeeCommand = Command<MaintenanceFeeDebited>
 
 module MaintenanceFeeCommand =
@@ -124,10 +180,7 @@ module MaintenanceFeeCommand =
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         {
-            Id = Constants.SYSTEM_USER_ID |> InitiatedById
-            Name = "System"
-         }
+         Initiator.System
          {
             Amount = MaintenanceFee.RecurringDebitAmount
          }
@@ -150,10 +203,7 @@ module SkipMaintenanceFeeCommand =
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         {
-            Id = Constants.SYSTEM_USER_ID |> InitiatedById
-            Name = "System"
-         }
+         Initiator.System
          data
 
    let toEvent
@@ -191,10 +241,7 @@ module StartBillingCycleCommand =
          (AccountId.toEntityId accountId)
          orgId
          (CorrelationId.create ())
-         {
-            Id = Constants.SYSTEM_USER_ID |> InitiatedById
-            Name = "System"
-         }
+         Initiator.System
          data
 
    let toEvent

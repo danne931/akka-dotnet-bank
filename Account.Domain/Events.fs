@@ -31,6 +31,13 @@ type DebitedAccount = {
    EmployeePurchaseReference: EmployeePurchaseReference
 }
 
+type RefundedDebit = {
+   EmployeePurchaseReference: EmployeePurchaseReference
+   Merchant: string
+   Amount: decimal
+   Reason: PurchaseRefundReason
+}
+
 type MaintenanceFeeDebited = { Amount: decimal }
 type MaintenanceFeeSkipped = { Reason: MaintenanceFeeCriteria }
 

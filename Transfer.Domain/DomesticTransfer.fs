@@ -89,6 +89,8 @@ type DomesticTransferRecipientFailReason =
 
 [<RequireQualifiedAccess>]
 type DomesticTransferFailReason =
+   | SenderAccountNotActive
+   | SenderAccountInsufficientFunds
    | CorruptData
    | InvalidAction
    | InvalidPaymentNetwork
@@ -100,6 +102,9 @@ type DomesticTransferFailReason =
 
    member x.Display =
       match x with
+      | SenderAccountNotActive -> "Sender Account Not Active"
+      | SenderAccountInsufficientFunds ->
+         "Sender Account Has Insufficient Funds"
       | CorruptData -> "Corrupt Data"
       | InvalidAction -> "Invalid Action"
       | InvalidPaymentNetwork -> "Invalid Payment Network"
@@ -110,15 +115,18 @@ type DomesticTransferFailReason =
       | Unknown r -> r
 
 [<RequireQualifiedAccess>]
-type DomesticTransferInProgress =
+type DomesticTransferServiceProgress =
    | InitialHandshakeAck
-   | Other of string
+   | InProgress of string
+   | Settled
+   | Failed of DomesticTransferFailReason
 
 [<RequireQualifiedAccess>]
 type DomesticTransferProgress =
    | Scheduled
-   | Outgoing
-   | InProgress of DomesticTransferInProgress
+   | ProcessingSenderAccountDeduction
+   | WaitingForTransferServiceAck
+   | InProgress of DomesticTransferServiceProgress
    | Completed
    | Failed of DomesticTransferFailReason
 

@@ -171,6 +171,19 @@ type CommandApprovalProgressId =
 
 type Initiator = { Id: InitiatedById; Name: string }
 
+module Initiator =
+   /// System user represents transactions which do not
+   /// originate from a human user.  Used in BillingCycleCommand,
+   /// MaintenanceFeeCommand, etc.
+   let System = {
+      Id =
+         "029528ee-a120-4301-b8b5-e9c60d859346"
+         |> Guid.Parse
+         |> EmployeeId
+         |> InitiatedById
+      Name = "System"
+   }
+
 type Envelope = {
    Id: EventId
    EntityId: EntityId
@@ -301,7 +314,6 @@ type EmployeeStateTransitionError =
    | CardExpired
    | ExceededDailyDebit of limit: decimal * accrued: decimal
    | ExceededMonthlyDebit of limit: decimal * accrued: decimal
-   | DebitAlreadyProgressedToCompletedOrFailed
    | EmployeeStatusDisallowsAccessRestore of string
 
 type Err =
@@ -400,8 +412,6 @@ type Err =
             "Attempted to update an auto transfer rule which does not exist."
       | EmployeeStateTransitionError e ->
          match e with
-         | EmployeeStateTransitionError.DebitAlreadyProgressedToCompletedOrFailed ->
-            "Not found in PendingPurchases. Likely already completed or failed."
          | EmployeeStateTransitionError.EmployeeNotActive ->
             "Employee Not Active"
          | EmployeeStateTransitionError.EmployeeNotReadyToActivate ->

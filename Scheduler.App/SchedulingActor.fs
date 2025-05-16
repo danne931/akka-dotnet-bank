@@ -5,6 +5,7 @@ open Akka.Hosting
 open Akka.Actor
 open Akka.Quartz.Actor.Commands
 open Akka.Cluster.Sharding
+open Akkling.Cluster.Sharding
 open Akkling
 open Quartz
 
@@ -14,27 +15,14 @@ open BillingStatement
 open ActorUtil
 open Lib.SharedTypes
 open Lib.Postgres
+open Lib.Saga
+open Bank.Scheduler
 
-// NOTE:
-// Using a QuartzMessageEnvelope type for messages serialized with
-// Akka.Quartz.Actor until serialization PR merged.  Akka.Quartz.Actor
-// is always passing in Object as manifest unless this PR merged:
-// https://github.com/akkadotnet/Akka.Quartz.Actor/pull/335
-type QuartzMessageEnvelope = { Manifest: string; Message: obj }
-
-type Message =
-   | AccountClosureCronJobSchedule
-   | BillingCycleCronJobSchedule
-   | DeleteAccountsJobSchedule of AccountId list
-   | TransferProgressCronJobSchedule
-   | BalanceHistoryCronJobSchedule
-   | TriggerBalanceHistoryCronJob
-   | ScheduleInternalTransferBetweenOrgs of InternalTransferBetweenOrgsScheduled
-   | ScheduleDomesticTransfer of DomesticTransferScheduled
-   | BalanceManagementCronJobSchedule
-
-let actorProps (quartzPersistentActorRef: IActorRef) =
-   let handler (ctx: Actor<Message>) = actor {
+let actorProps
+   (quartzPersistentActorRef: IActorRef)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   =
+   let handler (ctx: Actor<SchedulerMessage>) = actor {
       let logInfo = logInfo ctx
       let! msg = ctx.Receive()
 
@@ -131,18 +119,38 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
 
          quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
          return ignored ()
-      | TransferProgressCronJobSchedule ->
-         logInfo $"Scheduling transfer progress tracking."
+      | SagaAlarmClockCronJobSchedule ->
+         logInfo $"Scheduling saga alarm clock."
 
-         let trigger = TransferProgressTrackingTriggers.schedule logInfo
-         let path = ActorMetadata.transferProgressTracking.ProxyPath
+         let name = "SagaAlarmClock"
+         let group = "Bank"
+
+         let builder =
+            TriggerBuilder
+               .Create()
+               .ForJob($"{name}Job", group)
+               .WithIdentity($"{name}Trigger", group)
+               .WithDescription(
+                  "Wake up sleeping txn sagas which have remaining activities."
+               )
+
+         let minutes = 1
+         logInfo $"Scheduling txn saga alarm clock every {minutes} minutes."
+
+         let trigger =
+            builder
+               .WithSimpleSchedule(fun s ->
+                  s.WithIntervalInMinutes(minutes).RepeatForever() |> ignore)
+               .Build()
+
+         let path = ActorMetadata.sagaAlarmClock.ProxyPath
 
          let job =
             CreatePersistentJob(
                path,
                {
-                  Manifest = "TransferProgressTrackingActorMessage"
-                  Message = TransferProgressTrackingMessage.ProgressCheck
+                  Manifest = "SagaAlarmClockActorMessage"
+                  Message = SagaAlarmClockMessage.WakeUpIfUnfinishedBusiness
                },
                trigger
             )
@@ -159,7 +167,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
                path,
                {
                   Manifest = "SchedulingActorMessage"
-                  Message = Message.TriggerBalanceHistoryCronJob
+                  Message = SchedulerMessage.TriggerBalanceHistoryCronJob
                },
                trigger
             )
@@ -177,11 +185,13 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
          | Error err ->
             logError ctx $"Daily balance history update error: {err}"
             return unhandled ()
-      | ScheduleInternalTransferBetweenOrgs s ->
+      | ScheduleInternalTransferBetweenOrgs transfer ->
          let name = "InternalTransferBetweenOrgs"
          let group = "Bank"
 
-         let transferId = s.BaseInfo.TransferId
+         let transferId = transfer.TransferId
+         let correlationId = TransferId.toCorrelationId transferId
+         let orgId = transfer.Sender.OrgId
 
          let builder =
             TriggerBuilder
@@ -190,7 +200,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
                .WithIdentity($"{name}Trigger-{transferId}", group)
                .WithDescription("Schedule internal transfer")
 
-         let scheduledAt = s.BaseInfo.ScheduledDate
+         let scheduledAt = transfer.ScheduledDate
 
          logInfo
             $"Scheduling internal transfer for {transferId} at {scheduledAt}."
@@ -200,33 +210,44 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
          let path =
             ClusterSharding
                .Get(ctx.System)
-               .ShardRegionProxy(ClusterMetadata.accountShardRegion.name)
+               .ShardRegionProxy(ClusterMetadata.sagaShardRegion.name)
                .Path
 
          let job =
             CreatePersistentJob(
                path,
                {
-                  Manifest = "AccountActorMessage"
+                  Manifest = "SagaActorMessage"
                   Message = {|
-                     AccountId = s.BaseInfo.Sender.AccountId
-                     AccountMessage =
-                        s
-                        |> ScheduleInternalTransferBetweenOrgsCommand.initiateTransferCommand
-                        |> AccountCommand.InternalTransferBetweenOrgs
-                        |> AccountMessage.StateChange
+                     CorrelationId = correlationId
+                     SagaMessage =
+                        PlatformTransferSaga.PlatformTransferSagaEvent.ScheduledJobExecuted
+                        |> AppSaga.Event.PlatformTransfer
+                        |> SagaEvent.create orgId correlationId
+                        |> SagaMessage.Event
                   |}
                },
                trigger
             )
 
          quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
+
+         let msg =
+            PlatformTransferSaga.PlatformTransferSagaEvent.ScheduledJobCreated
+            |> AppSaga.Event.PlatformTransfer
+            |> SagaEvent.create orgId correlationId
+            |> SagaMessage.Event
+
+         getSagaRef correlationId <! msg
+
          return ignored ()
-      | ScheduleDomesticTransfer s ->
+      | ScheduleDomesticTransfer transfer ->
          let name = "DomesticTransfer"
          let group = "Bank"
 
-         let transferId = s.BaseInfo.TransferId
+         let transferId = transfer.TransferId
+         let correlationId = TransferId.toCorrelationId transferId
+         let orgId = transfer.Sender.OrgId
 
          let builder =
             TriggerBuilder
@@ -235,7 +256,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
                .WithIdentity($"{name}Trigger-{transferId}", group)
                .WithDescription("Schedule domestic transfer")
 
-         let scheduledAt = s.BaseInfo.ScheduledDate
+         let scheduledAt = transfer.ScheduledDate
 
          logInfo
             $"Scheduling domestic transfer for {transferId} at {scheduledAt}."
@@ -245,31 +266,40 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
          let path =
             ClusterSharding
                .Get(ctx.System)
-               .ShardRegionProxy(ClusterMetadata.accountShardRegion.name)
+               .ShardRegionProxy(ClusterMetadata.sagaShardRegion.name)
                .Path
 
          let job =
             CreatePersistentJob(
                path,
                {
-                  Manifest = "AccountActorMessage"
+                  Manifest = "SagaActorMessage"
                   Message = {|
-                     AccountId = s.BaseInfo.Sender.AccountId
-                     AccountMessage =
-                        s
-                        |> ScheduleDomesticTransferCommand.initiateTransferCommand
-                        |> AccountCommand.DomesticTransfer
-                        |> AccountMessage.StateChange
+                     CorrelationId = correlationId
+                     SagaMessage =
+                        DomesticTransferSaga.DomesticTransferSagaEvent.ScheduledJobExecuted
+                        |> AppSaga.Event.DomesticTransfer
+                        |> SagaEvent.create orgId correlationId
+                        |> SagaMessage.Event
                   |}
                },
                trigger
             )
 
          quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
+
+         let msg =
+            DomesticTransferSaga.DomesticTransferSagaEvent.ScheduledJobCreated
+            |> AppSaga.Event.DomesticTransfer
+            |> SagaEvent.create orgId correlationId
+            |> SagaMessage.Event
+
+         getSagaRef correlationId <! msg
+
          return ignored ()
    }
 
    props handler
 
-let get (system: ActorSystem) : IActorRef<Message> =
+let get (system: ActorSystem) : IActorRef<SchedulerMessage> =
    typed <| ActorRegistry.For(system).Get<ActorMetadata.SchedulingMarker>()

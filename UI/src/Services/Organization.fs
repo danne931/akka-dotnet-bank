@@ -3,14 +3,11 @@ module OrgService
 
 open Fable.SimpleHttp
 open FsToolkit.ErrorHandling
-open Feliz.Router
 
 open Bank.Org.Domain
 open CommandApproval
 open UIDomain.Org
-open History
 open Lib.SharedTypes
-open Lib.NetworkQuery
 open RoutePaths
 
 let private serviceName = "OrgService"
@@ -42,22 +39,6 @@ let private postJson (command: OrgCommand) =
       | other -> notImplemented other
 
    Http.postJson url serialized
-
-let networkQueryFromHistoryBrowserQuery
-   (query: HistoryBrowserQuery)
-   : HistoryQuery
-   =
-   {
-      PageLimit = 40
-      Cursor = None
-      DateRange = query.Date |> Option.map UIDomain.DateFilter.toDateRange
-      EmployeeEventType = query.EmployeeEventType
-      AccountEventType = query.AccountEventType
-      OrgEventType = query.OrgEventType
-      InitiatedByIds =
-         query.SelectedInitiatedBy
-         |> Option.map (List.map (_.Id >> InitiatedById))
-   }
 
 let submitCommand
    (org: Org)
@@ -114,54 +95,6 @@ let getOrgAndAccountProfiles
             |> Serialization.deserialize<OrgWithAccountProfiles>
             |> Result.map Some
    }
-
-let getHistory (orgId: OrgId) (query: HistoryQuery) : Async<HistoryMaybe> = async {
-   let queryParams =
-      [
-         "pageLimit", string query.PageLimit
-
-         match query.Cursor with
-         | Some cursor ->
-            "cursorTimestamp", DateTime.toISOString cursor.Timestamp
-            "cursorEventId", string cursor.EventId
-         | None -> ()
-
-         match query.InitiatedByIds with
-         | None -> ()
-         | Some ids -> "initiatedByIds", listToQueryString ids
-
-         match query.EmployeeEventType with
-         | None -> ()
-         | Some filters -> "employeeEventFilters", listToQueryString filters
-
-         match query.AccountEventType with
-         | None -> ()
-         | Some filters -> "accountEventFilters", listToQueryString filters
-
-         match query.OrgEventType with
-         | None -> ()
-         | Some filters -> "orgEventFilters", listToQueryString filters
-
-         match query.DateRange with
-         | None -> ()
-         | Some(startDate, endDate) ->
-            "date", DateTime.rangeAsQueryString startDate endDate
-      ]
-      |> Router.encodeQueryString
-
-   let path = OrgPath.history orgId + queryParams
-   let! (code, responseText) = Http.get path
-
-   if code = 404 then
-      return Ok None
-   elif code <> 200 then
-      return Error <| Err.InvalidStatusCodeError(serviceName, code)
-   else
-      return
-         responseText
-         |> Serialization.deserialize<History list>
-         |> Result.map Some
-}
 
 let searchOrgTransferSocialDiscovery
    (orgId: OrgId)

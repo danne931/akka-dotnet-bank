@@ -1,6 +1,8 @@
 namespace Bank.Org.Domain
 
-type OrgCreated = { Name: string }
+open Lib.SharedTypes
+
+type OrgCreated = { Name: string; AdminTeamEmail: Email }
 
 type OrgOnboardingFinished = { EmployerIdentificationNumber: int }
 

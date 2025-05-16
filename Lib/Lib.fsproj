@@ -13,6 +13,8 @@
     <Compile Include="Queue.fs" />
     <Compile Include="BulkWriteStreamFlow.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
+    <Compile Include="./Saga/Saga.fs" />
+    <Compile Include="./Saga/SagaActor.fs" />
   </ItemGroup>
 
   <ItemGroup>

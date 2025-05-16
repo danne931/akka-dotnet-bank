@@ -6,7 +6,9 @@ open System
 open System.Net
 open System.IO
 open FsConfig
+
 open Lib.Types
+open Lib.Time
 
 // Serve static files out of the UI/dist directory during development.
 // This dist directory is copied over to the default Web/wwwroot
@@ -187,6 +189,8 @@ type private BankConfigInput = {
    BillingStatementPersistenceBackoffRestart: StreamBackoffRestartSettingsInput
    CircuitBreakerActorSupervisor: BackoffSupervisorInput
    QueueConsumerStreamBackoffRestart: StreamBackoffRestartSettingsInput
+   SleepingSagaThrottle: StreamThrottleInput
+   SagaPassivateIdleEntityAfter: TimeSpan option
 }
 
 type BankConfig = {
@@ -211,6 +215,8 @@ type BankConfig = {
    BillingStatementRetryPersistenceAfter: TimeSpan
    CircuitBreakerActorSupervisor: BackoffSupervisorOptions
    QueueConsumerStreamBackoffRestart: Akka.Streams.RestartSettings
+   SleepingSagaThrottle: StreamThrottle
+   SagaPassivateIdleEntityAfter: TimeSpan
 }
 
 let config =
@@ -310,6 +316,17 @@ let config =
          QueueConsumerStreamBackoffRestart =
             streamBackoffRestartSettingsFromInput
                input.QueueConsumerStreamBackoffRestart
+         SleepingSagaThrottle = {
+            Count = input.SleepingSagaThrottle.Count |> Option.defaultValue 1500
+            Burst = input.SleepingSagaThrottle.Burst |> Option.defaultValue 1500
+            Duration =
+               input.SleepingSagaThrottle.Seconds
+               |> Option.defaultValue 10
+               |> TimeSpan.FromSeconds
+         }
+         SagaPassivateIdleEntityAfter =
+            input.SagaPassivateIdleEntityAfter
+            |> Option.defaultValue (TimeSpan.FromMinutes 2)
       }
    | Error err ->
       match err with

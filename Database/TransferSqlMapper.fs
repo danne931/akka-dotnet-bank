@@ -212,7 +212,10 @@ module TransferSqlWriter =
       let status =
          function
          | DomesticTransferProgress.Scheduled -> "Scheduled"
-         | DomesticTransferProgress.Outgoing -> "Outgoing"
+         | DomesticTransferProgress.ProcessingSenderAccountDeduction ->
+            "ProcessingSenderAccountDeduction"
+         | DomesticTransferProgress.WaitingForTransferServiceAck ->
+            "WaitingForTransferServiceAck"
          | DomesticTransferProgress.Completed -> "Completed"
          | DomesticTransferProgress.InProgress _ -> "InProgress"
          | DomesticTransferProgress.Failed _ -> "Failed"

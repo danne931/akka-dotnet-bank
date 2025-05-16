@@ -32,6 +32,7 @@ module PaymentFields =
    module Platform =
       let payerOrgId = "payer_org_id"
       let status = "status"
+      let statusDetail = "status_detail"
       let payByAccount = "pay_by_account"
 
    // Specific to third_party_payment table
@@ -71,9 +72,9 @@ module PaymentSqlReader =
          PaymentFields.Platform.payerOrgId |> read.uuid |> OrgId
 
       let status (read: RowReader) =
-         PaymentFields.Platform.status
-         |> read.string
-         |> PlatformPaymentStatus.fromStringUnsafe
+         PaymentFields.Platform.statusDetail
+         |> read.text
+         |> Serialization.deserializeUnsafe<PlatformPaymentStatus>
 
       let payByAccount (read: RowReader) : AccountId option =
          PaymentFields.Platform.payByAccount
@@ -118,7 +119,19 @@ module PaymentSqlWriter =
    // Specific to platform_payment table
    module Platform =
       let payerOrgId = OrgSqlWriter.orgId
-      let status (status: PlatformPaymentStatus) = Sql.string (string status)
+
+      let status =
+         function
+         | PlatformPaymentStatus.Unpaid -> "Unpaid"
+         | PlatformPaymentStatus.Paid -> "Paid"
+         | PlatformPaymentStatus.Deposited -> "Deposited"
+         | PlatformPaymentStatus.Cancelled -> "Cancelled"
+         | PlatformPaymentStatus.Declined -> "Declined"
+         | PlatformPaymentStatus.Failed _ -> "Failed"
+         >> Sql.string
+
+      let statusDetail (status: PlatformPaymentStatus) =
+         status |> Serialization.serialize |> Sql.jsonb
 
       let payByAccount (opt: AccountId option) =
          opt |> Option.map AccountId.get |> Sql.uuidOrNone

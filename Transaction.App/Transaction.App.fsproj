@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="PlatformTransferSaga.fs" />
+    <Compile Include="PlatformPaymentSaga.fs" />
+    <Compile Include="DomesticTransferSaga.fs" />
+    <Compile Include="PurchaseSaga.fs" />
+    <Compile Include="HistoryApi.fs" />
+    <Compile Include="TransactionApi.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Cluster.Hosting" />
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Persistence.Extras" />
+    <PackageReference Include="Akkling" />
+    <PackageReference Include="Akkling.Cluster.Sharding" />
+    <PackageReference Include="Akkling.Persistence" />
+    <PackageReference Include="FSharp.Control.TaskSeq" />
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="Validus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Database/Database.fsproj" />
+    <ProjectReference Include="../Lib/Lib.fsproj" />
+    <ProjectReference Include="../Scheduler.Domain/Scheduler.Domain.fsproj" />
+    <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../Billing.App/Billing.App.fsproj" />
+    <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" />
+    <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Transaction.Domain/Transaction.Domain.fsproj" />
+  </ItemGroup>
+</Project>

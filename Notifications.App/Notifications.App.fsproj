@@ -5,7 +5,6 @@
 
   <ItemGroup>
     <Compile Include="Environment.fs" />
-    <Compile Include="Email.fs" />
     <Compile Include="EmailConsumerActor.fs" />
   </ItemGroup>
 
@@ -18,8 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="../Database/Database.fsproj" />
     <ProjectReference Include="../Lib/Lib.fsproj" />
-    <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
-    <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
-    <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" /> 
+    <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
+    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />
   </ItemGroup>
 </Project>

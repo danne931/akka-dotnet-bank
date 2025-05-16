@@ -101,10 +101,6 @@ let getAccountsWithScheduledAutoTransfer (schedule: CronSchedule) = asyncResultO
 let initProps
    (system: ActorSystem)
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (throttle: StreamThrottle)
    =
-   actorProps
-      system
-      getAccountRef
-      getAccountsWithScheduledAutoTransfer
-      // TODO: CONFIG
-      EnvTransfer.config.TransferProgressTrackingThrottle
+   actorProps system getAccountRef getAccountsWithScheduledAutoTransfer throttle

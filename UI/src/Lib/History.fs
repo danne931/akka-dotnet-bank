@@ -1,4 +1,4 @@
-module History
+module UIDomain.History
 
 open Bank.Org.Domain
 open Bank.Account.Domain
@@ -9,6 +9,7 @@ open Lib.SharedTypes
 open Lib.NetworkQuery
 open Lib.Time
 open CommandApproval
+open Transaction
 
 type HistoryMaybe = Result<History list option, Err>
 
@@ -148,25 +149,18 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
    }
 
    match txn.Event with
-   | EmployeeEvent.PurchasePending e -> {
+   | EmployeeEvent.PurchaseApplied e -> {
       props with
-         Name = "Purchase Pending"
+         Name = "Purchase Applied to Card"
          Info =
             $"Purchase requested by {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
          Amount = Some <| Money.format e.Data.Info.Amount
      }
-   | EmployeeEvent.PurchaseConfirmedByAccount e -> {
+   | EmployeeEvent.PurchaseRefunded e -> {
       props with
-         Name = "Purchase Confirmed by Account"
+         Name = "Purchase Refunded to Card"
          Info =
-            $"Purchase confirmed by account for {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
-         Amount = Some <| Money.format e.Data.Info.Amount
-     }
-   | EmployeeEvent.PurchaseRejectedByAccount e -> {
-      props with
-         Name = "Purchase Rejected by Account"
-         Info =
-            $"Purchase rejected by account for {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
+            $"Purchase refunded to card for {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
          Amount = Some <| Money.format e.Data.Info.Amount
      }
    | EmployeeEvent.CreatedEmployee e -> {
@@ -303,6 +297,16 @@ let accountHistoryUIFriendly
                $"Purchase from {evt.Data.Merchant} with card {card} ({accountName})"
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
+      }
+   | RefundedDebit e ->
+      let card = $"**{e.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
+
+      {
+         props with
+            Name = "Purchase Refunded to Card"
+            Info =
+               $"Refunded purchase from {e.Data.Merchant} with card {card} ({accountName}) due to {e.Data.Reason}."
+            Amount = Some <| Money.format e.Data.Amount
       }
    | MaintenanceFeeDebited evt -> {
       props with
@@ -517,6 +521,17 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format p.Amount
             MoneyFlow = Some MoneyFlow.In
       }
+   | PlatformPaymentRefunded evt ->
+      let p = evt.Data.BaseInfo
+
+      {
+         props with
+            Name = "Payment Refunded"
+            Info =
+               $"Refunded payment to {p.Payer.OrgName} due to {evt.Data.Reason}."
+            Amount = Some <| Money.format p.Amount
+            MoneyFlow = Some MoneyFlow.In
+      }
    | PlatformPaymentCancelled evt ->
       let p = evt.Data.BaseInfo
 
@@ -714,9 +729,8 @@ let private matchesEmployeeEventFilter
       | _ -> false
    | EmployeeEventGroupFilter.Purchase ->
       match event with
-      | EmployeeEvent.PurchasePending _
-      | EmployeeEvent.PurchaseConfirmedByAccount _
-      | EmployeeEvent.PurchaseRejectedByAccount _ -> true
+      | EmployeeEvent.PurchaseApplied _
+      | EmployeeEvent.PurchaseRefunded _ -> true
       | _ -> false
    | EmployeeEventGroupFilter.CreatedCard ->
       match event with

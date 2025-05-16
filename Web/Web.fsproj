@@ -34,5 +34,7 @@
     <ProjectReference Include="../Account.App/Account.App.fsproj" />
     <ProjectReference Include="../Employee.App/Employee.App.fsproj" />
     <ProjectReference Include="../Org.App/Org.App.fsproj" />
+    <ProjectReference Include="../Notifications.App/Notifications.App.fsproj" />
+    <ProjectReference Include="../Transaction.App/Transaction.App.fsproj" />
   </ItemGroup>
 </Project>

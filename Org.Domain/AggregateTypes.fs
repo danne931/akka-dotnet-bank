@@ -2,7 +2,6 @@ namespace Bank.Org.Domain
 
 open Lib.SharedTypes
 open Bank.Account.Domain
-open Bank.Employee.Domain
 open Bank.Transfer.Domain
 open CommandApproval
 
@@ -145,6 +144,7 @@ type Org = {
    CommandApprovalProgress:
       Map<CommandApprovalProgressId, CommandApprovalProgress.T>
    DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
+   AdminTeamEmail: Email
 }
 
 module Org =
@@ -152,6 +152,7 @@ module Org =
       OrgId = OrgId System.Guid.Empty
       Name = ""
       Status = OrgStatus.InitialEmptyState
+      AdminTeamEmail = Email.empty
       FeatureFlags = {
          SocialTransferDiscoveryPrimaryAccountId = None
       }
@@ -224,31 +225,3 @@ type OrgMessage =
    | ApprovableRequest of ApprovableCommand
    | StateChange of OrgCommand
    | Event of OrgEvent
-
-type OrgHistory = {
-   InitiatedByName: string
-   Event: OrgEvent
-}
-
-type AccountHistory = {
-   InitiatedByName: string
-   Event: AccountEvent
-}
-
-type EmployeeHistory = {
-   InitiatedByName: string
-   EmployeeName: string
-   Event: EmployeeEvent
-}
-
-[<RequireQualifiedAccess>]
-type History =
-   | Org of OrgHistory
-   | Account of AccountHistory
-   | Employee of EmployeeHistory
-
-   member x.Envelope =
-      match x with
-      | Org h -> OrgEnvelope.unwrap h.Event |> snd
-      | Account h -> AccountEnvelope.unwrap h.Event |> snd
-      | Employee h -> EmployeeEnvelope.unwrap h.Event |> snd

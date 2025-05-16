@@ -23,6 +23,7 @@ DROP TABLE IF EXISTS transfer_domestic;
 DROP TABLE IF EXISTS transfer;
 DROP TABLE IF EXISTS transfer_domestic_recipient;
 DROP TABLE IF EXISTS merchant;
+DROP TABLE IF EXISTS saga;
 DROP TABLE IF EXISTS ancillarytransactioninfo;
 DROP TABLE IF EXISTS account_event;
 DROP TABLE IF EXISTS card;
@@ -61,6 +62,8 @@ DROP TYPE IF EXISTS transfer_category;
 DROP TYPE IF EXISTS approvable_command;
 DROP TYPE IF EXISTS command_approval_criteria;
 DROP TYPE IF EXISTS command_approval_status;
+DROP TYPE IF EXISTS saga_type;
+DROP TYPE IF EXISTS saga_status;
 
 -- Drop Akka event sourcing tables.
 -- These tables are initiated in Infrastructure/Akka.fs.
@@ -149,7 +152,8 @@ CREATE TABLE organization (
    org_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
    org_name VARCHAR(100) UNIQUE NOT NULL,
    status organization_status NOT NULL,
-   status_detail JSONB NOT NULL
+   status_detail JSONB NOT NULL,
+   admin_team_email VARCHAR(255) UNIQUE NOT NULL
 );
 
 SELECT add_created_at_column('organization');
@@ -157,6 +161,13 @@ SELECT add_updated_at_column_and_trigger('organization');
 
 CREATE INDEX org_org_id_idx ON organization(org_id);
 CREATE INDEX org_search_idx ON organization USING gist (org_name gist_trgm_ops);
+
+COMMENT ON COLUMN organization.admin_team_email IS
+'Assumes the orgs email provider has the ability to configure distribution lists.
+Use this email address to notify team members of events in the app such as payment
+requests received.
+TODO: Consider creating extra fields on org_feature_flag table to allow the
+org to disable notifications pertaining to certain events.';
 
 
 --- ACCOUNT ---
@@ -324,7 +335,6 @@ CREATE TABLE employee (
    role employee_role NOT NULL,
    status employee_status NOT NULL,
    status_detail JSONB NOT NULL,
-   pending_purchases JSONB NOT NULL,
    onboarding_tasks JSONB NOT NULL,
    cards JSONB NOT NULL,
    invite_token UUID,
@@ -645,7 +655,8 @@ CREATE INDEX transfer_domestic_recipient_sender_org_id_idx ON transfer_domestic_
 --- DOMESTIC TRANSFERS ---
 CREATE TYPE domestic_transfer_status AS ENUM (
    'Scheduled',
-   'Outgoing',
+   'ProcessingSenderAccountDeduction',
+   'WaitingForTransferServiceAck',
    'InProgress',
    'Completed',
    'Failed'
@@ -708,12 +719,14 @@ CREATE TYPE platform_payment_status AS ENUM (
    'Paid',
    'Deposited',
    'Cancelled',
-   'Declined'
+   'Declined',
+   'Failed'
 );
 
 CREATE TABLE payment_platform(
    payment_id UUID PRIMARY KEY REFERENCES payment,
    status platform_payment_status NOT NULL,
+   status_detail JSONB NOT NULL,
    payer_org_id UUID NOT NULL REFERENCES organization(org_id),
    pay_by_account UUID REFERENCES account(account_id)
    --pay_by_card ...
@@ -845,6 +858,53 @@ CREATE TABLE command_approval_progress(
 
 SELECT add_created_at_column('command_approval_progress');
 SELECT add_updated_at_column_and_trigger('command_approval_progress');
+
+
+--- TRANSACTION SAGA ---
+CREATE TYPE saga_type AS ENUM (
+   'Purchase',
+   'DomesticTransfer',
+   'PlatformTransfer',
+   'PlatformPayment'
+);
+CREATE TYPE saga_status AS ENUM (
+   'Scheduled',
+   'InProgress',
+   'Completed',
+   'Failed'
+);
+
+CREATE TABLE saga(
+   id UUID PRIMARY KEY,
+   org_id UUID REFERENCES organization,
+   name saga_type NOT NULL,
+   status saga_status NOT NULL,
+   saga_state JSONB NOT NULL,
+   activity_in_progress_count int NOT NULL,
+   activity_attempts_exhausted_count int NOT NULL,
+   inactivity_timeout interval
+);
+
+SELECT add_created_at_column('saga');
+SELECT add_updated_at_column_and_trigger('saga');
+
+CREATE INDEX saga_status_idx ON saga(status);
+CREATE INDEX saga_org_id_idx ON saga(org_id);
+CREATE INDEX saga_activity_in_progress_count_idx ON saga(activity_in_progress_count);
+
+COMMENT ON COLUMN saga.inactivity_timeout IS
+'A saga alarm clock actor will periodically check this state, wake up the
+corresponding saga actor which then evaluates remaining in-progress activities.
+See Saga.App/AlarmClockActor.fs';
+
+COMMENT ON COLUMN saga.activity_in_progress_count IS
+'Whether a saga has remaining activities to complete.
+If the status is InProgress then success path activities are in progress.
+If the status is Failed then there may be compensation activities in progress.';
+
+COMMENT ON COLUMN saga.activity_attempts_exhausted_count IS
+'Whether the saga contains activities where Attempts = MaxAttempts.
+Indicates that a saga actor will not attempt to retry any unfinished work.';
 
 
 CREATE OR REPLACE PROCEDURE seed_balance_history()
@@ -1110,11 +1170,12 @@ BEGIN
       employee.first_name || ' ' || employee.last_name as employee_name,
       COALESCE(SUM(ae.amount::numeric), 0) AS amount
    FROM employee_event
+   JOIN saga ON correlation_id = saga.id AND saga.status = 'Completed'
    JOIN account_event ae using(correlation_id)
    JOIN employee using(employee_id)
    WHERE
       employee_event.org_id = orgId
-      AND employee_event.name = 'PurchaseConfirmedByAccount'
+      AND employee_event.name = 'PurchaseApplied'
       AND employee_event.timestamp::date
          BETWEEN DATE_TRUNC('month', d)
          AND (DATE_TRUNC('month', d) + INTERVAL '1 month' - INTERVAL '1 day')
@@ -1300,8 +1361,8 @@ $$ LANGUAGE plpgsql;
  * Create a "system" user to represent account events which do not originate
  * from a human user.  Used in BillingCycleCommand, MaintenanceFeeCommand, etc.
 **/
-INSERT INTO organization (org_name, status, status_detail)
-VALUES ('system', 'Active', '"Active"'::jsonb);
+INSERT INTO organization (org_name, status, status_detail, admin_team_email)
+VALUES ('system', 'Active', '"Active"'::jsonb, 'team@system.com');
 
 INSERT INTO employee (
    employee_id,
@@ -1311,7 +1372,6 @@ INSERT INTO employee (
    role,
    status,
    status_detail,
-   pending_purchases,
    onboarding_tasks,
    cards,
    org_id
@@ -1327,7 +1387,6 @@ VALUES (
    'Admin',
    'Active',
    '"Active"'::jsonb,
-   '{}'::jsonb,
    '{}'::jsonb,
    '{}'::jsonb,
    (SELECT org_id FROM organization WHERE org_name = 'system')

@@ -1,0 +1,107 @@
+module AppSagaSqlMapper
+
+open System
+
+open Lib.SharedTypes
+open Lib.Saga
+open PurchaseSaga
+open DomesticTransferSaga
+open PlatformPaymentSaga
+open Bank.Transfer.Domain
+
+let table = "saga"
+
+module TypeCast =
+   let name = "saga_type"
+   let status = "saga_status"
+
+module Fields =
+   let id = "id"
+   let orgId = "org_id"
+   let name = "name"
+   let status = "status"
+   let sagaState = "saga_state"
+   let activityInProgressCount = "activity_in_progress_count"
+   let activityAttemptsExhaustedCount = "activity_attempts_exhausted_count"
+   let inactivityTimeout = "inactivity_timeout"
+   let createdAt = "created_at"
+   let updatedAt = "updated_at"
+
+module Reader =
+   let id (read: RowReader) = Fields.id |> read.uuid |> CorrelationId
+
+   let orgId (read: RowReader) = Fields.orgId |> read.uuid |> OrgId
+
+   let sagaState (read: RowReader) =
+      Fields.sagaState
+      |> read.text
+      |> Serialization.deserializeUnsafe<AppSaga.Saga>
+
+   let activityInProgressCount (read: RowReader) =
+      Fields.activityInProgressCount |> read.int
+
+   let activityAttemptsExhaustedCount (read: RowReader) =
+      Fields.activityAttemptsExhaustedCount |> read.int
+
+   let inactivityTimeout (read: RowReader) =
+      Fields.inactivityTimeout |> read.intervalOrNone
+
+   let createdAt (read: RowReader) = read.dateTime Fields.createdAt
+   let updatedAt (read: RowReader) = read.dateTime Fields.updatedAt
+
+module Writer =
+   let id (CorrelationId id) = Sql.uuid id
+   let orgId (OrgId id) = Sql.uuid id
+
+   let name (saga: AppSaga.Saga) =
+      let name =
+         match saga with
+         | AppSaga.Saga.Purchase _ -> "Purchase"
+         | AppSaga.Saga.DomesticTransfer _ -> "DomesticTransfer"
+         | AppSaga.Saga.PlatformTransfer _ -> "PlatformTransfer"
+         | AppSaga.Saga.PlatformPayment _ -> "PlatformPayment"
+
+      Sql.string name
+
+   let status (saga: AppSaga.Saga) =
+      let status =
+         match saga with
+         | AppSaga.Saga.Purchase s ->
+            match s.Status with
+            | PurchaseSagaStatus.InProgress -> "InProgress"
+            | PurchaseSagaStatus.Completed -> "Completed"
+            | PurchaseSagaStatus.Failed _ -> "Failed"
+         | AppSaga.Saga.DomesticTransfer s ->
+            match s.Status with
+            | DomesticTransferProgress.Scheduled -> "Scheduled"
+            | DomesticTransferProgress.ProcessingSenderAccountDeduction
+            | DomesticTransferProgress.WaitingForTransferServiceAck
+            | DomesticTransferProgress.InProgress _ -> "InProgress"
+            | DomesticTransferProgress.Completed -> "Completed"
+            | DomesticTransferProgress.Failed _ -> "Failed"
+         | AppSaga.Saga.PlatformTransfer s ->
+            match s.Status with
+            | InternalTransferStatus.Scheduled -> "Scheduled"
+            | InternalTransferStatus.Deposited
+            | InternalTransferStatus.Pending -> "InProgress"
+            | InternalTransferStatus.Completed -> "Completed"
+            | InternalTransferStatus.Failed _ -> "Failed"
+         | AppSaga.Saga.PlatformPayment s ->
+            match s.Status with
+            | PlatformPaymentSagaStatus.InProgress _ -> "InProgress"
+            | PlatformPaymentSagaStatus.Completed -> "Completed"
+            | PlatformPaymentSagaStatus.Failed _ -> "Failed"
+
+      Sql.string status
+
+   let activityInProgressCount (saga: ISaga) =
+      saga.ActivityInProgressCount |> Sql.int
+
+   let activityAttemptsExhaustedCount (saga: ISaga) =
+      saga.ActivityAttemptsExhaustedCount |> Sql.int
+
+   let inactivityTimeout (saga: ISaga) =
+      Sql.intervalOrNone saga.InactivityTimeout
+
+   let sagaState (saga: AppSaga.Saga) =
+      saga |> Serialization.serialize |> Sql.jsonb

@@ -2,6 +2,12 @@ module Lib.Time
 
 open System
 
+[<Measure>]
+type minute
+
+[<Measure>]
+type second
+
 module DateTime =
    let isToday (date: DateTime) =
       let date = date.ToLocalTime().Date

@@ -9,7 +9,6 @@
     <Compile Include="AccountClosureTriggers.fs" />
     <Compile Include="BillingCycleTriggers.fs" />
     <Compile Include="BalanceManagementTriggers.fs" />
-    <Compile Include="TransferProgressTriggers.fs" />
     <Compile Include="SchedulingActor.fs" />
     <Compile Include="Serialization.fs" />
   </ItemGroup>
@@ -23,7 +22,9 @@
   <ItemGroup>
     <ProjectReference Include="../Database/Database.fsproj" />
     <ProjectReference Include="../Lib/Lib.fsproj" />
+    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />  
     <ProjectReference Include="../Billing.Domain/Billing.Domain.fsproj" />
     <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Scheduler.Domain/Scheduler.Domain.fsproj" />
   </ItemGroup>
 </Project>

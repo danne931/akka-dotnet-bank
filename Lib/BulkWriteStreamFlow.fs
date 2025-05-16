@@ -8,7 +8,6 @@ open Akkling.Streams
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
-open Lib.Types
 
 type BulkWriteOptions<'T> = {
    RetryAfter: TimeSpan
@@ -60,9 +59,6 @@ let private actorProps<'T> (opts: BulkWriteOptions<'T>) =
 
    props <| actorOf2 handler
 
-// Collects records to bulk insert in batches.
-// Records are persisted in a single transaction once the
-// StreamChunking.Size limit is reached or after some duration.
 // Flow processing is restarted with backoff upon persistence
 // exception.
 // Failed writes are stored & returned to the consumer upon
@@ -70,14 +66,12 @@ let private actorProps<'T> (opts: BulkWriteOptions<'T>) =
 let initBulkWriteFlow<'T>
    (system: ActorSystem)
    (restartSettings: Akka.Streams.RestartSettings)
-   (chunking: StreamChunking)
    (bulkWriteOpts: BulkWriteOptions<'T>)
    =
    let bulkWriteRef = spawnAnonymous system <| actorProps<'T> bulkWriteOpts
 
    let flow =
       Flow.id
-      |> Flow.groupedWithin chunking.Size chunking.Duration
       |> Flow.taskMap 1 (fun (statements: 'T seq) -> task {
          let! res = bulkWriteOpts.persist statements
 

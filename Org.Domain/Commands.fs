@@ -6,6 +6,7 @@ open Lib.SharedTypes
 
 type CreateOrgInput = {
    Name: string
+   AdminTeamEmail: Email
    OrgId: OrgId
    InitiatedBy: Initiator
 }
@@ -25,7 +26,10 @@ module CreateOrgCommand =
       (cmd: CreateOrgCommand)
       : ValidationResult<BankEvent<OrgCreated>>
       =
-      BankEvent.create2<CreateOrgInput, OrgCreated> cmd { Name = cmd.Data.Name }
+      BankEvent.create2<CreateOrgInput, OrgCreated> cmd {
+         Name = cmd.Data.Name
+         AdminTeamEmail = cmd.Data.AdminTeamEmail
+      }
       |> Ok
 
 type FinalizeOrgOnboardingInput = {

@@ -27,10 +27,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />
     <ProjectReference Include="../Billing.Domain/Billing.Domain.fsproj" />
-    <ProjectReference Include="../Account.App/Account.App.fsproj" />
-    <ProjectReference Include="../Notifications.App/Notifications.App.fsproj" />
-    <ProjectReference Include="../Scheduler.App/Scheduler.App.fsproj" />
+    <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
+    <ProjectReference Include="../Scheduler.Domain/Scheduler.Domain.fsproj" />
     <ProjectReference Include="../SignalR.App/SignalR.App.fsproj" /> 
   </ItemGroup>
 </Project>

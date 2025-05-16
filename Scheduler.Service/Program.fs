@@ -8,9 +8,9 @@ open Quartz
 open Bank.Infrastructure
 open Scheduler.Infrastructure
 open Bank.Account.Domain
-open Bank.Transfer.Domain
 open BillingStatement
 open ActorUtil
+open Bank.Scheduler
 
 let builder = Env.builder
 
@@ -88,12 +88,13 @@ builder.Services.AddAkka(
          .WithCustomSerializer(
             BankSerializer.Name,
             [
-               typedefof<SchedulingActor.Message>
+               typedefof<SchedulerMessage>
                typedefof<BillingCycleMessage>
                typedefof<AccountClosureMessage>
-               typedefof<TransferProgressTrackingMessage>
                typedefof<AutomaticTransfer.Message>
                typedefof<AccountMessage>
+               typedefof<Lib.Saga.SagaMessage<AppSaga.Event>>
+               typedefof<Lib.Saga.SagaAlarmClockMessage>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka
                //       ShardingEnvelope so need to explicitly add it for
@@ -107,6 +108,15 @@ builder.Services.AddAkka(
             [ typedefof<obj> ],
             (fun system -> QuartzSerializer(system))
          )
+         .WithShardRegionProxy<ActorMetadata.SagaMarker>(
+            ClusterMetadata.sagaShardRegion.name,
+            ClusterMetadata.roles.saga,
+            ClusterMetadata.sagaShardRegion.messageExtractor
+         )
+         .WithSingletonProxy<ActorMetadata.SagaAlarmClockMarker>(
+            ActorMetadata.sagaAlarmClock.Name,
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
+         )
          .WithShardRegionProxy<ActorMetadata.AccountMarker>(
             ClusterMetadata.accountShardRegion.name,
             ClusterMetadata.roles.account,
@@ -118,10 +128,6 @@ builder.Services.AddAkka(
          )
          .WithSingletonProxy<ActorMetadata.BillingCycleMarker>(
             ActorMetadata.billingCycle.Name,
-            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
-         )
-         .WithSingletonProxy<ActorMetadata.TransferProgressTrackingMarker>(
-            ActorMetadata.transferProgressTracking.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          .WithSingletonProxy<ActorMetadata.AutoTransferSchedulingMarker>(
@@ -139,10 +145,11 @@ builder.Services.AddAkka(
          )
          .WithSingleton<ActorMetadata.SchedulingMarker>(
             ActorMetadata.scheduling.Name,
-            (fun _ registry _ ->
+            (fun system registry _ ->
                let typedProps =
                   SchedulingActor.actorProps
                   <| registry.Get<QuartzPersistentActor>()
+                  <| AppSaga.getEntityRef system
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.scheduling)
@@ -151,19 +158,19 @@ builder.Services.AddAkka(
             StartupTask(fun system _ -> task {
                let schedulingActor = SchedulingActor.get system
 
-               schedulingActor <! SchedulingActor.BillingCycleCronJobSchedule
+               schedulingActor <! SchedulerMessage.BillingCycleCronJobSchedule
 
                schedulingActor
-               <! SchedulingActor.AccountClosureCronJobSchedule
+               <! SchedulerMessage.AccountClosureCronJobSchedule
 
                schedulingActor
-               <! SchedulingActor.TransferProgressCronJobSchedule
+               <! SchedulerMessage.BalanceHistoryCronJobSchedule
 
                schedulingActor
-               <! SchedulingActor.BalanceHistoryCronJobSchedule
+               <! SchedulerMessage.BalanceManagementCronJobSchedule
 
                schedulingActor
-               <! SchedulingActor.BalanceManagementCronJobSchedule
+               <! SchedulerMessage.SagaAlarmClockCronJobSchedule
             })
          )
       |> ignore

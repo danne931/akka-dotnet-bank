@@ -187,6 +187,17 @@ let applyEvent (state: AccountSnapshot) (evt: AccountEvent) =
                      account.MaintenanceFeeCriteria
                      balance
          }
+      | RefundedDebit e ->
+         let balance = account.Balance + e.Data.Amount
+
+         {
+            state with
+               Info.Balance = balance
+               Info.MaintenanceFeeCriteria =
+                  MaintenanceFee.fromDebitReversal
+                     account.MaintenanceFeeCriteria
+                     balance
+         }
       | MaintenanceFeeDebited e ->
          let balance = account.Balance - e.Data.Amount
 
@@ -301,6 +312,17 @@ let applyEvent (state: AccountSnapshot) (evt: AccountEvent) =
                         balance
             }
          | PaymentMethod.ThirdParty _ -> state
+      | PlatformPaymentRefunded e ->
+         let balance = account.Balance + e.Data.BaseInfo.Amount
+
+         {
+            state with
+               Info.Balance = balance
+               Info.MaintenanceFeeCriteria =
+                  MaintenanceFee.fromDebitReversal
+                     account.MaintenanceFeeCriteria
+                     balance
+         }
       | PlatformPaymentDeposited e ->
          applyTransferDeposit state e.Data.BaseInfo.Amount
       | AutoTransferRuleConfigured e -> {
@@ -386,6 +408,14 @@ module private StateTransition =
          transitionErr <| InsufficientBalance account.Balance
       else
          map DebitedAccount state (DebitCommand.toEvent cmd)
+
+   let refundDebit (state: AccountSnapshot) (cmd: RefundDebitCommand) =
+      let account = state.Info
+
+      if account.Status <> AccountStatus.Active then
+         transitionErr AccountNotActive
+      else
+         map RefundedDebit state (RefundDebitCommand.toEvent cmd)
 
    let maintenanceFee (state: AccountSnapshot) (cmd: MaintenanceFeeCommand) =
       let account = state.Info
@@ -769,6 +799,20 @@ module private StateTransition =
             state
             (FulfillPlatformPaymentCommand.toEvent cmd)
 
+   let platformPaymentRefunded
+      (state: AccountSnapshot)
+      (cmd: RefundPlatformPaymentCommand)
+      =
+      let account = state.Info
+
+      if account.Status <> AccountStatus.Active then
+         transitionErr AccountNotActive
+      else
+         map
+            PlatformPaymentRefunded
+            state
+            (RefundPlatformPaymentCommand.toEvent cmd)
+
    let platformPaymentDeposited
       (state: AccountSnapshot)
       (cmd: DepositPlatformPaymentCommand)
@@ -906,6 +950,7 @@ let stateTransition (state: AccountSnapshot) (command: AccountCommand) =
       StateTransition.startBillingcycle state cmd
    | AccountCommand.DepositCash cmd -> StateTransition.deposit state cmd
    | AccountCommand.Debit cmd -> StateTransition.debit state cmd
+   | AccountCommand.RefundDebit cmd -> StateTransition.refundDebit state cmd
    | AccountCommand.MaintenanceFee cmd ->
       StateTransition.maintenanceFee state cmd
    | AccountCommand.SkipMaintenanceFee cmd ->
@@ -943,6 +988,8 @@ let stateTransition (state: AccountSnapshot) (command: AccountCommand) =
       StateTransition.platformPaymentRequested state cmd
    | AccountCommand.FulfillPlatformPayment cmd ->
       StateTransition.platformPaymentPaid state cmd
+   | AccountCommand.RefundPlatformPayment cmd ->
+      StateTransition.platformPaymentRefunded state cmd
    | AccountCommand.DepositPlatformPayment cmd ->
       StateTransition.platformPaymentDeposited state cmd
    | AccountCommand.CancelPlatformPayment cmd ->

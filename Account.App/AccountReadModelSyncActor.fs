@@ -152,6 +152,8 @@ let sqlParamReducer
             match evt with
             | AccountEvent.DebitedAccount e ->
                Some e.Data.EmployeePurchaseReference.CardId
+            | AccountEvent.RefundedDebit e ->
+               Some e.Data.EmployeePurchaseReference.CardId
             | _ -> None
          )
       ]
@@ -250,7 +252,7 @@ let sqlParamReducer
       let transferParams =
          internalTransferBaseSqlParams info
          @ [
-            "memo", TransferSqlWriter.memo e.Data.Memo
+            "memo", TransferSqlWriter.memo e.Data.BaseInfo.Memo
             "transferCategory",
             TransferSqlWriter.transferCategory
                TransferCategory.InternalBetweenOrgs
@@ -276,7 +278,7 @@ let sqlParamReducer
       let transferParams =
          internalTransferBaseSqlParams info
          @ [
-            "memo", TransferSqlWriter.memo e.Data.Memo
+            "memo", TransferSqlWriter.memo e.Data.BaseInfo.Memo
             "transferCategory",
             TransferSqlWriter.transferCategory
                TransferCategory.InternalBetweenOrgs
@@ -345,7 +347,7 @@ let sqlParamReducer
             TransferSqlWriter.transferCategory TransferCategory.Domestic
          ]
 
-      let status = DomesticTransferProgress.Outgoing
+      let status = DomesticTransferProgress.WaitingForTransferServiceAck
 
       let domesticTransferParams =
          domesticTransferBaseSqlParams info
@@ -386,10 +388,14 @@ let sqlParamReducer
             "memo", PaymentSqlWriter.memo e.Data.Memo
          ]
 
+      let status = PlatformPaymentStatus.Unpaid
+
       let platformPayParams =
-         ("status",
-          PaymentSqlWriter.Platform.status PlatformPaymentStatus.Unpaid)
-         :: platformPaymentBaseSqlParams pInfo
+         [
+            "status", PaymentSqlWriter.Platform.status status
+            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
+         ]
+         @ platformPaymentBaseSqlParams pInfo
 
       {
          acc with
@@ -397,19 +403,28 @@ let sqlParamReducer
             PlatformPayment = platformPayParams :: acc.PlatformPayment
       }
    | AccountEvent.PlatformPaymentCancelled e ->
+      let status = PlatformPaymentStatus.Cancelled
+
       let pParams =
-         ("status",
-          PaymentSqlWriter.Platform.status PlatformPaymentStatus.Cancelled)
-         :: platformPaymentBaseSqlParams e.Data.BaseInfo
+         [
+            "status", PaymentSqlWriter.Platform.status status
+            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
+         ]
+         @ platformPaymentBaseSqlParams e.Data.BaseInfo
 
       {
          acc with
             PlatformPayment = pParams :: acc.PlatformPayment
       }
    | AccountEvent.PlatformPaymentPaid e ->
+      let status = PlatformPaymentStatus.Paid
+
       let pParams =
-         ("status", PaymentSqlWriter.Platform.status PlatformPaymentStatus.Paid)
-         :: platformPaymentBaseSqlParams e.Data.BaseInfo
+         [
+            "status", PaymentSqlWriter.Platform.status status
+            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
+         ]
+         @ platformPaymentBaseSqlParams e.Data.BaseInfo
 
       let pParams =
          match e.Data.PaymentMethod with
@@ -430,20 +445,28 @@ let sqlParamReducer
             PlatformPayment = pParams :: acc.PlatformPayment
       }
    | AccountEvent.PlatformPaymentDeposited e ->
+      let status = PlatformPaymentStatus.Deposited
+
       let pParams =
-         ("status",
-          PaymentSqlWriter.Platform.status PlatformPaymentStatus.Deposited)
-         :: platformPaymentBaseSqlParams e.Data.BaseInfo
+         [
+            "status", PaymentSqlWriter.Platform.status status
+            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
+         ]
+         @ platformPaymentBaseSqlParams e.Data.BaseInfo
 
       {
          acc with
             PlatformPayment = pParams :: acc.PlatformPayment
       }
    | AccountEvent.PlatformPaymentDeclined e ->
+      let status = PlatformPaymentStatus.Declined
+
       let pParams =
-         ("status",
-          PaymentSqlWriter.Platform.status PlatformPaymentStatus.Declined)
-         :: platformPaymentBaseSqlParams e.Data.BaseInfo
+         [
+            "status", PaymentSqlWriter.Platform.status status
+            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
+         ]
+         @ platformPaymentBaseSqlParams e.Data.BaseInfo
 
       {
          acc with
@@ -607,14 +630,17 @@ let upsertReadModels
          INSERT into {table}
             ({PaymentFields.paymentId},
              {PaymentFields.Platform.status},
+             {PaymentFields.Platform.statusDetail},
              {PaymentFields.Platform.payerOrgId})
          VALUES
             (@paymentId,
              @status::{PaymentTypeCast.platformPaymentStatus},
+             @statusDetail,
              @payerOrgId)
          ON CONFLICT ({PaymentFields.paymentId})
          DO UPDATE SET
             {PaymentFields.Platform.status} = @status::{PaymentTypeCast.platformPaymentStatus},
+            {PaymentFields.Platform.statusDetail} = @statusDetail,
             {payByField} = COALESCE(@payByAccount, {table}.{payByField});
          """,
          sqlParamsDerivedFromAccountEvents.PlatformPayment

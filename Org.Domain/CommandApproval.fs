@@ -1003,10 +1003,7 @@ module CommandApprovalProgress =
             (OrgId.toEntityId orgId)
             orgId
             correlationId
-            {
-               Id = InitiatedById Constants.SYSTEM_USER_ID
-               Name = "System"
-            }
+            Initiator.System
             data
 
       let toEvent

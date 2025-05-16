@@ -90,44 +90,35 @@ let startProjection<'TAggregate, 'TEvent>
 
    let failedWritesSource, failedWritesRef = initFailedWritesSource system
 
-   let chunking = {
-      conf.Chunking with
-         Duration = TimeSpan.FromSeconds 6
-   }
-
    let getAggregate ((aggId, evts): Guid * 'TEvent list) = task {
       let! res = conf.GetAggregate aggId
       return res |> Option.map (fun agg -> agg, evts)
    }
 
    let bulkWriteFlow, _ =
-      initBulkWriteFlow<'TAggregate * 'TEvent list>
-         system
-         conf.RestartSettings
-         chunking
-         {
-            RetryAfter = conf.RetryPersistenceAfter
-            persist =
-               fun (props: ('TAggregate * 'TEvent list) seq) ->
-                  props
-                  |> Seq.fold
-                        (fun (aggAcc, eventsAcc) grouping ->
-                           let agg, aggEvents = grouping
+      initBulkWriteFlow<'TAggregate * 'TEvent list> system conf.RestartSettings {
+         RetryAfter = conf.RetryPersistenceAfter
+         persist =
+            fun (props: ('TAggregate * 'TEvent list) seq) ->
+               props
+               |> Seq.fold
+                     (fun (aggAcc, eventsAcc) grouping ->
+                        let agg, aggEvents = grouping
 
-                           agg :: aggAcc, List.append aggEvents eventsAcc)
-                        ([], [])
-                  |> conf.UpsertReadModels
-            // Feed failed upserts back into the stream
-            onRetry =
-               fun (props: ('TAggregate * 'TEvent list) seq) ->
-                  for _, events in props do
-                     failedWritesRef <! events
-            onPersistOk =
-               fun _ response ->
-                  logInfo
-                     mailbox
-                     $"Saved aggregate read models for journal {conf.EventJournalTag} {response}"
-         }
+                        agg :: aggAcc, List.append aggEvents eventsAcc)
+                     ([], [])
+               |> conf.UpsertReadModels
+         // Feed failed upserts back into the stream
+         onRetry =
+            fun (props: ('TAggregate * 'TEvent list) seq) ->
+               for _, events in props do
+                  failedWritesRef <! events
+         onPersistOk =
+            fun _ response ->
+               logInfo
+                  mailbox
+                  $"Saved aggregate read models for journal {conf.EventJournalTag} {response}"
+      }
 
 
    let flow =
@@ -151,10 +142,8 @@ let startProjection<'TAggregate, 'TEvent>
             |> Array.map getAggregate
 
          let! res = Task.WhenAll(distinctAggregateIds) |> Async.AwaitTask
-         return res |> Array.toSeq
+         return res |> Array.toSeq |> Seq.choose id
       })
-      |> Flow.collect id
-      |> Flow.choose id
       |> Flow.via bulkWriteFlow
 
    readJournalSource

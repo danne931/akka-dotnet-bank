@@ -43,9 +43,6 @@ module OrgPath =
       =
       $"{Base}/command-approval-daily-accrual/{orgId}/{initiatedById}"
 
-   let History = Get + "/history"
-   let history (orgId: OrgId) = get orgId + "/history"
-
 module AccountPath =
    let Base = $"{API}/accounts"
    let account (id: AccountId) = $"{Base}/{id}"
@@ -100,6 +97,9 @@ module TransactionPath =
    let Transactions = Base + "/{orgId}"
    let transactions (orgId: OrgId) = $"{Base}/{orgId}"
    let Categories = Base + "/categories"
+
+   let History = Transactions + "/history"
+   let history (orgId: OrgId) = transactions orgId + "/history"
 
    let TransactionInfo = Base + "/transaction/{txnId}"
 

@@ -5,6 +5,7 @@ open System
 
 open Lib.SharedTypes
 open Lib.Validators
+open Bank.Account.Domain
 
 type CreateAccountOwnerInput = {
    Email: string
@@ -197,68 +198,39 @@ module CreateCardCommand =
             }
       }
 
-type PurchasePendingInput = {
-   CardId: CardId
-   CardNumberLast4: string
-   AccountId: AccountId
-   Amount: decimal
-   Merchant: string
-   Reference: string option
-   Date: DateTime
-}
+type PurchaseCommand = Command<PurchaseInfo>
 
-type PurchasePendingCommand = Command<PurchasePendingInput>
-
-// NOTE: CorrelationId traced from
-// EmployeeCommand.PurchasePending
-// -> AccountCommand.Debit
-// -> EmployeeCommand.AccountConfirmsPurchase/AccountRejectsPurchase
-module PurchasePendingCommand =
-   let create
-      (initiatedBy: Initiator)
-      (orgId: OrgId)
-      (data: PurchasePendingInput)
-      =
+module PurchaseCommand =
+   let create (data: PurchaseInfo) =
       Command.create
-         (initiatedBy.Id |> InitiatedById.toEmployeeId |> EmployeeId.toEntityId)
-         orgId
-         (CorrelationId.create ())
-         initiatedBy
+         (data.InitiatedBy.Id
+          |> InitiatedById.toEmployeeId
+          |> EmployeeId.toEntityId)
+         data.OrgId
+         data.CorrelationId
+         data.InitiatedBy
          data
 
    let toEvent
-      (cmd: PurchasePendingCommand)
-      : ValidationResult<BankEvent<PurchasePending>>
+      (cmd: PurchaseCommand)
+      : ValidationResult<BankEvent<PurchaseApplied>>
       =
       validate {
          let input = cmd.Data
-         let! amount = amountValidator "Debit amount" input.Amount
-         let! date = dateNotDefaultValidator "Date" input.Date
-         let! merchant = merchantValidator input.Merchant
+         let! _ = amountValidator "Debit amount" input.Amount
+         let! _ = dateNotDefaultValidator "Date" input.Date
+         let! _ = merchantValidator input.Merchant
 
          return
-            BankEvent.create2<PurchasePendingInput, PurchasePending> cmd {
-               Info = {
-                  InitiatedBy = cmd.InitiatedBy
-                  CorrelationId = cmd.CorrelationId
-                  CardId = input.CardId
-                  CardNumberLast4 = input.CardNumberLast4
-                  AccountId = input.AccountId
-                  Amount = amount
-                  Merchant = merchant
-                  Reference = cmd.Data.Reference
-                  Date = date
-               }
+            BankEvent.create2<PurchaseInfo, PurchaseApplied> cmd {
+               Info = cmd.Data
             }
       }
 
-type AccountConfirmsPurchaseCommand = Command<PurchaseConfirmedByAccount>
+type RefundPurchaseCommand = Command<PurchaseRefunded>
 
-module AccountConfirmsPurchaseCommand =
-   let create
-      (employeeId: EmployeeId, orgId: OrgId)
-      (data: PurchaseConfirmedByAccount)
-      =
+module RefundPurchaseCommand =
+   let create (employeeId: EmployeeId, orgId: OrgId) (data: PurchaseRefunded) =
       Command.create
          (EmployeeId.toEntityId employeeId)
          orgId
@@ -267,30 +239,10 @@ module AccountConfirmsPurchaseCommand =
          data
 
    let toEvent
-      (cmd: AccountConfirmsPurchaseCommand)
-      : ValidationResult<BankEvent<PurchaseConfirmedByAccount>>
+      (cmd: RefundPurchaseCommand)
+      : ValidationResult<BankEvent<PurchaseRefunded>>
       =
-      BankEvent.create<PurchaseConfirmedByAccount> cmd |> Ok
-
-type AccountRejectsPurchaseCommand = Command<PurchaseRejectedByAccount>
-
-module AccountRejectsPurchaseCommand =
-   let create
-      (employeeId: EmployeeId, orgId: OrgId)
-      (data: PurchaseRejectedByAccount)
-      =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         data.Info.CorrelationId
-         data.Info.InitiatedBy
-         data
-
-   let toEvent
-      (cmd: AccountRejectsPurchaseCommand)
-      : ValidationResult<BankEvent<PurchaseRejectedByAccount>>
-      =
-      BankEvent.create<PurchaseRejectedByAccount> cmd |> Ok
+      BankEvent.create<PurchaseRefunded> cmd |> Ok
 
 type LimitDailyDebitsCommand = Command<DailyDebitLimitUpdated>
 

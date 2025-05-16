@@ -20,6 +20,7 @@ type InternalTransferSender = {
 type InternalTransferFailReason =
    | AccountClosed
    | InvalidAccountInfo
+   | PartnerBankSync of string
 
 [<RequireQualifiedAccess>]
 type InternalTransferStatus =
@@ -36,6 +37,7 @@ type BaseInternalTransferInfo = {
    Amount: decimal
    ScheduledDate: DateTime
    Sender: InternalTransferSender
+   Memo: string option
 }
 
 type InProgressInternalTransfer = {

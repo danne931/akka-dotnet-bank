@@ -22,7 +22,6 @@ module EmployeeFields =
    let cards = "cards"
    let status = "status"
    let statusDetail = "status_detail"
-   let pendingPurchases = "pending_purchases"
    let onboardingTasks = "onboarding_tasks"
    let searchQuery = "search_query"
    let inviteToken = "invite_token"
@@ -62,10 +61,6 @@ module EmployeeSqlReader =
       read.text EmployeeFields.statusDetail
       |> Serialization.deserializeUnsafe<EmployeeStatus>
 
-   let pendingPurchases (read: RowReader) =
-      read.text EmployeeFields.pendingPurchases
-      |> Serialization.deserializeUnsafe<PurchaseInfo list>
-
    let onboardingTasks (read: RowReader) =
       read.text EmployeeFields.onboardingTasks
       |> Serialization.deserializeUnsafe<EmployeeOnboardingTask list>
@@ -82,10 +77,6 @@ module EmployeeSqlReader =
       LastName = lastName read
       Cards = cards read |> List.map (fun o -> o.CardId, o) |> Map.ofList
       Status = statusDetail read
-      PendingPurchases =
-         pendingPurchases read
-         |> List.map (fun o -> o.CorrelationId, o)
-         |> Map.ofList
       OnboardingTasks = onboardingTasks read
       AuthProviderUserId = authProviderUserId read
    }
@@ -114,12 +105,6 @@ module EmployeeSqlWriter =
 
    let statusDetail (status: EmployeeStatus) =
       status |> Serialization.serialize |> Sql.jsonb
-
-   let pendingPurchases (pendingPurchases: Map<CorrelationId, PurchaseInfo>) =
-      pendingPurchases.Values
-      |> Seq.toList
-      |> Serialization.serialize
-      |> Sql.jsonb
 
    let onboardingTasks (tasks: EmployeeOnboardingTask list) =
       tasks |> Serialization.serialize |> Sql.jsonb

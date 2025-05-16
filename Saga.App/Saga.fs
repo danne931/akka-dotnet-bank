@@ -1,0 +1,488 @@
+[<RequireQualifiedAccess>]
+module AppSaga
+
+open System
+open Akka.Actor
+open Akkling
+open Akkling.Cluster.Sharding
+open FSharp.Control
+
+open Lib.SharedTypes
+open Lib.Types
+open Lib.Saga
+open Bank.Account.Domain
+open Bank.Transfer.Domain
+open Bank.Employee.Domain
+open Email
+open PurchaseSaga
+open DomesticTransferSaga
+open PlatformTransferSaga
+open PlatformPaymentSaga
+open Bank.Scheduler
+
+[<RequireQualifiedAccess>]
+type Event =
+   | Purchase of PurchaseSagaEvent
+   | DomesticTransfer of DomesticTransferSagaEvent
+   | PlatformTransfer of PlatformTransferSagaEvent
+   | PlatformPayment of PlatformPaymentSagaEvent
+
+   member x.Name =
+      match x with
+      | Event.Purchase e ->
+         match e with
+         | PurchaseSagaEvent.Start e ->
+            match e with
+            | PurchaseSagaStartEvent.DeductedCardFunds _ -> "DeductedCardFunds"
+            | PurchaseSagaStartEvent.PurchaseRejectedByCard _ ->
+               "PurchaseRejectedByCard"
+         | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
+            "PurchaseRejectedCardNetworkResponse"
+         | PurchaseSagaEvent.CardNetworkResponse _ -> "CardNetworkResponse"
+         | PurchaseSagaEvent.PurchaseRefundedToCard -> "PurchaseRefundedToCard"
+         | PurchaseSagaEvent.PurchaseRefundedToAccount ->
+            "PurchaseRefundedToAccount"
+         | PurchaseSagaEvent.PurchaseConfirmedByAccount ->
+            "PurchaseConfirmedByAccount"
+         | PurchaseSagaEvent.PurchaseRejectedByAccount _ ->
+            "PurchaseRejectedByAccount"
+         | PurchaseSagaEvent.PurchaseNotificationSent ->
+            "PurchaseNotificationSent"
+         | PurchaseSagaEvent.PartnerBankSyncResponse _ ->
+            "PurchasePartnerBankSyncResponse"
+         | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync ->
+            "PurchaseSupportTeamResolvedPartnerBankSync"
+         | PurchaseSagaEvent.EvaluateRemainingWork ->
+            "PurchaseEvaluateRemainingWork"
+         | PurchaseSagaEvent.ResetInProgressActivityAttempts ->
+            "PurchaseResetInProgressActivityAttempts"
+      | Event.DomesticTransfer e ->
+         match e with
+         | DomesticTransferSagaEvent.Start e ->
+            match e with
+            | DomesticTransferSagaStartEvent.SenderAccountDeductedFunds _ ->
+               "DomesticTransferSenderAccountDeductedFunds"
+            | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ ->
+               "DomesticTransferScheduleTransferRequest"
+         | DomesticTransferSagaEvent.ScheduledJobCreated ->
+            "DomesticTransferScheduledJobCreated"
+         | DomesticTransferSagaEvent.ScheduledJobExecuted ->
+            "DomesticTransferScheduledJobExecuted"
+         | DomesticTransferSagaEvent.SenderAccountDeductedFunds ->
+            "DomesticTransferSenderAccountDeductedFunds"
+         | DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
+            "DomesticTransferSenderAccountUnableToDeductFunds"
+         | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
+            "DomesticTransferTransferProcessorProgressUpdate"
+         | DomesticTransferSagaEvent.RetryTransferServiceRequest ->
+            "DomesticTransferRetryTransferServiceRequest"
+         | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
+            "DomesticTransferMarkedAsSettled"
+         | DomesticTransferSagaEvent.SenderAccountRefunded ->
+            "DomesticTransferSenderAccountRefunded"
+         | DomesticTransferSagaEvent.TransferInitiatedNotificationSent ->
+            "DomesticTransferInitiatedNotificationSent"
+         | DomesticTransferSagaEvent.EvaluateRemainingWork ->
+            "DomesticTransferEvaluateRemainingWork"
+         | DomesticTransferSagaEvent.ResetInProgressActivityAttempts ->
+            "DomesticTransferResetInProgressActivityAttempts"
+      | Event.PlatformTransfer e ->
+         match e with
+         | PlatformTransferSagaEvent.Start e ->
+            match e with
+            | PlatformTransferSagaStartEvent.SenderAccountDeductedFunds _ ->
+               "PlatformTransferSenderAccountDeductedFunds"
+            | PlatformTransferSagaStartEvent.ScheduleTransferRequest _ ->
+               "PlatformTransferScheduleTransferRequest"
+         | PlatformTransferSagaEvent.ScheduledJobCreated ->
+            "PlatformTransferScheduledJobCreated"
+         | PlatformTransferSagaEvent.ScheduledJobExecuted ->
+            "PlatformTransferScheduledJobExecuted"
+         | PlatformTransferSagaEvent.SenderAccountDeductedFunds ->
+            "PlatformTransferSenderAccountDeductedFunds"
+         | PlatformTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
+            "PlatformTransferSenderAccountUnableToDeductFunds"
+         | PlatformTransferSagaEvent.RecipientAccountDepositedFunds ->
+            "PlatformTransferRecipientAccountDepositedFunds"
+         | PlatformTransferSagaEvent.RecipientAccountUnableToDepositFunds _ ->
+            "PlatformTransferRecipientAccountUnableToDepositFunds"
+         | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
+            "PlatformTransferPartnerBankSyncResponse"
+         | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
+            "PlatformTransferSupportTeamResolvedPartnerBankSync"
+         | PlatformTransferSagaEvent.TransferMarkedAsSettled ->
+            "PlatformTransferMarkedAsSettled"
+         | PlatformTransferSagaEvent.SenderAccountRefunded ->
+            "PlatformTransferSenderAccountRefunded"
+         | PlatformTransferSagaEvent.RecipientAccountDepositUndo ->
+            "PlatformTransferRecipientAccountDepositUndo"
+         | PlatformTransferSagaEvent.TransferNotificationSent ->
+            "PlatformTransferNotificationSent"
+         | PlatformTransferSagaEvent.TransferDepositNotificationSent ->
+            "PlatformTransferDepositNotificationSent"
+         | PlatformTransferSagaEvent.EvaluateRemainingWork ->
+            "PlatformTransferEvaluateRemainingWork"
+         | PlatformTransferSagaEvent.ResetInProgressActivityAttempts ->
+            "PlatformTransferResetInProgressActivityAttempts"
+      | Event.PlatformPayment e ->
+         match e with
+         | PlatformPaymentSagaEvent.Start e ->
+            match e with
+            | PlatformPaymentSagaStartEvent.PaymentRequested _ ->
+               "PlatformPaymentPaymentRequested"
+         | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
+            "PlatformPaymentRequestCancelled"
+         | PlatformPaymentSagaEvent.PaymentRequestDeclined ->
+            "PlatformPaymentRequestDeclined"
+         | PlatformPaymentSagaEvent.PayerAccountDeductedFunds _ ->
+            "PlatformPaymentPayerAccountDeductedFunds"
+         | PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds _ ->
+            "PlatformPaymentPayerAccountUnableToDeductFunds"
+         | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds ->
+            "PlatformPaymentPayeeAccountDepositedFunds"
+         | PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds _ ->
+            "PlatformPaymentPayeeAccountUnableToDepositFunds"
+         | PlatformPaymentSagaEvent.PartnerBankSyncResponse _ ->
+            "PlatformPaymentPartnerBankSyncResponse"
+         | PlatformPaymentSagaEvent.SupportTeamResolvedPartnerBankSync ->
+            "PlatformPaymentSupportTeamResolvedPartnerBankSync"
+         | PlatformPaymentSagaEvent.PayerAccountRefunded ->
+            "PlatformPaymentPayerAccountRefunded"
+         | PlatformPaymentSagaEvent.ThirdPartyPaymentMethodRefunded ->
+            "PlatformPaymentThirdPartyPaymentMethodRefunded"
+         | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->
+            "PlatformPaymentRequestNotificationSentToPayer"
+         | PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer ->
+            "PlatformPaymentPaidNotificationSentToPayer"
+         | PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee ->
+            "PlatformPaymentDepositedNotificationSentToPayee"
+         | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
+            "PlatformPaymentDeclinedNotificationSentToPayee"
+         | PlatformPaymentSagaEvent.EvaluateRemainingWork ->
+            "PlatformPaymentEvaluateRemainingWork"
+         | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts ->
+            "PlatformPaymentResetInProgressActivityAttempts"
+
+[<RequireQualifiedAccess>]
+type Saga =
+   | Purchase of PurchaseSaga
+   | DomesticTransfer of DomesticTransferSaga
+   | PlatformTransfer of PlatformTransferSaga
+   | PlatformPayment of PlatformPaymentSaga
+
+   interface ISaga with
+      member x.SagaId =
+         match x with
+         | Saga.Purchase s -> s.PurchaseInfo.CorrelationId
+         | Saga.DomesticTransfer s ->
+            TransferId.toCorrelationId s.TransferInfo.TransferId
+         | Saga.PlatformTransfer s ->
+            TransferId.toCorrelationId s.TransferInfo.TransferId
+         | Saga.PlatformPayment s -> PaymentId.toCorrelationId s.PaymentInfo.Id
+
+      member x.OrgId =
+         match x with
+         | Saga.Purchase s -> s.PurchaseInfo.OrgId
+         | Saga.DomesticTransfer s -> s.TransferInfo.Sender.OrgId
+         | Saga.PlatformTransfer s -> s.TransferInfo.Sender.OrgId
+         | Saga.PlatformPayment s -> s.PaymentInfo.Payee.OrgId
+
+      member x.ActivityInProgressCount =
+         match x with
+         | Saga.Purchase s -> s.LifeCycle.InProgress.Length
+         | Saga.DomesticTransfer s -> s.LifeCycle.InProgress.Length
+         | Saga.PlatformTransfer s -> s.LifeCycle.InProgress.Length
+         | Saga.PlatformPayment s -> s.LifeCycle.InProgress.Length
+
+      member x.ActivityAttemptsExhaustedCount =
+         match x with
+         | Saga.Purchase s -> s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
+         | Saga.DomesticTransfer s ->
+            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
+         | Saga.PlatformTransfer s ->
+            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
+         | Saga.PlatformPayment s ->
+            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
+
+      member x.ActivityRetryableAfterInactivityCount =
+         match x with
+         | Saga.Purchase s ->
+            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
+         | Saga.DomesticTransfer s ->
+            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
+         | Saga.PlatformTransfer s ->
+            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
+         | Saga.PlatformPayment s ->
+            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
+
+      member x.ExhaustedAllAttempts =
+         match x with
+         | Saga.Purchase s -> s.LifeCycle.SagaExhaustedAttempts
+         | Saga.DomesticTransfer s -> s.LifeCycle.SagaExhaustedAttempts
+         | Saga.PlatformTransfer s -> s.LifeCycle.SagaExhaustedAttempts
+         | Saga.PlatformPayment s -> s.LifeCycle.SagaExhaustedAttempts
+
+      member x.InactivityTimeout =
+         match x with
+         | Saga.Purchase s -> s.LifeCycle.InactivityTimeout
+         | Saga.DomesticTransfer s -> s.LifeCycle.InactivityTimeout
+         | Saga.PlatformTransfer s -> s.LifeCycle.InactivityTimeout
+         | Saga.PlatformPayment s -> s.LifeCycle.InactivityTimeout
+
+let sagaHandler
+   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
+   (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
+   (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
+   : SagaActor.SagaHandler<Saga, Event>
+   =
+   {
+      getEvaluateRemainingWorkEvent =
+         fun saga ->
+            match saga with
+            | Saga.Purchase _ ->
+               PurchaseSagaEvent.EvaluateRemainingWork |> Event.Purchase
+            | Saga.DomesticTransfer _ ->
+               DomesticTransferSagaEvent.EvaluateRemainingWork
+               |> Event.DomesticTransfer
+            | Saga.PlatformTransfer _ ->
+               PlatformTransferSagaEvent.EvaluateRemainingWork
+               |> Event.PlatformTransfer
+            | Saga.PlatformPayment _ ->
+               PlatformPaymentSagaEvent.EvaluateRemainingWork
+               |> Event.PlatformPayment
+      getResetInProgressActivitiesEvent =
+         fun saga ->
+            match saga with
+            | Saga.Purchase _ ->
+               PurchaseSagaEvent.ResetInProgressActivityAttempts
+               |> Event.Purchase
+            | Saga.DomesticTransfer _ ->
+               DomesticTransferSagaEvent.ResetInProgressActivityAttempts
+               |> Event.DomesticTransfer
+            | Saga.PlatformTransfer _ ->
+               PlatformTransferSagaEvent.ResetInProgressActivityAttempts
+               |> Event.PlatformTransfer
+            | Saga.PlatformPayment _ ->
+               PlatformPaymentSagaEvent.ResetInProgressActivityAttempts
+               |> Event.PlatformPayment
+      applyEvent =
+         fun (state: Saga option) (evt: Event) (timestamp: DateTime) ->
+            match evt, state with
+            | Event.Purchase e, None ->
+               PurchaseSaga.applyEvent None e timestamp
+               |> Option.map Saga.Purchase
+            | Event.Purchase e, Some(Saga.Purchase state) ->
+               PurchaseSaga.applyEvent (Some state) e timestamp
+               |> Option.map Saga.Purchase
+            | Event.DomesticTransfer e, None ->
+               DomesticTransferSaga.applyEvent None e timestamp
+               |> Option.map Saga.DomesticTransfer
+            | Event.DomesticTransfer e, Some(Saga.DomesticTransfer state) ->
+               DomesticTransferSaga.applyEvent (Some state) e timestamp
+               |> Option.map Saga.DomesticTransfer
+            | Event.PlatformTransfer e, None ->
+               PlatformTransferSaga.applyEvent None e timestamp
+               |> Option.map Saga.PlatformTransfer
+            | Event.PlatformTransfer e, Some(Saga.PlatformTransfer state) ->
+               PlatformTransferSaga.applyEvent (Some state) e timestamp
+               |> Option.map Saga.PlatformTransfer
+            | Event.PlatformPayment e, None ->
+               PlatformPaymentSaga.applyEvent None e timestamp
+               |> Option.map Saga.PlatformPayment
+            | Event.PlatformPayment e, Some(Saga.PlatformPayment state) ->
+               PlatformPaymentSaga.applyEvent (Some state) e timestamp
+               |> Option.map Saga.PlatformPayment
+            | _ -> state
+      stateTransition =
+         fun (state: Saga option) (evt: Event) (timestamp: DateTime) ->
+            match evt, state with
+            | Event.Purchase e, None ->
+               PurchaseSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.Purchase)
+            | Event.Purchase e, Some(Saga.Purchase state) ->
+               PurchaseSaga.stateTransition (Some state) e timestamp
+               |> Result.map (Option.map Saga.Purchase)
+            | Event.DomesticTransfer e, None ->
+               DomesticTransferSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.DomesticTransfer)
+            | Event.DomesticTransfer e, Some(Saga.DomesticTransfer state) ->
+               DomesticTransferSaga.stateTransition (Some state) e timestamp
+               |> Result.map (Option.map Saga.DomesticTransfer)
+            | Event.PlatformTransfer e, None ->
+               PlatformTransferSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.PlatformTransfer)
+            | Event.PlatformTransfer e, Some(Saga.PlatformTransfer state) ->
+               PlatformTransferSaga.stateTransition (Some state) e timestamp
+               |> Result.map (Option.map Saga.PlatformTransfer)
+            | Event.PlatformPayment e, None ->
+               PlatformPaymentSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.PlatformPayment)
+            | Event.PlatformPayment e, Some(Saga.PlatformPayment state) ->
+               PlatformPaymentSaga.stateTransition (Some state) e timestamp
+               |> Result.map (Option.map Saga.PlatformPayment)
+            | _ ->
+               Error
+                  Lib.Saga.SagaStateTransitionError.ReceivedEventOfDifferentSagaType
+      onEventPersisted =
+         fun mailbox evt priorState state ->
+            let getEmailRef () = getEmailRef mailbox.System
+            let getSchedulingRef () = getSchedulingRef mailbox.System
+
+            let notHandled () =
+               logError
+                  mailbox
+                  $"Can not handle saga event persisted -{priorState}- {evt}"
+
+            match evt with
+            | Event.Purchase e ->
+               let purchaseDeps: PurchaseSaga.PersistenceHandlerDependencies = {
+                  getEmployeeRef = getEmployeeRef
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  cardNetworkConfirmPurchase =
+                     PurchaseSaga.cardNetworkConfirmPurchase
+                  cardNetworkRejectPurchase =
+                     PurchaseSaga.cardNetworkRejectPurchase
+                  syncPurchaseToPartnerBank =
+                     PurchaseSaga.syncPurchaseToPartnerBank
+                  sendMessageToSelf =
+                     fun purchase asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (
+                              Event.Purchase
+                              >> SagaEvent.create
+                                    purchase.OrgId
+                                    purchase.CorrelationId
+                              >> SagaMessage.Event
+                           )
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match priorState, state, e with
+               | None, Saga.Purchase _, PurchaseSagaEvent.Start evt ->
+                  PurchaseSaga.onStartEventPersisted purchaseDeps evt
+               | Some(Saga.Purchase priorState), Saga.Purchase state, _ ->
+                  PurchaseSaga.onEventPersisted purchaseDeps priorState state e
+               | _ -> notHandled ()
+            | Event.DomesticTransfer evt ->
+               let deps: DomesticTransferSaga.PersistenceHandlerDependencies = {
+                  getSchedulingRef = getSchedulingRef
+                  getDomesticTransferRef =
+                     fun () -> getDomesticTransferRef mailbox.System
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  logError = logError mailbox
+               }
+
+               match priorState, state, evt with
+               | None,
+                 Saga.DomesticTransfer _,
+                 DomesticTransferSagaEvent.Start evt ->
+                  DomesticTransferSaga.onStartEventPersisted deps evt
+               | Some(Saga.DomesticTransfer priorState),
+                 Saga.DomesticTransfer state,
+                 _ ->
+                  DomesticTransferSaga.onEventPersisted
+                     deps
+                     priorState
+                     state
+                     evt
+               | _ -> notHandled ()
+            | Event.PlatformTransfer evt ->
+               let deps: PlatformTransferSaga.PersistenceHandlerDependencies = {
+                  getSchedulingRef = getSchedulingRef
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  syncToPartnerBank =
+                     PlatformTransferSaga.syncTransferToPartnerBank
+                  sendMessageToSelf =
+                     fun transfer asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (
+                              Event.PlatformTransfer
+                              >> SagaEvent.create
+                                    transfer.Sender.OrgId
+                                    (TransferId.toCorrelationId
+                                       transfer.TransferId)
+                              >> SagaMessage.Event
+                           )
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match priorState, state, evt with
+               | None,
+                 Saga.PlatformTransfer _,
+                 PlatformTransferSagaEvent.Start evt ->
+                  PlatformTransferSaga.onStartEventPersisted deps evt
+               | Some(Saga.PlatformTransfer priorState),
+                 Saga.PlatformTransfer state,
+                 _ ->
+                  PlatformTransferSaga.onEventPersisted
+                     deps
+                     priorState
+                     state
+                     evt
+               | _ -> notHandled ()
+            | Event.PlatformPayment evt ->
+               let deps: PlatformPaymentSaga.PersistenceHandlerDependencies = {
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  syncToPartnerBank =
+                     PlatformPaymentSaga.syncPaymentToPartnerBank
+                  refundPaymentToThirdParty =
+                     PlatformPaymentSaga.refundPaymentToThirdParty
+                  sendMessageToSelf =
+                     fun payment asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (
+                              Event.PlatformPayment
+                              >> SagaEvent.create
+                                    payment.Payee.OrgId
+                                    (PaymentId.toCorrelationId payment.Id)
+                              >> SagaMessage.Event
+                           )
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match priorState, state, evt with
+               | None,
+                 Saga.PlatformPayment _,
+                 PlatformPaymentSagaEvent.Start evt ->
+                  PlatformPaymentSaga.onStartEventPersisted deps evt
+               | Some(Saga.PlatformPayment priorState),
+                 Saga.PlatformPayment state,
+                 _ ->
+                  PlatformPaymentSaga.onEventPersisted deps priorState state evt
+               | _ -> notHandled ()
+   }
+
+let getEntityRef = SagaActor.get<Event>
+
+let initProps
+   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
+   (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
+   (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
+   (supervisorOpts: PersistenceSupervisorOptions)
+   (sagaPassivateIdleEntityAfter: TimeSpan)
+   (persistenceId: string)
+   =
+   SagaActor.initProps<Saga, Event>
+      supervisorOpts
+      sagaPassivateIdleEntityAfter
+      persistenceId
+      (sagaHandler
+         getEmployeeRef
+         getAccountRef
+         getEmailActor
+         getDomesticTransferRef
+         getSchedulingRef)

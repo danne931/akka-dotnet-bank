@@ -122,9 +122,9 @@ let private deserializeFromQueue<'QueueMessage>
 type QueueConsumerOptions<'QueueMessage, 'ActionRequest, 'ActionResponse> = {
    Service: CircuitBreakerService
    onCircuitBreakerEvent: CircuitBreakerEvent -> unit
-   /// One rabbit message to potentially multiple protected action requests.
-   queueMessageToActionRequests:
-      Actor<obj> -> 'QueueMessage -> Task<'ActionRequest list option>
+   /// A rabbit message to a protected action request.
+   queueMessageToActionRequest:
+      Actor<obj> -> 'QueueMessage -> Task<'ActionRequest option>
    /// The action to protect with circuit breaker
    protectedAction:
       Actor<obj> -> 'ActionRequest -> Task<Result<'ActionResponse, Err>>
@@ -186,8 +186,8 @@ let private initConsumerStream
    source
    |> Source.viaMat (killSwitch.Flow()) Keep.none
    // Deserialize dequeued Rabbit message envelopes into 'QueueMessage
-   // and map the 'QueueMessage to multiple 'ActionRequest objects.
-   |> Source.asyncMapUnordered
+   // and map the 'QueueMessage to a 'ActionRequest object.
+   |> Source.asyncMap
       maxParallel
       (fun (committable: CommittableIncomingMessage) -> async {
          if breaker.IsOpen then
@@ -199,29 +199,23 @@ let private initConsumerStream
          else
             match deserializeFromQueue mailbox.System committable with
             | Error e ->
-               logError $"Deserialization Broken ({opts.Service}): {e.Message}"
+               logError $"Deserialization Broken ({opts.Service}): {e}"
                do! committable.Nack() |> Async.AwaitTask
                return None
             | Ok msg ->
-               let! actionRequestObjects =
-                  opts.queueMessageToActionRequests mailbox msg
+               let! actionRequestObject =
+                  opts.queueMessageToActionRequest mailbox msg
                   |> Async.AwaitTask
 
-               match actionRequestObjects with
+               match actionRequestObject with
                | None ->
                   do! committable.Nack() |> Async.AwaitTask
                   return None
-               | Some requests ->
-                  return
-                     requests
-                     |> List.map (fun info -> committable, msg, info)
-                     |> Some
+               | Some request -> return Some(committable, msg, request)
       })
    // Filter out items that were nacked due to circuit breaker being open,
-   // deserialization errors or errors resolving 'ActionRequest list from 'QueueMessage.
+   // deserialization errors or errors resolving 'ActionRequest from 'QueueMessage.
    |> Source.choose id
-   // Flatten ('ActionRequest list) list to 'ActionRequest list.
-   |> Source.collect id
    // Initiate action with circuit breaker integration.  If the action
    // fails then the message will be Nacked and attempted later when
    // the breaker transitions to HalfOpen or Closed.

@@ -26,7 +26,7 @@ type Values = {
 }
 
 let private ANY_ADMIN_APPROVER = {
-   EmployeeId = string Constants.SYSTEM_USER_ID
+   EmployeeId = string Initiator.System.Id
    Name = "Any Admin"
 }
 

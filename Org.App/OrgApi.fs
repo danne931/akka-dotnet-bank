@@ -99,6 +99,7 @@ let getOrgAndAccountProfiles
          SELECT
             o.{Fields.name},
             o.{Fields.statusDetail},
+            o.{Fields.adminTeamEmail},
             features.{Fields.socialTransferDiscoveryAccountId},
             a.*,
             dta.internal_transfer_within_org_accrued as daily_internal_within,
@@ -244,6 +245,7 @@ let searchOrgTransferSocialDiscovery (fromOrgId: OrgId) (nameQuery: string) =
          o.{{Fields.orgId}},
          o.{{Fields.name}},
          o.{{Fields.statusDetail}},
+         o.{{Fields.adminTeamEmail}},
          features.{{Fields.socialTransferDiscoveryAccountId}}
       FROM {{table}} o
       LEFT JOIN {{OrganizationSqlMapper.featureFlagsTable}} features using({{Fields.orgId}})

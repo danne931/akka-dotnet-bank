@@ -16,6 +16,7 @@ open Lib.Types
 open ActorUtil
 open Bank.Account.Domain
 open Email
+open Bank.Scheduler
 
 // NOTE:
 // This was created before scope was expanded into the business banking
@@ -41,7 +42,7 @@ let initState: Map<AccountId, Account> = Map.empty
 
 let actorProps
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getSchedulingRef: ActorSystem -> IActorRef<SchedulingActor.Message>)
+   (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (deleteHistoricalRecords:
       AccountId list -> TaskResultOption<AccountNumber list, Err>)
@@ -82,10 +83,10 @@ let actorProps
 
                   for account in accounts.Values do
                      let msg =
-                        EmailMessage.AccountClose(
-                           account.FullName,
+                        EmailMessage.create
                            account.OrgId
-                        )
+                           (System.Guid.NewGuid() |> CorrelationId)
+                           (EmailInfo.AccountClose account.FullName)
 
                      getEmailRef system <! msg
 
@@ -96,7 +97,7 @@ let actorProps
 
                   // Schedule deletion of historical/legal records for 3 months later.
                   getSchedulingRef system
-                  <! SchedulingActor.DeleteAccountsJobSchedule accountIds
+                  <! SchedulerMessage.DeleteAccountsJobSchedule accountIds
 
                   return! loop initState <@> SaveSnapshot initState
             | AccountClosureMessage.DeleteAll accountIds ->
@@ -161,7 +162,7 @@ let deleteHistoricalRecords (accountIds: AccountId list) =
 let initProps
    (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
-   (getSchedulingRef: ActorSystem -> IActorRef<SchedulingActor.Message>)
+   (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
    (throttle: StreamThrottle)
    =
    actorProps

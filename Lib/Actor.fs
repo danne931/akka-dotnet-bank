@@ -111,6 +111,13 @@ module ClusterMetadata =
          messageExtractor Env.config.AccountCluster.NumberOfShards
    }
 
+   let sagaShardRegion = {
+      name = "saga"
+      messageExtractor =
+         // TODO: Create separate config const for saga number of shards
+         messageExtractor Env.config.AccountCluster.NumberOfShards
+   }
+
    let roles = {|
       web = "web-role"
       org = "org-role"
@@ -118,6 +125,7 @@ module ClusterMetadata =
       signalR = "signal-r-role"
       scheduling = "scheduling-role"
       employee = "employee-role"
+      saga = "saga-role"
    |}
 
 module ActorMetadata =
@@ -150,13 +158,17 @@ module ActorMetadata =
    /// Enqueues domestic transfer messages into RabbitMq
    type DomesticTransferProducerMarker() = class end
 
-   type TransferProgressTrackingMarker() = class end
-
    type AutoTransferSchedulingMarker() = class end
 
    type BillingCycleMarker() = class end
 
    type BillingStatementMarker() = class end
+
+   type SagaMarker() = class end
+
+   type SagaReadModelSyncMarker() = class end
+
+   type SagaAlarmClockMarker() = class end
 
    type AccountMarker() = class end
 
@@ -217,6 +229,16 @@ module ActorMetadata =
       Route = "employee-read-model-sync"
    }
 
+   let sagaReadModelSync = {
+      Name = "saga-read-model-sync"
+      Route = "saga-read-model-sync"
+   }
+
+   let sagaAlarmClock = {
+      Name = "saga-alarm-clock"
+      Route = "saga-alarm-clock"
+   }
+
    let internalTransfer = {
       Name = "internal-transfer-recipient"
       RouteBuilder =
@@ -231,11 +253,6 @@ module ActorMetadata =
    let domesticTransferProducer = {
       Name = "domestic-transfer-producer"
       Route = "domestic-transfer-producer"
-   }
-
-   let transferProgressTracking = {
-      Name = "transfer-progress-tracking"
-      Route = "transfer-progress-tracking"
    }
 
    let autoTransferScheduling = {

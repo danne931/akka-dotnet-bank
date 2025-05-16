@@ -54,22 +54,28 @@ let form
 
    let onSubmit amount merchant =
       let cmd =
-         PurchasePendingCommand.create
-            {
+         PurchaseCommand.create {
+            CorrelationId = CorrelationId(Guid.NewGuid())
+            InitiatedBy = {
                Id = InitiatedById employee.EmployeeId
                Name = employee.Name
             }
-            employee.OrgId
-            {
-               CardId = selectedCardId
-               CardNumberLast4 = card.CardNumberLast4
-               AccountId = account.AccountId
-               Amount = amount
-               Merchant = merchant
-               Reference = None
-               Date = DateTime.UtcNow
-            }
-         |> EmployeeCommand.PurchasePending
+            OrgId = employee.OrgId
+            EmployeeId = employee.EmployeeId
+            EmployeeName = employee.Name
+            EmployeeEmail = employee.Email
+            CardId = selectedCardId
+            CardNumberLast4 = card.CardNumberLast4
+            AccountId = account.AccountId
+            Amount = amount
+            Merchant = merchant
+            Reference = None
+            Date = DateTime.UtcNow
+            // Represents ID of transaction coming from
+            // simulated card network.
+            CardNetworkTransactionId = Guid.NewGuid()
+         }
+         |> EmployeeCommand.Purchase
          |> FormCommand.Employee
 
       Msg.Submit(FormEntity.Employee employee, cmd, Started)

@@ -16,6 +16,8 @@ module PaymentId =
       let (PaymentId id) = payId
       id
 
+   let toCorrelationId (PaymentId payId) = CorrelationId payId
+
 [<RequireQualifiedAccess>]
 type PaymentType =
    | Platform
@@ -34,28 +36,21 @@ module PaymentType =
       | None -> failwith "Error attempting to cast string to PaymentType"
 
 [<RequireQualifiedAccess>]
+type PlatformPaymentFailReason =
+   | AccountClosed
+   | PartnerBankSync of string
+
+[<RequireQualifiedAccess>]
+type PlatformPaymentRefundReason = PaymentFailed of PlatformPaymentFailReason
+
+[<RequireQualifiedAccess>]
 type PlatformPaymentStatus =
    | Unpaid
    | Paid
    | Deposited
    | Cancelled
    | Declined
-
-module PlatformPaymentStatus =
-   let fromString (str: string) : PlatformPaymentStatus option =
-      match str.ToLower() with
-      | "unpaid" -> Some PlatformPaymentStatus.Unpaid
-      | "paid" -> Some PlatformPaymentStatus.Paid
-      | "deposited" -> Some PlatformPaymentStatus.Deposited
-      | "cancelled" -> Some PlatformPaymentStatus.Cancelled
-      | "declined" -> Some PlatformPaymentStatus.Declined
-      | _ -> None
-
-   let fromStringUnsafe str : PlatformPaymentStatus =
-      match fromString str with
-      | Some s -> s
-      | None ->
-         failwith "Error attempting to cast string to PlatformPaymentStatus"
+   | Failed of PlatformPaymentFailReason
 
 [<RequireQualifiedAccess>]
 type ThirdPartyPaymentStatus =
@@ -170,11 +165,12 @@ module Payment =
       match payment with
       | Payment.Platform p ->
          match p.Status with
-         | PlatformPaymentStatus.Unpaid when isExpired payment -> 5
-         | PlatformPaymentStatus.Paid -> 3
-         | PlatformPaymentStatus.Deposited -> 4
-         | PlatformPaymentStatus.Cancelled -> 2
-         | PlatformPaymentStatus.Declined -> 2
+         | PlatformPaymentStatus.Unpaid when isExpired payment -> 6
+         | PlatformPaymentStatus.Deposited -> 5
+         | PlatformPaymentStatus.Paid -> 4
+         | PlatformPaymentStatus.Cancelled -> 3
+         | PlatformPaymentStatus.Declined -> 3
+         | PlatformPaymentStatus.Failed _ -> 2
          | PlatformPaymentStatus.Unpaid -> 1
       | Payment.ThirdParty p ->
          match p.Status with

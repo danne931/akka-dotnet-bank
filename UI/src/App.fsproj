@@ -118,6 +118,7 @@
      <ProjectReference Include="../../Account.Domain/Account.Domain.fsproj" />
      <ProjectReference Include="../../Employee.Domain/Employee.Domain.fsproj" />
      <ProjectReference Include="../../Org.Domain/Org.Domain.fsproj" />
+     <ProjectReference Include="../../Transaction.Domain/Transaction.Domain.fsproj" />
   </ItemGroup>
 
 </Project>

@@ -7,7 +7,7 @@ open CommandApproval
 open Bank.Org.Domain
 open Bank.Employee.Domain
 open Lib.SharedTypes
-open History
+open UIDomain.History
 open UIDomain.Account
 
 type private MenuUrl =

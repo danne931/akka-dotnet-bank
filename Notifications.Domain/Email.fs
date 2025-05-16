@@ -1,0 +1,77 @@
+module Email
+
+open Lib.SharedTypes
+open Bank.Employee.Domain
+open Bank.Account.Domain
+
+type EmployeeInviteEmailInfo = {
+   Name: string
+   Email: Email
+   Token: InviteToken
+}
+
+type InternalTransferBetweenOrgsEmailInfo = {
+   SenderAccountName: string
+   RecipientBusinessName: string
+   Amount: decimal
+}
+
+type InternalTransferBetweenOrgsDepositEmailInfo = {
+   SenderBusinessName: string
+   RecipientAccountName: string
+   Amount: decimal
+}
+
+type PlatformPaymentEmailInfo = {
+   PayeeBusinessName: string
+   PayerBusinessName: string
+   Amount: decimal
+}
+
+type DomesticTransferEmailInfo = {
+   SenderAccountName: string
+   RecipientName: string
+   Amount: decimal
+}
+
+type PurchaseEmailInfo = {
+   Email: Email
+   Amount: decimal
+   Merchant: string
+   CardNumberLast4: string
+}
+
+type PurchaseFailEmailInfo = {
+   Email: Email
+   Reason: PurchaseFailReason
+}
+
+[<RequireQualifiedAccess>]
+type EmailInfo =
+   | AccountOpen of accountName: string
+   | AccountClose of accountName: string
+   | BillingStatement of accountName: string
+   | Purchase of PurchaseEmailInfo
+   | PurchaseFailed of PurchaseFailEmailInfo
+   | InternalTransferBetweenOrgs of InternalTransferBetweenOrgsEmailInfo
+   | InternalTransferBetweenOrgsDeposited of
+      InternalTransferBetweenOrgsDepositEmailInfo
+   | PlatformPaymentRequested of PlatformPaymentEmailInfo
+   | PlatformPaymentDeclined of PlatformPaymentEmailInfo
+   | PlatformPaymentPaid of PlatformPaymentEmailInfo
+   | PlatformPaymentDeposited of PlatformPaymentEmailInfo
+   | DomesticTransfer of DomesticTransferEmailInfo
+   | ApplicationErrorRequiresSupport of error: string
+   | EmployeeInvite of EmployeeInviteEmailInfo
+
+type EmailMessage = {
+   OrgId: OrgId
+   CorrelationId: CorrelationId
+   Info: EmailInfo
+} with
+
+   static member create orgId corrId info = {
+      OrgId = orgId
+      CorrelationId = corrId
+      Info = info
+   }

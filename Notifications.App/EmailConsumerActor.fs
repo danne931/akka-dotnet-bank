@@ -4,6 +4,8 @@ module EmailConsumerActor
 open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
 open Akkling
+open Akkling.Streams
+open Akkling.Cluster.Sharding
 open System
 open System.Net.Http
 open System.Net.Http.Json
@@ -13,11 +15,11 @@ open FsToolkit.ErrorHandling
 open Lib.Types
 open Lib.Postgres
 open Lib.SharedTypes
-open Bank.Employee.Domain
 open SignalRBroadcast
 open Email
+open Lib.Saga
 
-module private EmailRequest =
+module EmailRequest =
    type PreliminaryT = {
       OrgId: OrgId
       Event: string
@@ -45,52 +47,120 @@ let private emailPropsFromMessage
    (msg: EmailMessage)
    : EmailRequest.PreliminaryT
    =
-   match msg with
-   | EmailMessage.AccountOpen(accountName, orgId) -> {
-      OrgId = orgId
+   match msg.Info with
+   | EmailInfo.AccountOpen(accountName) -> {
+      OrgId = msg.OrgId
       Event = "account-opened"
       Email = None
       Data = {| name = accountName |}
      }
-   | EmailMessage.AccountClose(accountName, orgId) -> {
-      OrgId = orgId
+   | EmailInfo.AccountClose(accountName) -> {
+      OrgId = msg.OrgId
       Event = "account-closed"
       Email = None
       Data = {| name = accountName |}
      }
    // TODO: Include link to view statement
-   | EmailMessage.BillingStatement(accountName, orgId) -> {
-      OrgId = orgId
+   | EmailInfo.BillingStatement(accountName) -> {
+      OrgId = msg.OrgId
       Event = "billing-statement"
       Email = None
       Data = {| name = accountName |}
      }
-   | EmailMessage.PurchaseFailed info -> {
-      OrgId = info.OrgId
-      Event = "debit-declined"
+   | EmailInfo.Purchase info -> {
+      OrgId = msg.OrgId
+      Event = "purchase"
       Email = Some(string info.Email)
       Data = {|
-         reason = PurchaseFailReason.display info.Reason
+         amount = $"${info.Amount}"
+         merchant = info.Merchant
+         cardNumberLast4 = info.CardNumberLast4
       |}
      }
-   | EmailMessage.InternalTransferBetweenOrgsDeposited info -> {
-      OrgId = info.OrgId
-      Event = "transfer-deposited"
+   | EmailInfo.PurchaseFailed info -> {
+      OrgId = msg.OrgId
+      Event = "debit-declined"
+      Email = Some(string info.Email)
+      Data = {| reason = info.Reason.Display |}
+     }
+   | EmailInfo.InternalTransferBetweenOrgs info -> {
+      OrgId = msg.OrgId
+      Event = "internal-transfer-between-orgs"
       Email = None
       Data = {|
-         name = info.AccountName
+         sender = info.SenderAccountName
+         recipient = info.RecipientBusinessName
          amount = $"${info.Amount}"
-         origin = info.SenderBusinessName
       |}
      }
-   | EmailMessage.ApplicationErrorRequiresSupport(errMsg, orgId) -> {
-      OrgId = orgId
+   | EmailInfo.InternalTransferBetweenOrgsDeposited info -> {
+      OrgId = msg.OrgId
+      Event = "internal-transfer-between-orgs-deposited"
+      Email = None
+      Data = {|
+         sender = info.SenderBusinessName
+         recipient = info.RecipientAccountName
+         amount = $"${info.Amount}"
+      |}
+     }
+   | EmailInfo.PlatformPaymentRequested info -> {
+      OrgId = msg.OrgId
+      Event = "platform-payment-requested"
+      Email = None
+      Data = {|
+         payee = info.PayeeBusinessName
+         payer = info.PayerBusinessName
+         amount = $"${info.Amount}"
+      |}
+     }
+   | EmailInfo.PlatformPaymentPaid info -> {
+      OrgId = msg.OrgId
+      Event = "platform-payment-paid"
+      Email = None
+      Data = {|
+         payee = info.PayeeBusinessName
+         payer = info.PayerBusinessName
+         amount = $"${info.Amount}"
+      |}
+     }
+   | EmailInfo.PlatformPaymentDeposited info -> {
+      OrgId = msg.OrgId
+      Event = "platform-payment-deposited"
+      Email = None
+      Data = {|
+         payee = info.PayeeBusinessName
+         payer = info.PayerBusinessName
+         amount = $"${info.Amount}"
+      |}
+     }
+   | EmailInfo.PlatformPaymentDeclined info -> {
+      OrgId = msg.OrgId
+      Event = "platform-payment-declined"
+      Email = None
+      Data = {|
+         payee = info.PayeeBusinessName
+         payer = info.PayerBusinessName
+         amount = $"${info.Amount}"
+      |}
+     }
+   | EmailInfo.DomesticTransfer info -> {
+      OrgId = msg.OrgId
+      Event = "domestic-transfer"
+      Email = None
+      Data = {|
+         senderAccountName = info.SenderAccountName
+         recipientName = info.RecipientName
+         amount = $"${info.Amount}"
+      |}
+     }
+   | EmailInfo.ApplicationErrorRequiresSupport(errMsg) -> {
+      OrgId = msg.OrgId
       Event = "application-error-requires-support"
       Email = EnvNotifications.config.SupportEmail
       Data = {| error = errMsg |}
      }
-   | EmailMessage.EmployeeInvite info -> {
-      OrgId = info.OrgId
+   | EmailInfo.EmployeeInvite info -> {
+      OrgId = msg.OrgId
       Event = "employee-invite"
       Email = Some(string info.Email)
       Data = {|
@@ -114,7 +184,9 @@ let private sendEmail
                {|
                   orgId = data.OrgId
                   event = data.Event
-                  email = data.Email
+                  email =
+                     EnvNotifications.config.OverrideEmailRecipient
+                     |> Option.defaultValue data.Email
                   data = data.Data
                |}
             )
@@ -132,6 +204,9 @@ let private sendEmail
          return Error(Err.UnexpectedError e.Message)
    }
 
+let private mockSendEmail _ =
+   new HttpResponseMessage() |> Ok |> Task.FromResult
+
 let private createClient (bearerToken: string) =
    let client =
       new HttpClient(BaseAddress = Uri(EnvNotifications.config.EmailServiceUri))
@@ -146,39 +221,88 @@ let private createClient (bearerToken: string) =
 // If no specified Email then formulate an EmailRequest for each
 // admin of the organization.
 let private queueMessageToActionRequest
-   (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
+   (getOrgTeamEmail: OrgId -> Task<Result<Email option, Err>>)
    (mailbox: Actor<_>)
    (msg: EmailMessage)
-   : EmailRequest.T list option Task
+   : EmailRequest.T option Task
    =
    task {
       let preliminaryInfo = emailPropsFromMessage msg
 
       match EmailRequest.create preliminaryInfo with
-      | Some evt -> return Some [ evt ]
+      | Some email -> return Some email
       | None ->
-         let! emailsToSendToAdmins =
-            getAdminEmailsForOrg preliminaryInfo.OrgId
-            |> TaskResultOption.map (
-               List.choose (fun email ->
+         let! email =
+            getOrgTeamEmail preliminaryInfo.OrgId
+            |> TaskResult.map (
+               Option.bind (fun email ->
                   EmailRequest.create {
                      preliminaryInfo with
                         Email = Some(string email)
                   })
             )
 
-         match emailsToSendToAdmins with
-         | Error err ->
-            logError mailbox $"Error getting admin emails - {err}"
-            return None
-         | Ok None ->
-            logError
-               mailbox
-               $"Could not retrieve admin emails for email message: {msg}"
-
-            return None
-         | Ok(Some emails) -> return Some emails
+         return
+            match email with
+            | Error err ->
+               logError mailbox $"Error getting admin email - {err}"
+               None
+            | Ok emailOpt ->
+               emailOpt
+               |> Option.teeNone (fun () ->
+                  logError
+                     mailbox
+                     $"Could not retrieve admin email for email message: {msg}")
    }
+
+let onSuccessfulServiceResponse
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (mailbox: Actor<_>)
+   (msg: EmailMessage)
+   =
+   let txnSagaEvt =
+      match msg.Info with
+      | EmailInfo.Purchase _ ->
+         PurchaseSaga.PurchaseSagaEvent.PurchaseNotificationSent
+         |> AppSaga.Event.Purchase
+         |> Some
+      | EmailInfo.DomesticTransfer _ ->
+         DomesticTransferSaga.DomesticTransferSagaEvent.TransferInitiatedNotificationSent
+         |> AppSaga.Event.DomesticTransfer
+         |> Some
+      | EmailInfo.InternalTransferBetweenOrgs _ ->
+         PlatformTransferSaga.PlatformTransferSagaEvent.TransferNotificationSent
+         |> AppSaga.Event.PlatformTransfer
+         |> Some
+      | EmailInfo.InternalTransferBetweenOrgsDeposited _ ->
+         PlatformTransferSaga.PlatformTransferSagaEvent.TransferDepositNotificationSent
+         |> AppSaga.Event.PlatformTransfer
+         |> Some
+      | EmailInfo.PlatformPaymentRequested _ ->
+         PlatformPaymentSaga.PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer
+         |> AppSaga.Event.PlatformPayment
+         |> Some
+      | EmailInfo.PlatformPaymentPaid _ ->
+         PlatformPaymentSaga.PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer
+         |> AppSaga.Event.PlatformPayment
+         |> Some
+      | EmailInfo.PlatformPaymentDeposited _ ->
+         PlatformPaymentSaga.PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee
+         |> AppSaga.Event.PlatformPayment
+         |> Some
+      | EmailInfo.PlatformPaymentDeclined _ ->
+         PlatformPaymentSaga.PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee
+         |> AppSaga.Event.PlatformPayment
+         |> Some
+      | _ -> None
+
+   match txnSagaEvt with
+   | Some evt ->
+      let sagaMsg =
+         SagaEvent.create msg.OrgId msg.CorrelationId evt |> SagaMessage.Event
+
+      getSagaRef msg.CorrelationId <! sagaMsg
+   | None -> ()
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
@@ -186,8 +310,9 @@ let actorProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (client: HttpClient)
-   (getAdminEmailsForOrg: OrgId -> Task<Result<Email list option, Err>>)
+   (getTeamEmailForOrg: OrgId -> Task<Result<Email option, Err>>)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (sendEmail: EmailRequest.T -> TaskResult<HttpResponseMessage, Err>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -198,10 +323,17 @@ let actorProps
          > = {
       Service = CircuitBreakerService.Email
       onCircuitBreakerEvent = broadcaster.circuitBreaker
-      protectedAction = fun _ emailData -> sendEmail client emailData
-      queueMessageToActionRequests =
-         queueMessageToActionRequest getAdminEmailsForOrg
-      onSuccessFlow = None
+      protectedAction = fun _ emailData -> sendEmail emailData
+      queueMessageToActionRequest =
+         queueMessageToActionRequest getTeamEmailForOrg
+      onSuccessFlow =
+         Flow.map
+            (fun (mailbox, queueMessage, response) ->
+               onSuccessfulServiceResponse getSagaRef mailbox queueMessage
+
+               response)
+            Flow.id
+         |> Some
    }
 
    Lib.Queue.consumerActorProps
@@ -211,28 +343,18 @@ let actorProps
       breaker
       consumerQueueOpts
 
-module Fields = EmployeeSqlMapper.EmployeeFields
-module Reader = EmployeeSqlMapper.EmployeeSqlReader
-module Writer = EmployeeSqlMapper.EmployeeSqlWriter
+module Fields = OrganizationSqlMapper.OrgFields
+module Reader = OrganizationSqlMapper.OrgSqlReader
+module Writer = OrganizationSqlMapper.OrgSqlWriter
 
-let getAdminEmailsForOrg (orgId: OrgId) =
-   let roleTypecast = EmployeeSqlMapper.EmployeeTypeCast.role
-   let statusTypecast = EmployeeSqlMapper.EmployeeTypeCast.status
-
-   pgQuery<Email>
+let getOrgTeamEmail (orgId: OrgId) =
+   pgQuerySingle<Email>
       $"""
-      SELECT {Fields.email} FROM {EmployeeSqlMapper.table}
-      WHERE
-         {Fields.orgId} = @orgId
-         AND {Fields.role} = @role::{roleTypecast}
-         AND {Fields.status} = @status::{statusTypecast}
+      SELECT {Fields.adminTeamEmail} FROM {OrganizationSqlMapper.table}
+      WHERE {Fields.orgId} = @orgId
       """
-      (Some [
-         "orgId", Writer.orgId orgId
-         "role", Writer.role Role.Admin
-         "status", Writer.status EmployeeStatus.Active
-      ])
-      Reader.email
+      (Some [ "orgId", Writer.orgId orgId ])
+      Reader.adminTeamEmail
 
 let initProps
    (breaker: Akka.Pattern.CircuitBreaker)
@@ -241,19 +363,24 @@ let initProps
    (queueSettings: QueueSettings)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (bearerToken: string option)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    =
    let client = bearerToken |> Option.map createClient
 
-   match client with
-   | Some client ->
+   let actorProps =
       actorProps
          queueConnection
          queueSettings
          streamRestartSettings
          breaker
          broadcaster
-         client
-         getAdminEmailsForOrg
+         getOrgTeamEmail
+         getSagaRef
+
+   match client with
+   | Some client -> actorProps (sendEmail client)
+   | None when EnvNotifications.config.MockSendingEmail ->
+      actorProps mockSendEmail
    | None ->
       let name = $"{queueSettings.Name}-consumer"
 

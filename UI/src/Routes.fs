@@ -4,7 +4,7 @@ module Routes
 open System
 open Feliz.Router
 
-open History
+open UIDomain.History
 open UIDomain.Account
 open UIDomain.Employee
 open UIDomain.Card

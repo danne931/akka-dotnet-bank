@@ -13,24 +13,19 @@ open FsToolkit.ErrorHandling
 
 open Lib.ActivePatterns
 open Lib.SharedTypes
-open Bank.Account.Domain
 open Bank.Transfer.Domain
 open SignalRBroadcast
-open Email
 open Lib.Types
+open Lib.Saga
+open DomesticTransferSaga
 
-module Command = DomesticTransferToCommand
 type private FailReason = DomesticTransferFailReason
 
 let private progressFromResponse (response: DomesticTransferServiceResponse) =
    match response.Status with
-   | "Complete" -> DomesticTransferProgress.Completed
-   | "ReceivedRequest" ->
-      DomesticTransferInProgress.InitialHandshakeAck
-      |> DomesticTransferProgress.InProgress
-   | status ->
-      DomesticTransferInProgress.Other status
-      |> DomesticTransferProgress.InProgress
+   | "Complete" -> DomesticTransferServiceProgress.Settled
+   | "ReceivedRequest" -> DomesticTransferServiceProgress.InitialHandshakeAck
+   | status -> DomesticTransferServiceProgress.InProgress status
 
 let private failReasonFromError (err: string) : FailReason =
    match err with
@@ -69,68 +64,30 @@ let private networkRecipient
 
 // Notify account actor of DomesticTransfer Progress, Completed, or Failed.
 let onSuccessfulServiceResponse
-   (mailbox: Actor<_>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
-   (action: DomesticTransferServiceAction)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (txn: DomesticTransfer)
    (res: DomesticTransferServiceResponse)
    =
-   let accountRef = getAccountRef txn.Sender.AccountId
+   let orgId = txn.Sender.OrgId
+   let corrId = txn.TransferId |> TransferId.get |> CorrelationId
+   let txnSagaRef = getSagaRef corrId
 
-   if res.Ok then
-      let progress = progressFromResponse res
+   let progress =
+      if res.Ok then
+         progressFromResponse res
+      else
+         res.Reason
+         |> failReasonFromError
+         |> DomesticTransferServiceProgress.Failed
 
-      match progress with
-      | DomesticTransferProgress.Completed ->
-         let msg =
-            Command.complete txn
-            |> AccountCommand.CompleteDomesticTransfer
-            |> AccountMessage.StateChange
+   let evt = DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress
 
-         accountRef <! msg
-      | DomesticTransferProgress.InProgress progress ->
-         let msg =
-            Command.progress txn progress
-            |> AccountCommand.UpdateDomesticTransferProgress
-            |> AccountMessage.StateChange
+   let msg =
+      AppSaga.Event.DomesticTransfer evt
+      |> SagaEvent.create orgId corrId
+      |> SagaMessage.Event
 
-         match action with
-         | DomesticTransferServiceAction.TransferAck -> accountRef <! msg
-         | DomesticTransferServiceAction.ProgressCheck ->
-            let previousProgress = txn.Status
-
-            if
-               (DomesticTransferProgress.InProgress progress)
-               <> previousProgress
-            then
-               accountRef <! msg
-      | _ -> ()
-   else
-      let err = failReasonFromError res.Reason
-
-      match err with
-      | FailReason.CorruptData
-      | FailReason.InvalidPaymentNetwork
-      | FailReason.InvalidDepository
-      | FailReason.InvalidAction ->
-         logError mailbox $"Transfer API requires code update: {err}"
-
-         getEmailRef mailbox.System
-         <! EmailMessage.ApplicationErrorRequiresSupport(
-            string err,
-            txn.Sender.OrgId
-         )
-      | FailReason.InvalidAmount
-      | FailReason.InvalidAccountInfo
-      | FailReason.AccountClosed
-      | _ ->
-         let msg =
-            Command.fail txn err
-            |> AccountCommand.FailDomesticTransfer
-            |> AccountMessage.StateChange
-
-         accountRef <! msg
+   txnSagaRef <! msg
 
 let protectedAction
    (networkRequest: DomesticTransferRequest)
@@ -170,8 +127,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (networkRequest: DomesticTransferRequest)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -184,19 +140,13 @@ let actorProps
       onCircuitBreakerEvent = broadcaster.circuitBreaker
       protectedAction =
          fun mailbox msg -> protectedAction networkRequest mailbox msg
-      queueMessageToActionRequests = fun _ msg -> Task.FromResult(Some [ msg ])
+      queueMessageToActionRequest = fun _ msg -> Task.FromResult(Some msg)
       onSuccessFlow =
          Flow.map
             (fun (mailbox, queueMessage, transferResponse) ->
                match queueMessage with
                | DomesticTransferMessage.TransferRequest(action, txn) ->
-                  onSuccessfulServiceResponse
-                     mailbox
-                     getAccountRef
-                     getEmailRef
-                     action
-                     txn
-                     transferResponse
+                  onSuccessfulServiceResponse getSagaRef txn transferResponse
 
                   transferResponse)
             Flow.id
@@ -247,8 +197,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    : Props<obj>
    =
    actorProps
@@ -258,8 +207,7 @@ let initProps
       breaker
       broadcaster
       networkRequestToTransferProcessor
-      getAccountRef
-      getEmailRef
+      getSagaRef
 
 let getProducer (system: ActorSystem) : IActorRef<DomesticTransferMessage> =
    Akka.Hosting.ActorRegistry

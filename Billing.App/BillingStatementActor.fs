@@ -41,7 +41,7 @@ let initQueueSource
    (billingStatementActorRef: IActorRef<obj>)
    =
    let flow, bulkWriteRef =
-      initBulkWriteFlow<BillingStatement> system restartSettings chunking {
+      initBulkWriteFlow<BillingStatement> system restartSettings {
          RetryAfter = retryAfter
          persist =
             fun (statements: BillingStatement seq) ->
@@ -56,8 +56,12 @@ let initQueueSource
                SystemLog.info system $"Saved billing statements {response}"
       }
 
-   bulkWriteRef,
-   Source.queue OverflowStrategy.Backpressure 1000 |> Source.via flow
+   let source =
+      Source.queue OverflowStrategy.Backpressure 1000
+      |> Source.groupedWithin chunking.Size chunking.Duration
+      |> Source.via flow
+
+   bulkWriteRef, source
 
 let actorProps
    (system: ActorSystem)

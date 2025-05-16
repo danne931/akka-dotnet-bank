@@ -16,6 +16,14 @@ open Bank.Transfer.Domain
 open BillingStatement
 open Lib.SharedTypes
 open CommandApproval
+open Lib.Saga
+open Bank.Scheduler
+
+
+
+// TODO: Replace with protobuf
+
+
 
 type OrganizationEventPersistenceAdapter() =
    let envelopeFromJournal (entry: obj) : Envelope =
@@ -83,6 +91,25 @@ type EmployeeEventPersistenceAdapter() =
       member x.FromJournal(evt: obj, manifest: string) : IEventSequence =
          EventSequence.Single(evt)
 
+type SagaEventPersistenceAdapter() =
+   let eventName (entry: obj) : string =
+      let evt: SagaEvent<AppSaga.Event> = unbox entry
+      evt.Data.Name
+
+   interface IEventAdapter with
+      member x.Manifest(evt: obj) = eventName evt
+
+      member x.ToJournal(evt: obj) : obj =
+         let evtName = eventName evt
+
+         Tagged(
+            evt,
+            Set.empty<string>.Add(Constants.AKKA_APP_SAGA_JOURNAL).Add(evtName)
+         )
+
+      member x.FromJournal(evt: obj, manifest: string) : IEventSequence =
+         EventSequence.Single(evt)
+
 type private OrgShardEnvelope = {
    EntityId: string
    ShardId: string
@@ -99,6 +126,12 @@ type private EmployeeShardEnvelope = {
    EntityId: string
    ShardId: string
    Message: EmployeeMessage
+}
+
+type private AppSagaShardEnvelope = {
+   EntityId: string
+   ShardId: string
+   Message: SagaMessage<AppSaga.Event>
 }
 
 type BankSerializer(system: ExtendedActorSystem) =
@@ -125,10 +158,14 @@ type BankSerializer(system: ExtendedActorSystem) =
          match msg with
          | EmployeeMessage.Event _ -> "EmployeeEvent"
          | _ -> "EmployeeMessage"
+      | :? SagaAlarmClockMessage -> "SagaAlarmClockMessage"
+      | :? SagaMessage<AppSaga.Event> -> "AppSagaMessage"
+      | :? SagaEvent<AppSaga.Event> -> "AppSagaEvent"
+      | :? AppSaga.Saga -> "AppSagaSnapshot"
       | :? AccountLoadTestTypes.AccountLoadTestMessage ->
          "AccountLoadTestMessage"
       | :? AccountSeederMessage -> "AccountSeederMessage"
-      | :? SchedulingActor.Message -> "SchedulingActorMessage"
+      | :? SchedulerMessage -> "SchedulerMessage"
       | :? AccountClosureMessage -> "AccountClosureActorMessage"
       | :? List<AccountEvent> -> "AccountEventList"
       | :? AccountSnapshot -> "AccountSnapshot"
@@ -145,14 +182,13 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? CircuitBreakerMessage -> "CircuitBreakerActorMessage"
       | :? BillingCycleMessage -> "BillingCycleActorMessage"
       | :? DomesticTransferMessage -> "DomesticTransferActorMessage"
-      | :? TransferProgressTrackingMessage ->
-         "TransferProgressTrackingActorMessage"
       | :? AutomaticTransfer.Message -> "AutomaticTransferActorMessage"
       | :? ShardEnvelope as e ->
          match e.Message with
          | :? OrgMessage -> "OrgShardEnvelope"
          | :? AccountMessage -> "AccountShardEnvelope"
          | :? EmployeeMessage -> "EmployeeShardEnvelope"
+         | :? SagaMessage<AppSaga.Event> -> "AppSagaShardEnvelope"
          | _ -> raise <| NotImplementedException()
       | :? Email.EmailMessage -> "EmailMessage"
       | _ -> raise <| NotImplementedException()
@@ -176,6 +212,8 @@ type BankSerializer(system: ExtendedActorSystem) =
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | :? EmployeeMessage ->
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
+         | :? SagaMessage<AppSaga.Event> ->
+            JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | _ -> raise <| NotImplementedException()
       // AccountEvent, EmployeeEvent, & OrgEvent messages to be persisted
       // are wrapped in Akka.Persistence.Extras ConfirmableMessageEnvelope
@@ -190,15 +228,12 @@ type BankSerializer(system: ExtendedActorSystem) =
       // Messages from account nodes to AccountSeederActor cluster singleton
       | :? AccountSeederMessage
       // SchedulingActor message for Quartz job persistence.
-      | :? SchedulingActor.Message
+      | :? SchedulerMessage
       // Messages from SchedulingActor to BillingCycleActor
       | :? BillingCycleMessage
-      // Messages from SchedulingActor to TransferProgressTrackingActor
-      | :? TransferProgressTrackingMessage
       // Messages from SchedulingActor to AutomaticTransferSchedulingActor
       | :? AutomaticTransfer.Message
-      // ProgressCheck messages from TransferProgressTracking
-      // singleton actor to DomesticTransferActor
+      // Ack/ProgressCheck messages from saga to to DomesticTransferActor
       | :? DomesticTransferMessage
       // Messages from sharded account nodes to AccountClosureActor cluster
       // singleton. Also for messages from SchedulingActor to Account Closure Proxy
@@ -245,6 +280,14 @@ type BankSerializer(system: ExtendedActorSystem) =
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | msg ->
             JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+      | :? SagaMessage<AppSaga.Event> as msg ->
+         JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+      // Saga event persistence
+      | :? SagaEvent<AppSaga.Event>
+      // AppSagaActor persistence snapshot.
+      | :? AppSaga.Saga
+      // Messages from SchedulingActor to Saga.App/SagaAlarmClockActor
+      | :? SagaAlarmClockMessage
       // OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy response
       // serialized for message sent from org cluster nodes to web node
       | :? CommandApprovalDailyAccrual
@@ -302,20 +345,23 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AccountEventList" -> typeof<AccountEvent list>
          | "AccountMessage" -> typeof<AccountMessage>
          | "AccountShardEnvelope" -> typeof<AccountShardEnvelope>
+         | "AppSagaMessage" -> typeof<SagaMessage<AppSaga.Event>>
+         | "AppSagaEvent" -> typeof<SagaEvent<AppSaga.Event>>
+         | "AppSagaShardEnvelope" -> typeof<AppSagaShardEnvelope>
+         | "AppSagaSnapshot" -> typeof<AppSaga.Saga>
+         | "SagaAlarmClockMessage" -> typeof<SagaAlarmClockMessage>
          | "SignalRMessage" -> typeof<SignalRActor.Msg>
          | "CircuitBreakerEvent" -> typeof<CircuitBreakerEvent>
          | "CircuitBreakerActorMessage" -> typeof<CircuitBreakerMessage>
          | "CircuitBreakerActorState" -> typeof<CircuitBreakerActorState>
          | "BillingCycleActorMessage" -> typeof<BillingCycleMessage>
-         | "TransferProgressTrackingActorMessage" ->
-            typeof<TransferProgressTrackingMessage>
          | "AutomaticTransferActorMessage" -> typeof<AutomaticTransfer.Message>
          | "Bank.Transfer.Domain.DomesticTransferMessage, Transfer.Domain"
          | "DomesticTransferActorMessage" -> typeof<DomesticTransferMessage>
          | "AccountClosureActorMessage" -> typeof<AccountClosureMessage>
-         | "SchedulingActorMessage" -> typeof<SchedulingActor.Message>
+         | "SchedulerMessage" -> typeof<SchedulerMessage>
          | "AccountSeederMessage" -> typeof<AccountSeederMessage>
-         | "Email+EmailMessage, Notifications.App"
+         | "Email+EmailMessage, Notifications.Domain"
          | "EmailMessage" -> typeof<Email.EmailMessage>
          | _ -> raise <| SerializationException()
 
@@ -350,6 +396,14 @@ type BankSerializer(system: ExtendedActorSystem) =
 
          envelope
       | :? OrgShardEnvelope as e ->
+         let envelope: ShardEnvelope = {
+            EntityId = e.EntityId
+            ShardId = e.ShardId
+            Message = e.Message
+         }
+
+         envelope
+      | :? AppSagaShardEnvelope as e ->
          let envelope: ShardEnvelope = {
             EntityId = e.EntityId
             ShardId = e.ShardId

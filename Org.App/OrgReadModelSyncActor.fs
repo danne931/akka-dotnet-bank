@@ -391,6 +391,7 @@ let sqlParamsFromOrg (org: Org) : (string * SqlValue) list = [
    "name", OrgSqlWriter.name org.Name
    "status", OrgSqlWriter.status org.Status
    "statusDetail", OrgSqlWriter.statusDetail org.Status
+   "adminTeamEmail", OrgSqlWriter.adminTeamEmail org.AdminTeamEmail
 ]
 
 let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
@@ -421,16 +422,19 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
          ({OrgFields.orgId},
           {OrgFields.name},
           {OrgFields.status},
-          {OrgFields.statusDetail})
+          {OrgFields.statusDetail},
+          {OrgFields.adminTeamEmail})
       VALUES
          (@orgId,
           @name,
           @status::{OrgTypeCast.status},
-          @statusDetail)
+          @statusDetail,
+          @adminTeamEmail)
       ON CONFLICT ({OrgFields.orgId})
       DO UPDATE SET
          {OrgFields.status} = @status::{OrgTypeCast.status},
-         {OrgFields.statusDetail} = @statusDetail;
+         {OrgFields.statusDetail} = @statusDetail,
+         {OrgFields.adminTeamEmail} = @adminTeamEmail;
       """,
       orgSqlParams
 

@@ -115,6 +115,7 @@ let formInternalWithinOrg
             AccountId = sender.AccountId
             OrgId = sender.OrgId
          }
+         OriginatedFromSchedule = false
       }
 
       let msg =
@@ -208,28 +209,26 @@ let formInternalBetweenOrgs
             OrgId = sender.OrgId
          }
          Memo = memo
-      }
-
-      let scheduledTransfer: ScheduleInternalTransferInput = {
-         ScheduledDate = scheduledAt.ToUniversalTime()
-         TransferInput = transfer
+         OriginatedFromSchedule =
+            scheduledAt.ToUniversalTime() <> DateTime.Today.ToUniversalTime()
       }
 
       let cmd =
-         if
-            scheduledTransfer.ScheduledDate = DateTime.Today.ToUniversalTime()
-         then
+         if transfer.OriginatedFromSchedule then
+            ScheduleInternalTransferBetweenOrgsCommand.create
+               sender.CompositeId
+               initiatedBy
+               {
+                  ScheduledDate = scheduledAt.ToUniversalTime()
+                  TransferInput = transfer
+               }
+            |> AccountCommand.ScheduleInternalTransferBetweenOrgs
+         else
             InternalTransferBetweenOrgsCommand.create
                sender.CompositeId
                initiatedBy
                transfer
             |> AccountCommand.InternalTransferBetweenOrgs
-         else
-            ScheduleInternalTransferBetweenOrgsCommand.create
-               sender.CompositeId
-               initiatedBy
-               scheduledTransfer
-            |> AccountCommand.ScheduleInternalTransferBetweenOrgs
 
       Msg.Submit(FormEntity.Account sender, FormCommand.Account cmd, Started)
 
@@ -290,6 +289,8 @@ let formDomestic
          |> Option.bind (fun memo ->
             if String.IsNullOrWhiteSpace memo then None else Some memo)
 
+      let scheduledAt = scheduledAt.ToUniversalTime()
+
       let transfer: DomesticTransferInput = {
          Amount = amount
          Sender = {
@@ -302,29 +303,27 @@ let formDomestic
          Recipient = recipient
          Memo = memo
          ScheduledDateSeedOverride = None
-      }
-
-      let scheduledTransfer: ScheduleDomesticTransferInput = {
-         ScheduledDate = scheduledAt.ToUniversalTime()
-         TransferInput = transfer
+         OriginatedFromSchedule =
+            scheduledAt <> DateTime.Today.ToUniversalTime()
       }
 
       let cmd =
-         if
-            scheduledTransfer.ScheduledDate = DateTime.Today.ToUniversalTime()
-         then
+         if transfer.OriginatedFromSchedule then
+            ScheduleDomesticTransferCommand.create
+               sender.CompositeId
+               initiatedBy
+               {
+                  ScheduledDate = scheduledAt
+                  TransferInput = transfer
+               }
+            |> AccountCommand.ScheduleDomesticTransfer
+         else
             DomesticTransferCommand.create
                sender.CompositeId
                (Guid.NewGuid() |> CorrelationId)
                initiatedBy
                transfer
             |> AccountCommand.DomesticTransfer
-         else
-            ScheduleDomesticTransferCommand.create
-               sender.CompositeId
-               initiatedBy
-               scheduledTransfer
-            |> AccountCommand.ScheduleDomesticTransfer
 
       Msg.Submit(FormEntity.Account sender, FormCommand.Account cmd, Started)
 
@@ -413,6 +412,8 @@ let TransferInternalBetweenOrgsComponent
          function
          | FormSubmitReceipt.Account receipt ->
             match receipt.PendingCommand with
+            | AccountCommand.ScheduleInternalTransferBetweenOrgs _ ->
+               onSubmit receipt
             | AccountCommand.InternalTransferBetweenOrgs cmd ->
                let cmd =
                   cmd
@@ -480,6 +481,7 @@ let TransferDomesticFormComponent
          function
          | FormSubmitReceipt.Account receipt ->
             match receipt.PendingCommand with
+            | AccountCommand.ScheduleDomesticTransfer _ -> onSubmit receipt
             | AccountCommand.DomesticTransfer cmd ->
                let cmd =
                   cmd |> DomesticTransfer |> ApprovableCommand.AmountBased

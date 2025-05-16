@@ -1,7 +1,5 @@
 module Bank.History.Api
 
-open System
-
 open Lib.Postgres
 open Lib.SharedTypes
 open Bank.Org.Domain
@@ -116,9 +114,8 @@ let employeeEventFilterNames
               typeof<AccessRestored>.Name
              ]
            | EmployeeEventGroupFilter.Purchase -> [
-              typeof<PurchasePending>.Name
-              typeof<PurchaseConfirmedByAccount>.Name
-              typeof<PurchaseRejectedByAccount>.Name
+              typeof<PurchaseApplied>.Name
+              typeof<PurchaseRefunded>.Name
              ]
            | EmployeeEventGroupFilter.CreatedCard -> [
               typeof<CreatedCard>.Name
@@ -344,7 +341,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
          event,
          employee_name,
          CASE
-            WHEN {Fields.initiatedById} = '{string Constants.SYSTEM_USER_ID}' THEN 'System'
+            WHEN {Fields.initiatedById} = '{string Initiator.System.Id}' THEN '{Initiator.System.Name}'
             ELSE initiators.first_name || ' ' || initiators.last_name
          END as initiator_name
       FROM (
@@ -356,24 +353,24 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
       ORDER BY timestamp desc
       """
 
-   pgQuery<History> query (Some queryParams) (fun read ->
+   pgQuery<Transaction.History> query (Some queryParams) (fun read ->
       let eventType = read.string "event_type"
       let initiator = read.string "initiator_name"
 
       match eventType with
       | "employee" ->
-         History.Employee {
+         Transaction.History.Employee {
             EmployeeName = read.string "employee_name"
             InitiatedByName = initiator
             Event = Reader.event read
          }
       | "account" ->
-         History.Account {
+         Transaction.History.Account {
             InitiatedByName = initiator
             Event = AccountEventSqlMapper.SqlReader.event read
          }
       | "org" ->
-         History.Org {
+         Transaction.History.Org {
             InitiatedByName = initiator
             Event = OrganizationEventSqlMapper.OrgEventSqlReader.event read
          }

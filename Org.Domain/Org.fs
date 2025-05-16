@@ -164,6 +164,7 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
          OrgId = e.OrgId
          Name = e.Data.Name
          Status = OrgStatus.PendingOnboardingTasksFulfilled
+         AdminTeamEmail = e.Data.AdminTeamEmail
          FeatureFlags = {
             SocialTransferDiscoveryPrimaryAccountId = None
          }

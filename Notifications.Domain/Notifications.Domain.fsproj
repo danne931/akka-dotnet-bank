@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Email.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" /> 
+  </ItemGroup>
+</Project>

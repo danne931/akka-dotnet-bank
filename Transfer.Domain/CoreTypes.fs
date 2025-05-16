@@ -1,6 +1,7 @@
 namespace Bank.Transfer.Domain
 
 open System
+open Lib.SharedTypes
 
 type TransferId =
    | TransferId of Guid
@@ -13,6 +14,8 @@ module TransferId =
    let get (transferId: TransferId) =
       let (TransferId id) = transferId
       id
+
+   let toCorrelationId (TransferId transferId) = CorrelationId transferId
 
 [<RequireQualifiedAccess>]
 type TransferCategory =

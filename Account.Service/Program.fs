@@ -45,6 +45,10 @@ journalOpts.Adapters
       "employee-v1",
       [ typedefof<EmployeeMessage> ]
    )
+   .AddEventAdapter<SagaEventPersistenceAdapter>(
+      "saga-v1",
+      [ typeof<Lib.Saga.SagaEvent<AppSaga.Event>> ]
+   )
 |> ignore
 
 let snapshotOpts = AkkaInfra.getSnapshotOpts ()
@@ -58,6 +62,7 @@ builder.Services.AddAkka(
             ClusterMetadata.roles.account
             ClusterMetadata.roles.signalR
             ClusterMetadata.roles.employee
+            ClusterMetadata.roles.saga
          |]
          << AkkaInfra.withPetabridgeCmd
          << AkkaInfra.withHealthCheck
@@ -73,7 +78,7 @@ builder.Services.AddAkka(
          .WithCustomSerializer(
             BankSerializer.Name,
             [ typedefof<obj> ],
-            (fun system -> BankSerializer(system))
+            fun system -> BankSerializer(system)
          )
          .WithDistributedPubSub(ClusterMetadata.roles.signalR)
          .WithSingletonProxy<ActorMetadata.SchedulingMarker>(
@@ -114,13 +119,10 @@ builder.Services.AddAkka(
                      system
                      Env.config.AccountActorSupervisor
                      persistenceId
-                     (OrgActor.get system)
-                     (EmployeeActor.get system)
-                     DomesticTransferConsumerActor.getProducer
+                     (AppSaga.getEntityRef system)
                      EmailConsumerActor.getProducer
                      AccountClosureActor.get
                      BillingStatementActor.get
-                     SchedulingActor.get
 
                props),
             ClusterMetadata.accountShardRegion.messageExtractor,
@@ -141,13 +143,49 @@ builder.Services.AddAkka(
                      Env.config.AccountActorSupervisor
                      persistenceId
                      (provider.GetRequiredService<SignalRBroadcast>())
-                     (AccountActor.get system)
+                     (AppSaga.getEntityRef system)
                      (OrgActor.get system)
                      EmailConsumerActor.getProducer
 
                props),
             ClusterMetadata.employeeShardRegion.messageExtractor,
             ShardOptions(Role = ClusterMetadata.roles.employee)
+         )
+         .WithShardRegion<ActorMetadata.SagaMarker>(
+            ClusterMetadata.sagaShardRegion.name,
+            (fun persistenceId ->
+               let system = provider.GetRequiredService<ActorSystem>()
+
+               let props =
+                  AppSaga.initProps
+                     (EmployeeActor.get system)
+                     (AccountActor.get system)
+                     EmailConsumerActor.getProducer
+                     DomesticTransferConsumerActor.getProducer
+                     SchedulingActor.get
+                     Env.config.AccountActorSupervisor
+                     Env.config.SagaPassivateIdleEntityAfter
+                     persistenceId
+
+               props),
+            ClusterMetadata.sagaShardRegion.messageExtractor,
+            ShardOptions(
+               RememberEntities = false,
+               PassivateIdleEntityAfter =
+                  Env.config.SagaPassivateIdleEntityAfter,
+               Role = ClusterMetadata.roles.saga
+            )
+         )
+         .WithSingleton<ActorMetadata.SagaAlarmClockMarker>(
+            ActorMetadata.sagaAlarmClock.Name,
+            (fun system _ _ ->
+               let typedProps =
+                  SagaAlarmClockActor.initProps
+                     system
+                     (AppSaga.getEntityRef system)
+
+               typedProps.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
          )
          .WithSingleton<ActorMetadata.BillingCycleMarker>(
             ActorMetadata.billingCycle.Name,
@@ -160,17 +198,6 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.TransferProgressTrackingMarker>(
-            ActorMetadata.transferProgressTracking.Name,
-            (fun system _ _ ->
-               let typedProps =
-                  TransferProgressTrackingActor.initProps
-                     system
-                     DomesticTransferConsumerActor.getProducer
-
-               typedProps.ToProps()),
-            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
-         )
          .WithSingleton<ActorMetadata.AutoTransferSchedulingMarker>(
             ActorMetadata.autoTransferScheduling.Name,
             (fun system _ _ ->
@@ -178,6 +205,7 @@ builder.Services.AddAkka(
                   AutomaticTransferSchedulingActor.initProps
                      system
                      (AccountActor.get system)
+                     EnvTransfer.config.AutoTransferComputeThrottle
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -238,6 +266,21 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.employee)
          )
+         .WithSingleton<ActorMetadata.SagaReadModelSyncMarker>(
+            ActorMetadata.sagaReadModelSync.Name,
+            (fun system _ _ ->
+               let typedProps =
+                  AppSagaReadModelSyncActor.initProps
+                     (AppSaga.getEntityRef system)
+                     // TODO: Create saga-specific Environment file & replace
+                     //       account env var here.
+                     Env.config.AccountEventProjectionChunking
+                     Env.config.AccountEventReadModelPersistenceBackoffRestart
+                     Env.config.AccountEventReadModelRetryPersistenceAfter
+
+               typedProps.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
+         )
          // TODO: Do more than just printing dead letter messages.
          .WithSingleton<ActorMetadata.AuditorMarker>(
             ActorMetadata.auditor.Name,
@@ -293,6 +336,7 @@ builder.Services.AddAkka(
                   EnvNotifications.config.Queue
                   Env.config.QueueConsumerStreamBackoffRestart
                   EnvNotifications.config.EmailBearerToken
+                  (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -318,8 +362,7 @@ builder.Services.AddAkka(
                   Env.config.QueueConsumerStreamBackoffRestart
                   (EnvTransfer.config.domesticTransferCircuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
-                  (AccountActor.get system)
-                  EmailConsumerActor.getProducer
+                  (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )

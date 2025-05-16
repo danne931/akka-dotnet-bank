@@ -18,11 +18,12 @@ open Bank.Org.Domain
 open CommandApproval
 open SignalRBroadcast
 open Email
+open Lib.Saga
 
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
    mailbox
-   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (employee: Employee)
    (cmd: EmployeeCommand)
    (err: Err)
@@ -37,37 +38,38 @@ let private handleValidationError
       cmd.Envelope.CorrelationId
       err
 
-   match err with
-   | EmployeeStateTransitionError e ->
-      match e with
-      // Noop
-      | DebitAlreadyProgressedToCompletedOrFailed -> ()
-      | ExceededDailyDebit(limit, accrued) ->
-         let msg =
-            EmailMessage.PurchaseFailed(
-               {
-                  OrgId = employee.OrgId
-                  Email = employee.Email
-                  Reason =
-                     PurchaseFailReason.ExceededDailyCardLimit(limit, accrued)
-               }
+   let hasPurchaseFail =
+      match cmd, err with
+      | EmployeeCommand.Purchase cmd, EmployeeStateTransitionError e ->
+         match e with
+         | CardNotFound -> Some(cmd.Data, PurchaseCardFailReason.CardNotFound)
+         | CardExpired -> Some(cmd.Data, PurchaseCardFailReason.CardExpired)
+         | CardLocked -> Some(cmd.Data, PurchaseCardFailReason.CardLocked)
+         | ExceededDailyDebit(limit, accrued) ->
+            Some(
+               cmd.Data,
+               PurchaseCardFailReason.ExceededDailyCardLimit(limit, accrued)
             )
-
-         getEmailActor (mailbox.System) <! msg
-      | ExceededMonthlyDebit(limit, accrued) ->
-         let msg =
-            EmailMessage.PurchaseFailed(
-               {
-                  OrgId = employee.OrgId
-                  Email = employee.Email
-                  Reason =
-                     PurchaseFailReason.ExceededMonthlyCardLimit(limit, accrued)
-               }
+         | ExceededMonthlyDebit(limit, accrued) ->
+            Some(
+               cmd.Data,
+               PurchaseCardFailReason.ExceededMonthlyCardLimit(limit, accrued)
             )
+         | _ -> None
+      | _ -> None
 
-         getEmailActor (mailbox.System) <! msg
-      | _ -> ()
-   | _ -> ()
+   match hasPurchaseFail with
+   | Some(purchaseInfo, reason) ->
+      let msg =
+         (purchaseInfo, reason)
+         |> PurchaseSaga.PurchaseSagaStartEvent.PurchaseRejectedByCard
+         |> PurchaseSaga.PurchaseSagaEvent.Start
+         |> AppSaga.Event.Purchase
+         |> SagaEvent.create purchaseInfo.OrgId purchaseInfo.CorrelationId
+         |> SagaMessage.Event
+
+      getSagaRef cmd.Envelope.CorrelationId <! msg
+   | None -> ()
 
 let supplementaryCardInfoToCreateCardCommand
    (employee: Employee)
@@ -92,7 +94,7 @@ let supplementaryCardInfoToCreateCardCommand
 let actorProps
    (broadcaster: SignalRBroadcast)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    =
    let handler (mailbox: Eventsourced<obj>) =
@@ -108,7 +110,17 @@ let actorProps
          let employee = state.Info
 
          let handleValidationError =
-            handleValidationError broadcaster mailbox getEmailActor employee
+            handleValidationError broadcaster mailbox getSagaRef employee
+
+         let employeeInviteMsg corrId token =
+            EmailMessage.create
+               employee.OrgId
+               corrId
+               (EmailInfo.EmployeeInvite {
+                  Name = employee.Name
+                  Email = employee.Email
+                  Token = token
+               })
 
          match box msg with
          | Persisted mailbox e ->
@@ -121,12 +133,7 @@ let actorProps
             match evt with
             | EmployeeEvent.CreatedAccountOwner e ->
                getEmailActor mailbox.System
-               <! EmailMessage.EmployeeInvite {
-                  OrgId = employee.OrgId
-                  Name = employee.Name
-                  Email = employee.Email
-                  Token = e.Data.InviteToken
-               }
+               <! employeeInviteMsg e.CorrelationId e.Data.InviteToken
             | EmployeeEvent.CreatedEmployee e ->
                match employee.Status with
                | EmployeeStatus.PendingInviteApproval _ ->
@@ -147,40 +154,20 @@ let actorProps
                   getOrgRef orgId <! OrgMessage.ApprovableRequest cmd
                | EmployeeStatus.PendingInviteConfirmation token ->
                   getEmailActor mailbox.System
-                  <! EmailMessage.EmployeeInvite {
-                     OrgId = employee.OrgId
-                     Name = employee.Name
-                     Email = employee.Email
-                     Token = token
-                  }
+                  <! employeeInviteMsg e.CorrelationId token
                | _ -> ()
             | EmployeeEvent.AccessApproved e ->
                getEmailActor mailbox.System
-               <! EmailMessage.EmployeeInvite {
-                  OrgId = employee.OrgId
-                  Name = employee.Name
-                  Email = employee.Email
-                  Token = e.Data.InviteToken
-               }
-            | EmployeeEvent.AccessRestored _ ->
+               <! employeeInviteMsg e.CorrelationId e.Data.InviteToken
+            | EmployeeEvent.AccessRestored e ->
                match employee.Status with
                | EmployeeStatus.PendingInviteConfirmation token ->
                   getEmailActor mailbox.System
-                  <! EmailMessage.EmployeeInvite {
-                     OrgId = employee.OrgId
-                     Name = employee.Name
-                     Email = employee.Email
-                     Token = token
-                  }
+                  <! employeeInviteMsg e.CorrelationId token
                | _ -> ()
             | EmployeeEvent.InvitationTokenRefreshed e ->
                getEmailActor mailbox.System
-               <! EmailMessage.EmployeeInvite {
-                  OrgId = employee.OrgId
-                  Name = employee.Name
-                  Email = employee.Email
-                  Token = e.Data.InviteToken
-               }
+               <! employeeInviteMsg e.CorrelationId e.Data.InviteToken
             | EmployeeEvent.InvitationConfirmed e ->
                for task in employee.OnboardingTasks do
                   match task with
@@ -203,49 +190,24 @@ let actorProps
 
                   mailbox.Parent() <! (EmployeeMessage.StateChange cmd)
                | None -> ()
-            | EmployeeEvent.PurchasePending e ->
-               let accountId = e.Data.Info.AccountId
-               let info = e.Data.Info
-
-               let cmd =
-                  DebitCommand.create
-                     (accountId, e.OrgId)
-                     e.CorrelationId
-                     e.InitiatedBy
-                     {
-                        Date = info.Date
-                        Amount = info.Amount
-                        Merchant = info.Merchant
-                        Reference = info.Reference
-                        EmployeePurchaseReference = {
-                           EmployeeName = employee.Name
-                           EmployeeCardNumberLast4 = info.CardNumberLast4
-                           EmployeeId =
-                              InitiatedById.toEmployeeId info.InitiatedBy.Id
-                           CardId = info.CardId
-                        }
-                     }
-
-               // Notify associated company account actor of
-               // debit request and wait for approval before
-               // sending a response to issuing card network.
-               getAccountRef accountId
-               <! AccountMessage.StateChange(AccountCommand.Debit cmd)
-            | EmployeeEvent.PurchaseConfirmedByAccount e ->
-               // TODO: Notify card network which issued the debit request to our bank.
-               ()
-            | EmployeeEvent.PurchaseRejectedByAccount e ->
-               // TODO: Notify card network which issued the debit request to our bank.
+            | EmployeeEvent.PurchaseApplied e ->
                let msg =
-                  EmailMessage.PurchaseFailed(
-                     {
-                        Email = employee.Email
-                        Reason = e.Data.Reason
-                        OrgId = employee.OrgId
-                     }
-                  )
+                  e.Data.Info
+                  |> PurchaseSaga.PurchaseSagaStartEvent.DeductedCardFunds
+                  |> PurchaseSaga.PurchaseSagaEvent.Start
+                  |> AppSaga.Event.Purchase
+                  |> SagaEvent.create e.OrgId e.CorrelationId
+                  |> SagaMessage.Event
 
-               getEmailActor mailbox.System <! msg
+               getSagaRef e.CorrelationId <! msg
+            | EmployeeEvent.PurchaseRefunded e ->
+               let msg =
+                  PurchaseSaga.PurchaseSagaEvent.PurchaseRefundedToCard
+                  |> AppSaga.Event.Purchase
+                  |> SagaEvent.create e.OrgId e.CorrelationId
+                  |> SagaMessage.Event
+
+               getSagaRef e.CorrelationId <! msg
             | _ -> ()
 
             return! loop <| Some state
@@ -265,7 +227,6 @@ let actorProps
                            (EmployeeMessage.Event evt)
                            envelope.ConfirmationId
                   | Error err -> handleValidationError cmd err
-
                | msg ->
                   logError
                      $"Unknown message in ConfirmableMessageEnvelope - {msg}"
@@ -332,12 +293,12 @@ let initProps
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
    (broadcaster: SignalRBroadcast)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    =
    persistenceSupervisor
       supervisorOpts
       isPersistableMessage
-      (actorProps broadcaster getOrgRef getAccountRef getEmailActor)
+      (actorProps broadcaster getOrgRef getSagaRef getEmailActor)
       persistenceId
