@@ -109,6 +109,7 @@ let destinationAccountForm
       ProposedPercentAllocated = proposedAllocation
       Recipient = {
          OrgId = destination.OrgId
+         ParentAccountId = destination.ParentAccountId
          AccountId = destination.AccountId
          Name = destination.Name
       }
@@ -165,6 +166,7 @@ let form
             {
                Name = targetAccount.Name
                AccountId = targetAccount.AccountId
+               ParentAccountId = targetAccount.ParentAccountId
                OrgId = targetAccount.OrgId
             }
             destinations

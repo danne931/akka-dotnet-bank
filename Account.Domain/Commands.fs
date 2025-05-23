@@ -11,6 +11,7 @@ type CreateAccountInput = {
    Depository: AccountDepository
    Currency: Currency
    AccountId: AccountId
+   ParentAccountId: ParentAccountId
    OrgId: OrgId
    InitiatedBy: Initiator
 }
@@ -20,7 +21,7 @@ type CreateAccountCommand = Command<CreateAccountInput>
 module CreateAccountCommand =
    let create (data: CreateAccountInput) =
       Command.create
-         (AccountId.toEntityId data.AccountId)
+         (ParentAccountId.toEntityId data.ParentAccountId)
          data.OrgId
          (CorrelationId.create ())
          data.InitiatedBy
@@ -49,10 +50,12 @@ module CreateAccountCommand =
                Currency = input.Currency
                RoutingNumber = routingNumber
                AccountNumber = accountNumber
+               AccountId = input.AccountId
             }
       }
 
 type DepositCashInput = {
+   AccountId: AccountId
    Amount: decimal
    Origin: string option
 }
@@ -61,12 +64,12 @@ type DepositCashCommand = Command<DepositCashInput>
 
 module DepositCashCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (parentAccountId: ParentAccountId, orgId: OrgId)
       (initiator: Initiator)
       (data: DepositCashInput)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          initiator
@@ -82,6 +85,7 @@ module DepositCashCommand =
 
          return
             BankEvent.create2<DepositCashInput, DepositedCash> cmd {
+               AccountId = input.AccountId
                Amount = input.Amount
                Origin = input.Origin |> Option.defaultValue "ATM"
             }
@@ -91,31 +95,36 @@ type DebitCommand = Command<DebitedAccount>
 
 module DebitCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (parentAccountId: ParentAccountId, orgId: OrgId)
       (correlationId: CorrelationId)
       (initiator: Initiator)
       (data: DebitedAccount)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          correlationId
          initiator
          data
 
    let fromPurchase (info: PurchaseInfo) =
-      create (info.AccountId, info.OrgId) info.CorrelationId info.InitiatedBy {
-         Date = info.Date
-         Amount = info.Amount
-         Merchant = info.Merchant
-         Reference = info.Reference
-         EmployeePurchaseReference = {
-            EmployeeName = info.EmployeeName
-            EmployeeCardNumberLast4 = info.CardNumberLast4
-            EmployeeId = InitiatedById.toEmployeeId info.InitiatedBy.Id
-            CardId = info.CardId
+      create
+         (info.ParentAccountId, info.OrgId)
+         info.CorrelationId
+         info.InitiatedBy
+         {
+            AccountId = info.AccountId
+            Date = info.Date
+            Amount = info.Amount
+            Merchant = info.Merchant
+            Reference = info.Reference
+            EmployeePurchaseReference = {
+               EmployeeName = info.EmployeeName
+               EmployeeCardNumberLast4 = info.CardNumberLast4
+               EmployeeId = InitiatedById.toEmployeeId info.InitiatedBy.Id
+               CardId = info.CardId
+            }
          }
-      }
 
    let toEvent
       (cmd: DebitCommand)
@@ -134,13 +143,13 @@ type RefundDebitCommand = Command<RefundedDebit>
 
 module RefundDebitCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (parentAccountId: ParentAccountId, orgId: OrgId)
       (correlationId: CorrelationId)
       (initiator: Initiator)
       (data: RefundedDebit)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          correlationId
          initiator
@@ -151,10 +160,11 @@ module RefundDebitCommand =
       (reason: PurchaseRefundReason)
       =
       create
-         (purchaseInfo.AccountId, purchaseInfo.OrgId)
+         (purchaseInfo.ParentAccountId, purchaseInfo.OrgId)
          purchaseInfo.CorrelationId
          purchaseInfo.InitiatedBy
          {
+            AccountId = purchaseInfo.AccountId
             EmployeePurchaseReference = {
                EmployeeName = purchaseInfo.EmployeeName
                EmployeeId = purchaseInfo.EmployeeId
@@ -175,13 +185,16 @@ module RefundDebitCommand =
 type MaintenanceFeeCommand = Command<MaintenanceFeeDebited>
 
 module MaintenanceFeeCommand =
-   let create (accountId: AccountId, orgId: OrgId) =
+   let create
+      (accountId: AccountId, parentAccountId: ParentAccountId, orgId: OrgId)
+      =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          Initiator.System
          {
+            AccountId = accountId
             Amount = MaintenanceFee.RecurringDebitAmount
          }
 
@@ -191,20 +204,22 @@ module MaintenanceFeeCommand =
       =
       Ok <| BankEvent.create<MaintenanceFeeDebited> cmd
 
-
 type SkipMaintenanceFeeCommand = Command<MaintenanceFeeSkipped>
 
 module SkipMaintenanceFeeCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
-      (data: MaintenanceFeeSkipped)
+      (accountId: AccountId, parentAccountId: ParentAccountId, orgId: OrgId)
+      (criteria: MaintenanceFee.MaintenanceFeeCriteria)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          Initiator.System
-         data
+         {
+            AccountId = accountId
+            Reason = criteria
+         }
 
    let toEvent
       (cmd: SkipMaintenanceFeeCommand)
@@ -216,12 +231,12 @@ type CloseAccountCommand = Command<AccountClosed>
 
 module CloseAccountCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (parentAccountId: ParentAccountId, orgId: OrgId)
       (initiator: Initiator)
       (data: AccountClosed)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          initiator
@@ -236,9 +251,12 @@ module CloseAccountCommand =
 type StartBillingCycleCommand = Command<BillingCycleStarted>
 
 module StartBillingCycleCommand =
-   let create (accountId: AccountId, orgId: OrgId) (data: BillingCycleStarted) =
+   let create
+      (parentAccountId: ParentAccountId, orgId: OrgId)
+      (data: BillingCycleStarted)
+      =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          Initiator.System

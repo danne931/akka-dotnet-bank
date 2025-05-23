@@ -16,6 +16,7 @@ module OrgFields =
    let statusDetail = "status_detail"
    let socialTransferDiscoveryAccountId = "social_transfer_discovery_account_id"
    let adminTeamEmail = "admin_team_email"
+   let parentAccountId = "parent_account_id"
 
 module OrgSqlReader =
    let orgId (read: RowReader) = OrgFields.orgId |> read.uuid |> OrgId
@@ -33,8 +34,12 @@ module OrgSqlReader =
    let adminTeamEmail (read: RowReader) =
       OrgFields.adminTeamEmail |> read.string |> Email.deserialize
 
+   let parentAccountId (read: RowReader) =
+      OrgFields.parentAccountId |> read.uuid |> ParentAccountId
+
    let org (read: RowReader) : Org = {
       OrgId = orgId read
+      ParentAccountId = parentAccountId read
       Name = name read
       Status = statusDetail read
       AdminTeamEmail = adminTeamEmail read
@@ -63,3 +68,5 @@ module OrgSqlWriter =
       accountId |> Option.map AccountId.get |> Sql.uuidOrNone
 
    let adminTeamEmail (email: Email) = email |> string |> Sql.string
+
+   let parentAccountId (ParentAccountId id) = Sql.uuid id

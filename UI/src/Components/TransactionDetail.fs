@@ -389,8 +389,6 @@ let renderTransactionInfo
                         | AccountEvent.InternalTransferWithinOrgPending e ->
                            Html.p
                               $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
-                        | AccountEvent.InternalTransferWithinOrgCompleted _ ->
-                           Html.p "Deduction of funds finalized"
                         | AccountEvent.InternalTransferWithinOrgDeposited e ->
                            Html.p
                               $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
@@ -402,8 +400,6 @@ let renderTransactionInfo
                            Html.p $"Scheduled for {date}"
                         | AccountEvent.InternalTransferBetweenOrgsPending _ ->
                            Html.p $"Funds deducted from {txn.Source}"
-                        | AccountEvent.InternalTransferBetweenOrgsCompleted _ ->
-                           Html.p "Deduction of funds finalized"
                         | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
                            Html.p
                               $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
@@ -411,8 +407,6 @@ let renderTransactionInfo
                            Html.p $"Failed: {e.Data.Reason}"
                         | AccountEvent.InternalAutomatedTransferPending _ ->
                            Html.p $"Funds deducted from {txn.Source}"
-                        | AccountEvent.InternalAutomatedTransferCompleted _ ->
-                           Html.p "Deduction of funds finalized"
                         | AccountEvent.InternalAutomatedTransferDeposited e ->
                            Html.p
                               $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"

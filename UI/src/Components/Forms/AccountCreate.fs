@@ -7,6 +7,7 @@ open System
 open Fable.Form.Simple.Pico
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Org.Domain
 open UIDomain.Account
 open Lib.Validators
 open Bank.Forms.FormContainer
@@ -19,6 +20,7 @@ type Values = {
 
 let private form
    (session: UserSession)
+   (org: Org)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let fieldAccountDepository =
@@ -67,6 +69,7 @@ let private form
             Depository = depository
             AccountNumber = AccountNumber.generate ()
             OrgId = session.OrgId
+            ParentAccountId = org.ParentAccountId
             AccountId = Guid.NewGuid() |> AccountId
             Currency = Currency.USD
             InitiatedBy = session.AsInitiator
@@ -83,6 +86,7 @@ let private form
 [<ReactComponent>]
 let AccountCreateFormComponent
    (session: UserSession)
+   (org: Org)
    (onSubmit: AccountCommandReceipt -> unit)
    =
    FormContainer {|
@@ -90,7 +94,7 @@ let AccountCreateFormComponent
          AccountName = ""
          AccountDepository = "checking"
       }
-      Form = form session
+      Form = form session org
       Action = None
       OnSubmit =
          function

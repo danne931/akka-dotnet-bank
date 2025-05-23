@@ -345,7 +345,7 @@ let stateTransition
 type PersistenceHandlerDependencies = {
    getSchedulingRef: unit -> IActorRef<SchedulerMessage>
    getDomesticTransferRef: unit -> IActorRef<DomesticTransferMessage>
-   getAccountRef: AccountId -> IEntityRef<AccountMessage>
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
    logError: string -> unit
 }
@@ -376,7 +376,6 @@ let onEventPersisted
    (evt: DomesticTransferSagaEvent)
    =
    let info = currentState.TransferInfo
-   let compositeId = info.Sender.AccountId, info.Sender.OrgId
    let correlationId = TransferId.toCorrelationId info.TransferId
 
    let transfer = {
@@ -392,23 +391,19 @@ let onEventPersisted
 
    let deductFromSenderAccount () =
       let cmd =
-         DomesticTransferCommand.create
-            compositeId
-            correlationId
-            info.InitiatedBy
-            {
-               Amount = info.Amount
-               Sender = info.Sender
-               Recipient = info.Recipient
-               Memo = info.Memo
-               ScheduledDateSeedOverride = None
-               OriginatedFromSchedule = currentState.OriginatedFromSchedule
-            }
+         DomesticTransferCommand.create correlationId info.InitiatedBy {
+            Amount = info.Amount
+            Sender = info.Sender
+            Recipient = info.Recipient
+            Memo = info.Memo
+            ScheduledDateSeedOverride = None
+            OriginatedFromSchedule = currentState.OriginatedFromSchedule
+         }
 
       let msg =
          cmd |> AccountCommand.DomesticTransfer |> AccountMessage.StateChange
 
-      dep.getAccountRef info.Sender.AccountId <! msg
+      dep.getAccountRef info.Sender.ParentAccountId <! msg
 
    let sendTransferToProcessorService () =
       let msg =
@@ -431,7 +426,6 @@ let onEventPersisted
    let updateTransferProgress progress =
       let cmd =
          UpdateDomesticTransferProgressCommand.create
-            compositeId
             correlationId
             info.InitiatedBy
             {
@@ -444,27 +438,23 @@ let onEventPersisted
          |> AccountCommand.UpdateDomesticTransferProgress
          |> AccountMessage.StateChange
 
-      dep.getAccountRef info.Sender.AccountId <! msg
+      dep.getAccountRef info.Sender.ParentAccountId <! msg
 
    let updateTransferAsComplete () =
       let cmd =
-         CompleteDomesticTransferCommand.create
-            compositeId
-            correlationId
-            info.InitiatedBy
-            {
-               BaseInfo = info
-               // Will be overwritten during the account actor state transition
-               // upon detecting a previously failed transfer by TransferId.
-               FromRetry = None
-            }
+         CompleteDomesticTransferCommand.create correlationId info.InitiatedBy {
+            BaseInfo = info
+            // Will be overwritten during the account actor state transition
+            // upon detecting a previously failed transfer by TransferId.
+            FromRetry = None
+         }
 
       let msg =
          cmd
          |> AccountCommand.CompleteDomesticTransfer
          |> AccountMessage.StateChange
 
-      dep.getAccountRef info.Sender.AccountId <! msg
+      dep.getAccountRef info.Sender.ParentAccountId <! msg
 
    let sendTransferInitiatedEmail () =
       let emailMsg =
@@ -481,15 +471,14 @@ let onEventPersisted
 
    let refundSenderAccount reason =
       let msg =
-         FailDomesticTransferCommand.create
-            compositeId
-            correlationId
-            info.InitiatedBy
-            { BaseInfo = info; Reason = reason }
+         FailDomesticTransferCommand.create correlationId info.InitiatedBy {
+            BaseInfo = info
+            Reason = reason
+         }
          |> AccountCommand.FailDomesticTransfer
          |> AccountMessage.StateChange
 
-      dep.getAccountRef info.Sender.AccountId <! msg
+      dep.getAccountRef info.Sender.ParentAccountId <! msg
 
    match evt with
    | DomesticTransferSagaEvent.Start _ -> ()

@@ -84,7 +84,7 @@ let actorProps<'Saga, 'SagaEvent when 'Saga :> ISaga>
 
                      return ignored ()
                   | Ok _ ->
-                     return! confirmPersist mailbox evt envelope.ConfirmationId
+                     return! confirmPersist mailbox envelope.ConfirmationId evt
                | _ -> return unknownMsg msg
             | msg -> return unknownMsg msg
          | :? SagaMessage<'SagaEvent> as msg ->

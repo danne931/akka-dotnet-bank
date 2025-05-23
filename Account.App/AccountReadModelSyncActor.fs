@@ -28,7 +28,13 @@ let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [
 
    "payeeAccountId", PaymentSqlWriter.payeeAccountId p.Payee.AccountId
 
+   "payeeParentAccountId",
+   PaymentSqlWriter.payeeParentAccountId p.Payee.ParentAccountId
+
    "payerOrgId", PaymentSqlWriter.Platform.payerOrgId p.Payer.OrgId
+
+   "payerParentAccountId",
+   PaymentSqlWriter.Platform.payerParentAccountId p.Payer.ParentAccountId
 
    "payByAccount", PaymentSqlWriter.Platform.payByAccount None
 ]
@@ -124,10 +130,14 @@ let sqlParamReducer
    let transactionSqlParams = [
       "eventId", aeSqlWriter.eventId envelope.Id
 
-      "accountId",
-      envelope.EntityId |> AccountId.fromEntityId |> aeSqlWriter.accountId
+      "accountId", aeSqlWriter.accountId evt.AccountId
 
       "orgId", aeSqlWriter.orgId envelope.OrgId
+
+      "parentAccountId",
+      envelope.EntityId
+      |> ParentAccountId.fromEntityId
+      |> aeSqlWriter.parentAccountId
 
       "correlationId", aeSqlWriter.correlationId envelope.CorrelationId
 
@@ -195,11 +205,6 @@ let sqlParamReducer
          acc
          (InternalTransferStatus.Failed e.Data.Reason)
          e.Data.BaseInfo
-   | AccountEvent.InternalTransferWithinOrgCompleted e ->
-      internalTransferStatusReducer
-         acc
-         InternalTransferStatus.Completed
-         e.Data.BaseInfo
    | AccountEvent.InternalTransferWithinOrgDeposited e ->
       internalTransferStatusReducer
          acc
@@ -235,11 +240,6 @@ let sqlParamReducer
       internalTransferStatusReducer
          acc
          (InternalTransferStatus.Failed e.Data.Reason)
-         e.Data.BaseInfo
-   | AccountEvent.InternalAutomatedTransferCompleted e ->
-      internalTransferStatusReducer
-         acc
-         InternalTransferStatus.Completed
          e.Data.BaseInfo
    | AccountEvent.InternalAutomatedTransferDeposited e ->
       internalTransferStatusReducer
@@ -302,11 +302,6 @@ let sqlParamReducer
       internalTransferStatusReducer
          acc
          (InternalTransferStatus.Failed e.Data.Reason)
-         e.Data.BaseInfo
-   | AccountEvent.InternalTransferBetweenOrgsCompleted e ->
-      internalTransferStatusReducer
-         acc
-         InternalTransferStatus.Completed
          e.Data.BaseInfo
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       internalTransferStatusReducer
@@ -479,6 +474,7 @@ let sqlParamsFromAccount (account: Account) : (string * SqlValue) list = [
    "accountNumber", AccountSqlWriter.accountNumber account.AccountNumber
    "routingNumber", AccountSqlWriter.routingNumber account.RoutingNumber
    "orgId", AccountSqlWriter.orgId account.OrgId
+   "parentAccountId", AccountSqlWriter.parentAccountId account.ParentAccountId
    "name", AccountSqlWriter.name account.Name
    "depository", AccountSqlWriter.depository account.Depository
    "balance", AccountSqlWriter.balance account.Balance
@@ -505,9 +501,28 @@ let sqlParamsFromAccount (account: Account) : (string * SqlValue) list = [
 ]
 
 let upsertReadModels
-   (accounts: Account list, accountEvents: AccountEvent list)
+   (parentAccounts: ParentAccountSnapshot list, accountEvents: AccountEvent list)
    =
-   let accountSqlParams = List.map sqlParamsFromAccount accounts
+   let accountsIndexed =
+      parentAccounts
+      |> List.map (_.Info.Values >> Seq.toList)
+      |> List.collect id
+      |> List.fold
+            (fun acc account -> Map.add account.Info.AccountId account.Info acc)
+            Map.empty<AccountId, Account>
+
+   let updatedAccounts =
+      accountEvents
+      |> List.fold
+            (fun acc evt ->
+               match accountsIndexed |> Map.tryFind evt.AccountId with
+               | Some account -> acc |> Map.add evt.AccountId account
+               | None -> acc)
+            Map.empty<AccountId, Account>
+      |> _.Values
+      |> Seq.toList
+
+   let accountSqlParams = List.map sqlParamsFromAccount updatedAccounts
 
    let sqlParamsDerivedFromAccountEvents =
       accountEvents
@@ -528,6 +543,7 @@ let upsertReadModels
           {AccountFields.accountNumber},
           {AccountFields.routingNumber},
           {AccountFields.orgId},
+          {AccountFields.parentAccountId},
           {AccountFields.name},
           {AccountFields.depository},
           {AccountFields.balance},
@@ -543,6 +559,7 @@ let upsertReadModels
           @accountNumber,
           @routingNumber,
           @orgId,
+          @parentAccountId,
           @name,
           @depository::{AccountTypeCast.depository},
           @balance,
@@ -570,6 +587,7 @@ let upsertReadModels
          ({aeFields.eventId},
           {aeFields.accountId},
           {aeFields.orgId},
+          {aeFields.parentAccountId},
           {aeFields.correlationId},
           {aeFields.initiatedById},
           {aeFields.cardId},
@@ -583,6 +601,7 @@ let upsertReadModels
          (@eventId,
           @accountId,
           @orgId,
+          @parentAccountId,
           @correlationId,
           @initiatedById,
           @cardId,
@@ -607,7 +626,8 @@ let upsertReadModels
              {PaymentFields.paymentType},
              {PaymentFields.expiration},
              {PaymentFields.payeeOrgId},
-             {PaymentFields.payeeAccountId})
+             {PaymentFields.payeeAccountId},
+             {PaymentFields.payeeParentAccountId})
          VALUES
             (@paymentId,
              @initiatedById,
@@ -616,7 +636,8 @@ let upsertReadModels
              @paymentType::{PaymentTypeCast.paymentType},
              @expiration,
              @payeeOrgId,
-             @payeeAccountId)
+             @payeeAccountId,
+             @payeeParentAccountId)
          ON CONFLICT ({PaymentFields.paymentId})
          DO NOTHING;
          """,
@@ -631,12 +652,14 @@ let upsertReadModels
             ({PaymentFields.paymentId},
              {PaymentFields.Platform.status},
              {PaymentFields.Platform.statusDetail},
-             {PaymentFields.Platform.payerOrgId})
+             {PaymentFields.Platform.payerOrgId},
+             {PaymentFields.Platform.payerParentAccountId})
          VALUES
             (@paymentId,
              @status::{PaymentTypeCast.platformPaymentStatus},
              @statusDetail,
-             @payerOrgId)
+             @payerOrgId,
+             @payerParentAccountId)
          ON CONFLICT ({PaymentFields.paymentId})
          DO UPDATE SET
             {PaymentFields.Platform.status} = @status::{PaymentTypeCast.platformPaymentStatus},
@@ -712,23 +735,23 @@ let upsertReadModels
    ]
 
 let initProps
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
-   actorProps<Account, AccountEvent> (
+   actorProps<ParentAccountSnapshot, AccountEvent> (
       {
          GetAggregateIdFromEvent =
             AccountEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
          GetAggregate =
-            fun accountId -> task {
-               let aref = getAccountRef (AccountId accountId)
+            fun parentAccountId -> task {
+               let aref = getAccountRef (ParentAccountId parentAccountId)
 
-               let! (accountOpt: Account option) =
+               let! (parentAccountOpt: ParentAccountSnapshot option) =
                   aref <? AccountMessage.GetAccount
 
-               return accountOpt
+               return parentAccountOpt
             }
          Chunking = chunking
          RestartSettings = restartSettings

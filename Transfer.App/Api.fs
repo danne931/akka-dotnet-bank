@@ -18,6 +18,7 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
          payeeOrg.{OrganizationSqlMapper.OrgFields.name} as payee_org_name,
          payerOrg.{OrganizationSqlMapper.OrgFields.name} as payer_org_name,
          {Table.platformPayment}.{PaymentFields.Platform.statusDetail},
+         {Table.platformPayment}.{PaymentFields.Platform.payerParentAccountId},
          {PaymentFields.Platform.payerOrgId},
          {PaymentFields.Platform.payByAccount}
       FROM {Table.payment} 
@@ -51,6 +52,7 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
                   OrgId = Reader.payeeOrgId read
                   OrgName = read.string "payee_org_name"
                   AccountId = Reader.payeeAccountId read
+                  ParentAccountId = Reader.payeeParentAccountId read
                }
                CreatedAt = Reader.createdAt read
                Expiration = Reader.expiration read
@@ -65,6 +67,8 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
                   Payer = {
                      OrgName = read.string "payer_org_name"
                      OrgId = Reader.Platform.payerOrgId read
+                     ParentAccountId =
+                        Reader.Platform.payerParentAccountId read
                   }
                   PaidBy =
                      Reader.Platform.payByAccount read

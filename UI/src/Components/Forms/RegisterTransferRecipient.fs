@@ -146,18 +146,19 @@ let domesticRecipientForm
       let cmd =
          match editingDomesticRecipient with
          | None ->
-            RegisterDomesticTransferRecipientCommand.create
-               org.OrgId
-               initiatedBy
-               {
-                  AccountId = AccountId <| Guid.NewGuid()
-                  LastName = last
-                  FirstName = first
-                  AccountNumber = accountNum
-                  RoutingNumber = routingNum
-                  Depository = depository
-                  PaymentNetwork = paymentNetwork
-               }
+            RegisterDomesticTransferRecipientCommand.create initiatedBy {
+               AccountId = AccountId <| Guid.NewGuid()
+               LastName = last
+               FirstName = first
+               AccountNumber = accountNum
+               RoutingNumber = routingNum
+               Depository = depository
+               PaymentNetwork = paymentNetwork
+               Sender = {|
+                  OrgId = org.OrgId
+                  ParentAccountId = org.ParentAccountId
+               |}
+            }
             |> OrgCommand.RegisterDomesticTransferRecipient
          | Some recipient ->
             EditDomesticTransferRecipientCommand.create org.OrgId initiatedBy {

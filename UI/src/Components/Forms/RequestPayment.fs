@@ -140,27 +140,26 @@ let formPlatformPayment
       let payeeAccount = payeeDestinationAccounts[payeeAccountId]
 
       let cmd =
-         RequestPlatformPaymentCommand.create
-            payeeAccount.CompositeId
-            initiatedBy
-            {
-               Expiration = expirationOpt |> Option.map _.ToUniversalTime()
-               Memo = memo
-               BaseInfo = {
-                  Id = Guid.NewGuid() |> PaymentId
-                  InitiatedById = initiatedBy.Id
-                  Amount = amount
-                  Payer = {
-                     OrgId = payerOrg.OrgId
-                     OrgName = payerOrg.Name
-                  }
-                  Payee = {
-                     OrgId = payeeOrg.OrgId
-                     OrgName = payeeOrg.Name
-                     AccountId = payeeAccountId
-                  }
+         RequestPlatformPaymentCommand.create initiatedBy {
+            Expiration = expirationOpt |> Option.map _.ToUniversalTime()
+            Memo = memo
+            BaseInfo = {
+               Id = Guid.NewGuid() |> PaymentId
+               InitiatedById = initiatedBy.Id
+               Amount = amount
+               Payer = {
+                  OrgId = payerOrg.OrgId
+                  OrgName = payerOrg.Name
+                  ParentAccountId = payerOrg.ParentAccountId
+               }
+               Payee = {
+                  OrgId = payeeOrg.OrgId
+                  OrgName = payeeOrg.Name
+                  AccountId = payeeAccountId
+                  ParentAccountId = payeeAccount.ParentAccountId
                }
             }
+         }
          |> AccountCommand.RequestPlatformPayment
          |> FormCommand.Account
 

@@ -146,12 +146,6 @@ let transactionInfoFromHistory
             TransactionStatus.Failed,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.InternalTransferWithinOrgCompleted e ->
-         Some(
-            TransactionType.InternalTransferWithinOrg,
-            TransactionStatus.InProgress,
-            e.Data.BaseInfo.Amount
-         )
       | AccountEvent.InternalTransferWithinOrgDeposited e ->
          Some(
             TransactionType.InternalTransferWithinOrg,
@@ -170,12 +164,6 @@ let transactionInfoFromHistory
             TransactionStatus.Failed,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.InternalTransferBetweenOrgsCompleted e ->
-         Some(
-            TransactionType.InternalTransferBetweenOrgs,
-            TransactionStatus.Complete,
-            e.Data.BaseInfo.Amount
-         )
       | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
          Some(
             TransactionType.InternalTransferBetweenOrgs,
@@ -183,12 +171,6 @@ let transactionInfoFromHistory
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalAutomatedTransferPending e ->
-         Some(
-            TransactionType.InternalAutomatedTransfer,
-            TransactionStatus.InProgress,
-            e.Data.BaseInfo.Amount
-         )
-      | AccountEvent.InternalAutomatedTransferCompleted e ->
          Some(
             TransactionType.InternalAutomatedTransfer,
             TransactionStatus.InProgress,

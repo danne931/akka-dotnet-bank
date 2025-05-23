@@ -127,18 +127,22 @@ let AccountDashboardComponent (url: Routes.AccountUrl) (session: UserSession) =
    classyNode Html.div [ "account-dashboard" ] [
       match url with
       | Routes.AccountUrl.CreateAccount ->
-         classyNode Html.article [ "form-wrapper" ] [
-            Html.h6 "Create Account"
-            CloseButton.render onClose
+         match orgCtx with
+         | Deferred.Resolved(Ok(Some org)) ->
+            classyNode Html.article [ "form-wrapper" ] [
+               Html.h6 "Create Account"
+               CloseButton.render onClose
 
-            AccountCreateFormComponent
-               session
-               (_.PendingState
-                >> OrgProvider.Msg.AccountCreated
-                >> orgDispatch
-                >> onClose)
-         ]
-         |> ScreenOverlay.Portal
+               AccountCreateFormComponent
+                  session
+                  org.Org
+                  (_.PendingState
+                   >> OrgProvider.Msg.AccountCreated
+                   >> orgDispatch
+                   >> onClose)
+            ]
+            |> ScreenOverlay.Portal
+         | _ -> ()
       | _ -> ()
 
       classyNode Html.main [ "container-fluid" ] [

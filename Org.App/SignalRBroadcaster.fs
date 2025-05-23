@@ -39,6 +39,7 @@ let init (system: ActorSystem) : SignalRBroadcast =
                let msg =
                   AccountLoadTestMessage.AccountEventPersisted {
                      AccountId = account.AccountId
+                     OrgId = account.OrgId
                      Event = event
                      AccountBalance = account.Balance
                   }

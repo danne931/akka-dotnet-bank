@@ -107,7 +107,8 @@ let update
                return Msg.Submit(FormEntity.Account account, command, Started)
             | Ok None ->
                let err =
-                  AccountStateTransitionError.AccountNotActive
+                  accountId
+                  |> AccountStateTransitionError.AccountNotFound
                   |> Err.AccountStateTransitionError
                   |> Error
 

@@ -52,7 +52,7 @@ let formFulfillPlatformPayment
 
       let cmd =
          FulfillPlatformPaymentCommand.create initiatedBy {
-            PaymentMethod = selectedAccountId
+            PaymentMethod = PaymentMethod.Platform selectedAccountId
             RequestedPayment = {
                PlatformPaymentRequested.fromPayment payment with
                   BaseInfo.InitiatedById = initiatedBy.Id

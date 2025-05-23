@@ -327,10 +327,7 @@ let transactionUIFriendly
             | History.Account accountHistory ->
                match accountHistory.Event with
                | AccountEvent.DepositedCash e ->
-                  Some(
-                     e.Data.Origin,
-                     accountName (AccountId.fromEntityId e.EntityId)
-                  )
+                  Some(e.Data.Origin, accountName e.Data.AccountId)
                | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown")
@@ -365,7 +362,7 @@ let transactionUIFriendly
                      em.EmployeeName,
                      $"**{em.EmployeeCardNumberLast4}",
                      merchant,
-                     accountName (AccountId.fromEntityId e.EntityId)
+                     accountName e.Data.AccountId
                   )
                | _ -> None
             | _ -> None)
@@ -410,8 +407,9 @@ let transactionUIFriendly
             | History.Account accountHistory ->
                match accountHistory.Event with
                | AccountEvent.InternalTransferBetweenOrgsPending e ->
-                  let sender = accountName (AccountId.fromEntityId e.EntityId)
-                  Some(sender, e.Data.BaseInfo.Recipient.Name)
+                  let i = e.Data.BaseInfo
+                  let sender = accountName i.Sender.AccountId
+                  Some(sender, i.Recipient.Name)
                | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown")
@@ -478,11 +476,15 @@ let transactionUIFriendly
                | AccountEvent.PlatformPaymentPaid e when e.OrgId = org.Org.OrgId ->
                   let i = e.Data.BaseInfo
 
-                  Some(
-                     accountName (AccountId.fromEntityId e.EntityId),
-                     i.Payee.OrgName,
-                     Some MoneyFlow.Out
-                  )
+                  let sender =
+                     match e.Data.PaymentMethod with
+                     | PaymentMethod.Platform accountId -> accountName accountId
+                     | PaymentMethod.ThirdParty pay ->
+                        match pay with
+                        | ThirdPartyPaymentMethod.ACH -> "ACH"
+                        | ThirdPartyPaymentMethod.Card -> "3rd party card"
+
+                  Some(sender, i.Payee.OrgName, Some MoneyFlow.Out)
                | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown", None)
@@ -541,21 +543,18 @@ let private matchesTransactionGroupFilter
    | TransactionGroupFilter.InternalTransferWithinOrg ->
       match event with
       | AccountEvent.InternalTransferWithinOrgPending _
-      | AccountEvent.InternalTransferWithinOrgCompleted _
       | AccountEvent.InternalTransferWithinOrgFailed _
       | AccountEvent.InternalTransferWithinOrgDeposited _ -> true
       | _ -> false
    | TransactionGroupFilter.InternalTransferBetweenOrgs ->
       match event with
       | AccountEvent.InternalTransferBetweenOrgsPending _
-      | AccountEvent.InternalTransferBetweenOrgsCompleted _
       | AccountEvent.InternalTransferBetweenOrgsFailed _
       | AccountEvent.InternalTransferBetweenOrgsDeposited _ -> true
       | _ -> false
    | TransactionGroupFilter.InternalAutomatedTransfer ->
       match event with
       | AccountEvent.InternalAutomatedTransferPending _
-      | AccountEvent.InternalAutomatedTransferCompleted _
       | AccountEvent.InternalAutomatedTransferFailed _
       | AccountEvent.InternalAutomatedTransferDeposited _ -> true
       | _ -> false
@@ -596,9 +595,7 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
       match query.AccountIds with
       | None -> true
       | Some accounts ->
-         accounts
-         |> List.exists (fun accountId ->
-            accountId = AccountId.fromEntityId envelope.EntityId)
+         accounts |> List.exists (fun accountId -> accountId = evt.AccountId)
 
    let qualifiedCard =
       match query.CardIds, evt with

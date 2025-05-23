@@ -135,6 +135,7 @@ type DomesticTransferSender = {
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
    OrgId: OrgId
+   ParentAccountId: ParentAccountId
    AccountId: AccountId
 }
 

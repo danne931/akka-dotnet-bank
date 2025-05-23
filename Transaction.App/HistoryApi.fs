@@ -60,19 +60,16 @@ let accountEventFilterNames
            | TransactionGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
            | TransactionGroupFilter.InternalTransferWithinOrg -> [
               typeof<InternalTransferWithinOrgPending>.Name
-              typeof<InternalTransferWithinOrgCompleted>.Name
               typeof<InternalTransferWithinOrgFailed>.Name
               typeof<InternalTransferWithinOrgDeposited>.Name
              ]
            | TransactionGroupFilter.InternalTransferBetweenOrgs -> [
               typeof<InternalTransferBetweenOrgsPending>.Name
-              typeof<InternalTransferBetweenOrgsCompleted>.Name
               typeof<InternalTransferBetweenOrgsFailed>.Name
               typeof<InternalTransferBetweenOrgsDeposited>.Name
              ]
            | TransactionGroupFilter.InternalAutomatedTransfer -> [
               typeof<InternalAutomatedTransferPending>.Name
-              typeof<InternalAutomatedTransferCompleted>.Name
               typeof<InternalAutomatedTransferFailed>.Name
               typeof<InternalAutomatedTransferDeposited>.Name
              ]

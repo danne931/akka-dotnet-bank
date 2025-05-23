@@ -25,12 +25,14 @@ module PaymentFields =
    let paymentType = "payment_type"
    let expiration = "expiration"
    let payeeOrgId = "payee_org_id"
+   let payeeParentAccountId = "payee_parent_account_id"
    let payeeAccountId = "payee_account_id"
    let createdAt = "created_at"
 
    // Specific to platform_payment table
    module Platform =
       let payerOrgId = "payer_org_id"
+      let payerParentAccountId = "payer_parent_account_id"
       let status = "status"
       let statusDetail = "status_detail"
       let payByAccount = "pay_by_account"
@@ -58,6 +60,9 @@ module PaymentSqlReader =
    let payeeOrgId (read: RowReader) =
       PaymentFields.payeeOrgId |> read.uuid |> OrgId
 
+   let payeeParentAccountId (read: RowReader) =
+      PaymentFields.payeeParentAccountId |> read.uuid |> ParentAccountId
+
    let payeeAccountId (read: RowReader) =
       PaymentFields.payeeAccountId |> read.uuid |> AccountId
 
@@ -70,6 +75,11 @@ module PaymentSqlReader =
    module Platform =
       let payerOrgId (read: RowReader) =
          PaymentFields.Platform.payerOrgId |> read.uuid |> OrgId
+
+      let payerParentAccountId (read: RowReader) =
+         PaymentFields.Platform.payerParentAccountId
+         |> read.uuid
+         |> ParentAccountId
 
       let status (read: RowReader) =
          PaymentFields.Platform.statusDetail
@@ -112,6 +122,7 @@ module PaymentSqlWriter =
    let expiration (date: DateTime) = Sql.timestamptz date
 
    let payeeOrgId = OrgSqlWriter.orgId
+   let payeeParentAccountId (ParentAccountId id) = Sql.uuid id
    let payeeAccountId = AccountSqlWriter.accountId
 
    let createdAt (date: DateTime) = Sql.timestamptz date
@@ -119,6 +130,8 @@ module PaymentSqlWriter =
    // Specific to platform_payment table
    module Platform =
       let payerOrgId = OrgSqlWriter.orgId
+
+      let payerParentAccountId (ParentAccountId id) = Sql.uuid id
 
       let status =
          function

@@ -189,6 +189,7 @@ type TargetBalanceRange = {
 type BiDirectionalTransferContact = {
    Name: string
    AccountId: AccountId
+   ParentAccountId: ParentAccountId
    OrgId: OrgId
 }
 
@@ -236,11 +237,13 @@ module TargetBalanceRule =
             Sender = {
                Name = partner.Name
                AccountId = partner.AccountId
+               ParentAccountId = partner.ParentAccountId
                OrgId = partner.OrgId
             }
             Recipient = {
                Name = target.Name
                AccountId = target.AccountId
+               ParentAccountId = partner.ParentAccountId
                OrgId = target.OrgId
             }
          })
@@ -257,11 +260,13 @@ module TargetBalanceRule =
             Sender = {
                Name = target.Name
                AccountId = target.AccountId
+               ParentAccountId = partner.ParentAccountId
                OrgId = target.OrgId
             }
             Recipient = {
                Name = partner.Name
                AccountId = partner.AccountId
+               ParentAccountId = partner.ParentAccountId
                OrgId = partner.OrgId
             }
          })

@@ -116,7 +116,6 @@ builder.Services.AddAkka(
                let props =
                   AccountActor.initProps
                      (provider.GetRequiredService<SignalRBroadcast>())
-                     system
                      Env.config.AccountActorSupervisor
                      persistenceId
                      (AppSaga.getEntityRef system)

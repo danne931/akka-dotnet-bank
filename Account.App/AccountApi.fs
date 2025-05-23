@@ -1,8 +1,5 @@
 module Bank.Account.Api
 
-open System
-open System.Threading.Tasks
-open FSharp.Control
 open Akkling
 open Akka.Actor
 open FsToolkit.ErrorHandling
@@ -74,21 +71,12 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
             $"Command processing not implemented for {cmd}"
          ]
 
-   let! res = validation |> Result.mapError Err.ValidationError
+   let! envelope = validation |> Result.mapError Err.ValidationError
 
-   let ref = AccountActor.get system (AccountId.fromEntityId res.EntityId)
+   let ref =
+      AccountActor.get system (ParentAccountId.fromEntityId envelope.EntityId)
+
    ref <! AccountMessage.StateChange command
 
-   return res
+   return envelope
 }
-
-// Diagnostic
-let getAccountFromAkka
-   (sys: ActorSystem)
-   (accountId: AccountId)
-   : Account option Task
-   =
-   let ref = AccountActor.get sys accountId
-
-   ref.Ask(AccountMessage.GetAccount, Some(TimeSpan.FromSeconds 3))
-   |> Async.toTask

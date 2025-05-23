@@ -7,12 +7,14 @@ open Lib.SharedTypes
 type InternalTransferRecipient = {
    Name: string
    AccountId: AccountId
+   ParentAccountId: ParentAccountId
    OrgId: OrgId
 }
 
 type InternalTransferSender = {
    Name: string
    AccountId: AccountId
+   ParentAccountId: ParentAccountId
    OrgId: OrgId
 }
 
@@ -26,7 +28,6 @@ type InternalTransferFailReason =
 type InternalTransferStatus =
    | Scheduled
    | Pending
-   | Completed
    | Deposited
    | Failed of InternalTransferFailReason
 

@@ -16,13 +16,10 @@ type AccountCommand =
    | MaintenanceFee of MaintenanceFeeCommand
    | SkipMaintenanceFee of SkipMaintenanceFeeCommand
    | InternalTransfer of InternalTransferWithinOrgCommand
-   | CompleteInternalTransfer of CompleteInternalTransferWithinOrgCommand
    | FailInternalTransfer of FailInternalTransferWithinOrgCommand
    | ScheduleInternalTransferBetweenOrgs of
       ScheduleInternalTransferBetweenOrgsCommand
    | InternalTransferBetweenOrgs of InternalTransferBetweenOrgsCommand
-   | CompleteInternalTransferBetweenOrgs of
-      CompleteInternalTransferBetweenOrgsCommand
    | FailInternalTransferBetweenOrgs of FailInternalTransferBetweenOrgsCommand
    | DepositTransferWithinOrg of DepositInternalTransferWithinOrgCommand
    | DepositTransferBetweenOrgs of DepositInternalTransferBetweenOrgsCommand
@@ -42,7 +39,6 @@ type AccountCommand =
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
    | DeleteAutoTransferRule of DeleteAutoTransferRuleCommand
    | InternalAutoTransfer of InternalAutoTransferCommand
-   | CompleteInternalAutoTransfer of CompleteInternalAutoTransferCommand
    | FailInternalAutoTransfer of FailInternalAutoTransferCommand
    | DepositInternalAutoTransfer of DepositInternalAutoTransferCommand
 
@@ -55,11 +51,9 @@ type AccountCommand =
       | MaintenanceFee cmd -> Command.envelope cmd
       | SkipMaintenanceFee cmd -> Command.envelope cmd
       | InternalTransfer cmd -> Command.envelope cmd
-      | CompleteInternalTransfer cmd -> Command.envelope cmd
       | FailInternalTransfer cmd -> Command.envelope cmd
       | ScheduleInternalTransferBetweenOrgs cmd -> Command.envelope cmd
       | InternalTransferBetweenOrgs cmd -> Command.envelope cmd
-      | CompleteInternalTransferBetweenOrgs cmd -> Command.envelope cmd
       | FailInternalTransferBetweenOrgs cmd -> Command.envelope cmd
       | DepositTransferWithinOrg cmd -> Command.envelope cmd
       | DepositTransferBetweenOrgs cmd -> Command.envelope cmd
@@ -79,9 +73,52 @@ type AccountCommand =
       | ConfigureAutoTransferRule cmd -> Command.envelope cmd
       | DeleteAutoTransferRule cmd -> Command.envelope cmd
       | InternalAutoTransfer cmd -> Command.envelope cmd
-      | CompleteInternalAutoTransfer cmd -> Command.envelope cmd
       | FailInternalAutoTransfer cmd -> Command.envelope cmd
       | DepositInternalAutoTransfer cmd -> Command.envelope cmd
+
+   member x.AccountId =
+      match x with
+      | CreateAccount cmd -> cmd.Data.AccountId
+      | DepositCash cmd -> cmd.Data.AccountId
+      | Debit cmd -> cmd.Data.AccountId
+      | RefundDebit cmd -> cmd.Data.AccountId
+      | MaintenanceFee cmd -> cmd.Data.AccountId
+      | SkipMaintenanceFee cmd -> cmd.Data.AccountId
+      | InternalTransfer cmd -> cmd.Data.Sender.AccountId
+      | FailInternalTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
+      | ScheduleInternalTransferBetweenOrgs cmd ->
+         cmd.Data.TransferInput.Sender.AccountId
+      | InternalTransferBetweenOrgs cmd -> cmd.Data.Sender.AccountId
+      | FailInternalTransferBetweenOrgs cmd ->
+         cmd.Data.BaseInfo.Sender.AccountId
+      | DepositTransferWithinOrg cmd -> cmd.Data.BaseInfo.Recipient.AccountId
+      | DepositTransferBetweenOrgs cmd -> cmd.Data.BaseInfo.Recipient.AccountId
+      | ScheduleDomesticTransfer cmd -> cmd.Data.TransferInput.Sender.AccountId
+      | DomesticTransfer cmd -> cmd.Data.Sender.AccountId
+      | UpdateDomesticTransferProgress cmd -> cmd.Data.BaseInfo.Sender.AccountId
+      | CompleteDomesticTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
+      | FailDomesticTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
+      | RequestPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
+      | CancelPlatformPayment cmd ->
+         cmd.Data.RequestedPayment.BaseInfo.Payee.AccountId
+      | DeclinePlatformPayment cmd ->
+         cmd.Data.RequestedPayment.BaseInfo.Payee.AccountId
+      | FulfillPlatformPayment cmd ->
+         match cmd.Data.PaymentMethod with
+         | PaymentMethod.Platform accountId -> accountId
+         | PaymentMethod.ThirdParty _ -> Guid.Empty |> AccountId
+      | DepositPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
+      | RefundPlatformPayment cmd ->
+         match cmd.Data.PaymentMethod with
+         | PaymentMethod.Platform accountId -> accountId
+         | PaymentMethod.ThirdParty _ -> Guid.Empty |> AccountId
+      | CloseAccount cmd -> cmd.Data.AccountId
+      | StartBillingCycle cmd -> cmd.Data.AccountId
+      | ConfigureAutoTransferRule cmd -> cmd.Data.AccountId
+      | DeleteAutoTransferRule cmd -> cmd.Data.AccountId
+      | InternalAutoTransfer cmd -> cmd.Data.Transfer.Sender.AccountId
+      | FailInternalAutoTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
+      | DepositInternalAutoTransfer cmd -> cmd.Data.BaseInfo.Recipient.AccountId
 
 type AccountEvent =
    | CreatedAccount of BankEvent<CreatedAccount>
@@ -92,16 +129,12 @@ type AccountEvent =
    | MaintenanceFeeSkipped of BankEvent<MaintenanceFeeSkipped>
    | InternalTransferWithinOrgPending of
       BankEvent<InternalTransferWithinOrgPending>
-   | InternalTransferWithinOrgCompleted of
-      BankEvent<InternalTransferWithinOrgCompleted>
    | InternalTransferWithinOrgFailed of
       BankEvent<InternalTransferWithinOrgFailed>
    | InternalTransferBetweenOrgsScheduled of
       BankEvent<InternalTransferBetweenOrgsScheduled>
    | InternalTransferBetweenOrgsPending of
       BankEvent<InternalTransferBetweenOrgsPending>
-   | InternalTransferBetweenOrgsCompleted of
-      BankEvent<InternalTransferBetweenOrgsCompleted>
    | InternalTransferBetweenOrgsFailed of
       BankEvent<InternalTransferBetweenOrgsFailed>
    | InternalTransferWithinOrgDeposited of
@@ -125,12 +158,60 @@ type AccountEvent =
    | AutoTransferRuleDeleted of BankEvent<AutomaticTransferRuleDeleted>
    | InternalAutomatedTransferPending of
       BankEvent<InternalAutomatedTransferPending>
-   | InternalAutomatedTransferCompleted of
-      BankEvent<InternalAutomatedTransferCompleted>
    | InternalAutomatedTransferFailed of
       BankEvent<InternalAutomatedTransferFailed>
    | InternalAutomatedTransferDeposited of
       BankEvent<InternalAutomatedTransferDeposited>
+
+   member x.AccountId =
+      match x with
+      | CreatedAccount evt -> evt.Data.AccountId
+      | DepositedCash evt -> evt.Data.AccountId
+      | DebitedAccount evt -> evt.Data.AccountId
+      | RefundedDebit evt -> evt.Data.AccountId
+      | MaintenanceFeeDebited evt -> evt.Data.AccountId
+      | MaintenanceFeeSkipped evt -> evt.Data.AccountId
+      | InternalTransferWithinOrgPending evt ->
+         evt.Data.BaseInfo.Sender.AccountId
+      | InternalTransferWithinOrgFailed evt ->
+         evt.Data.BaseInfo.Sender.AccountId
+      | InternalTransferBetweenOrgsScheduled evt ->
+         evt.Data.BaseInfo.Sender.AccountId
+      | InternalTransferBetweenOrgsPending evt ->
+         evt.Data.BaseInfo.Sender.AccountId
+      | InternalTransferBetweenOrgsFailed evt ->
+         evt.Data.BaseInfo.Sender.AccountId
+      | DomesticTransferScheduled evt -> evt.Data.BaseInfo.Sender.AccountId
+      | DomesticTransferPending evt -> evt.Data.BaseInfo.Sender.AccountId
+      | DomesticTransferProgress evt -> evt.Data.BaseInfo.Sender.AccountId
+      | DomesticTransferCompleted evt -> evt.Data.BaseInfo.Sender.AccountId
+      | DomesticTransferFailed evt -> evt.Data.BaseInfo.Sender.AccountId
+      | InternalTransferWithinOrgDeposited evt ->
+         evt.Data.BaseInfo.Recipient.AccountId
+      | InternalTransferBetweenOrgsDeposited evt ->
+         evt.Data.BaseInfo.Recipient.AccountId
+      | PlatformPaymentRequested evt -> evt.Data.BaseInfo.Payee.AccountId
+      | PlatformPaymentCancelled evt -> evt.Data.BaseInfo.Payee.AccountId
+      | PlatformPaymentDeclined evt -> evt.Data.BaseInfo.Payee.AccountId
+      | PlatformPaymentPaid evt ->
+         match evt.Data.PaymentMethod with
+         | PaymentMethod.Platform accountId -> accountId
+         | PaymentMethod.ThirdParty _ -> Guid.Empty |> AccountId
+      | PlatformPaymentDeposited evt -> evt.Data.BaseInfo.Payee.AccountId
+      | PlatformPaymentRefunded evt ->
+         match evt.Data.PaymentMethod with
+         | PaymentMethod.Platform accountId -> accountId
+         | PaymentMethod.ThirdParty _ -> Guid.Empty |> AccountId
+      | AccountClosed evt -> evt.Data.AccountId
+      | BillingCycleStarted evt -> evt.Data.AccountId
+      | AutoTransferRuleConfigured evt -> evt.Data.AccountId
+      | AutoTransferRuleDeleted evt -> evt.Data.AccountId
+      | InternalAutomatedTransferPending evt ->
+         evt.Data.BaseInfo.Sender.AccountId
+      | InternalAutomatedTransferFailed evt ->
+         evt.Data.BaseInfo.Sender.AccountId
+      | InternalAutomatedTransferDeposited evt ->
+         evt.Data.BaseInfo.Recipient.AccountId
 
 module AccountEvent =
    let moneyTransaction =
@@ -145,10 +226,6 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
          Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalTransferWithinOrgCompleted evt ->
-         Some evt.Data.BaseInfo.Amount,
-         None,
-         Some evt.Data.BaseInfo.Recipient.Name
       | AccountEvent.InternalTransferWithinOrgFailed evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.In,
@@ -160,10 +237,6 @@ module AccountEvent =
       | AccountEvent.InternalAutomatedTransferPending evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
-         Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalAutomatedTransferCompleted evt ->
-         Some evt.Data.BaseInfo.Amount,
-         None,
          Some evt.Data.BaseInfo.Recipient.Name
       | AccountEvent.InternalAutomatedTransferFailed evt ->
          Some evt.Data.BaseInfo.Amount,
@@ -180,10 +253,6 @@ module AccountEvent =
       | AccountEvent.InternalTransferBetweenOrgsPending evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
-         Some evt.Data.BaseInfo.Recipient.Name
-      | AccountEvent.InternalTransferBetweenOrgsCompleted evt ->
-         Some evt.Data.BaseInfo.Amount,
-         None,
          Some evt.Data.BaseInfo.Recipient.Name
       | AccountEvent.InternalTransferBetweenOrgsFailed evt ->
          Some evt.Data.BaseInfo.Amount,
@@ -242,16 +311,12 @@ module AccountEnvelope =
       | :? BankEvent<MaintenanceFeeSkipped> as evt -> MaintenanceFeeSkipped evt
       | :? BankEvent<InternalTransferWithinOrgPending> as evt ->
          InternalTransferWithinOrgPending evt
-      | :? BankEvent<InternalTransferWithinOrgCompleted> as evt ->
-         InternalTransferWithinOrgCompleted evt
       | :? BankEvent<InternalTransferWithinOrgFailed> as evt ->
          InternalTransferWithinOrgFailed evt
       | :? BankEvent<InternalTransferBetweenOrgsScheduled> as evt ->
          InternalTransferBetweenOrgsScheduled evt
       | :? BankEvent<InternalTransferBetweenOrgsPending> as evt ->
          InternalTransferBetweenOrgsPending evt
-      | :? BankEvent<InternalTransferBetweenOrgsCompleted> as evt ->
-         InternalTransferBetweenOrgsCompleted evt
       | :? BankEvent<InternalTransferBetweenOrgsFailed> as evt ->
          InternalTransferBetweenOrgsFailed evt
       | :? BankEvent<InternalTransferWithinOrgDeposited> as evt ->
@@ -287,8 +352,6 @@ module AccountEnvelope =
          AutoTransferRuleDeleted evt
       | :? BankEvent<InternalAutomatedTransferPending> as evt ->
          InternalAutomatedTransferPending evt
-      | :? BankEvent<InternalAutomatedTransferCompleted> as evt ->
-         InternalAutomatedTransferCompleted evt
       | :? BankEvent<InternalAutomatedTransferFailed> as evt ->
          InternalAutomatedTransferFailed evt
       | :? BankEvent<InternalAutomatedTransferDeposited> as evt ->
@@ -304,11 +367,9 @@ module AccountEnvelope =
       | MaintenanceFeeDebited evt -> wrap evt, get evt
       | MaintenanceFeeSkipped evt -> wrap evt, get evt
       | InternalTransferWithinOrgPending evt -> wrap evt, get evt
-      | InternalTransferWithinOrgCompleted evt -> wrap evt, get evt
       | InternalTransferWithinOrgFailed evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsScheduled evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsPending evt -> wrap evt, get evt
-      | InternalTransferBetweenOrgsCompleted evt -> wrap evt, get evt
       | InternalTransferBetweenOrgsFailed evt -> wrap evt, get evt
       | DomesticTransferScheduled evt -> wrap evt, get evt
       | DomesticTransferPending evt -> wrap evt, get evt
@@ -328,13 +389,13 @@ module AccountEnvelope =
       | AutoTransferRuleConfigured evt -> wrap evt, get evt
       | AutoTransferRuleDeleted evt -> wrap evt, get evt
       | InternalAutomatedTransferPending evt -> wrap evt, get evt
-      | InternalAutomatedTransferCompleted evt -> wrap evt, get evt
       | InternalAutomatedTransferFailed evt -> wrap evt, get evt
       | InternalAutomatedTransferDeposited evt -> wrap evt, get evt
 
 type Account = {
    AccountId: AccountId
    OrgId: OrgId
+   ParentAccountId: ParentAccountId
    Name: string
    Depository: AccountDepository
    Currency: Currency
@@ -347,7 +408,7 @@ type Account = {
    AutoTransferRule: AutomaticTransferConfig option
 } with
 
-   member x.CompositeId = x.AccountId, x.OrgId
+   member x.CompositeId = x.AccountId, x.ParentAccountId, x.OrgId
 
    member x.FullName = $"{x.Name} **{x.AccountNumber.Last4}"
 
@@ -378,6 +439,7 @@ type Account = {
    static member empty: Account = {
       AccountId = AccountId Guid.Empty
       OrgId = OrgId Guid.Empty
+      ParentAccountId = ParentAccountId Guid.Empty
       Name = ""
       Depository = AccountDepository.Checking
       Currency = Currency.USD
@@ -396,20 +458,22 @@ type Account = {
 type AccountSnapshot = {
    Info: Account
    Events: AccountEvent list
-   // TODO: Add Scheduled transfer fields & probably change these
-   //       in-progress/failed fields to just contain the Id
-   InProgressInternalTransfers: Map<TransferId, InProgressInternalTransfer>
-   InProgressDomesticTransfers: Map<TransferId, DomesticTransfer>
-   FailedDomesticTransfers: Map<TransferId, DomesticTransfer>
 }
 
 module AccountSnapshot =
-   let empty: AccountSnapshot = {
-      Info = Account.empty
-      Events = []
-      InProgressInternalTransfers = Map.empty
-      InProgressDomesticTransfers = Map.empty
-      FailedDomesticTransfers = Map.empty
+   let empty: AccountSnapshot = { Info = Account.empty; Events = [] }
+
+type ParentAccountSnapshot = {
+   OrgId: OrgId
+   ParentAccountId: ParentAccountId
+   Info: Map<AccountId, AccountSnapshot>
+}
+
+module ParentAccountSnapshot =
+   let empty: ParentAccountSnapshot = {
+      OrgId = OrgId Guid.Empty
+      ParentAccountId = ParentAccountId Guid.Empty
+      Info = Map.empty
    }
 
 type AccountMetrics = {
@@ -447,9 +511,10 @@ type AccountProfile = {
 [<RequireQualifiedAccess>]
 type AccountMessage =
    | GetAccount
+   | GetVirtualAccount of AccountId
    | StateChange of AccountCommand
    | Event of AccountEvent
-   | AutoTransferCompute of AutomaticTransfer.Frequency
+   | AutoTransferCompute of AutomaticTransfer.Frequency * AccountId
    | Delete
 
 [<RequireQualifiedAccess>]
@@ -471,6 +536,7 @@ module AccountLoadTestTypes =
    }
 
    type LoadTestEventPersisted = {
+      OrgId: OrgId
       AccountId: AccountId
       AccountBalance: decimal
       Event: AccountEvent

@@ -53,9 +53,12 @@ let update (onDeleted: AccountCommandReceipt -> unit) msg (state: State) =
    | ConfirmDeleteRule(session, account, ruleConfig, Started) ->
       let cmd =
          DeleteAutoTransferRuleCommand.create
-            (account.AccountId, account.OrgId)
+            (account.ParentAccountId, account.OrgId)
             session.AsInitiator
-            { RuleId = ruleConfig.Id }
+            {
+               RuleId = ruleConfig.Id
+               AccountId = account.AccountId
+            }
          |> AccountCommand.DeleteAutoTransferRule
 
       let delete = async {

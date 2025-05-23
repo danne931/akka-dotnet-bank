@@ -62,6 +62,7 @@ module private Stub =
    let depositAmount = 3m
    let balanceAfter3Deposits = depositAmount * 3m
    let orgId = Guid.NewGuid() |> OrgId
+   let parentAccountId = Guid.NewGuid() |> ParentAccountId
 
    let initiatedBy: Initiator = {
       Id = InitiatedById Constants.LOGGED_IN_EMPLOYEE_ID_REMOVE_SOON
@@ -75,6 +76,7 @@ module private Stub =
          Currency = Currency.EUR
          Depository = AccountDepository.Checking
          AccountNumber = AccountNumber.generate ()
+         ParentAccountId = parentAccountId
          AccountId = accountId
          OrgId = orgId
          InitiatedBy = initiatedBy
@@ -82,14 +84,16 @@ module private Stub =
 
    let depositMessage accountId =
       AccountMessage.StateChange << AccountCommand.DepositCash
-      <| DepositCashCommand.create (accountId, orgId) initiatedBy {
+      <| DepositCashCommand.create (parentAccountId, orgId) initiatedBy {
+         AccountId = accountId
          Amount = depositAmount
          Origin = Some "load-test"
       }
 
    let closeAccountMessage accountId =
       AccountMessage.StateChange << AccountCommand.CloseAccount
-      <| CloseAccountCommand.create (accountId, orgId) initiatedBy {
+      <| CloseAccountCommand.create (parentAccountId, orgId) initiatedBy {
+         AccountId = accountId
          Reference = Some "load test - clean up"
       }
 
@@ -117,7 +121,7 @@ let private prepareTestData () = {
    UnexpectedBalances = Map.empty
 }
 
-let actorProps (getAccountRef: AccountId -> IEntityRef<AccountMessage>) =
+let actorProps (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>) =
    let handler (mailbox: Actor<AccountLoadTestMessage>) =
       PubSub.subscribePointToPoint (PubSub.get mailbox.System) mailbox.Self
 
@@ -169,7 +173,7 @@ let actorProps (getAccountRef: AccountId -> IEntityRef<AccountMessage>) =
             | StartLoadTest ->
                for test in state.AccountTests.Values do
                   let accountId = test.AccountId
-                  let ref = getAccountRef accountId
+                  let ref = getAccountRef Stub.parentAccountId
                   ref <! Stub.createAccountMessage accountId
                   ref <! Stub.depositMessage accountId
                   ref <! Stub.depositMessage accountId
@@ -192,9 +196,9 @@ let actorProps (getAccountRef: AccountId -> IEntityRef<AccountMessage>) =
             | Teardown ->
                logInfo "Commence teardown."
 
-               for accountId in state.AccountTests.Keys do
-                  let ref = getAccountRef accountId
-                  ref <! Stub.closeAccountMessage accountId
+               for test in state.AccountTests.Values do
+                  let ref = getAccountRef Stub.parentAccountId
+                  ref <! Stub.closeAccountMessage test.AccountId
 
                ignored ()
             | AccountEventPersisted _ when state.Progress <> InProgress ->

@@ -1,12 +1,11 @@
 module AppSagaSqlMapper
 
-open System
-
 open Lib.SharedTypes
 open Lib.Saga
 open PurchaseSaga
 open DomesticTransferSaga
 open PlatformPaymentSaga
+open PlatformTransferSaga
 open Bank.Transfer.Domain
 
 let table = "saga"
@@ -81,11 +80,10 @@ module Writer =
             | DomesticTransferProgress.Failed _ -> "Failed"
          | AppSaga.Saga.PlatformTransfer s ->
             match s.Status with
-            | InternalTransferStatus.Scheduled -> "Scheduled"
-            | InternalTransferStatus.Deposited
-            | InternalTransferStatus.Pending -> "InProgress"
-            | InternalTransferStatus.Completed -> "Completed"
-            | InternalTransferStatus.Failed _ -> "Failed"
+            | PlatformTransferSagaStatus.Scheduled -> "Scheduled"
+            | PlatformTransferSagaStatus.InProgress -> "InProgress"
+            | PlatformTransferSagaStatus.Completed -> "Completed"
+            | PlatformTransferSagaStatus.Failed _ -> "Failed"
          | AppSaga.Saga.PlatformPayment s ->
             match s.Status with
             | PlatformPaymentSagaStatus.InProgress _ -> "InProgress"

@@ -369,7 +369,7 @@ let stateTransition
          Ok(applyEvent state evt timestamp)
 
 type PersistenceHandlerDependencies = {
-   getAccountRef: AccountId -> IEntityRef<AccountMessage>
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
    refundPaymentToThirdParty:
       PlatformPaymentBaseInfo -> ThirdPartyPaymentMethod -> Async<Event>
@@ -449,33 +449,28 @@ let onEventPersisted
 
    let depositToPayeeAccount (e: BankEvent<PlatformPaymentPaid>) =
       let msg =
-         DepositPlatformPaymentCommand.create
-            (payment.Payee.AccountId, payment.Payee.OrgId)
-            e.InitiatedBy
-            {
-               BaseInfo = payment
-               PaymentMethod = e.Data.PaymentMethod
-            }
+         DepositPlatformPaymentCommand.create e.InitiatedBy {
+            BaseInfo = payment
+            PaymentMethod = e.Data.PaymentMethod
+         }
          |> AccountCommand.DepositPlatformPayment
          |> AccountMessage.StateChange
 
-      dep.getAccountRef payment.Payee.AccountId <! msg
+      dep.getAccountRef payment.Payee.ParentAccountId <! msg
 
    let refundPayment (reason, payMethod) =
       match payMethod with
       | PaymentMethod.Platform _ ->
          let msg =
-            RefundPlatformPaymentCommand.create
-               (payment.Payee.AccountId, payment.Payee.OrgId)
-               Initiator.System
-               {
-                  BaseInfo = payment
-                  Reason = PlatformPaymentRefundReason.PaymentFailed reason
-               }
+            RefundPlatformPaymentCommand.create Initiator.System {
+               BaseInfo = payment
+               Reason = PlatformPaymentRefundReason.PaymentFailed reason
+               PaymentMethod = payMethod
+            }
             |> AccountCommand.RefundPlatformPayment
             |> AccountMessage.StateChange
 
-         dep.getAccountRef payment.Payee.AccountId <! msg
+         dep.getAccountRef payment.Payee.ParentAccountId <! msg
       | PaymentMethod.ThirdParty payMethod ->
          dep.sendMessageToSelf
             payment

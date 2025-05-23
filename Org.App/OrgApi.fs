@@ -246,6 +246,7 @@ let searchOrgTransferSocialDiscovery (fromOrgId: OrgId) (nameQuery: string) =
          o.{{Fields.name}},
          o.{{Fields.statusDetail}},
          o.{{Fields.adminTeamEmail}},
+         o.{{Fields.parentAccountId}},
          features.{{Fields.socialTransferDiscoveryAccountId}}
       FROM {{table}} o
       LEFT JOIN {{OrganizationSqlMapper.featureFlagsTable}} features using({{Fields.orgId}})

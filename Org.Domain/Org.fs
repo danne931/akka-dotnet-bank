@@ -162,6 +162,7 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
       match evt with
       | OrgCreated e -> {
          OrgId = e.OrgId
+         ParentAccountId = e.Data.ParentAccountId
          Name = e.Data.Name
          Status = OrgStatus.PendingOnboardingTasksFulfilled
          AdminTeamEmail = e.Data.AdminTeamEmail

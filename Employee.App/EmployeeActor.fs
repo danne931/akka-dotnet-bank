@@ -65,8 +65,7 @@ let private handleValidationError
          |> PurchaseSaga.PurchaseSagaStartEvent.PurchaseRejectedByCard
          |> PurchaseSaga.PurchaseSagaEvent.Start
          |> AppSaga.Event.Purchase
-         |> SagaEvent.create purchaseInfo.OrgId purchaseInfo.CorrelationId
-         |> SagaMessage.Event
+         |> AppSaga.sagaMessage purchaseInfo.OrgId purchaseInfo.CorrelationId
 
       getSagaRef cmd.Envelope.CorrelationId <! msg
    | None -> ()
@@ -196,16 +195,14 @@ let actorProps
                   |> PurchaseSaga.PurchaseSagaStartEvent.DeductedCardFunds
                   |> PurchaseSaga.PurchaseSagaEvent.Start
                   |> AppSaga.Event.Purchase
-                  |> SagaEvent.create e.OrgId e.CorrelationId
-                  |> SagaMessage.Event
+                  |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
                getSagaRef e.CorrelationId <! msg
             | EmployeeEvent.PurchaseRefunded e ->
                let msg =
                   PurchaseSaga.PurchaseSagaEvent.PurchaseRefundedToCard
                   |> AppSaga.Event.Purchase
-                  |> SagaEvent.create e.OrgId e.CorrelationId
-                  |> SagaMessage.Event
+                  |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
                getSagaRef e.CorrelationId <! msg
             | _ -> ()
@@ -224,8 +221,8 @@ let actorProps
                      return!
                         confirmPersist
                            mailbox
-                           (EmployeeMessage.Event evt)
                            envelope.ConfirmationId
+                           (EmployeeMessage.Event evt)
                   | Error err -> handleValidationError cmd err
                | msg ->
                   logError

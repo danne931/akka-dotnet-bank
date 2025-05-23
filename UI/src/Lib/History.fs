@@ -273,7 +273,7 @@ let accountHistoryUIFriendly
       |> Option.defaultValue recipientFromEvt.FullName
 
    let accountName =
-      org.AccountProfiles.TryFind(AccountId.fromEntityId envelope.EntityId)
+      org.AccountProfiles.TryFind(history.Event.AccountId)
       |> Option.map (fun a -> a.Account.Name)
       |> Option.defaultValue "Account"
 
@@ -329,16 +329,6 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
       }
-   | InternalTransferWithinOrgCompleted evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Internal Transfer Completed"
-            Info =
-               $"Completed money movement from {info.Sender.Name} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
-      }
    | InternalTransferWithinOrgFailed evt ->
       let info = evt.Data.BaseInfo
 
@@ -372,16 +362,6 @@ let accountHistoryUIFriendly
                $"Transfer from {accountName} to {info.Recipient.Name} scheduled for {DateTime.formatShort info.ScheduledDate}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = None
-      }
-   | InternalTransferBetweenOrgsCompleted evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Transfer Between Orgs Completed"
-            Info =
-               $"Completed transfer from {accountName} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
       }
    | InternalTransferBetweenOrgsFailed evt ->
       let info = evt.Data.BaseInfo
@@ -575,16 +555,6 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
       }
-   | InternalAutomatedTransferCompleted evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Internal Automated Transfer Completed"
-            Info =
-               $"Auto Balance Management: completed transfer from {info.Sender.Name} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
-      }
    | InternalAutomatedTransferFailed evt ->
       let info = evt.Data.BaseInfo
 
@@ -673,21 +643,18 @@ let private matchesAccountEventFilter
    | TransactionGroupFilter.InternalTransferWithinOrg ->
       match event with
       | AccountEvent.InternalTransferWithinOrgPending _
-      | AccountEvent.InternalTransferWithinOrgCompleted _
       | AccountEvent.InternalTransferWithinOrgFailed _
       | AccountEvent.InternalTransferWithinOrgDeposited _ -> true
       | _ -> false
    | TransactionGroupFilter.InternalTransferBetweenOrgs ->
       match event with
       | AccountEvent.InternalTransferBetweenOrgsPending _
-      | AccountEvent.InternalTransferBetweenOrgsCompleted _
       | AccountEvent.InternalTransferBetweenOrgsFailed _
       | AccountEvent.InternalTransferBetweenOrgsDeposited _ -> true
       | _ -> false
    | TransactionGroupFilter.InternalAutomatedTransfer ->
       match event with
       | AccountEvent.InternalAutomatedTransferPending _
-      | AccountEvent.InternalAutomatedTransferCompleted _
       | AccountEvent.InternalAutomatedTransferFailed _
       | AccountEvent.InternalAutomatedTransferDeposited _ -> true
       | _ -> false

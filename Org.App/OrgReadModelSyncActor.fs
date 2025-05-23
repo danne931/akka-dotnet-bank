@@ -388,6 +388,7 @@ let sqlParamReducer
 
 let sqlParamsFromOrg (org: Org) : (string * SqlValue) list = [
    "orgId", OrgSqlWriter.orgId org.OrgId
+   "parentAccountId", OrgSqlWriter.parentAccountId org.ParentAccountId
    "name", OrgSqlWriter.name org.Name
    "status", OrgSqlWriter.status org.Status
    "statusDetail", OrgSqlWriter.statusDetail org.Status
@@ -420,18 +421,21 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
       $"""
       INSERT into {OrganizationSqlMapper.table}
          ({OrgFields.orgId},
+          {OrgFields.parentAccountId},
           {OrgFields.name},
           {OrgFields.status},
           {OrgFields.statusDetail},
           {OrgFields.adminTeamEmail})
       VALUES
          (@orgId,
+          @parentAccountId,
           @name,
           @status::{OrgTypeCast.status},
           @statusDetail,
           @adminTeamEmail)
       ON CONFLICT ({OrgFields.orgId})
       DO UPDATE SET
+         {OrgFields.parentAccountId} = @parentAccountId,
          {OrgFields.status} = @status::{OrgTypeCast.status},
          {OrgFields.statusDetail} = @statusDetail,
          {OrgFields.adminTeamEmail} = @adminTeamEmail;

@@ -52,10 +52,14 @@ let form
       let account = accounts[accountId]
 
       let command =
-         DepositCashCommand.create account.CompositeId initiatedBy {
-            Amount = amount
-            Origin = Some "ATM"
-         }
+         DepositCashCommand.create
+            (account.ParentAccountId, account.OrgId)
+            initiatedBy
+            {
+               AccountId = account.AccountId
+               Amount = amount
+               Origin = Some "ATM"
+            }
          |> AccountCommand.DepositCash
 
       Msg.Submit(

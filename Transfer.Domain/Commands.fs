@@ -25,14 +25,10 @@ type ScheduleInternalTransferInput = {
 type InternalTransferWithinOrgCommand = Command<InternalTransferInput>
 
 module InternalTransferWithinOrgCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      (initiator: Initiator)
-      (data: InternalTransferInput)
-      =
+   let create (initiator: Initiator) (data: InternalTransferInput) =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.Sender.ParentAccountId)
+         data.Sender.OrgId
          (CorrelationId.create ())
          initiator
          data
@@ -67,42 +63,18 @@ module InternalTransferWithinOrgCommand =
                }
       }
 
-type CompleteInternalTransferWithinOrgCommand =
-   Command<InternalTransferWithinOrgCompleted>
-
-module CompleteInternalTransferWithinOrgCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      correlationId
-      (initiator: Initiator)
-      (data: InternalTransferWithinOrgCompleted)
-      =
-      Command.create
-         (AccountId.toEntityId accountId)
-         orgId
-         correlationId
-         initiator
-         data
-
-   let toEvent
-      (cmd: CompleteInternalTransferWithinOrgCommand)
-      : ValidationResult<BankEvent<InternalTransferWithinOrgCompleted>>
-      =
-      BankEvent.create<InternalTransferWithinOrgCompleted> cmd |> Ok
-
 type FailInternalTransferWithinOrgCommand =
    Command<InternalTransferWithinOrgFailed>
 
 module FailInternalTransferWithinOrgCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiator: Initiator)
       (data: InternalTransferWithinOrgFailed)
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.OrgId
          correlationId
          initiator
          data
@@ -116,14 +88,10 @@ module FailInternalTransferWithinOrgCommand =
 type InternalTransferBetweenOrgsCommand = Command<InternalTransferInput>
 
 module InternalTransferBetweenOrgsCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      (initiator: Initiator)
-      (data: InternalTransferInput)
-      =
+   let create (initiator: Initiator) (data: InternalTransferInput) =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.Sender.ParentAccountId)
+         data.Sender.OrgId
          (CorrelationId.create ())
          initiator
          data
@@ -163,14 +131,10 @@ type ScheduleInternalTransferBetweenOrgsCommand =
    Command<ScheduleInternalTransferInput>
 
 module ScheduleInternalTransferBetweenOrgsCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      (initiator: Initiator)
-      (data: ScheduleInternalTransferInput)
-      =
+   let create (initiator: Initiator) (data: ScheduleInternalTransferInput) =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.TransferInput.Sender.ParentAccountId)
+         data.TransferInput.Sender.OrgId
          (CorrelationId.create ())
          initiator
          data
@@ -206,42 +170,18 @@ module ScheduleInternalTransferBetweenOrgsCommand =
                }
       }
 
-type CompleteInternalTransferBetweenOrgsCommand =
-   Command<InternalTransferBetweenOrgsCompleted>
-
-module CompleteInternalTransferBetweenOrgsCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      correlationId
-      (initiator: Initiator)
-      (data: InternalTransferBetweenOrgsCompleted)
-      =
-      Command.create
-         (AccountId.toEntityId accountId)
-         orgId
-         correlationId
-         initiator
-         data
-
-   let toEvent
-      (cmd: CompleteInternalTransferBetweenOrgsCommand)
-      : ValidationResult<BankEvent<InternalTransferBetweenOrgsCompleted>>
-      =
-      BankEvent.create<InternalTransferBetweenOrgsCompleted> cmd |> Ok
-
 type FailInternalTransferBetweenOrgsCommand =
    Command<InternalTransferBetweenOrgsFailed>
 
 module FailInternalTransferBetweenOrgsCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiator: Initiator)
       (data: InternalTransferBetweenOrgsFailed)
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.OrgId
          correlationId
          initiator
          data
@@ -257,17 +197,29 @@ type DepositInternalTransferWithinOrgCommand =
 
 module DepositInternalTransferWithinOrgCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: Initiator)
       (data: InternalTransferWithinOrgDeposited)
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
          data
+
+   let fromPending
+      (evt: BankEvent<InternalTransferWithinOrgPending>)
+      : DepositInternalTransferWithinOrgCommand
+      =
+      let info = evt.Data.BaseInfo
+
+      Command.create
+         (ParentAccountId.toEntityId info.Sender.ParentAccountId)
+         evt.OrgId
+         evt.CorrelationId
+         evt.InitiatedBy
+         { BaseInfo = info }
 
    let toEvent
       (cmd: DepositInternalTransferWithinOrgCommand)
@@ -280,14 +232,13 @@ type DepositInternalTransferBetweenOrgsCommand =
 
 module DepositInternalTransferBetweenOrgsCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: Initiator)
       (data: InternalTransferBetweenOrgsDeposited)
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.BaseInfo.Recipient.ParentAccountId)
+         data.BaseInfo.Recipient.OrgId
          correlationId
          initiatedBy
          data
@@ -328,20 +279,20 @@ type DomesticTransferRecipientInput = {
    RoutingNumber: string
    Depository: DomesticRecipientAccountDepository
    PaymentNetwork: PaymentNetwork
+   Sender: {|
+      OrgId: OrgId
+      ParentAccountId: ParentAccountId
+   |}
 }
 
 type RegisterDomesticTransferRecipientCommand =
    Command<DomesticTransferRecipientInput>
 
 module RegisterDomesticTransferRecipientCommand =
-   let create
-      (orgId: OrgId)
-      (initiatedBy: Initiator)
-      (data: DomesticTransferRecipientInput)
-      =
+   let create (initiatedBy: Initiator) (data: DomesticTransferRecipientInput) =
       Command.create
-         (OrgId.toEntityId orgId)
-         orgId
+         (OrgId.toEntityId data.Sender.OrgId)
+         data.Sender.OrgId
          (CorrelationId.create ())
          initiatedBy
          data
@@ -504,15 +455,14 @@ type DomesticTransferCommand = Command<DomesticTransferInput>
 
 module DomesticTransferCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       (correlationId: CorrelationId)
       (initiatedBy: Initiator)
       (data: DomesticTransferInput)
       : DomesticTransferCommand
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.Sender.ParentAccountId)
+         data.Sender.OrgId
          correlationId
          initiatedBy
          data
@@ -549,14 +499,13 @@ type ScheduleDomesticTransferCommand = Command<ScheduleDomesticTransferInput>
 
 module ScheduleDomesticTransferCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       (initiatedBy: Initiator)
       (data: ScheduleDomesticTransferInput)
       : ScheduleDomesticTransferCommand
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.TransferInput.Sender.ParentAccountId)
+         data.TransferInput.Sender.OrgId
          (CorrelationId.create ())
          initiatedBy
          data
@@ -596,14 +545,13 @@ type CompleteDomesticTransferCommand = Command<DomesticTransferCompleted>
 
 module CompleteDomesticTransferCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: Initiator)
       (data: DomesticTransferCompleted)
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
          data
@@ -618,14 +566,13 @@ type FailDomesticTransferCommand = Command<DomesticTransferFailed>
 
 module FailDomesticTransferCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: Initiator)
       (data: DomesticTransferFailed)
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
          data
@@ -641,14 +588,13 @@ type UpdateDomesticTransferProgressCommand =
 
 module UpdateDomesticTransferProgressCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: Initiator)
       (data: DomesticTransferProgressUpdate)
       =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
          data
@@ -668,14 +614,10 @@ type PlatformPaymentRequestInput = {
 type RequestPlatformPaymentCommand = Command<PlatformPaymentRequestInput>
 
 module RequestPlatformPaymentCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: Initiator)
-      (data: PlatformPaymentRequestInput)
-      =
+   let create (initiatedBy: Initiator) (data: PlatformPaymentRequestInput) =
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId data.BaseInfo.Payee.ParentAccountId)
+         data.BaseInfo.Payee.OrgId
          (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
@@ -723,7 +665,7 @@ module CancelPlatformPaymentCommand =
       let payee = data.RequestedPayment.BaseInfo.Payee
 
       Command.create
-         (AccountId.toEntityId payee.AccountId)
+         (ParentAccountId.toEntityId payee.ParentAccountId)
          payee.OrgId
          (data.RequestedPayment.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
@@ -751,11 +693,11 @@ type DeclinePlatformPaymentCommand = Command<DeclinePlatformPaymentInput>
 
 module DeclinePlatformPaymentCommand =
    let create (initiatedBy: Initiator) (data: DeclinePlatformPaymentInput) =
-      let payee = data.RequestedPayment.BaseInfo.Payee
+      let payer = data.RequestedPayment.BaseInfo.Payer
 
       Command.create
-         (AccountId.toEntityId payee.AccountId)
-         payee.OrgId
+         (ParentAccountId.toEntityId payer.ParentAccountId)
+         payer.OrgId
          (data.RequestedPayment.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
@@ -774,7 +716,7 @@ module DeclinePlatformPaymentCommand =
 
 type FulfillPlatformPaymentInput = {
    RequestedPayment: PlatformPaymentRequested
-   PaymentMethod: AccountId
+   PaymentMethod: PaymentMethod
 }
 
 type FulfillPlatformPaymentCommand = Command<FulfillPlatformPaymentInput>
@@ -784,7 +726,7 @@ module FulfillPlatformPaymentCommand =
       let payer = data.RequestedPayment.BaseInfo.Payer
 
       Command.create
-         (AccountId.toEntityId data.PaymentMethod)
+         (ParentAccountId.toEntityId payer.ParentAccountId)
          payer.OrgId
          (data.RequestedPayment.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
@@ -796,21 +738,19 @@ module FulfillPlatformPaymentCommand =
       =
       BankEvent.create2<FulfillPlatformPaymentInput, PlatformPaymentPaid> cmd {
          BaseInfo = cmd.Data.RequestedPayment.BaseInfo
-         PaymentMethod = PaymentMethod.Platform cmd.Data.PaymentMethod
+         PaymentMethod = cmd.Data.PaymentMethod
       }
       |> Ok
 
 type DepositPlatformPaymentCommand = Command<PlatformPaymentDeposited>
 
 module DepositPlatformPaymentCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: Initiator)
-      (data: PlatformPaymentDeposited)
-      =
+   let create (initiatedBy: Initiator) (data: PlatformPaymentDeposited) =
+      let payee = data.BaseInfo.Payee
+
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId payee.ParentAccountId)
+         payee.OrgId
          (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
@@ -824,14 +764,12 @@ module DepositPlatformPaymentCommand =
 type RefundPlatformPaymentCommand = Command<PlatformPaymentRefunded>
 
 module RefundPlatformPaymentCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      (initiatedBy: Initiator)
-      (data: PlatformPaymentRefunded)
-      =
+   let create (initiatedBy: Initiator) (data: PlatformPaymentRefunded) =
+      let payer = data.BaseInfo.Payer
+
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId payer.ParentAccountId)
+         payer.OrgId
          (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
@@ -845,18 +783,19 @@ module RefundPlatformPaymentCommand =
 type ConfigureAutoTransferRuleInput = {
    RuleIdToUpdate: Guid option
    Rule: AutomaticTransferRule
+   AccountId: AccountId
 }
 
 type ConfigureAutoTransferRuleCommand = Command<ConfigureAutoTransferRuleInput>
 
 module ConfigureAutoTransferRuleCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (parentAccountId: ParentAccountId, orgId: OrgId)
       (initiatedBy: Initiator)
       (data: ConfigureAutoTransferRuleInput)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -872,6 +811,7 @@ module ConfigureAutoTransferRuleCommand =
        >
          cmd
          {
+            AccountId = cmd.Data.AccountId
             Config = {
                Id =
                   cmd.Data.RuleIdToUpdate
@@ -885,12 +825,12 @@ type DeleteAutoTransferRuleCommand = Command<AutomaticTransferRuleDeleted>
 
 module DeleteAutoTransferRuleCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
+      (parentAccountId: ParentAccountId, orgId: OrgId)
       (initiatedBy: Initiator)
       (data: AutomaticTransferRuleDeleted)
       =
       Command.create
-         (AccountId.toEntityId accountId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -910,7 +850,7 @@ module InternalAutoTransferCommand =
       let t = data.Transfer
 
       Command.create
-         (AccountId.toEntityId t.Sender.AccountId)
+         (ParentAccountId.toEntityId t.Sender.ParentAccountId)
          t.Sender.OrgId
          (CorrelationId.create ())
          Initiator.System
@@ -945,41 +885,19 @@ module InternalAutoTransferCommand =
                }
       }
 
-type CompleteInternalAutoTransferCommand =
-   Command<InternalAutomatedTransferCompleted>
-
-module CompleteInternalAutoTransferCommand =
-   let create
-      (accountId: AccountId, orgId: OrgId)
-      correlationId
-      (initiatedBy: Initiator)
-      (data: InternalAutomatedTransferCompleted)
-      =
-      Command.create
-         (AccountId.toEntityId accountId)
-         orgId
-         correlationId
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: CompleteInternalAutoTransferCommand)
-      : ValidationResult<BankEvent<InternalAutomatedTransferCompleted>>
-      =
-      BankEvent.create<InternalAutomatedTransferCompleted> cmd |> Ok
-
 type FailInternalAutoTransferCommand = Command<InternalAutomatedTransferFailed>
 
 module FailInternalAutoTransferCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: Initiator)
       (data: InternalAutomatedTransferFailed)
       =
+      let sender = data.BaseInfo.Sender
+
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId sender.ParentAccountId)
+         sender.OrgId
          correlationId
          initiatedBy
          data
@@ -995,14 +913,15 @@ type DepositInternalAutoTransferCommand =
 
 module DepositInternalAutoTransferCommand =
    let create
-      (accountId: AccountId, orgId: OrgId)
       correlationId
       (initiatedBy: Initiator)
       (data: InternalAutomatedTransferDeposited)
       =
+      let recipient = data.BaseInfo.Recipient
+
       Command.create
-         (AccountId.toEntityId accountId)
-         orgId
+         (ParentAccountId.toEntityId recipient.ParentAccountId)
+         recipient.OrgId
          correlationId
          initiatedBy
          data

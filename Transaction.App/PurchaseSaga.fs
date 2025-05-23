@@ -357,7 +357,7 @@ let stateTransition
 
 type PersistenceHandlerDependencies = {
    getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
-   getAccountRef: AccountId -> IEntityRef<AccountMessage>
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
    cardNetworkConfirmPurchase: PurchaseInfo -> Async<PurchaseSagaEvent>
    cardNetworkRejectPurchase:
@@ -400,7 +400,7 @@ let onStartEventPersisted
       // Notify associated company account actor of
       // debit request and wait for approval before
       // sending a response to issuing card network.
-      dep.getAccountRef info.AccountId <! msg
+      dep.getAccountRef info.ParentAccountId <! msg
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)
@@ -426,7 +426,7 @@ let onEventPersisted
          |> AccountCommand.RefundDebit
          |> AccountMessage.StateChange
 
-      dep.getAccountRef purchaseInfo.AccountId <! msg
+      dep.getAccountRef purchaseInfo.ParentAccountId <! msg
 
    let sendPurchaseEmail () =
       let emailMsg = {
@@ -536,7 +536,7 @@ let onEventPersisted
                |> AccountCommand.Debit
                |> AccountMessage.StateChange
 
-            dep.getAccountRef purchaseInfo.AccountId <! msg
+            dep.getAccountRef purchaseInfo.ParentAccountId <! msg
          | Activity.NotifyCardNetworkOfConfirmedPurchase ->
             cardNetworkConfirmPurchase ()
          | Activity.SyncToPartnerBank -> syncToPartnerBank ()

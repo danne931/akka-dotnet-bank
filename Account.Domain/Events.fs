@@ -6,6 +6,7 @@ open Lib.SharedTypes
 open MaintenanceFee
 
 type CreatedAccount = {
+   AccountId: AccountId
    Name: string
    Depository: AccountDepository
    Balance: decimal
@@ -14,7 +15,11 @@ type CreatedAccount = {
    RoutingNumber: RoutingNumber
 }
 
-type DepositedCash = { Amount: decimal; Origin: string }
+type DepositedCash = {
+   AccountId: AccountId
+   Amount: decimal
+   Origin: string
+}
 
 type EmployeePurchaseReference = {
    EmployeeName: string
@@ -24,6 +29,7 @@ type EmployeePurchaseReference = {
 }
 
 type DebitedAccount = {
+   AccountId: AccountId
    Date: DateTime
    Amount: decimal
    Merchant: string
@@ -32,18 +38,30 @@ type DebitedAccount = {
 }
 
 type RefundedDebit = {
+   AccountId: AccountId
    EmployeePurchaseReference: EmployeePurchaseReference
    Merchant: string
    Amount: decimal
    Reason: PurchaseRefundReason
 }
 
-type MaintenanceFeeDebited = { Amount: decimal }
-type MaintenanceFeeSkipped = { Reason: MaintenanceFeeCriteria }
+type MaintenanceFeeDebited = {
+   AccountId: AccountId
+   Amount: decimal
+}
 
-type AccountClosed = { Reference: string option }
+type MaintenanceFeeSkipped = {
+   AccountId: AccountId
+   Reason: MaintenanceFeeCriteria
+}
+
+type AccountClosed = {
+   AccountId: AccountId
+   Reference: string option
+}
 
 type BillingCycleStarted = {
+   AccountId: AccountId
    Month: int
    Year: int
    Reference: string option

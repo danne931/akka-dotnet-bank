@@ -10,6 +10,7 @@
     <Compile Include="Commands.fs" />
     <Compile Include="AggregateTypes.fs" />
     <Compile Include="Account.fs" />
+    <Compile Include="ParentAccount.fs" /> 
   </ItemGroup>
 
   <ItemGroup>

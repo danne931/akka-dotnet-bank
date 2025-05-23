@@ -90,24 +90,6 @@ let private applyInternalTransferPending
          Info.Balance = balance
          Info.MaintenanceFeeCriteria =
             MaintenanceFee.fromDebit account.MaintenanceFeeCriteria balance
-         InProgressInternalTransfers =
-            Map.add
-               info.TransferId
-               {
-                  TransferId = info.TransferId
-                  Info = info
-               }
-               state.InProgressInternalTransfers
-   }
-
-let private applyInternalTransferCompleted
-   (info: BaseInternalTransferInfo)
-   (state: AccountSnapshot)
-   =
-   {
-      state with
-         InProgressInternalTransfers =
-            Map.remove info.TransferId state.InProgressInternalTransfers
    }
 
 let private applyInternalTransferFailed
@@ -124,8 +106,6 @@ let private applyInternalTransferFailed
             MaintenanceFee.fromDebitReversal
                account.MaintenanceFeeCriteria
                balance
-         InProgressInternalTransfers =
-            Map.remove info.TransferId state.InProgressInternalTransfers
    }
 
 let private applyTransferDeposit (state: AccountSnapshot) (amount: decimal) = {
@@ -147,10 +127,11 @@ let applyEvent (state: AccountSnapshot) (evt: AccountEvent) =
       | CreatedAccount e -> {
          state with
             Info = {
-               AccountId = AccountId.fromEntityId e.EntityId
+               AccountId = e.Data.AccountId
                AccountNumber = e.Data.AccountNumber
                RoutingNumber = e.Data.RoutingNumber
                OrgId = e.OrgId
+               ParentAccountId = ParentAccountId.fromEntityId e.EntityId
                Name = e.Data.Name
                Depository = e.Data.Depository
                Currency = e.Data.Currency
@@ -222,36 +203,9 @@ let applyEvent (state: AccountSnapshot) (evt: AccountEvent) =
                   MaintenanceFee.fromDebit
                      account.MaintenanceFeeCriteria
                      balance
-               InProgressDomesticTransfers =
-                  Map.add
-                     info.TransferId
-                     (TransferEventToDomesticTransfer.fromPending e)
-                     state.InProgressDomesticTransfers
          }
-      | DomesticTransferProgress e -> {
-         state with
-            InProgressDomesticTransfers =
-               Map.change
-                  e.Data.BaseInfo.TransferId
-                  (Option.map (fun txn -> {
-                     txn with
-                        Status =
-                           DomesticTransferProgress.InProgress
-                              e.Data.InProgressInfo
-                  }))
-                  state.InProgressDomesticTransfers
-        }
-      | DomesticTransferCompleted e -> {
-         state with
-            InProgressDomesticTransfers =
-               Map.remove
-                  e.Data.BaseInfo.TransferId
-                  state.InProgressDomesticTransfers
-            FailedDomesticTransfers =
-               Map.remove
-                  e.Data.BaseInfo.TransferId
-                  state.FailedDomesticTransfers
-        }
+      | DomesticTransferProgress e -> state
+      | DomesticTransferCompleted e -> state
       | DomesticTransferFailed e ->
          let info = e.Data.BaseInfo
          let balance = account.Balance + info.Amount
@@ -265,28 +219,14 @@ let applyEvent (state: AccountSnapshot) (evt: AccountEvent) =
                      balance
          }
 
-         {
-            state with
-               Info = account
-               InProgressDomesticTransfers =
-                  Map.remove info.TransferId state.InProgressDomesticTransfers
-               FailedDomesticTransfers =
-                  Map.add
-                     info.TransferId
-                     (TransferEventToDomesticTransfer.fromFailure e)
-                     state.FailedDomesticTransfers
-         }
+         { state with Info = account }
       | InternalTransferWithinOrgPending e ->
          applyInternalTransferPending e.Data.BaseInfo state
-      | InternalTransferWithinOrgCompleted e ->
-         applyInternalTransferCompleted e.Data.BaseInfo state
       | InternalTransferWithinOrgFailed e ->
          applyInternalTransferFailed e.Data.BaseInfo state
       | InternalTransferBetweenOrgsScheduled _ -> state
       | InternalTransferBetweenOrgsPending e ->
          applyInternalTransferPending e.Data.BaseInfo state
-      | InternalTransferBetweenOrgsCompleted e ->
-         applyInternalTransferCompleted e.Data.BaseInfo state
       | InternalTransferBetweenOrgsFailed e ->
          applyInternalTransferFailed e.Data.BaseInfo state
       | InternalTransferWithinOrgDeposited e ->
@@ -335,8 +275,6 @@ let applyEvent (state: AccountSnapshot) (evt: AccountEvent) =
         }
       | InternalAutomatedTransferPending e ->
          applyInternalTransferPending e.Data.BaseInfo state
-      | InternalAutomatedTransferCompleted e ->
-         applyInternalTransferCompleted e.Data.BaseInfo state
       | InternalAutomatedTransferFailed e ->
          applyInternalTransferFailed e.Data.BaseInfo state
       | InternalAutomatedTransferDeposited e ->
@@ -370,6 +308,7 @@ module private StateTransition =
       (eventTransform: BankEvent<'t> -> AccountEvent)
       (state: AccountSnapshot)
       (eventValidation: ValidationResult<BankEvent<'t>>)
+      : Result<(AccountEvent * AccountSnapshot), Err>
       =
       eventValidation
       |> Result.mapError ValidationError
@@ -388,13 +327,13 @@ module private StateTransition =
       (cmd: StartBillingCycleCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive state.Info.FullName)
       else
          map BillingCycleStarted state (StartBillingCycleCommand.toEvent cmd)
 
    let deposit (state: AccountSnapshot) (cmd: DepositCashCommand) =
       if state.Info.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive state.Info.FullName)
       else
          map DepositedCash state (DepositCashCommand.toEvent cmd)
 
@@ -403,9 +342,9 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive state.Info.FullName)
       elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       else
          map DebitedAccount state (DebitCommand.toEvent cmd)
 
@@ -413,7 +352,7 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
          map RefundedDebit state (RefundDebitCommand.toEvent cmd)
 
@@ -421,9 +360,9 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       elif account.Balance - cmd.Data.Amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       else
          map MaintenanceFeeDebited state (MaintenanceFeeCommand.toEvent cmd)
 
@@ -432,7 +371,7 @@ module private StateTransition =
       (cmd: SkipMaintenanceFeeCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive state.Info.FullName)
       else
          map MaintenanceFeeSkipped state (SkipMaintenanceFeeCommand.toEvent cmd)
 
@@ -444,9 +383,9 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       elif input.Recipient.OrgId <> account.OrgId then
          transitionErr TransferExpectedToOccurWithinOrg
       elif
@@ -464,40 +403,14 @@ module private StateTransition =
             state
             (InternalTransferWithinOrgCommand.toEvent cmd)
 
-   let completeInternalTransfer
-      (state: AccountSnapshot)
-      (cmd: CompleteInternalTransferWithinOrgCommand)
-      =
-      let account = state.Info
-      let transferId = cmd.Data.BaseInfo.TransferId
-
-      if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      else if
-         Option.isNone
-         <| Map.tryFind transferId state.InProgressInternalTransfers
-      then
-         transitionErr TransferAlreadyProgressedToCompletedOrFailed
-      else
-         map
-            InternalTransferWithinOrgCompleted
-            state
-            (CompleteInternalTransferWithinOrgCommand.toEvent cmd)
-
    let failInternalTransfer
       (state: AccountSnapshot)
       (cmd: FailInternalTransferWithinOrgCommand)
       =
       let account = state.Info
-      let transferId = cmd.Data.BaseInfo.TransferId
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      else if
-         Option.isNone
-         <| Map.tryFind transferId state.InProgressInternalTransfers
-      then
-         transitionErr TransferAlreadyProgressedToCompletedOrFailed
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             InternalTransferWithinOrgFailed
@@ -512,9 +425,9 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       else
          map
             InternalTransferBetweenOrgsScheduled
@@ -529,9 +442,9 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       elif
          TransferLimits.exceedsDailyInternalTransferLimit
             state.Events
@@ -547,26 +460,6 @@ module private StateTransition =
             state
             (InternalTransferBetweenOrgsCommand.toEvent cmd)
 
-   let completeInternalTransferBetweenOrgs
-      (state: AccountSnapshot)
-      (cmd: CompleteInternalTransferBetweenOrgsCommand)
-      =
-      let account = state.Info
-      let transferId = cmd.Data.BaseInfo.TransferId
-
-      if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      else if
-         Option.isNone
-         <| Map.tryFind transferId state.InProgressInternalTransfers
-      then
-         transitionErr TransferAlreadyProgressedToCompletedOrFailed
-      else
-         map
-            InternalTransferBetweenOrgsCompleted
-            state
-            (CompleteInternalTransferBetweenOrgsCommand.toEvent cmd)
-
    let failInternalTransferBetweenOrgs
       (state: AccountSnapshot)
       (cmd: FailInternalTransferBetweenOrgsCommand)
@@ -575,12 +468,7 @@ module private StateTransition =
       let transferId = cmd.Data.BaseInfo.TransferId
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      else if
-         Option.isNone
-         <| Map.tryFind transferId state.InProgressInternalTransfers
-      then
-         transitionErr TransferAlreadyProgressedToCompletedOrFailed
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             InternalTransferBetweenOrgsFailed
@@ -595,9 +483,9 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       else
          map
             DomesticTransferScheduled
@@ -612,9 +500,9 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       elif
          TransferLimits.exceedsDailyDomesticTransferLimit
             state.Events
@@ -632,60 +520,24 @@ module private StateTransition =
       (cmd: UpdateDomesticTransferProgressCommand)
       =
       let account = state.Info
-      let transferId = cmd.Data.BaseInfo.TransferId
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
-         let existing = Map.tryFind transferId state.InProgressDomesticTransfers
-
-         match existing with
-         | None ->
-            map
-               DomesticTransferProgress
-               state
-               (UpdateDomesticTransferProgressCommand.toEvent cmd)
-         | Some txn ->
-            let existingStatus = txn.Status
-
-            if
-               existingStatus = (DomesticTransferProgress.InProgress
-                  cmd.Data.InProgressInfo)
-            then
-               transitionErr TransferProgressNoChange
-            else
-               map
-                  DomesticTransferProgress
-                  state
-                  (UpdateDomesticTransferProgressCommand.toEvent cmd)
+         map
+            DomesticTransferProgress
+            state
+            (UpdateDomesticTransferProgressCommand.toEvent cmd)
 
    let completeDomesticTransfer
       (state: AccountSnapshot)
       (cmd: CompleteDomesticTransferCommand)
       =
       let account = state.Info
-      let transferId = cmd.Data.BaseInfo.TransferId
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      else if
-         Option.isNone
-         <| Map.tryFind transferId state.InProgressDomesticTransfers
-      then
-         transitionErr TransferAlreadyProgressedToCompletedOrFailed
+         transitionErr (AccountNotActive account.FullName)
       else
-         let retriedDueTo =
-            state.FailedDomesticTransfers.TryFind(transferId)
-            |> Option.bind (fun transfer ->
-               match transfer.Status with
-               | DomesticTransferProgress.Failed failReason -> Some failReason
-               | _ -> None)
-
-         let cmd = {
-            cmd with
-               Data.FromRetry = retriedDueTo
-         }
-
          map
             DomesticTransferCompleted
             state
@@ -696,15 +548,9 @@ module private StateTransition =
       (cmd: FailDomesticTransferCommand)
       =
       let account = state.Info
-      let transferId = cmd.Data.BaseInfo.TransferId
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      else if
-         Option.isNone
-         <| Map.tryFind transferId state.InProgressDomesticTransfers
-      then
-         transitionErr TransferAlreadyProgressedToCompletedOrFailed
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             DomesticTransferFailed
@@ -716,7 +562,7 @@ module private StateTransition =
       (cmd: DepositInternalTransferWithinOrgCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive state.Info.FullName)
       else
          map InternalTransferWithinOrgDeposited state
          <| (DepositInternalTransferWithinOrgCommand.toEvent cmd)
@@ -726,7 +572,7 @@ module private StateTransition =
       (cmd: DepositInternalTransferBetweenOrgsCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive state.Info.FullName)
       else
          map InternalTransferBetweenOrgsDeposited state
          <| (DepositInternalTransferBetweenOrgsCommand.toEvent cmd)
@@ -738,7 +584,7 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             PlatformPaymentRequested
@@ -752,7 +598,7 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             PlatformPaymentCancelled
@@ -766,7 +612,7 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             PlatformPaymentDeclined
@@ -781,9 +627,9 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       elif
          TransferLimits.exceedsDailyInternalTransferLimit
             state.Events
@@ -806,7 +652,7 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             PlatformPaymentRefunded
@@ -820,7 +666,7 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             PlatformPaymentDeposited
@@ -837,7 +683,7 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
          match account.AutoTransferRule, cmd.Data.RuleIdToUpdate with
          | Some _, None -> transitionErr OnlyOneAutoTransferRuleMayExistAtATime
@@ -857,7 +703,7 @@ module private StateTransition =
       let account = state.Info
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             AutoTransferRuleDeleted
@@ -873,9 +719,9 @@ module private StateTransition =
       let amount = PositiveAmount.get input.Amount
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive account.FullName)
       elif account.Balance - amount < 0m then
-         transitionErr <| InsufficientBalance account.Balance
+         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
       elif input.Recipient.OrgId <> account.OrgId then
          transitionErr TransferExpectedToOccurWithinOrg
       elif
@@ -893,40 +739,14 @@ module private StateTransition =
             state
             (InternalAutoTransferCommand.toEvent cmd)
 
-   let completeInternalAutoTransfer
-      (state: AccountSnapshot)
-      (cmd: CompleteInternalAutoTransferCommand)
-      =
-      let account = state.Info
-      let transferId = cmd.Data.BaseInfo.TransferId
-
-      if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      else if
-         Option.isNone
-         <| Map.tryFind transferId state.InProgressInternalTransfers
-      then
-         transitionErr TransferAlreadyProgressedToCompletedOrFailed
-      else
-         map
-            InternalAutomatedTransferCompleted
-            state
-            (CompleteInternalAutoTransferCommand.toEvent cmd)
-
    let failInternalAutoTransfer
       (state: AccountSnapshot)
       (cmd: FailInternalAutoTransferCommand)
       =
       let account = state.Info
-      let transferId = cmd.Data.BaseInfo.TransferId
 
       if account.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
-      else if
-         Option.isNone
-         <| Map.tryFind transferId state.InProgressInternalTransfers
-      then
-         transitionErr TransferAlreadyProgressedToCompletedOrFailed
+         transitionErr (AccountNotActive account.FullName)
       else
          map
             InternalAutomatedTransferFailed
@@ -938,7 +758,7 @@ module private StateTransition =
       (cmd: DepositInternalAutoTransferCommand)
       =
       if state.Info.Status <> AccountStatus.Active then
-         transitionErr AccountNotActive
+         transitionErr (AccountNotActive state.Info.FullName)
       else
          map InternalAutomatedTransferDeposited state
          <| (DepositInternalAutoTransferCommand.toEvent cmd)
@@ -957,16 +777,12 @@ let stateTransition (state: AccountSnapshot) (command: AccountCommand) =
       StateTransition.skipMaintenanceFee state cmd
    | AccountCommand.InternalTransfer cmd ->
       StateTransition.internalTransfer state cmd
-   | AccountCommand.CompleteInternalTransfer cmd ->
-      StateTransition.completeInternalTransfer state cmd
    | AccountCommand.FailInternalTransfer cmd ->
       StateTransition.failInternalTransfer state cmd
    | AccountCommand.ScheduleInternalTransferBetweenOrgs cmd ->
       StateTransition.scheduleInternalTransferBetweenOrgs state cmd
    | AccountCommand.InternalTransferBetweenOrgs cmd ->
       StateTransition.internalTransferBetweenOrgs state cmd
-   | AccountCommand.CompleteInternalTransferBetweenOrgs cmd ->
-      StateTransition.completeInternalTransferBetweenOrgs state cmd
    | AccountCommand.FailInternalTransferBetweenOrgs cmd ->
       StateTransition.failInternalTransferBetweenOrgs state cmd
    | AccountCommand.DepositTransferWithinOrg cmd ->
@@ -1002,8 +818,6 @@ let stateTransition (state: AccountSnapshot) (command: AccountCommand) =
       StateTransition.deleteAutoTransferRule state cmd
    | AccountCommand.InternalAutoTransfer cmd ->
       StateTransition.internalAutoTransfer state cmd
-   | AccountCommand.CompleteInternalAutoTransfer cmd ->
-      StateTransition.completeInternalAutoTransfer state cmd
    | AccountCommand.FailInternalAutoTransfer cmd ->
       StateTransition.failInternalAutoTransfer state cmd
    | AccountCommand.DepositInternalAutoTransfer cmd ->

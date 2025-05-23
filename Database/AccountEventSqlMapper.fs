@@ -34,6 +34,7 @@ module Views =
 module Fields =
    let eventId = "event_id"
    let accountId = AccountFields.accountId
+   let parentAccountId = AccountFields.parentAccountId
    let orgId = OrgFields.orgId
    let correlationId = "correlation_id"
    let initiatedById = EmployeeEventSqlMapper.EmployeeEventFields.initiatedById
@@ -49,6 +50,8 @@ module SqlReader =
    let eventId (read: RowReader) = Fields.eventId |> read.uuid |> EventId
 
    let accountId = AccountSqlReader.accountId
+
+   let parentAccountId = AccountSqlReader.parentAccountId
 
    let orgId = OrgSqlReader.orgId
 
@@ -106,6 +109,8 @@ module SqlWriter =
 
    let accountIds (ids: AccountId list) =
       ids |> List.map AccountId.get |> Array.ofList |> Sql.uuidArray
+
+   let parentAccountId = AccountSqlWriter.parentAccountId
 
    let orgId = OrgSqlWriter.orgId
    let name = Sql.text

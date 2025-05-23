@@ -1,13 +1,12 @@
 module AncillaryTransactionInfoSqlMapper
 
-open CategorySqlMapper
 open Lib.SharedTypes
 
-let table = "ancillarytransactioninfo"
+let table = "ancillary_transaction_info"
 
 module AncillaryTransactionFields =
    let transactionId = "transaction_id"
-   let categoryId = CategoryFields.catId
+   let categoryId = PurchaseCategorySqlMapper.Fields.catId
    let note = "note"
 
 module AncillaryTransactionSqlReader =

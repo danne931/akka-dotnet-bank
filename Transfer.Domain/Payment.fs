@@ -74,7 +74,11 @@ module ThirdPartyPaymentStatus =
 
 type ThirdPartyPayer = { Name: string; Email: Email }
 
-type PlatformPayer = { OrgId: OrgId; OrgName: string }
+type PlatformPayer = {
+   OrgId: OrgId
+   ParentAccountId: ParentAccountId
+   OrgName: string
+}
 
 [<RequireQualifiedAccess>]
 type Payer =
@@ -90,6 +94,7 @@ type Payer =
 type Payee = {
    OrgId: OrgId
    OrgName: string
+   ParentAccountId: ParentAccountId
    AccountId: AccountId
 }
 

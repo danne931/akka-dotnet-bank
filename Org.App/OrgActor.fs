@@ -58,7 +58,7 @@ let private handleValidationError
 // when the approval process is complete or no approval required.
 let private sendApprovedCommand
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (orgRef: IActorRef<OrgMessage>)
    (cmd: ApprovableCommand)
    =
@@ -112,7 +112,8 @@ let private sendApprovedCommand
    | ApprovableCommand.AmountBased c ->
       match c with
       | FulfillPlatformPayment cmd ->
-         let accountRef = getAccountRef (AccountId.fromEntityId cmd.EntityId)
+         let accountRef =
+            getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
 
          let cmd =
             { cmd with Timestamp = DateTime.UtcNow }
@@ -120,7 +121,8 @@ let private sendApprovedCommand
 
          accountRef <! AccountMessage.StateChange cmd
       | DomesticTransfer cmd ->
-         let accountRef = getAccountRef (AccountId.fromEntityId cmd.EntityId)
+         let accountRef =
+            getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
 
          let cmd =
             { cmd with Timestamp = DateTime.UtcNow }
@@ -128,7 +130,8 @@ let private sendApprovedCommand
 
          accountRef <! AccountMessage.StateChange cmd
       | InternalTransferBetweenOrgs cmd ->
-         let accountRef = getAccountRef cmd.Data.Sender.AccountId
+         let accountRef =
+            getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
 
          let cmd =
             { cmd with Timestamp = DateTime.UtcNow }
@@ -209,7 +212,7 @@ let private terminateProgressAssociatedWithRule
 // Recipient of the Transfer as having invalid account info.
 module private RetryDomesticTransfers =
    let private actorProps
-      (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+      (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
       (getRetryableTransfers:
          AccountId -> Task<Result<DomesticTransfer list option, Err>>)
       : Props<AccountId>
@@ -226,7 +229,6 @@ module private RetryDomesticTransfers =
             for (transfer: DomesticTransfer) in transfers do
                let msg =
                   DomesticTransferCommand.create
-                     (transfer.Sender.AccountId, transfer.Sender.OrgId)
                      (transfer.TransferId |> TransferId.get |> CorrelationId)
                      transfer.InitiatedBy
                      {
@@ -240,7 +242,7 @@ module private RetryDomesticTransfers =
                   |> AccountCommand.DomesticTransfer
                   |> AccountMessage.StateChange
 
-               getAccountRef transfer.Sender.AccountId <! msg
+               getAccountRef transfer.Sender.ParentAccountId <! msg
 
             return ignored ()
       }
@@ -248,7 +250,7 @@ module private RetryDomesticTransfers =
       props (actorOf2 handler)
 
    let getOrStart
-      (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+      (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
       (getRetryableTransfers:
          AccountId -> Task<Result<DomesticTransfer list option, Err>>)
       (mailbox: Actor<_>)
@@ -262,7 +264,7 @@ module private RetryDomesticTransfers =
 let actorProps
    (broadcaster: SignalRBroadcast)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
       AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
@@ -362,7 +364,7 @@ let actorProps
                   (getEmployeeRef employeeId) <! msg
                | ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
                   let accountRef =
-                     getAccountRef (AccountId.fromEntityId cmd.EntityId)
+                     getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
 
                   let msg =
                      DeclinePlatformPaymentCommand.create e.InitiatedBy {
@@ -411,6 +413,8 @@ let actorProps
                logError $"Unknown message in ConfirmableMessageEnvelope - {msg}"
                unhandled ()
 
+            let confirmPersist = confirmPersist mailbox envelope.ConfirmationId
+
             match envelope.Message with
             | :? OrgMessage as msg ->
                match msg with
@@ -418,12 +422,7 @@ let actorProps
                   let validation = Org.stateTransition state cmd
 
                   match validation with
-                  | Ok(evt, _) ->
-                     return!
-                        confirmPersist
-                           mailbox
-                           (OrgMessage.Event evt)
-                           envelope.ConfirmationId
+                  | Ok(evt, _) -> return! confirmPersist (OrgMessage.Event evt)
                   | Error err -> handleValidationError err cmd
                | msg -> return unknownMsg msg
             | msg -> return unknownMsg msg
@@ -515,7 +514,7 @@ let initProps
    (broadcaster: SignalRBroadcast)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
       AccountId -> Task<Result<DomesticTransfer list option, Err>>)

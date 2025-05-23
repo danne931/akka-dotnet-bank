@@ -18,14 +18,14 @@ open Bank.Account.Domain
 open Email
 open Bank.Scheduler
 
-// NOTE:
+// TODO:
 // This was created before scope was expanded into the business banking
 // domain so it likely does not work as intended anymore.
 // Need to evalutate foreign relations & determine how to proceed.
 
 let deleteAccounts
    (system: ActorSystem)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (throttle: StreamThrottle)
    (accounts: Map<AccountId, Account>)
    =
@@ -36,12 +36,12 @@ let deleteAccounts
          throttle.Count
          throttle.Duration
    |> Source.runForEach (system.Materializer()) (fun account ->
-      getAccountRef account.AccountId <! AccountMessage.Delete)
+      getAccountRef account.ParentAccountId <! AccountMessage.Delete)
 
 let initState: Map<AccountId, Account> = Map.empty
 
 let actorProps
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (deleteHistoricalRecords:
@@ -160,7 +160,7 @@ let deleteHistoricalRecords (accountIds: AccountId list) =
          AccountSqlReader.accountNumber
 
 let initProps
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
    (throttle: StreamThrottle)

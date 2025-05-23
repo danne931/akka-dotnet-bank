@@ -1,13 +1,13 @@
 [<RequireQualifiedAccess>]
 module AccountActor
 
-open System
 open Akka.Actor
 open Akka.Persistence
 open Akka.Persistence.Extras
 open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
+open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
 open Lib.Types
@@ -23,9 +23,6 @@ open PurchaseSaga
 open DomesticTransferSaga
 open PlatformTransferSaga
 open PlatformPaymentSaga
-
-type private InternalTransferMsg =
-   InternalTransferRecipientActor.InternalTransferMessage
 
 // Pass monthly billing statement to BillingStatementActor.
 // Conditionally apply monthly maintenance fee.
@@ -44,9 +41,10 @@ let private billingCycle
       Year = evt.Data.Year
    }
 
+   let lastSequenceNum = mailbox.LastSequenceNr()
+
    let billing =
-      BillingStatement.billingStatement state billingPeriod
-      <| mailbox.LastSequenceNr()
+      BillingStatement.billingStatement state billingPeriod lastSequenceNum
 
    getBillingStatementActor mailbox.System <! RegisterBillingStatement billing
 
@@ -54,9 +52,7 @@ let private billingCycle
 
    if criteria.CanSkipFee then
       let msg =
-         SkipMaintenanceFeeCommand.create account.CompositeId {
-            Reason = criteria
-         }
+         SkipMaintenanceFeeCommand.create account.CompositeId criteria
          |> AccountCommand.SkipMaintenanceFee
          |> AccountMessage.StateChange
 
@@ -83,7 +79,6 @@ let private billingCycle
 let private canProduceAutoTransfer =
    function
    | AccountEvent.InternalAutomatedTransferPending _
-   | AccountEvent.InternalAutomatedTransferCompleted _
    | AccountEvent.InternalAutomatedTransferFailed _
    | AccountEvent.InternalAutomatedTransferDeposited _ -> false
    | e ->
@@ -94,7 +89,6 @@ let private onValidationError
    (broadcaster: SignalRBroadcast)
    mailbox
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
-   (account: Account)
    (cmd: AccountCommand)
    (err: Err)
    =
@@ -106,17 +100,15 @@ let private onValidationError
       match err with
       | AccountStateTransitionError e ->
          match e with
-         | TransferProgressNoChange
-         | TransferAlreadyProgressedToCompletedOrFailed
          | AccountNotReadyToActivate -> true, None
-         | AccountNotActive ->
+         | AccountNotActive accountName ->
             match cmd with
             | AccountCommand.Debit cmd ->
                false,
                Some(
                   cmd.CorrelationId,
                   cmd.OrgId,
-                  PurchaseAccountFailReason.AccountNotActive account.FullName
+                  PurchaseAccountFailReason.AccountNotActive accountName
                   |> PurchaseSagaEvent.PurchaseRejectedByAccount
                   |> AppSaga.Event.Purchase
                )
@@ -171,7 +163,7 @@ let private onValidationError
                   |> AppSaga.Event.PlatformPayment
                )
             | _ -> false, None
-         | InsufficientBalance _ ->
+         | InsufficientBalance(balance, accountName) ->
             match cmd with
             | AccountCommand.Debit cmd ->
                false,
@@ -179,8 +171,8 @@ let private onValidationError
                   cmd.CorrelationId,
                   cmd.OrgId,
                   PurchaseAccountFailReason.InsufficientAccountFunds(
-                     account.Balance,
-                     account.FullName
+                     balance,
+                     accountName
                   )
                   |> PurchaseSagaEvent.PurchaseRejectedByAccount
                   |> AppSaga.Event.Purchase
@@ -202,8 +194,8 @@ let private onValidationError
       logDebug mailbox $"AccountTransferActor NOOP msg {err}"
    else
       broadcaster.accountEventError
-         account.OrgId
-         account.AccountId
+         cmd.Envelope.OrgId
+         cmd.AccountId
          cmd.Envelope.CorrelationId
          err
 
@@ -215,7 +207,6 @@ let private onValidationError
       | None -> ()
 
 let onPersisted
-   (getOrStartInternalTransferRef: Actor<_> -> IActorRef<InternalTransferMsg>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
    (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
@@ -228,25 +219,19 @@ let onPersisted
 
    let onPlatformPaymentEvent evt corrId orgId =
       let msg =
-         AppSaga.Event.PlatformPayment evt
-         |> SagaEvent.create orgId corrId
-         |> SagaMessage.Event
+         AppSaga.Event.PlatformPayment evt |> AppSaga.sagaMessage orgId corrId
 
       getSagaRef corrId <! msg
 
    let onPlatformTransferEvent evt corrId orgId =
       let msg =
-         AppSaga.Event.PlatformTransfer evt
-         |> SagaEvent.create orgId corrId
-         |> SagaMessage.Event
+         AppSaga.Event.PlatformTransfer evt |> AppSaga.sagaMessage orgId corrId
 
       getSagaRef corrId <! msg
 
    let onDomesticTransferEvent evt corrId orgId =
       let msg =
-         AppSaga.Event.DomesticTransfer evt
-         |> SagaEvent.create orgId corrId
-         |> SagaMessage.Event
+         AppSaga.Event.DomesticTransfer evt |> AppSaga.sagaMessage orgId corrId
 
       getSagaRef corrId <! msg
 
@@ -266,24 +251,16 @@ let onPersisted
       let msg =
          PurchaseSagaEvent.PurchaseConfirmedByAccount
          |> AppSaga.Event.Purchase
-         |> SagaEvent.create e.OrgId e.CorrelationId
-         |> SagaMessage.Event
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
    | RefundedDebit e ->
       let msg =
          PurchaseSagaEvent.PurchaseRefundedToAccount
          |> AppSaga.Event.Purchase
-         |> SagaEvent.create e.OrgId e.CorrelationId
-         |> SagaMessage.Event
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | InternalTransferWithinOrgPending e ->
-      getOrStartInternalTransferRef mailbox
-      <! InternalTransferMsg.TransferRequestWithinOrg e
-   | InternalAutomatedTransferPending e ->
-      getOrStartInternalTransferRef mailbox
-      <! InternalTransferMsg.AutomatedTransferRequest e
    | BillingCycleStarted e ->
       billingCycle getBillingStatementRef getEmailRef mailbox state e
    | PlatformPaymentRequested e ->
@@ -345,11 +322,6 @@ let onPersisted
          PlatformTransferSagaEvent.RecipientAccountDepositedFunds
          e.CorrelationId
          e.OrgId
-   | InternalTransferBetweenOrgsCompleted e ->
-      onPlatformTransferEvent
-         PlatformTransferSagaEvent.TransferMarkedAsSettled
-         e.CorrelationId
-         e.OrgId
    | DomesticTransferScheduled e ->
       let evt =
          DomesticTransferSagaStartEvent.ScheduleTransferRequest e
@@ -380,51 +352,129 @@ let onPersisted
          e.OrgId
    | _ -> ()
 
-   if
-      canProduceAutoTransfer evt
-      && not account.AutoTransfersPerTransaction.IsEmpty
-   then
-      mailbox.Self
-      <! AccountMessage.AutoTransferCompute Frequency.PerTransaction
+let persistInternalTransferWithinOrgEvent
+   (logError: string -> unit)
+   (confirmPersist: AccountMessage -> PersistentEffect<obj>)
+   (transfer: BankEvent<InternalTransferWithinOrgPending>)
+   (state: ParentAccountSnapshot)
+   : Effect<obj>
+   =
+   let transferPendingEvt =
+      AccountEvent.InternalTransferWithinOrgPending transfer
+
+   let correspondingTransferDeposit =
+      DepositInternalTransferWithinOrgCommand.fromPending transfer
+      |> AccountCommand.DepositTransferWithinOrg
+      |> ParentAccount.stateTransition state
+
+   match correspondingTransferDeposit with
+   | Error err ->
+      logError
+         $"Not able to deposit transfer into recipient account.
+         Will not deduct transfer from sender account. {err}"
+
+      ignored ()
+   | Ok(transferDepositEvt, state) ->
+      let autoTransferStateTransitions =
+         ParentAccount.computeAutoTransferStateTransitions
+            Frequency.PerTransaction
+            transfer.Data.BaseInfo.Sender.AccountId
+            state
+         |> Option.sequenceResult
+         |> ResultOption.bind (fun (state, evts) ->
+            ParentAccount.computeAutoTransferStateTransitions
+               Frequency.PerTransaction
+               transfer.Data.BaseInfo.Recipient.AccountId
+               state
+            |> Option.sequenceResult
+            |> ResultOption.map (fun (state, evts2) -> state, evts @ evts2))
+
+      let toConfirm = AccountMessage.Event transferPendingEvt
+
+      match autoTransferStateTransitions with
+      | Ok None ->
+         confirmPersist toConfirm
+         <@> Persist(AccountMessage.Event transferDepositEvt)
+      | Error(_, err) ->
+         logError
+            $"Will not persist auto transfers due to state transition error: {err}"
+
+         confirmPersist toConfirm
+         <@> Persist(AccountMessage.Event transferDepositEvt)
+      | Ok(Some(_, autoTransferEvts)) ->
+         let evts =
+            List.map
+               (AccountMessage.Event >> box)
+               (transferDepositEvt :: autoTransferEvts)
+
+         confirmPersist toConfirm <@> PersistAll evts
+
+let persistEvent
+   (logError: string -> unit)
+   (confirmPersist: AccountMessage -> PersistentEffect<obj>)
+   (evt: AccountEvent)
+   (state: ParentAccountSnapshot)
+   : Effect<obj>
+   =
+   let autoTransferStateTransitions =
+      if canProduceAutoTransfer evt then
+         ParentAccount.computeAutoTransferStateTransitions
+            Frequency.PerTransaction
+            evt.AccountId
+            state
+      else
+         None
+
+   let toConfirm = AccountMessage.Event evt
+
+   match autoTransferStateTransitions with
+   | None -> confirmPersist toConfirm
+   | Some(Error(_, err)) ->
+      logError
+         $"Will not persist auto transfers due to state transition error: {err}"
+
+      confirmPersist toConfirm
+   | Some(Ok(_, autoTransferEvts)) ->
+      let autoTransferEvts =
+         List.map (AccountMessage.Event >> box) autoTransferEvts
+
+      confirmPersist toConfirm <@> PersistAll autoTransferEvts
 
 let actorProps
    (broadcaster: SignalRBroadcast)
-   (getOrStartInternalTransferRef: Actor<_> -> IActorRef<InternalTransferMsg>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
    (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
 
-      let rec loop (stateOpt: AccountSnapshot option) = actor {
+      let rec loop (stateOpt: ParentAccountSnapshot option) = actor {
          let! msg = mailbox.Receive()
 
-         let state = stateOpt |> Option.defaultValue AccountSnapshot.empty
-
-         let account = state.Info
+         let state = stateOpt |> Option.defaultValue ParentAccountSnapshot.empty
 
          let onValidationError =
-            onValidationError broadcaster mailbox getSagaRef account
+            onValidationError broadcaster mailbox getSagaRef
 
          match msg with
          | Persisted mailbox e ->
             let (AccountMessage.Event evt) = unbox e
-            let state = Account.applyEvent state evt
-            let account = state.Info
+
+            let state = ParentAccount.applyEvent state evt
+            let accountSnapshot = state.Info[evt.AccountId]
+            let account = accountSnapshot.Info
 
             broadcaster.accountEventPersisted evt account
 
             onPersisted
-               getOrStartInternalTransferRef
                getEmailRef
                getAccountClosureRef
                getBillingStatementRef
                getSagaRef
                mailbox
-               state
+               accountSnapshot
                evt
 
             return! loop <| Some state
@@ -434,26 +484,59 @@ let actorProps
                logError $"Unknown message in ConfirmableMessageEnvelope - {msg}"
                unhandled ()
 
+            let confirmPersist = confirmPersist mailbox envelope.ConfirmationId
+
             match envelope.Message with
             | :? AccountMessage as msg ->
                match msg with
                | AccountMessage.StateChange cmd ->
-                  let validation = Account.stateTransition state cmd
+                  let validation = ParentAccount.stateTransition state cmd
 
                   match validation with
-                  | Ok(evt, _) ->
-                     return!
-                        confirmPersist
-                           mailbox
-                           (AccountMessage.Event evt)
-                           envelope.ConfirmationId
                   | Error err -> onValidationError cmd err
+                  | Ok(InternalTransferWithinOrgPending transfer, state) ->
+                     return!
+                        persistInternalTransferWithinOrgEvent
+                           logError
+                           confirmPersist
+                           transfer
+                           state
+                  | Ok(evt, state) ->
+                     return! persistEvent logError confirmPersist evt state
                | msg -> return unknownMsg msg
             | msg -> return unknownMsg msg
          | :? AccountMessage as msg ->
             match msg with
-            | AccountMessage.GetAccount ->
-               mailbox.Sender() <! (stateOpt |> Option.map _.Info)
+            | AccountMessage.GetAccount -> mailbox.Sender() <! stateOpt
+            | AccountMessage.GetVirtualAccount accountId ->
+               let account =
+                  stateOpt
+                  |> Option.bind (_.Info.TryFind(accountId))
+                  |> Option.map _.Info
+
+               mailbox.Sender() <! account
+            | AccountMessage.AutoTransferCompute(frequency, accountId) ->
+               let autoTransfers =
+                  ParentAccount.computeAutoTransferStateTransitions
+                     frequency
+                     accountId
+                     state
+
+               match autoTransfers with
+               | None ->
+                  logDebug
+                     mailbox
+                     $"Received AutoTransferCompute {frequency} {accountId} but nothing computed."
+               | Some(Error(_, err)) ->
+                  logError
+                     $"Will not persist auto transfers due to state transition error: {err}"
+               | Some(Ok(_, autoTransferEvts)) ->
+                  let evts =
+                     List.map (AccountMessage.Event >> box) autoTransferEvts
+
+                  return! PersistAll evts
+            | _ -> unhandled ()
+         (*
             | AccountMessage.Delete ->
                let state =
                   Some {
@@ -462,75 +545,15 @@ let actorProps
                   }
 
                return! loop state <@> DeleteMessages Int64.MaxValue
-            | AccountMessage.AutoTransferCompute frequency ->
-               let transfers =
-                  match frequency with
-                  | Frequency.PerTransaction ->
-                     account.AutoTransfersPerTransaction
-                  | Frequency.Schedule CronSchedule.Daily ->
-                     account.AutoTransfersDaily
-                  | Frequency.Schedule CronSchedule.TwiceMonthly ->
-                     account.AutoTransfersTwiceMonthly
-
-               let transfersOut, transfersIn =
-                  transfers
-                  |> List.partition (fun t ->
-                     t.Transfer.Sender.AccountId = account.AccountId)
-
-               // NOTE: Transfers-in
-               // Computed transfers which are generated from a
-               // TargetBalanceRule.  When the target balance is lower
-               // than desired, the ManagingPartnerAccount is designated
-               // as the sender in order to restore funds to the target.
-               for t in transfersIn do
-                  let msg =
-                     InternalAutoTransferCommand.create t
-                     |> AccountCommand.InternalAutoTransfer
-                     |> AccountMessage.StateChange
-
-                  (getAccountRef t.Transfer.Sender.AccountId) <! msg
-
-               // NOTE: Transfers-out
-               // Outgoing auto transfers are computed, applied against the
-               // aggregate state, and persisted in one go.
-               //
-               // If instead they were computed and then sent as individual
-               // StateChange InternalAutoTransfer messages then you would
-               // run the risk of other StateChange messages being processed
-               // before the computed InternalAutoTransfer message leading to
-               // InsufficientBalance validation errors in busy workloads.
-               match transfersOut with
-               | [] -> return ignored ()
-               | transfers ->
-                  let validations =
-                     transfers
-                     |> List.map (
-                        InternalAutoTransferCommand.create
-                        >> AccountCommand.InternalAutoTransfer
-                     )
-                     |> List.fold
-                           (fun acc cmd ->
-                              match acc with
-                              | Ok(accountState, events) ->
-                                 Account.stateTransition accountState cmd
-                                 |> Result.map (fun (evt, newState) ->
-                                    newState, evt :: events)
-                                 |> Result.mapError (fun err -> cmd, err)
-                              | Error err -> Error err)
-                           (Ok(state, []))
-
-                  match validations with
-                  | Ok(_, evts) ->
-                     let evts = List.map (AccountMessage.Event >> box) evts
-                     return! PersistAll evts
-                  | Error(cmd, err) -> onValidationError cmd err
+            *)
          // Event replay on actor start
          | :? AccountEvent as e when mailbox.IsRecovering() ->
-            return! loop <| Some(Account.applyEvent state e)
+            return! loop <| Some(ParentAccount.applyEvent state e)
          | msg ->
             PersistentActorEventHandler.handleEvent
                {
                   PersistentActorEventHandler.init with
+                     (*
                      DeleteMessagesSuccess =
                         fun _ ->
                            if account.Status = AccountStatus.ReadyForDelete then
@@ -538,11 +561,10 @@ let actorProps
                               passivate ()
                            else
                               ignored ()
+                     *)
                      LifecyclePostStop =
                         fun _ ->
-                           logInfo
-                              mailbox
-                              $"ACCOUNT POSTSTOP {account.FullName} {account.AccountId}"
+                           logInfo mailbox $"ACCOUNT POSTSTOP {mailbox.Pid}"
 
                            ignored ()
                }
@@ -554,8 +576,15 @@ let actorProps
 
    propsPersist handler
 
-let get (sys: ActorSystem) (accountId: AccountId) : IEntityRef<AccountMessage> =
-   getEntityRef sys ClusterMetadata.accountShardRegion (AccountId.get accountId)
+let get
+   (sys: ActorSystem)
+   (parentAccountId: ParentAccountId)
+   : IEntityRef<AccountMessage>
+   =
+   getEntityRef
+      sys
+      ClusterMetadata.accountShardRegion
+      (ParentAccountId.get parentAccountId)
 
 let isPersistableMessage (msg: obj) =
    match msg with
@@ -567,7 +596,6 @@ let isPersistableMessage (msg: obj) =
 
 let initProps
    (broadcaster: SignalRBroadcast)
-   (system: ActorSystem)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
@@ -575,18 +603,13 @@ let initProps
    (getAccountClosureActor: ActorSystem -> IActorRef<AccountClosureMessage>)
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
    =
-   let getOrStartInternalTransferActor mailbox =
-      InternalTransferRecipientActor.getOrStart mailbox (get system)
-
    let childProps =
       actorProps
          broadcaster
-         getOrStartInternalTransferActor
          getEmailActor
          getAccountClosureActor
          getBillingStatementActor
          getSagaRef
-         (get system)
 
    persistenceSupervisor
       supervisorOpts

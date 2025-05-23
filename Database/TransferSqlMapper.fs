@@ -164,6 +164,7 @@ module TransferSqlReader =
          AccountNumber = read.int64 AccountFields.accountNumber |> AccountNumber
          RoutingNumber = read.int AccountFields.routingNumber |> RoutingNumber
          OrgId = senderOrgId read
+         ParentAccountId = Guid.NewGuid() |> ParentAccountId
          AccountId = AccountSqlReader.accountId read
       }
 
@@ -197,7 +198,6 @@ module TransferSqlWriter =
          function
          | InternalTransferStatus.Scheduled -> "Scheduled"
          | InternalTransferStatus.Pending -> "Pending"
-         | InternalTransferStatus.Completed -> "Completed"
          | InternalTransferStatus.Deposited -> "Deposited"
          | InternalTransferStatus.Failed _ -> "Failed"
          >> Sql.string

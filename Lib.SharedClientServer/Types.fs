@@ -92,13 +92,25 @@ module AccountId =
       let (AccountId id) = accountId
       id
 
-   let toEntityId (accountId: AccountId) : EntityId =
-      let (AccountId id) = accountId
+type ParentAccountId =
+   | ParentAccountId of Guid
+
+   override x.ToString() =
+      let (ParentAccountId id) = x
+      string id
+
+module ParentAccountId =
+   let get (accountId: ParentAccountId) : Guid =
+      let (ParentAccountId id) = accountId
+      id
+
+   let toEntityId (accountId: ParentAccountId) : EntityId =
+      let (ParentAccountId id) = accountId
       EntityId id
 
-   let fromEntityId (entityId: EntityId) : AccountId =
+   let fromEntityId (entityId: EntityId) : ParentAccountId =
       let (EntityId id) = entityId
-      AccountId id
+      ParentAccountId id
 
 type EmployeeId =
    | EmployeeId of Guid
@@ -295,12 +307,11 @@ type OrgStateTransitionError =
 
 type AccountStateTransitionError =
    | AccountNotReadyToActivate
-   | AccountNotActive
-   | InsufficientBalance of decimal
+   | AccountNotFound of AccountId
+   | AccountNotActive of accountName: string
+   | InsufficientBalance of balance: decimal * accountName: string
    | ExceededDailyInternalTransferLimit of decimal
    | ExceededDailyDomesticTransferLimit of decimal
-   | TransferProgressNoChange
-   | TransferAlreadyProgressedToCompletedOrFailed
    | TransferExpectedToOccurWithinOrg
    | OnlyOneAutoTransferRuleMayExistAtATime
    | AutoTransferRuleDoesNotExist
@@ -391,19 +402,17 @@ type Err =
             "Recipient Already Confirmed"
       | AccountStateTransitionError e ->
          match e with
-         | AccountStateTransitionError.AccountNotActive -> "Account Not Active"
+         | AccountNotFound accountId -> $"Account Not Found {accountId}"
+         | AccountStateTransitionError.AccountNotActive accountName ->
+            $"Account Not Active {accountName}"
          | AccountStateTransitionError.AccountNotReadyToActivate ->
             "Account Not Ready to Activate"
          | AccountStateTransitionError.ExceededDailyInternalTransferLimit limit ->
             $"Exceeded Daily Internal Transfer Limit ${limit}"
          | AccountStateTransitionError.ExceededDailyDomesticTransferLimit limit ->
             $"Exceeded Daily Internal Transfer Limit ${limit}"
-         | AccountStateTransitionError.InsufficientBalance balance ->
-            $"Insufficient Balance ${balance}"
-         | AccountStateTransitionError.TransferAlreadyProgressedToCompletedOrFailed ->
-            "Transfer already progressed to completed or failed"
-         | AccountStateTransitionError.TransferProgressNoChange ->
-            "Transfer progress no change"
+         | AccountStateTransitionError.InsufficientBalance(balance, accountName) ->
+            $"Insufficient Balance ${balance} for {accountName}"
          | AccountStateTransitionError.TransferExpectedToOccurWithinOrg ->
             "Expected to transfer funds within organization."
          | AccountStateTransitionError.OnlyOneAutoTransferRuleMayExistAtATime ->

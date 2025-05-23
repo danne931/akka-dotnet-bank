@@ -199,11 +199,13 @@ let form
          TargetAccount = {
             Name = target.Name
             AccountId = target.AccountId
+            ParentAccountId = target.ParentAccountId
             OrgId = target.OrgId
          }
          ManagingPartnerAccount = {
             Name = partner.Name
             AccountId = partner.AccountId
+            ParentAccountId = partner.ParentAccountId
             OrgId = partner.OrgId
          }
       }

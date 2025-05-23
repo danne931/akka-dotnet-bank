@@ -101,28 +101,30 @@ let formInternalWithinOrg
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let onSubmit (sender: Account) (recipient: Account) (amount: decimal) =
+      let orgId = sender.OrgId
+      let parentAccountId = sender.ParentAccountId
+
       let transfer: InternalTransferInput = {
          Memo = None
          ScheduledDateSeedOverride = None
          Amount = amount
+         Sender = {
+            OrgId = orgId
+            ParentAccountId = parentAccountId
+            AccountId = sender.AccountId
+            Name = sender.Name
+         }
          Recipient = {
-            OrgId = recipient.OrgId
+            OrgId = orgId
+            ParentAccountId = parentAccountId
             AccountId = recipient.AccountId
             Name = recipient.Name
-         }
-         Sender = {
-            Name = sender.Name
-            AccountId = sender.AccountId
-            OrgId = sender.OrgId
          }
          OriginatedFromSchedule = false
       }
 
       let msg =
-         InternalTransferWithinOrgCommand.create
-            sender.CompositeId
-            initiatedBy
-            transfer
+         InternalTransferWithinOrgCommand.create initiatedBy transfer
          |> AccountCommand.InternalTransfer
          |> FormCommand.Account
 
@@ -177,7 +179,7 @@ let formInternalBetweenOrgs
       }
 
    let onSubmit
-      (recipientId: AccountId)
+      (selectedRecipientId: AccountId)
       (sender: Account)
       (amount: decimal)
       (memo: string option)
@@ -188,25 +190,28 @@ let formInternalBetweenOrgs
          |> Option.bind (fun memo ->
             if String.IsNullOrWhiteSpace memo then None else Some memo)
 
-      let org =
+      let parentAccountId, orgId, orgName =
          destinationOrgs
-         |> List.find (fun o ->
+         |> List.pick (fun o ->
             match o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId with
-            | Some accountId -> accountId = recipientId
-            | None -> false)
+            | Some id when id = selectedRecipientId ->
+               Some(o.ParentAccountId, o.OrgId, o.Name)
+            | _ -> None)
 
       let transfer: InternalTransferInput = {
          ScheduledDateSeedOverride = None
          Amount = amount
-         Recipient = {
-            OrgId = org.OrgId
-            AccountId = recipientId
-            Name = org.Name
-         }
          Sender = {
-            Name = sender.Name
-            AccountId = sender.AccountId
             OrgId = sender.OrgId
+            ParentAccountId = sender.ParentAccountId
+            AccountId = sender.AccountId
+            Name = sender.Name
+         }
+         Recipient = {
+            OrgId = orgId
+            ParentAccountId = parentAccountId
+            AccountId = selectedRecipientId
+            Name = orgName
          }
          Memo = memo
          OriginatedFromSchedule =
@@ -215,19 +220,13 @@ let formInternalBetweenOrgs
 
       let cmd =
          if transfer.OriginatedFromSchedule then
-            ScheduleInternalTransferBetweenOrgsCommand.create
-               sender.CompositeId
-               initiatedBy
-               {
-                  ScheduledDate = scheduledAt.ToUniversalTime()
-                  TransferInput = transfer
-               }
+            ScheduleInternalTransferBetweenOrgsCommand.create initiatedBy {
+               ScheduledDate = scheduledAt.ToUniversalTime()
+               TransferInput = transfer
+            }
             |> AccountCommand.ScheduleInternalTransferBetweenOrgs
          else
-            InternalTransferBetweenOrgsCommand.create
-               sender.CompositeId
-               initiatedBy
-               transfer
+            InternalTransferBetweenOrgsCommand.create initiatedBy transfer
             |> AccountCommand.InternalTransferBetweenOrgs
 
       Msg.Submit(FormEntity.Account sender, FormCommand.Account cmd, Started)
@@ -298,6 +297,7 @@ let formDomestic
             AccountNumber = sender.AccountNumber
             RoutingNumber = sender.RoutingNumber
             OrgId = sender.OrgId
+            ParentAccountId = sender.ParentAccountId
             AccountId = sender.AccountId
          }
          Recipient = recipient
@@ -309,17 +309,13 @@ let formDomestic
 
       let cmd =
          if transfer.OriginatedFromSchedule then
-            ScheduleDomesticTransferCommand.create
-               sender.CompositeId
-               initiatedBy
-               {
-                  ScheduledDate = scheduledAt
-                  TransferInput = transfer
-               }
+            ScheduleDomesticTransferCommand.create initiatedBy {
+               ScheduledDate = scheduledAt
+               TransferInput = transfer
+            }
             |> AccountCommand.ScheduleDomesticTransfer
          else
             DomesticTransferCommand.create
-               sender.CompositeId
                (Guid.NewGuid() |> CorrelationId)
                initiatedBy
                transfer

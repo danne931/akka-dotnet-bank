@@ -1,5 +1,7 @@
 namespace Bank.Org.Domain
 
+open System
+
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
@@ -137,6 +139,7 @@ module OrgEnvelope =
 
 type Org = {
    OrgId: OrgId
+   ParentAccountId: ParentAccountId
    Name: string
    Status: OrgStatus
    FeatureFlags: FeatureFlagOrgSettings
@@ -149,7 +152,8 @@ type Org = {
 
 module Org =
    let empty: Org = {
-      OrgId = OrgId System.Guid.Empty
+      OrgId = OrgId Guid.Empty
+      ParentAccountId = ParentAccountId Guid.Empty
       Name = ""
       Status = OrgStatus.InitialEmptyState
       AdminTeamEmail = Email.empty

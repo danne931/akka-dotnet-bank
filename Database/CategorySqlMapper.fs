@@ -1,15 +1,15 @@
-module CategorySqlMapper
+module PurchaseCategorySqlMapper
 
-let table = "category"
+let table = "purchase_category"
 
-module CategoryFields =
+module Fields =
    let catId = "category_id"
    let name = "name"
 
-module CategorySqlReader =
-   let catId (read: RowReader) = read.int CategoryFields.catId
-   let name (read: RowReader) = read.string CategoryFields.name
+module Reader =
+   let catId (read: RowReader) = read.int Fields.catId
+   let name (read: RowReader) = read.string Fields.name
 
-module CategorySqlWriter =
+module Writer =
    let catId = Sql.int
    let name = Sql.string

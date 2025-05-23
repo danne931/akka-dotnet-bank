@@ -84,6 +84,7 @@ module MoneyFlow =
 
 type PurchaseInfo = {
    OrgId: OrgId
+   ParentAccountId: ParentAccountId
    AccountId: AccountId
    EmployeeId: EmployeeId
    CardId: CardId

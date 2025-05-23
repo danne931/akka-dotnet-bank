@@ -110,8 +110,6 @@ type Event =
             "PlatformTransferPartnerBankSyncResponse"
          | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
             "PlatformTransferSupportTeamResolvedPartnerBankSync"
-         | PlatformTransferSagaEvent.TransferMarkedAsSettled ->
-            "PlatformTransferMarkedAsSettled"
          | PlatformTransferSagaEvent.SenderAccountRefunded ->
             "PlatformTransferSenderAccountRefunded"
          | PlatformTransferSagaEvent.RecipientAccountDepositUndo ->
@@ -229,9 +227,14 @@ type Saga =
          | Saga.PlatformTransfer s -> s.LifeCycle.InactivityTimeout
          | Saga.PlatformPayment s -> s.LifeCycle.InactivityTimeout
 
+
+/// Wrap an AppSaga event in a saga message.
+let sagaMessage orgId correlationId (evt: Event) =
+   SagaEvent.create orgId correlationId evt |> SagaMessage.Event
+
 let sagaHandler
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
@@ -353,10 +356,9 @@ let sagaHandler
                            asyncEvt
                            |> Async.map (
                               Event.Purchase
-                              >> SagaEvent.create
+                              >> sagaMessage
                                     purchase.OrgId
                                     purchase.CorrelationId
-                              >> SagaMessage.Event
                            )
 
                         mailbox.Parent() <!| asyncMsg
@@ -405,11 +407,10 @@ let sagaHandler
                            asyncEvt
                            |> Async.map (
                               Event.PlatformTransfer
-                              >> SagaEvent.create
+                              >> sagaMessage
                                     transfer.Sender.OrgId
                                     (TransferId.toCorrelationId
                                        transfer.TransferId)
-                              >> SagaMessage.Event
                            )
 
                         mailbox.Parent() <!| asyncMsg
@@ -443,10 +444,9 @@ let sagaHandler
                            asyncEvt
                            |> Async.map (
                               Event.PlatformPayment
-                              >> SagaEvent.create
+                              >> sagaMessage
                                     payment.Payee.OrgId
                                     (PaymentId.toCorrelationId payment.Id)
-                              >> SagaMessage.Event
                            )
 
                         mailbox.Parent() <!| asyncMsg
@@ -468,7 +468,7 @@ let getEntityRef = SagaActor.get<Event>
 
 let initProps
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)

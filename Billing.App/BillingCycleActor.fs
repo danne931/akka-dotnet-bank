@@ -26,22 +26,25 @@ let getBillingCycleReadyAccounts () =
       else
          "'1 minutes'::interval"
 
-   pgQuery<AccountId * OrgId>
+   pgQuery<ParentAccountId * AccountId * OrgId>
       $"""
-      SELECT {AccountFields.accountId}, {AccountFields.orgId}
+      SELECT {AccountFields.accountId}, {AccountFields.orgId}, {AccountFields.parentAccountId}
       FROM {AccountSqlMapper.table}
       WHERE
          {AccountFields.status} = '{string AccountStatus.Active}'
          AND ({prevCycle} IS NULL
-              OR {prevCycle} < current_timestamp - {lookback})
+         OR {prevCycle} < current_timestamp - {lookback})
       """
       None
-   <| fun read -> AccountSqlReader.accountId read, AccountSqlReader.orgId read
+   <| fun read ->
+      AccountSqlReader.parentAccountId read,
+      AccountSqlReader.accountId read,
+      AccountSqlReader.orgId read
 
 let private fanOutBillingCycleMessage
    (ctx: Actor<_>)
    (throttle: StreamThrottle)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    =
    task {
       let mat = ctx.System.Materializer()
@@ -66,13 +69,14 @@ let private fanOutBillingCycleMessage
 
                opt)
          |> Source.collect id
-         |> Source.runForEach mat (fun (accountId, orgId) ->
+         |> Source.runForEach mat (fun (parentAccountId, accountId, orgId) ->
             // This billing cycle actor is scheduled to run at the start of
             // every month.  The billing period refers to the previous month.
             let billingPeriod = DateTime.UtcNow.AddMonths -1
 
             let msg =
-               StartBillingCycleCommand.create (accountId, orgId) {
+               StartBillingCycleCommand.create (parentAccountId, orgId) {
+                  AccountId = accountId
                   Month = billingPeriod.Month
                   Year = billingPeriod.Year
                   Reference = None
@@ -80,14 +84,14 @@ let private fanOutBillingCycleMessage
                |> AccountCommand.StartBillingCycle
                |> AccountMessage.StateChange
 
-            getAccountRef accountId <! msg)
+            getAccountRef parentAccountId <! msg)
 
       return BillingCycleMessage.BillingCycleFinished
    }
 
 let actorProps
    (throttle: StreamThrottle)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    =
    let handler (ctx: Actor<BillingCycleMessage>) =
       function

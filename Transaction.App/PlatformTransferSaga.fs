@@ -12,6 +12,13 @@ open Email
 open Bank.Scheduler
 
 [<RequireQualifiedAccess>]
+type PlatformTransferSagaStatus =
+   | Scheduled
+   | InProgress
+   | Completed
+   | Failed of InternalTransferFailReason
+
+[<RequireQualifiedAccess>]
 type PlatformTransferSagaStartEvent =
    | SenderAccountDeductedFunds of BankEvent<InternalTransferBetweenOrgsPending>
    | ScheduleTransferRequest of BankEvent<InternalTransferBetweenOrgsScheduled>
@@ -25,7 +32,6 @@ type PlatformTransferSagaEvent =
    | SenderAccountUnableToDeductFunds of InternalTransferFailReason
    | RecipientAccountDepositedFunds
    | RecipientAccountUnableToDepositFunds of InternalTransferFailReason
-   | TransferMarkedAsSettled
    | TransferNotificationSent
    | TransferDepositNotificationSent
    | PartnerBankSyncResponse of Result<string, string>
@@ -45,7 +51,6 @@ type Activity =
    | DeductFromSenderAccount
    | DepositToRecipientAccount
    | SyncToPartnerBank
-   | MarkTransferAsSettled
    | SendTransferNotification
    | SendTransferDepositNotification
    | RefundSenderAccount
@@ -68,7 +73,6 @@ type Activity =
          | ScheduleTransfer
          | DeductFromSenderAccount
          | DepositToRecipientAccount
-         | MarkTransferAsSettled
          | RefundSenderAccount
          | UndoRecipientDeposit -> Some(TimeSpan.FromSeconds 5)
          | WaitForScheduledTransferExecution
@@ -76,10 +80,14 @@ type Activity =
 
 type PlatformTransferSaga = {
    Events: PlatformTransferSagaEvent list
-   Status: InternalTransferStatus
+   Status: PlatformTransferSagaStatus
    TransferInfo: BaseInternalTransferInfo
    LifeCycle: SagaLifeCycle<Activity>
 } with
+
+   member x.SyncedToPartnerBank =
+      x.LifeCycle.Completed
+      |> List.exists (fun w -> w.Activity = Activity.SyncToPartnerBank)
 
    member x.TransferNotificationSent =
       x.LifeCycle.Completed
@@ -111,7 +119,7 @@ let applyEvent
          match evt with
          | StartEvent.SenderAccountDeductedFunds evt ->
             Some {
-               Status = InternalTransferStatus.Pending
+               Status = PlatformTransferSagaStatus.InProgress
                Events = [ e ]
                TransferInfo = evt.Data.BaseInfo
                LifeCycle = {
@@ -136,7 +144,7 @@ let applyEvent
             }
          | StartEvent.ScheduleTransferRequest evt ->
             Some {
-               Status = InternalTransferStatus.Scheduled
+               Status = PlatformTransferSagaStatus.Scheduled
                Events = [ e ]
                TransferInfo = evt.Data.BaseInfo
                LifeCycle =
@@ -156,7 +164,7 @@ let applyEvent
            }
          | Event.ScheduledJobExecuted -> {
             state with
-               Status = InternalTransferStatus.Pending
+               Status = PlatformTransferSagaStatus.InProgress
                LifeCycle =
                   state.LifeCycle
                   |> finishActivity Activity.WaitForScheduledTransferExecution
@@ -174,15 +182,16 @@ let applyEvent
                LifeCycle =
                   state.LifeCycle
                   |> failActivity Activity.DeductFromSenderAccount
-               Status = InternalTransferStatus.Failed reason
+               Status = PlatformTransferSagaStatus.Failed reason
            }
          | Event.RecipientAccountDepositedFunds -> {
             state with
-               Status = InternalTransferStatus.Deposited
                LifeCycle =
                   state.LifeCycle
                   |> finishActivity Activity.DepositToRecipientAccount
-                  |> addActivity Activity.MarkTransferAsSettled
+                  |> addActivity Activity.SyncToPartnerBank
+                  |> addActivity Activity.SendTransferNotification
+                  |> addActivity Activity.SendTransferDepositNotification
            }
          | Event.RecipientAccountUnableToDepositFunds _ -> {
             state with
@@ -190,14 +199,6 @@ let applyEvent
                   state.LifeCycle
                   |> failActivity Activity.DepositToRecipientAccount
                   |> addActivity Activity.RefundSenderAccount
-           }
-         | Event.TransferMarkedAsSettled -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.MarkTransferAsSettled
-                  |> addActivity Activity.SendTransferNotification
-                  |> addActivity Activity.SendTransferDepositNotification
            }
          | Event.PartnerBankSyncResponse res ->
             match res with
@@ -214,7 +215,7 @@ let applyEvent
                      state with
                         Status =
                            InternalTransferFailReason.PartnerBankSync err
-                           |> InternalTransferStatus.Failed
+                           |> PlatformTransferSagaStatus.Failed
                         LifeCycle =
                            state.LifeCycle
                            |> failActivity activity
@@ -223,13 +224,21 @@ let applyEvent
                   }
             | Ok _ -> {
                state with
+                  Status =
+                     if
+                        state.TransferNotificationSent
+                        && state.TransferDepositNotificationSent
+                     then
+                        PlatformTransferSagaStatus.Completed
+                     else
+                        state.Status
                   LifeCycle =
                      state.LifeCycle
                      |> finishActivity Activity.SyncToPartnerBank
               }
          | Event.SupportTeamResolvedPartnerBankSync -> {
             state with
-               Status = InternalTransferStatus.Pending
+               Status = PlatformTransferSagaStatus.InProgress
                LifeCycle =
                   state.LifeCycle
                   |> finishActivity
@@ -241,8 +250,11 @@ let applyEvent
                   state.LifeCycle
                   |> finishActivity Activity.SendTransferNotification
                Status =
-                  if state.TransferDepositNotificationSent then
-                     InternalTransferStatus.Completed
+                  if
+                     state.TransferDepositNotificationSent
+                     && state.SyncedToPartnerBank
+                  then
+                     PlatformTransferSagaStatus.Completed
                   else
                      state.Status
            }
@@ -252,8 +264,10 @@ let applyEvent
                   state.LifeCycle
                   |> finishActivity Activity.SendTransferDepositNotification
                Status =
-                  if state.TransferNotificationSent then
-                     InternalTransferStatus.Completed
+                  if
+                     state.TransferNotificationSent && state.SyncedToPartnerBank
+                  then
+                     PlatformTransferSagaStatus.Completed
                   else
                      state.Status
            }
@@ -322,8 +336,6 @@ let stateTransition
             activityIsDone Activity.DepositToRecipientAccount
          | PlatformTransferSagaEvent.RecipientAccountDepositUndo ->
             activityIsDone Activity.UndoRecipientDeposit
-         | PlatformTransferSagaEvent.TransferMarkedAsSettled ->
-            activityIsDone Activity.MarkTransferAsSettled
          | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
             activityIsDone Activity.SyncToPartnerBank
          | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
@@ -335,7 +347,7 @@ let stateTransition
          | PlatformTransferSagaEvent.SenderAccountRefunded ->
             activityIsDone Activity.RefundSenderAccount
 
-      if saga.Status = InternalTransferStatus.Completed then
+      if saga.Status = PlatformTransferSagaStatus.Completed then
          Error SagaStateTransitionError.HasAlreadyCompleted
       elif eventIsStartEvent then
          Error SagaStateTransitionError.HasAlreadyStarted
@@ -352,22 +364,18 @@ let private scheduleTransferMessage =
 
 type PersistenceHandlerDependencies = {
    getSchedulingRef: unit -> IActorRef<SchedulerMessage>
-   getAccountRef: AccountId -> IEntityRef<AccountMessage>
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
    syncToPartnerBank: BaseInternalTransferInfo -> Async<TransferEvent>
    sendMessageToSelf: BaseInternalTransferInfo -> Async<TransferEvent> -> unit
 }
 
 let private depositTransfer
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (transfer: BaseInternalTransferInfo)
    =
-   let accountId = transfer.Recipient.AccountId
-   let orgId = transfer.Recipient.OrgId
-
    let cmd =
       DepositInternalTransferBetweenOrgsCommand.create
-         (accountId, orgId)
          (TransferId.toCorrelationId transfer.TransferId)
          transfer.InitiatedBy
          { BaseInfo = transfer }
@@ -377,7 +385,7 @@ let private depositTransfer
       |> AccountCommand.DepositTransferBetweenOrgs
       |> AccountMessage.StateChange
 
-   getAccountRef accountId <! msg
+   getAccountRef transfer.Recipient.ParentAccountId <! msg
 
 let onStartEventPersisted
    (dep: PersistenceHandlerDependencies)
@@ -396,22 +404,18 @@ let onEventPersisted
    (evt: TransferEvent)
    =
    let transfer = currentState.TransferInfo
-   let compositeId = transfer.Sender.AccountId, transfer.Sender.OrgId
    let correlationId = TransferId.toCorrelationId transfer.TransferId
 
    let deductFromSender () =
       let cmd = {
-         InternalTransferBetweenOrgsCommand.create
-            compositeId
-            transfer.InitiatedBy
-            {
-               Amount = transfer.Amount
-               Sender = transfer.Sender
-               Recipient = transfer.Recipient
-               Memo = transfer.Memo
-               ScheduledDateSeedOverride = None
-               OriginatedFromSchedule = true
-            } with
+         InternalTransferBetweenOrgsCommand.create transfer.InitiatedBy {
+            Amount = transfer.Amount
+            Sender = transfer.Sender
+            Recipient = transfer.Recipient
+            Memo = transfer.Memo
+            ScheduledDateSeedOverride = None
+            OriginatedFromSchedule = true
+         } with
             CorrelationId = correlationId
       }
 
@@ -420,22 +424,7 @@ let onEventPersisted
          |> AccountCommand.InternalTransferBetweenOrgs
          |> AccountMessage.StateChange
 
-      dep.getAccountRef transfer.Sender.AccountId <! msg
-
-   let completeTransfer () =
-      let cmd =
-         CompleteInternalTransferBetweenOrgsCommand.create
-            compositeId
-            correlationId
-            transfer.InitiatedBy
-            { BaseInfo = transfer }
-
-      let msg =
-         cmd
-         |> AccountCommand.CompleteInternalTransferBetweenOrgs
-         |> AccountMessage.StateChange
-
-      dep.getAccountRef transfer.Sender.AccountId <! msg
+      dep.getAccountRef transfer.Sender.ParentAccountId <! msg
 
    let transferSentEmail () =
       let msg =
@@ -472,7 +461,10 @@ let onEventPersisted
    | TransferEvent.ScheduledJobExecuted -> deductFromSender ()
    | TransferEvent.SenderAccountDeductedFunds ->
       depositTransfer dep.getAccountRef transfer
-   | TransferEvent.RecipientAccountDepositedFunds -> completeTransfer ()
+   | TransferEvent.RecipientAccountDepositedFunds ->
+      transferSentEmail ()
+      transferDepositEmail ()
+      syncToPartnerBank ()
    | TransferEvent.PartnerBankSyncResponse res ->
       match res with
       | Ok _ -> ()
@@ -490,10 +482,6 @@ let onEventPersisted
                   (EmailInfo.ApplicationErrorRequiresSupport reason)
 
             dep.getEmailRef () <! msg
-   | TransferEvent.TransferMarkedAsSettled ->
-      transferSentEmail ()
-      transferDepositEmail ()
-      syncToPartnerBank ()
    | TransferEvent.TransferNotificationSent -> ()
    | TransferEvent.TransferDepositNotificationSent -> ()
    | TransferEvent.SenderAccountUnableToDeductFunds _ -> ()
@@ -501,7 +489,6 @@ let onEventPersisted
       if currentState.RequiresSenderAccountRefund then
          let cmd =
             FailInternalTransferBetweenOrgsCommand.create
-               compositeId
                correlationId
                transfer.InitiatedBy
                { BaseInfo = transfer; Reason = reason }
@@ -511,7 +498,7 @@ let onEventPersisted
             |> AccountCommand.FailInternalTransferBetweenOrgs
             |> AccountMessage.StateChange
 
-         dep.getAccountRef transfer.Sender.AccountId <! msg
+         dep.getAccountRef transfer.Sender.ParentAccountId <! msg
    | TransferEvent.SupportTeamResolvedPartnerBankSync ->
       // Support team resolved dispute with partner bank so
       // reattempt syncing transaction to partner bank.
@@ -527,7 +514,6 @@ let onEventPersisted
          | Activity.DeductFromSenderAccount -> deductFromSender ()
          | Activity.DepositToRecipientAccount ->
             depositTransfer dep.getAccountRef transfer
-         | Activity.MarkTransferAsSettled -> completeTransfer ()
          | Activity.SyncToPartnerBank -> syncToPartnerBank ()
          | Activity.SendTransferNotification -> transferSentEmail ()
          | Activity.SendTransferDepositNotification -> transferDepositEmail ()
@@ -535,10 +521,9 @@ let onEventPersisted
             match
                currentState.RequiresSenderAccountRefund, currentState.Status
             with
-            | true, InternalTransferStatus.Failed reason ->
+            | true, PlatformTransferSagaStatus.Failed reason ->
                let cmd =
                   FailInternalTransferBetweenOrgsCommand.create
-                     compositeId
                      correlationId
                      transfer.InitiatedBy
                      { BaseInfo = transfer; Reason = reason }
@@ -548,7 +533,7 @@ let onEventPersisted
                   |> AccountCommand.FailInternalTransferBetweenOrgs
                   |> AccountMessage.StateChange
 
-               dep.getAccountRef transfer.Sender.AccountId <! msg
+               dep.getAccountRef transfer.Sender.ParentAccountId <! msg
             | _ -> ()
          | Activity.UndoRecipientDeposit
          | Activity.WaitForScheduledTransferExecution

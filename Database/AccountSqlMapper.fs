@@ -18,6 +18,7 @@ module AccountTypeCast =
 module AccountFields =
    let accountId = "account_id"
    let orgId = OrgFields.orgId
+   let parentAccountId = "parent_account_id"
    let accountNumber = "account_number"
    let routingNumber = "routing_number"
    let name = "account_name"
@@ -42,6 +43,9 @@ module AccountSqlReader =
       AccountFields.accountId |> read.uuid |> AccountId
 
    let orgId = OrgSqlReader.orgId
+
+   let parentAccountId (read: RowReader) =
+      read.uuid AccountFields.parentAccountId |> ParentAccountId
 
    let accountNumber (read: RowReader) =
       read.int64 AccountFields.accountNumber |> AccountNumber
@@ -81,6 +85,7 @@ module AccountSqlReader =
    let account (read: RowReader) : Account = {
       AccountId = accountId read
       OrgId = orgId read
+      ParentAccountId = parentAccountId read
       AccountNumber = accountNumber read
       RoutingNumber = routingNumber read
       Name = name read
@@ -96,6 +101,7 @@ module AccountSqlReader =
 module AccountSqlWriter =
    let accountId = AccountId.get >> Sql.uuid
    let orgId = OrgSqlWriter.orgId
+   let parentAccountId (ParentAccountId id) = Sql.uuid id
 
    let accountNumber (num: AccountNumber) =
       let (AccountNumber acctNum) = num

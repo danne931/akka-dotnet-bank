@@ -8,7 +8,6 @@ open Lib.Postgres
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Org.Domain
-open CategorySqlMapper
 open AncillaryTransactionInfoSqlMapper
 open Transaction
 
@@ -339,6 +338,8 @@ let getTransactionInfo
    : TaskResultOption<Transaction.TransactionWithAncillaryInfo, Err>
    =
    taskResultOption {
+      let purchaseCategoryTable = PurchaseCategorySqlMapper.table
+      let purchaseCategoryName = PurchaseCategorySqlMapper.Fields.name
       let employeeEventTable = EmployeeEventSqlMapper.table
 
       let employeeIdField =
@@ -353,7 +354,7 @@ let getTransactionInfo
             events.event,
             {atiTable}.{atiFields.categoryId},
             {atiTable}.{atiFields.note},
-            {CategorySqlMapper.table}.{CategoryFields.name} as category_name
+            {purchaseCategoryTable}.{purchaseCategoryName} as category_name
          FROM (
             SELECT
                'account' as event_aggregate,
@@ -389,7 +390,7 @@ let getTransactionInfo
          ) AS events
          LEFT JOIN {atiTable}
             ON {atiTable}.{atiFields.transactionId} = events.correlation_id
-         LEFT JOIN {CategorySqlMapper.table} using({atiFields.categoryId})
+         LEFT JOIN {PurchaseCategorySqlMapper.table} using({atiFields.categoryId})
          ORDER BY events.timestamp
          """
 

@@ -48,8 +48,12 @@ type State = {
 let orgId = Constants.ORG_ID_REMOVE_SOON
 let orgName = "Sapphire Health"
 
+let parentAccountId =
+   ParentAccountId(Guid.Parse("06751328-320e-477a-9b89-2c193d8cf3a0"))
+
 type OrgSetup = {
    OrgId: OrgId
+   ParentAccountId: ParentAccountId
    PrimaryAccountId: AccountId
    OpsAccountId: AccountId
    SavingsAccountId: AccountId
@@ -62,6 +66,8 @@ type OrgSetup = {
 let socialTransferCandidates = [
    {
       OrgId = "6b20162e-61f3-4434-82e0-e7d27337316b" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "1e6961fe-081d-4f6f-bfb0-19a2ebc38109" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "2eb09ebc-bb20-4ef8-88c0-15d5e23125f5" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -79,6 +85,8 @@ let socialTransferCandidates = [
    }
    {
       OrgId = "55e75321-b9ad-48cc-b5ad-74af0a7e31b2" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "8524548e-6112-4249-b59b-a7e6c1d0a72e" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "7918f574-9600-481f-bbc8-0a0430f5a416" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -93,6 +101,8 @@ let socialTransferCandidates = [
    }
    {
       OrgId = "4c6d31a0-51de-4ab8-b805-f61eadb78f81" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "a5b36dee-e8a6-462a-ba9f-c0e411c80b2a" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "c923710d-610d-4bea-a324-de8a66d072cc" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -113,6 +123,8 @@ let socialTransferCandidates = [
 let socialTransferSenders = [
    {
       OrgId = "5f808408-04a1-45f3-9e45-eba1ecd7a2da" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "e1323f2f-a560-4534-9687-486c503663c9" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "24dc1103-0682-4141-a97e-b3870b8fadbf" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -127,6 +139,8 @@ let socialTransferSenders = [
    }
    {
       OrgId = "b854d513-c40e-4582-bf2f-688d6a73a21a" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "2a4c6d7a-40d3-4967-97cf-01ce2ffd807a" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "29963c00-c366-431e-84c2-cee5a3258581" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -141,6 +155,8 @@ let socialTransferSenders = [
    }
    {
       OrgId = "1e01868e-adcb-4c5d-8a8b-f75bc36db0f5" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "5209ad5c-8c38-444b-b564-6fd951ff906f" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "b260b00f-8f09-47c2-9fe5-c6d19742b125" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -160,6 +176,8 @@ let socialTransferOrgs = socialTransferCandidates @ socialTransferSenders
 let paymentRequesters = [
    {
       OrgId = "e6641c29-b980-4a7a-9b5a-24e01ebd9af0" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "900b2a64-c9d3-4327-a6a1-b6c3230f4aa3" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "ade87fa5-df43-43da-9903-90d66e986bf8" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -177,6 +195,8 @@ let paymentRequesters = [
    }
    {
       OrgId = "7ef9d8f8-741f-4138-8aa8-37ab6e2e576d" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "96718323-01fd-49ba-9d52-06b91b7d8d70" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "0b6c7486-4228-411d-8f39-6db9a98faf27" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -194,6 +214,8 @@ let paymentRequesters = [
 let paymentPayers = [
    {
       OrgId = "4ccbb100-c023-4957-82fd-36c35004a9fd" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "85110da9-68d2-41a6-b5bf-2ab30fdec5db" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "a8ffdd09-4502-4054-bb20-1c12e3f26821" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -208,6 +230,8 @@ let paymentPayers = [
    }
    {
       OrgId = "9f7a2ae5-9cb5-46ac-908e-4427230bf0fe" |> Guid.Parse |> OrgId
+      ParentAccountId =
+         "aa2c5176-1b59-436d-97f2-774810bc2dac" |> Guid.Parse |> ParentAccountId
       PrimaryAccountId =
          "60b76142-bded-4eb3-8c87-89ab9949a65e" |> Guid.Parse |> AccountId
       OpsAccountId =
@@ -243,14 +267,16 @@ let enableUpdatePreventionTriggers () =
    ]
 
 let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
-   let myOrg = orgId, orgName
+   let myOrg = orgId, orgName, parentAccountId
 
    let otherOrgs =
-      otherOrgs |> List.map (fun o -> o.OrgId, o.BusinessName) |> List.ofSeq
+      otherOrgs
+      |> List.map (fun o -> o.OrgId, o.BusinessName, o.ParentAccountId)
+      |> List.ofSeq
 
    let orgs = myOrg :: otherOrgs
 
-   for orgId, name in orgs do
+   for orgId, name, parentAccountId in orgs do
       let cmd =
          {
             CreateOrgCommand.create {
@@ -261,6 +287,7 @@ let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
                   |> _.ToLower().Replace(" ", "")
                   |> Email.deserialize
                OrgId = orgId
+               ParentAccountId = parentAccountId
                InitiatedBy = Initiator.System
             } with
                Timestamp = DateTime.UtcNow.AddMonths -4
@@ -430,6 +457,7 @@ let mockAccounts =
          Name = "AP"
          Currency = Currency.USD
          Depository = AccountDepository.Checking
+         ParentAccountId = parentAccountId
          AccountId = apCheckingAccountId
          AccountNumber = AccountNumber.generate ()
          OrgId = orgId
@@ -442,6 +470,7 @@ let mockAccounts =
          Name = "AR"
          Currency = Currency.USD
          Depository = AccountDepository.Checking
+         ParentAccountId = parentAccountId
          AccountId = arCheckingAccountId
          AccountNumber = AccountNumber.generate ()
          OrgId = orgId
@@ -454,6 +483,7 @@ let mockAccounts =
          Name = "Operations"
          Currency = Currency.USD
          Depository = AccountDepository.Checking
+         ParentAccountId = parentAccountId
          AccountId = opsCheckingAccountId
          AccountNumber = AccountNumber.generate ()
          OrgId = orgId
@@ -466,6 +496,7 @@ let mockAccounts =
          Name = "Savings"
          Currency = Currency.USD
          Depository = AccountDepository.Savings
+         ParentAccountId = parentAccountId
          AccountId = savingsAccountId
          AccountNumber = AccountNumber.generate ()
          OrgId = orgId
@@ -484,6 +515,7 @@ let mockAccounts =
                   Name = "AR"
                   Currency = Currency.USD
                   Depository = AccountDepository.Checking
+                  ParentAccountId = o.ParentAccountId
                   AccountId = o.PrimaryAccountId
                   AccountNumber = AccountNumber.generate ()
                   OrgId = o.OrgId
@@ -496,6 +528,7 @@ let mockAccounts =
                   Name = "Operations"
                   Currency = Currency.USD
                   Depository = AccountDepository.Checking
+                  ParentAccountId = o.ParentAccountId
                   AccountId = o.OpsAccountId
                   AccountNumber = AccountNumber.generate ()
                   OrgId = o.OrgId
@@ -512,6 +545,7 @@ let mockAccounts =
                   Name = "Savings"
                   Currency = Currency.USD
                   Depository = AccountDepository.Savings
+                  ParentAccountId = o.ParentAccountId
                   AccountId = o.SavingsAccountId
                   AccountNumber = AccountNumber.generate ()
                   OrgId = o.OrgId
@@ -689,17 +723,17 @@ let mockEmployeesPendingInviteConfirmation =
          Timestamp = mockAccountOwnerCmd.Timestamp
    })
 
-let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task {
-   let buffer = DateTime.UtcNow.AddDays(-2)
+let seedPayments
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   =
+   task {
+      let buffer = DateTime.UtcNow.AddDays(-2)
 
-   // Payment requests from main demo org to other orgs
-   let requestsFromDemoAccount = [
-      for payer in paymentPayers ->
-         let cmd =
-            RequestPlatformPaymentCommand.create
-               (arCheckingAccountId, orgId)
-               mockAccountOwner
-               {
+      // Payment requests from main demo org to other orgs
+      let requestsFromDemoAccount = [
+         for payer in paymentPayers ->
+            let cmd =
+               RequestPlatformPaymentCommand.create mockAccountOwner {
                   Memo = "Services rendered..."
                   Expiration = None
                   BaseInfo = {
@@ -710,93 +744,100 @@ let seedPayments (getAccountRef: AccountId -> IEntityRef<AccountMessage>) = task
                         OrgId = orgId
                         OrgName = orgName
                         AccountId = arCheckingAccountId
+                        ParentAccountId = parentAccountId
                      }
                      Payer = {
                         OrgId = payer.OrgId
                         OrgName = payer.BusinessName
+                        ParentAccountId = payer.ParentAccountId
                      }
                   }
                }
 
-         payer, { cmd with Timestamp = buffer }
-   ]
+            payer, { cmd with Timestamp = buffer }
+      ]
 
-   for _, request in requestsFromDemoAccount do
+      for _, request in requestsFromDemoAccount do
+         let msg =
+            request
+            |> AccountCommand.RequestPlatformPayment
+            |> AccountMessage.StateChange
+
+         let payee = request.Data.BaseInfo.Payee
+
+         (getAccountRef payee.ParentAccountId) <! msg
+
+      do! Async.Sleep 2000
+
+      // Some payment requests fulfilled
+      let payer, request = List.head requestsFromDemoAccount
+      let info = request.Data.BaseInfo
+
       let msg =
-         request
-         |> AccountCommand.RequestPlatformPayment
-         |> AccountMessage.StateChange
-
-      (getAccountRef request.Data.BaseInfo.Payee.AccountId) <! msg
-
-   do! Async.Sleep 2000
-
-   // Some payment requests fulfilled
-   let payer, request = List.head requestsFromDemoAccount
-   let info = request.Data.BaseInfo
-   let accountId = payer.PrimaryAccountId
-
-   let msg =
-      {
-         FulfillPlatformPaymentCommand.create
-            {
-               Id = InitiatedById payer.AccountOwnerId
-               Name = payer.BusinessName
-            }
-            {
-               RequestedPayment = {
-                  Memo = request.Data.Memo
-                  Expiration =
-                     request
-                     |> RequestPlatformPaymentCommand.toEvent
-                     |> Result.toValueOption
-                     |> fun p -> p.Value.Data.Expiration
-                  BaseInfo = info
+         {
+            FulfillPlatformPaymentCommand.create
+               {
+                  Id = InitiatedById payer.AccountOwnerId
+                  Name = payer.BusinessName
                }
-               PaymentMethod = accountId
-            } with
-            Timestamp = buffer.AddHours 2
-      }
-      |> AccountCommand.FulfillPlatformPayment
-      |> AccountMessage.StateChange
-
-   (getAccountRef accountId) <! msg
-
-   // Payment requests from other orgs to main demo org
-   for payee in paymentRequesters do
-      let cmd =
-         RequestPlatformPaymentCommand.create
-            (payee.PrimaryAccountId, payee.OrgId)
-            {
-               Id = InitiatedById payee.AccountOwnerId
-               Name = payee.BusinessName
-            }
-            {
-               Expiration = Some <| DateTime.UtcNow.AddDays 13
-               Memo = "Services rendered..."
-               BaseInfo = {
-                  InitiatedById = InitiatedById payee.AccountOwnerId
-                  Id = Guid.NewGuid() |> PaymentId
-                  Amount = 5000m + randomAmount 1000 3000
-                  Payee = {
-                     OrgId = payee.OrgId
-                     OrgName = payee.BusinessName
-                     AccountId = payee.PrimaryAccountId
+               {
+                  RequestedPayment = {
+                     Memo = request.Data.Memo
+                     Expiration =
+                        request
+                        |> RequestPlatformPaymentCommand.toEvent
+                        |> Result.toValueOption
+                        |> fun p -> p.Value.Data.Expiration
+                     BaseInfo = info
                   }
-                  Payer = { OrgId = orgId; OrgName = orgName }
-               }
-            }
-
-      let msg =
-         cmd
-         |> AccountCommand.RequestPlatformPayment
+                  PaymentMethod = PaymentMethod.Platform payer.PrimaryAccountId
+               } with
+               Timestamp = buffer.AddHours 2
+         }
+         |> AccountCommand.FulfillPlatformPayment
          |> AccountMessage.StateChange
 
-      (getAccountRef payee.PrimaryAccountId) <! msg
-}
+      (getAccountRef payer.ParentAccountId) <! msg
+
+      // Payment requests from other orgs to main demo org
+      for payee in paymentRequesters do
+         let cmd =
+            RequestPlatformPaymentCommand.create
+               {
+                  Id = InitiatedById payee.AccountOwnerId
+                  Name = payee.BusinessName
+               }
+               {
+                  Expiration = Some <| DateTime.UtcNow.AddDays 13
+                  Memo = "Services rendered..."
+                  BaseInfo = {
+                     InitiatedById = InitiatedById payee.AccountOwnerId
+                     Id = Guid.NewGuid() |> PaymentId
+                     Amount = 5000m + randomAmount 1000 3000
+                     Payee = {
+                        OrgId = payee.OrgId
+                        OrgName = payee.BusinessName
+                        AccountId = payee.PrimaryAccountId
+                        ParentAccountId = payee.ParentAccountId
+                     }
+                     Payer = {
+                        OrgId = orgId
+                        OrgName = orgName
+                        ParentAccountId = parentAccountId
+                     }
+                  }
+               }
+
+         let msg =
+            cmd
+            |> AccountCommand.RequestPlatformPayment
+            |> AccountMessage.StateChange
+
+         (getAccountRef payee.ParentAccountId) <! msg
+   }
 
 let configureAutoTransferRules
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (timestamp: DateTime)
    =
    // Set up percent distribution rule for demo account
@@ -804,6 +845,7 @@ let configureAutoTransferRules
    let sender: InternalTransferSender = {
       Name = mockAccounts[arCheckingAccountId].Data.Name
       AccountId = arCheckingAccountId
+      ParentAccountId = parentAccountId
       OrgId = orgId
    }
 
@@ -819,6 +861,7 @@ let configureAutoTransferRules
                Recipient = {
                   OrgId = recipient.OrgId
                   AccountId = recipient.Data.AccountId
+                  ParentAccountId = recipient.Data.ParentAccountId
                   Name = recipient.Data.Name
                }
             }
@@ -830,6 +873,7 @@ let configureAutoTransferRules
                Recipient = {
                   OrgId = recipient.OrgId
                   AccountId = recipient.Data.AccountId
+                  ParentAccountId = recipient.Data.ParentAccountId
                   Name = recipient.Data.Name
                }
             }
@@ -840,9 +884,10 @@ let configureAutoTransferRules
    let msg =
       {
          ConfigureAutoTransferRuleCommand.create
-            (sender.AccountId, sender.OrgId)
+            (sender.ParentAccountId, sender.OrgId)
             mockAccountOwner
             {
+               AccountId = sender.AccountId
                RuleIdToUpdate = None
                Rule =
                   percentDistributionRule
@@ -853,13 +898,14 @@ let configureAutoTransferRules
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
 
-   (getAccountRef sender.AccountId) <! msg
+   (getAccountRef sender.ParentAccountId) <! msg
 
    // Set up zero balance rule for demo account
    // ----------------------------------------
    let sender: InternalTransferSender = {
       Name = mockAccounts[apCheckingAccountId].Data.Name
       AccountId = apCheckingAccountId
+      ParentAccountId = parentAccountId
       OrgId = orgId
    }
 
@@ -868,9 +914,10 @@ let configureAutoTransferRules
    let msg =
       {
          ConfigureAutoTransferRuleCommand.create
-            (sender.AccountId, sender.OrgId)
+            (sender.ParentAccountId, sender.OrgId)
             mockAccountOwner
             {
+               AccountId = sender.AccountId
                RuleIdToUpdate = None
                Rule =
                   AutomaticTransferRule.ZeroBalance {
@@ -878,6 +925,7 @@ let configureAutoTransferRules
                      Recipient = {
                         OrgId = recipient.OrgId
                         AccountId = recipient.Data.AccountId
+                        ParentAccountId = recipient.Data.ParentAccountId
                         Name = recipient.Data.Name
                      }
                   }
@@ -887,13 +935,14 @@ let configureAutoTransferRules
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
 
-   (getAccountRef sender.AccountId) <! msg
+   (getAccountRef sender.ParentAccountId) <! msg
 
    // Set up target balance rule for demo savings account
    // ----------------------------------------
    let target: BiDirectionalTransferContact = {
       Name = mockAccounts[savingsAccountId].Data.Name
       AccountId = savingsAccountId
+      ParentAccountId = parentAccountId
       OrgId = orgId
    }
 
@@ -902,9 +951,10 @@ let configureAutoTransferRules
    let msg =
       {
          ConfigureAutoTransferRuleCommand.create
-            (target.AccountId, target.OrgId)
+            (target.ParentAccountId, target.OrgId)
             mockAccountOwner
             {
+               AccountId = target.AccountId
                RuleIdToUpdate = None
                Rule =
                   AutomaticTransferRule.TargetBalance {
@@ -927,6 +977,7 @@ let configureAutoTransferRules
                      ManagingPartnerAccount = {
                         OrgId = partner.OrgId
                         AccountId = partner.Data.AccountId
+                        ParentAccountId = partner.Data.ParentAccountId
                         Name = partner.Data.Name
                      }
                   }
@@ -936,7 +987,7 @@ let configureAutoTransferRules
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
 
-   (getAccountRef target.AccountId) <! msg
+   (getAccountRef target.ParentAccountId) <! msg
 
    // Create auto transfer rules for other orgs
    // ---------------------------------------
@@ -944,6 +995,7 @@ let configureAutoTransferRules
       let sender: InternalTransferSender = {
          OrgId = candidate.OrgId
          AccountId = candidate.PrimaryAccountId
+         ParentAccountId = candidate.ParentAccountId
          Name = candidate.BusinessName
       }
 
@@ -952,12 +1004,13 @@ let configureAutoTransferRules
       let msg =
          {
             ConfigureAutoTransferRuleCommand.create
-               (sender.AccountId, sender.OrgId)
+               (sender.ParentAccountId, sender.OrgId)
                {
                   Id = InitiatedById candidate.AccountOwnerId
                   Name = candidate.BusinessName
                }
                {
+                  AccountId = sender.AccountId
                   RuleIdToUpdate = None
                   Rule =
                      AutomaticTransferRule.ZeroBalance {
@@ -965,6 +1018,7 @@ let configureAutoTransferRules
                         Recipient = {
                            OrgId = recipient.OrgId
                            AccountId = recipient.Data.AccountId
+                           ParentAccountId = recipient.Data.ParentAccountId
                            Name = recipient.Data.Name
                         }
                      }
@@ -974,19 +1028,23 @@ let configureAutoTransferRules
          |> AccountCommand.ConfigureAutoTransferRule
          |> AccountMessage.StateChange
 
-      (getAccountRef sender.AccountId) <! msg
+      (getAccountRef sender.ParentAccountId) <! msg
 
    socialTransferCandidates |> List.iter initZeroBalanceRule
 
 let seedAccountOwnerActions
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (timestamp: DateTime)
    (account: Account)
    =
    let domesticRecipientCmd =
-      RegisterDomesticTransferRecipientCommand.create orgId mockAccountOwner {
+      RegisterDomesticTransferRecipientCommand.create mockAccountOwner {
          AccountId = Guid.NewGuid() |> AccountId
+         Sender = {|
+            OrgId = orgId
+            ParentAccountId = parentAccountId
+         |}
          FirstName = "Microsoft"
          LastName = "Azure"
          AccountNumber = AccountNumber.generate ()
@@ -1010,7 +1068,7 @@ let seedAccountOwnerActions
 
    getOrgRef orgId <! msg
 
-   let accountRef = getAccountRef account.AccountId
+   let accountRef = getAccountRef parentAccountId
 
    for month in [ 1..3 ] do
       let timestamp =
@@ -1021,7 +1079,6 @@ let seedAccountOwnerActions
 
       let transferCmd = {
          DomesticTransferCommand.create
-            (account.AccountId, orgId)
             (Guid.NewGuid() |> CorrelationId)
             mockAccountOwner
             {
@@ -1035,6 +1092,7 @@ let seedAccountOwnerActions
                   RoutingNumber = account.RoutingNumber
                   AccountId = account.AccountId
                   OrgId = orgId
+                  ParentAccountId = parentAccountId
                }
                Memo = Some "Azure Bill"
             } with
@@ -1064,9 +1122,10 @@ let seedAccountOwnerActions
             let msg =
                {
                   DepositCashCommand.create
-                     (apCheckingAccountId, orgId)
+                     (parentAccountId, orgId)
                      mockAccountOwner
                      {
+                        AccountId = apCheckingAccountId
                         Amount = randomAmount 5000 20_000
                         Origin = Some "ATM"
                      } with
@@ -1086,7 +1145,6 @@ let seedAccountOwnerActions
 
                {
                   InternalTransferBetweenOrgsCommand.create
-                     (sender.PrimaryAccountId, sender.OrgId)
                      {
                         Name = sender.BusinessName
                         Id = InitiatedById sender.AccountOwnerId
@@ -1098,12 +1156,14 @@ let seedAccountOwnerActions
                         Recipient = {
                            OrgId = orgId
                            AccountId = apCheckingAccountId
+                           ParentAccountId = parentAccountId
                            Name = orgName
                         }
                         ScheduledDateSeedOverride = Some ts
                         Sender = {
                            Name = sender.BusinessName
                            AccountId = sender.PrimaryAccountId
+                           ParentAccountId = sender.ParentAccountId
                            OrgId = sender.OrgId
                         }
                      } with
@@ -1112,79 +1172,75 @@ let seedAccountOwnerActions
                |> AccountCommand.InternalTransferBetweenOrgs
                |> AccountMessage.StateChange
 
-            (getAccountRef sender.PrimaryAccountId) <! msg
+            (getAccountRef sender.ParentAccountId) <! msg
 
             let timestamp = timestamp.AddDays(float (maxDays - 1))
 
             // Transfers from primary demo org to other orgs on the platform
             let msg =
                {
-                  InternalTransferBetweenOrgsCommand.create
-                     (apCheckingAccountId, orgId)
-                     mockAccountOwner
-                     {
-                        Memo = None
-                        OriginatedFromSchedule = false
-                        Recipient =
-                           let ind =
-                              randomAmount
-                                 0
-                                 (socialTransferCandidates.Length - 1)
-                              |> int
+                  InternalTransferBetweenOrgsCommand.create mockAccountOwner {
+                     Memo = None
+                     OriginatedFromSchedule = false
+                     Recipient =
+                        let ind =
+                           randomAmount 0 (socialTransferCandidates.Length - 1)
+                           |> int
 
-                           let recipient =
-                              socialTransferCandidates |> List.item ind
+                        let recipient =
+                           socialTransferCandidates |> List.item ind
 
-                           {
-                              OrgId = recipient.OrgId
-                              AccountId = recipient.PrimaryAccountId
-                              Name = recipient.BusinessName
-                           }
-                        Amount = 3000m + randomAmount 1000 8000
-                        ScheduledDateSeedOverride = Some timestamp
-                        Sender = {
-                           Name = orgName
-                           AccountId = apCheckingAccountId
-                           OrgId = orgId
+                        {
+                           OrgId = recipient.OrgId
+                           ParentAccountId = recipient.ParentAccountId
+                           AccountId = recipient.PrimaryAccountId
+                           Name = recipient.BusinessName
                         }
-                     } with
+                     Amount = 3000m + randomAmount 1000 8000
+                     ScheduledDateSeedOverride = Some timestamp
+                     Sender = {
+                        Name = orgName
+                        ParentAccountId = parentAccountId
+                        AccountId = opsCheckingAccountId
+                        OrgId = orgId
+                     }
+                  } with
                      Timestamp = timestamp
                }
                |> AccountCommand.InternalTransferBetweenOrgs
                |> AccountMessage.StateChange
 
-            (getAccountRef apCheckingAccountId) <! msg
+            (getAccountRef parentAccountId) <! msg
 
             let msg =
                {
-                  InternalTransferWithinOrgCommand.create
-                     (apCheckingAccountId, orgId)
-                     mockAccountOwner
-                     {
-                        Memo = None
-                        OriginatedFromSchedule = false
-                        Recipient =
-                           let recipient = mockAccounts[opsCheckingAccountId]
+                  InternalTransferWithinOrgCommand.create mockAccountOwner {
+                     Memo = None
+                     OriginatedFromSchedule = false
+                     Recipient =
+                        let recipient = mockAccounts[apCheckingAccountId]
 
-                           {
-                              OrgId = recipient.OrgId
-                              AccountId = recipient.Data.AccountId
-                              Name = recipient.Data.Name
-                           }
-                        Amount = 2000m + randomAmount 1000 2000
-                        ScheduledDateSeedOverride = Some timestamp
-                        Sender = {
-                           Name = mockAccounts[apCheckingAccountId].Data.Name
-                           AccountId = apCheckingAccountId
-                           OrgId = orgId
+                        {
+                           OrgId = recipient.OrgId
+                           AccountId = recipient.Data.AccountId
+                           ParentAccountId = recipient.Data.ParentAccountId
+                           Name = recipient.Data.Name
                         }
-                     } with
+                     Amount = 2000m + randomAmount 1000 2000
+                     ScheduledDateSeedOverride = Some timestamp
+                     Sender = {
+                        Name = mockAccounts[opsCheckingAccountId].Data.Name
+                        AccountId = opsCheckingAccountId
+                        ParentAccountId = parentAccountId
+                        OrgId = orgId
+                     }
+                  } with
                      Timestamp = timestamp
                }
                |> AccountCommand.InternalTransfer
                |> AccountMessage.StateChange
 
-            (getAccountRef apCheckingAccountId) <! msg
+            (getAccountRef parentAccountId) <! msg
 
 let seedEmployeeActions
    (card: Card)
@@ -1263,6 +1319,7 @@ let seedEmployeeActions
                OrgId = employee.OrgId
                EmployeeId = employee.EmployeeId
                InitiatedBy = initiator
+               ParentAccountId = parentAccountId
                AccountId = card.AccountId
                CardId = card.CardId
                CardNumberLast4 = card.CardNumberLast4
@@ -1409,14 +1466,14 @@ let getEmployeeCardPair
 let seedAccountTransactions
    (mailbox: Actor<AccountSeederMessage>)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (command: CreateAccountCommand)
    =
    task {
       let accountId = command.Data.AccountId
-      let compositeId = accountId, command.OrgId
-      let accountRef = getAccountRef accountId
+      let compositeId = command.Data.ParentAccountId, command.OrgId
+      let accountRef = getAccountRef command.Data.ParentAccountId
 
       let timestamp = command.Timestamp.AddHours 2
 
@@ -1425,6 +1482,7 @@ let seedAccountTransactions
          let msg =
             {
                DepositCashCommand.create compositeId mockAccountOwner {
+                  AccountId = command.Data.AccountId
                   Amount = depositAmount
                   Origin = Some "ATM"
                } with
@@ -1447,7 +1505,7 @@ let seedAccountTransactions
 
          configureAutoTransferRules getAccountRef timestamp
 
-         let! account = accountRef <? AccountMessage.GetAccount
+         let! account = accountRef <? AccountMessage.GetVirtualAccount accountId
 
          match account with
          | None ->
@@ -1529,7 +1587,7 @@ let private initState = {
 
 let actorProps
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    =
    let handler (ctx: Actor<AccountSeederMessage>) =
@@ -1573,7 +1631,7 @@ let actorProps
                         state.AccountsToCreate
 
                   for command in remaining.Values do
-                     let accountRef = getAccountRef command.Data.AccountId
+                     let accountRef = getAccountRef command.Data.ParentAccountId
 
                      let msg =
                         command

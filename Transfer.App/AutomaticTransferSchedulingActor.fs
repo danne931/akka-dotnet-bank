@@ -19,8 +19,10 @@ open AutomaticTransfer
 
 let actorProps
    (system: ActorSystem)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
-   (getAccounts: CronSchedule -> Async<Result<AccountId list option, Err>>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (getOrgIds:
+      CronSchedule
+         -> Async<Result<(AccountId * ParentAccountId) list option, Err>>)
    (throttle: StreamThrottle)
    =
    let mat = system.Materializer()
@@ -37,7 +39,7 @@ let actorProps
          $"Getting accounts with configured auto transfer rules for schedule {schedule}."
 
       do!
-         getAccounts schedule
+         getOrgIds schedule
          |> Source.ofAsync
          |> Source.choose (fun res ->
             match res with
@@ -57,9 +59,14 @@ let actorProps
                throttle.Burst
                throttle.Count
                throttle.Duration
-         |> Source.runForEach mat (fun accountId ->
-            getAccountRef accountId
-            <! AccountMessage.AutoTransferCompute(Frequency.Schedule schedule))
+         |> Source.runForEach mat (fun (accountId, parentAccountId) ->
+            let msg =
+               AccountMessage.AutoTransferCompute(
+                  Frequency.Schedule schedule,
+                  accountId
+               )
+
+            getAccountRef parentAccountId <! msg)
 
       logInfo ctx $"Finished running {schedule} balance management."
 
@@ -79,7 +86,7 @@ let getAccountsWithScheduledAutoTransfer (schedule: CronSchedule) = asyncResultO
 
    let query =
       $"""
-      SELECT {AccountFields.accountId}
+      SELECT {AccountFields.accountId}, {AccountFields.parentAccountId}
       FROM {AccountSqlMapper.table}
       WHERE {field} = @frequency::{AccountTypeCast.autoTransferRuleFrequency}
       """
@@ -89,18 +96,20 @@ let getAccountsWithScheduledAutoTransfer (schedule: CronSchedule) = asyncResultO
       |> Some
       |> AccountSqlWriter.autoTransferRuleFrequency
 
-   let! accountIds =
-      pgQuery<AccountId>
+   let! ids =
+      pgQuery<AccountId * ParentAccountId>
          query
          (Some [ "frequency", frequency ])
-         AccountSqlReader.accountId
+         (fun read ->
+            AccountSqlReader.accountId read,
+            AccountSqlReader.parentAccountId read)
 
-   return accountIds
+   return ids
 }
 
 let initProps
    (system: ActorSystem)
-   (getAccountRef: AccountId -> IEntityRef<AccountMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (throttle: StreamThrottle)
    =
    actorProps system getAccountRef getAccountsWithScheduledAutoTransfer throttle

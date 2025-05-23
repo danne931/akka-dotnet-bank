@@ -8,6 +8,7 @@ type CreateOrgInput = {
    Name: string
    AdminTeamEmail: Email
    OrgId: OrgId
+   ParentAccountId: ParentAccountId
    InitiatedBy: Initiator
 }
 
@@ -29,6 +30,7 @@ module CreateOrgCommand =
       BankEvent.create2<CreateOrgInput, OrgCreated> cmd {
          Name = cmd.Data.Name
          AdminTeamEmail = cmd.Data.AdminTeamEmail
+         ParentAccountId = cmd.Data.ParentAccountId
       }
       |> Ok
 

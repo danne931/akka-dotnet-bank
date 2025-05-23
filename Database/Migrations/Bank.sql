@@ -24,7 +24,7 @@ DROP TABLE IF EXISTS transfer;
 DROP TABLE IF EXISTS transfer_domestic_recipient;
 DROP TABLE IF EXISTS merchant;
 DROP TABLE IF EXISTS saga;
-DROP TABLE IF EXISTS ancillarytransactioninfo;
+DROP TABLE IF EXISTS ancillary_transaction_info;
 DROP TABLE IF EXISTS account_event;
 DROP TABLE IF EXISTS card;
 DROP TABLE IF EXISTS command_approval_progress;
@@ -37,7 +37,7 @@ DROP TABLE IF EXISTS employee_event;
 DROP TABLE IF EXISTS organization_event;
 DROP TABLE IF EXISTS employee;
 DROP TABLE IF EXISTS organization;
-DROP TABLE IF EXISTS category;
+DROP TABLE IF EXISTS purchase_category;
 
 DROP TYPE IF EXISTS money_flow CASCADE;
 DROP TYPE IF EXISTS monthly_time_series_filter_by CASCADE;
@@ -153,7 +153,8 @@ CREATE TABLE organization (
    org_name VARCHAR(100) UNIQUE NOT NULL,
    status organization_status NOT NULL,
    status_detail JSONB NOT NULL,
-   admin_team_email VARCHAR(255) UNIQUE NOT NULL
+   admin_team_email VARCHAR(255) UNIQUE NOT NULL,
+   parent_account_id UUID UNIQUE NOT NULL
 );
 
 SELECT add_created_at_column('organization');
@@ -189,6 +190,7 @@ CREATE TABLE account (
    maintenance_fee_qualifying_deposit_found BOOLEAN NOT NULL,
    maintenance_fee_daily_balance_threshold BOOLEAN NOT NULL,
    org_id UUID NOT NULL REFERENCES organization,
+   parent_account_id UUID NOT NULL,
    last_billing_cycle_at TIMESTAMPTZ
 );
 
@@ -278,16 +280,16 @@ CREATE INDEX billingstatement_org_id_idx ON billingstatement(org_id);
 CREATE INDEX billingstatement_account_id_idx ON billingstatement(account_id);
 
 
---- CATEGORIES ---
-CREATE TABLE category (
+--- PURCHASE CATEGORIES ---
+CREATE TABLE purchase_category (
    category_id SMALLSERIAL PRIMARY KEY,
    name VARCHAR(100) UNIQUE NOT NULL
 );
 
-SELECT add_created_at_column('category');
-SELECT add_updated_at_column_and_trigger('category');
+SELECT add_created_at_column('purchase_category');
+SELECT add_updated_at_column_and_trigger('purchase_category');
 
-COMMENT ON TABLE category IS
+COMMENT ON TABLE purchase_category IS
 'Typically represents a purchase-related category.
 
 Allows users to filter transactions by predefined categories such as
@@ -488,6 +490,7 @@ CREATE TABLE account_event (
    correlation_id UUID NOT NULL,
    card_id UUID REFERENCES card,
    event JSONB NOT NULL,
+   parent_account_id UUID NOT NULL,
    org_id UUID NOT NULL REFERENCES organization
 );
 
@@ -515,30 +518,32 @@ COMMENT ON COLUMN account_event.correlation_id IS
 is an example where 3 events share the same correlation_id.';
 
 --- ANCILLARY TRANSACTION INFO ---
-CREATE TABLE ancillarytransactioninfo (
+CREATE TABLE ancillary_transaction_info (
    note TEXT,
-   category_id SMALLSERIAL REFERENCES category,
+   category_id SMALLSERIAL REFERENCES purchase_category,
    transaction_id UUID PRIMARY KEY
 );
 
-SELECT add_created_at_column('ancillarytransactioninfo');
-SELECT add_updated_at_column_and_trigger('ancillarytransactioninfo');
+SELECT add_created_at_column('ancillary_transaction_info');
+SELECT add_updated_at_column_and_trigger('ancillary_transaction_info');
 
-CREATE INDEX ancillarytransactioninfo_category_id_idx ON ancillarytransactioninfo(category_id) WHERE category_id IS NOT NULL;
+CREATE INDEX ancillary_transaction_info_category_id_idx
+ON ancillary_transaction_info(category_id)
+WHERE category_id IS NOT NULL;
 
-ALTER TABLE ancillarytransactioninfo
+ALTER TABLE ancillary_transaction_info
 ALTER COLUMN category_id DROP NOT NULL;
 
-COMMENT ON TABLE ancillarytransactioninfo IS
+COMMENT ON TABLE ancillary_transaction_info IS
 'A user may provide supporting info for a transaction such as a note or a category
-(see category table).
+(see purchase_category table).
 
 Ancillary transaction info is inserted lazily when the user first provides
 this supporting info within the transaction detail component.
 TODO: Consider how we might attempt to automatically categorize incoming transactions so
 organizations would not have to apply these categories by hand.';
 
-COMMENT ON COLUMN ancillarytransactioninfo.transaction_id IS
+COMMENT ON COLUMN ancillary_transaction_info.transaction_id IS
 'transaction_id refers to the correlation_id of a transaction table record.';
 
 
@@ -599,7 +604,6 @@ COMMENT ON TABLE transfer IS
 CREATE TYPE internal_transfer_status AS ENUM (
    'Scheduled',
    'Pending',
-   'Completed',
    'Deposited',
    'Failed'
 );
@@ -696,7 +700,8 @@ CREATE TABLE payment(
    payment_type payment_type NOT NULL,
    expiration TIMESTAMPTZ NOT NULL,
    payee_org_id UUID NOT NULL REFERENCES organization(org_id),
-   payee_account_id UUID NOT NULL REFERENCES account(account_id)
+   payee_account_id UUID NOT NULL REFERENCES account(account_id),
+   payee_parent_account_id UUID NOT NULL
 );
 
 SELECT add_created_at_column('payment');
@@ -728,6 +733,7 @@ CREATE TABLE payment_platform(
    status platform_payment_status NOT NULL,
    status_detail JSONB NOT NULL,
    payer_org_id UUID NOT NULL REFERENCES organization(org_id),
+   payer_parent_account_id UUID NOT NULL,
    pay_by_account UUID REFERENCES account(account_id)
    --pay_by_card ...
    --pay_by_ach ...
@@ -1358,12 +1364,22 @@ $$ LANGUAGE plpgsql;
 **/
 
 /**
+ * Create a "system" organization for the "system" employee created below.
+**/
+INSERT INTO organization (org_name, status, status_detail, admin_team_email, parent_account_id)
+VALUES (
+  'system',
+  'Active',
+  '"Active"'::jsonb,
+  'team@system.com',
+  -- This parent_account_id is defined in Lib.SharedClientServer/Constants.fs
+  'd1240fcd-6080-45e6-a28d-7c840ece437b'
+);
+
+/**
  * Create a "system" user to represent account events which do not originate
  * from a human user.  Used in BillingCycleCommand, MaintenanceFeeCommand, etc.
 **/
-INSERT INTO organization (org_name, status, status_detail, admin_team_email)
-VALUES ('system', 'Active', '"Active"'::jsonb, 'team@system.com');
-
 INSERT INTO employee (
    employee_id,
    email,
@@ -1377,9 +1393,10 @@ INSERT INTO employee (
    org_id
 )
 VALUES (
-    -- This employee_id is defined in Lib.SharedClientServer/Constants.fs as
-    -- SYSTEM_USER_ID.  Account commands such as BillingCycle, which do not originate
-    -- from a human, are created with initiated_by_id set to SYSTEM_USER_ID.
+    -- This employee_id is defined in Lib.SharedClientServer/Types.fs as
+    -- Initiator.System.  Account commands such as BillingCycle, which do
+    -- not originate from a human, are created with initiated_by_id set 
+    -- to this system id.
    '029528ee-a120-4301-b8b5-e9c60d859346',
    'system@gmail.com',
    'system',
@@ -1392,7 +1409,7 @@ VALUES (
    (SELECT org_id FROM organization WHERE org_name = 'system')
 );
 
-INSERT INTO category (name)
+INSERT INTO purchase_category (name)
 VALUES
    ('Airlines'),
    ('Alcohol and Bars'),

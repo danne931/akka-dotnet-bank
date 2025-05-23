@@ -11,7 +11,6 @@ open FSharp.Control
 
 open Lib.SharedTypes
 open Bank.Account.Domain
-open Bank.Account.Api
 open AccountLoadTestTypes
 open RoutePaths
 open Bank.UserSession.Middleware
@@ -21,7 +20,11 @@ let startDiagnosticRoutes (app: WebApplication) =
       .MapGet(
          DiagnosticPath.Account,
          Func<ActorSystem, Guid, Task<IResult>>(fun sys id ->
-            getAccountFromAkka sys (AccountId id) |> RouteUtil.unwrapTaskOption)
+            let ref = AccountActor.get sys (ParentAccountId id)
+
+            ref.Ask(AccountMessage.GetAccount, Some(TimeSpan.FromSeconds 3))
+            |> Async.toTask
+            |> RouteUtil.unwrapTaskOption)
       )
       .RBAC(Permissions.Diagnostic)
    |> ignore

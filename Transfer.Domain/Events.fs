@@ -6,12 +6,12 @@ open Lib.SharedTypes
 
 type InternalTransferWithinOrgPending = { BaseInfo: BaseInternalTransferInfo }
 
-type InternalTransferWithinOrgCompleted = { BaseInfo: BaseInternalTransferInfo }
-
 type InternalTransferWithinOrgFailed = {
    BaseInfo: BaseInternalTransferInfo
    Reason: InternalTransferFailReason
 }
+
+type InternalTransferWithinOrgDeposited = { BaseInfo: BaseInternalTransferInfo }
 
 type InternalTransferBetweenOrgsScheduled = {
    BaseInfo: BaseInternalTransferInfo
@@ -23,7 +23,7 @@ type InternalTransferBetweenOrgsPending = {
    FromSchedule: bool
 }
 
-type InternalTransferBetweenOrgsCompleted = {
+type InternalTransferBetweenOrgsDeposited = {
    BaseInfo: BaseInternalTransferInfo
 }
 
@@ -76,12 +76,6 @@ type DomesticTransferRetryConfirmsRecipient = {
    TransferId: TransferId
 }
 
-type InternalTransferWithinOrgDeposited = { BaseInfo: BaseInternalTransferInfo }
-
-type InternalTransferBetweenOrgsDeposited = {
-   BaseInfo: BaseInternalTransferInfo
-}
-
 type NicknamedDomesticTransferRecipient = {
    RecipientId: AccountId
    RecipientAccountEnvironment: RecipientAccountEnvironment
@@ -104,20 +98,6 @@ module TransferEventToDomesticTransfer =
          ScheduledDate = info.ScheduledDate
          Memo = info.Memo
          Status = DomesticTransferProgress.WaitingForTransferServiceAck
-      }
-
-   let fromFailure (evt: BankEvent<DomesticTransferFailed>) : DomesticTransfer =
-      let info = evt.Data.BaseInfo
-
-      {
-         Sender = info.Sender
-         TransferId = evt.Data.BaseInfo.TransferId
-         Recipient = info.Recipient
-         InitiatedBy = evt.InitiatedBy
-         Amount = info.Amount
-         ScheduledDate = info.ScheduledDate
-         Memo = info.Memo
-         Status = DomesticTransferProgress.Failed evt.Data.Reason
       }
 
 type PlatformPaymentBaseInfo = {
@@ -189,6 +169,7 @@ type PlatformPaymentDeclined = {
 type PlatformPaymentRefunded = {
    BaseInfo: PlatformPaymentBaseInfo
    Reason: PlatformPaymentRefundReason
+   PaymentMethod: PaymentMethod
 }
 
 type ThirdPartyPaymentBaseInfo = {
@@ -216,17 +197,13 @@ type ThirdPartyPaymentCancelled = {
 }
 
 type AutomaticTransferRuleConfigured = {
+   AccountId: AccountId
    Config: AutomaticTransfer.AutomaticTransferConfig
 }
 
-type AutomaticTransferRuleDeleted = { RuleId: Guid }
+type AutomaticTransferRuleDeleted = { AccountId: AccountId; RuleId: Guid }
 
 type InternalAutomatedTransferPending = {
-   BaseInfo: BaseInternalTransferInfo
-   Rule: AutomaticTransfer.AutomaticTransferRule
-}
-
-type InternalAutomatedTransferCompleted = {
    BaseInfo: BaseInternalTransferInfo
    Rule: AutomaticTransfer.AutomaticTransferRule
 }

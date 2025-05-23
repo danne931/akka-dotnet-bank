@@ -61,6 +61,7 @@ let form
                Name = employee.Name
             }
             OrgId = employee.OrgId
+            ParentAccountId = account.ParentAccountId
             EmployeeId = employee.EmployeeId
             EmployeeName = employee.Name
             EmployeeEmail = employee.Email

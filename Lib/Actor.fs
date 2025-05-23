@@ -535,7 +535,7 @@ let persistenceSupervisor
 /// <summary>
 /// Persist with ack sent to PersistenceSupervisor parent actor.
 /// </summary>
-let confirmPersist (ctx: Eventsourced<_>) (evt: obj) (confirmationId: int64) =
+let confirmPersist (ctx: Eventsourced<_>) (confirmationId: int64) (evt: obj) =
    evt
    |> Persist
    |> Effects.andThen (fun _ ->
