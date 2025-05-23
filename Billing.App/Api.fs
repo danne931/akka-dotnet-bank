@@ -16,11 +16,11 @@ let getBillingStatement () =
       Year = BillingSqlReader.year read
       Balance = BillingSqlReader.balance read
       Name = BillingSqlReader.name read
-      AccountId = BillingSqlReader.accountId read
+      ParentAccountId = Guid.NewGuid() |> ParentAccountId //BillingSqlReader.accountId read
       OrgId = BillingSqlReader.orgId read
       LastPersistedEventSequenceNumber =
          BillingSqlReader.lastPersistedEventSequenceNumber read
-      AccountSnapshot = BillingSqlReader.accountSnapshot read
+      ParentAccountSnapshot = BillingSqlReader.accountSnapshot read
    }
 
 /// Get AccountEvents for a past billing cycle.

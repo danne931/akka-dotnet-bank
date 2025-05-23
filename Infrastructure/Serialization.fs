@@ -168,7 +168,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? SchedulerMessage -> "SchedulerMessage"
       | :? AccountClosureMessage -> "AccountClosureActorMessage"
       | :? List<AccountEvent> -> "AccountEventList"
-      | :? AccountSnapshot -> "AccountSnapshot"
+      | :? ParentAccountSnapshot -> "ParentAccountSnapshot"
       | :? Option<Account> -> "AccountOption"
       | :? List<Account> -> "AccountList"
       | :? Map<AccountId, Account> -> "AccountMap"
@@ -258,7 +258,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // Allow emails to also be sent from web nodes.
       | :? Email.EmailMessage
       // AccountActor persistence snapshot.
-      | :? AccountSnapshot as o ->
+      | :? ParentAccountSnapshot as o ->
          JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
       | :? AccountMessage as msg ->
          match msg with
@@ -337,7 +337,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "EmployeeEvent" -> typeof<EmployeeEvent>
          | "EmployeeMessage" -> typeof<EmployeeMessage>
          | "EmployeeShardEnvelope" -> typeof<EmployeeShardEnvelope>
-         | "AccountSnapshot" -> typeof<AccountSnapshot>
+         | "ParentAccountSnapshot" -> typeof<ParentAccountSnapshot>
          | "AccountOption" -> typeof<Account option>
          | "AccountMap" -> typeof<Map<AccountId, Account>>
          | "AccountList" -> typeof<Account list>

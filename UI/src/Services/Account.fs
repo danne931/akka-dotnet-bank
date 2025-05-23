@@ -74,12 +74,8 @@ let submitCommand
       // to the current state (Err.StateTransitionError).
       // This same validation occurs on the server when an actor is
       // processing a command.
-      let state = {
-         AccountSnapshot.empty with
-            Info = account
-      }
 
-      let! evt, updatedState = Account.stateTransition state command
+      let! evt, updatedAccount = Account.stateTransition account command
 
       let! res = postJson command
       let code = res.statusCode
@@ -91,7 +87,7 @@ let submitCommand
 
          return {
             Envelope = envelope
-            PendingState = updatedState.Info
+            PendingState = updatedAccount
             PendingEvent = evt
             PendingCommand = command
          }

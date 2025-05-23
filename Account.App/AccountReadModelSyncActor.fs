@@ -508,7 +508,7 @@ let upsertReadModels
       |> List.map (_.Info.Values >> Seq.toList)
       |> List.collect id
       |> List.fold
-            (fun acc account -> Map.add account.Info.AccountId account.Info acc)
+            (fun acc account -> Map.add account.AccountId account acc)
             Map.empty<AccountId, Account>
 
    let updatedAccounts =

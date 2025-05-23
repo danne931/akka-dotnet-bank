@@ -45,10 +45,10 @@ type BillingStatement = {
    Year: int
    Balance: decimal
    Name: string
-   AccountId: AccountId
+   ParentAccountId: ParentAccountId
    OrgId: OrgId
    LastPersistedEventSequenceNumber: Int64
-   AccountSnapshot: byte[]
+   ParentAccountSnapshot: byte[]
 }
 
 type BillingCycleMessage =
@@ -66,24 +66,23 @@ let billingTransactions (period: BillingPeriod) (evts: AccountEvent list) =
 open System.Text.Json
 
 let billingStatement
-   (state: AccountSnapshot)
+   (state: ParentAccountSnapshot)
    (period: BillingPeriod)
    (lastPersistedEventSequenceNumber: Int64)
    : BillingStatement
    =
-   let account = state.Info
    let evts = state.Events
 
    {
       Transactions = billingTransactions period evts
       Month = period.Month
       Year = period.Year
-      Balance = account.Balance
-      Name = account.Name
-      AccountId = account.AccountId
-      OrgId = account.OrgId
+      Balance = 100m //account.Balance
+      Name = "" //account.Name
+      ParentAccountId = state.ParentAccountId
+      OrgId = state.OrgId
       LastPersistedEventSequenceNumber = lastPersistedEventSequenceNumber
-      AccountSnapshot =
+      ParentAccountSnapshot =
          JsonSerializer.SerializeToUtf8Bytes(state, Serialization.jsonOptions)
    }
 #endif

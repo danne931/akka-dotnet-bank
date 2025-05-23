@@ -142,19 +142,20 @@ let private billingStatementSqlParams (bill: BillingStatement) = [
    "@year", BillingSqlWriter.year bill.Year
    "@balance", BillingSqlWriter.balance bill.Balance
    "@name", BillingSqlWriter.name bill.Name
-   "@accountId", BillingSqlWriter.accountId bill.AccountId
+   "@accountId", BillingSqlWriter.accountId (Guid.NewGuid() |> AccountId) //bill.ParentAccountId
    "@orgId", BillingSqlWriter.orgId bill.OrgId
    "@lastPersistedEventSequenceNumber",
    BillingSqlWriter.lastPersistedEventSequenceNumber
       bill.LastPersistedEventSequenceNumber
-   "@accountSnapshot", BillingSqlWriter.accountSnapshot bill.AccountSnapshot
+   "@accountSnapshot",
+   BillingSqlWriter.accountSnapshot bill.ParentAccountSnapshot
 ]
 
 let private snapshotStoreSqlParams (bill: BillingStatement) = [
-   "@persistenceId", Sql.text <| string bill.AccountId
+   "@persistenceId", Sql.text <| string bill.ParentAccountId
    "@sequenceNumber", Sql.int64 bill.LastPersistedEventSequenceNumber
    "@created", Sql.int64 <| DateTime.UtcNow.ToFileTimeUtc()
-   "@snapshot", Sql.bytea bill.AccountSnapshot
+   "@snapshot", Sql.bytea bill.ParentAccountSnapshot
    "@serializerId", Sql.int 931
    "@manifest", Sql.string "AccountSnapshot"
 ]

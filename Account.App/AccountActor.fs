@@ -27,11 +27,12 @@ open PlatformPaymentSaga
 // Pass monthly billing statement to BillingStatementActor.
 // Conditionally apply monthly maintenance fee.
 // Email account owner to notify of billing statement availability.
+(*
 let private billingCycle
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    (mailbox: Eventsourced<obj>)
-   (state: AccountSnapshot)
+   (state: ParentAccountSnapshot)
    (evt: BankEvent<BillingCycleStarted>)
    =
    let account = state.Info
@@ -72,6 +73,7 @@ let private billingCycle
          (EmailInfo.BillingStatement account.FullName)
 
    getEmailActor mailbox.System <! msg
+*)
 
 // Account events with an in/out money flow can produce an
 // automatic transfer.  Automated transfer account events have
@@ -212,11 +214,9 @@ let onPersisted
    (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (mailbox: Eventsourced<obj>)
-   (state: AccountSnapshot)
+   (account: Account)
    (evt: AccountEvent)
    =
-   let account = state.Info
-
    let onPlatformPaymentEvent evt corrId orgId =
       let msg =
          AppSaga.Event.PlatformPayment evt |> AppSaga.sagaMessage orgId corrId
@@ -261,8 +261,8 @@ let onPersisted
          |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | BillingCycleStarted e ->
-      billingCycle getBillingStatementRef getEmailRef mailbox state e
+   | BillingCycleStarted e -> ()
+   //billingCycle getBillingStatementRef getEmailRef mailbox state e
    | PlatformPaymentRequested e ->
       onPlatformPaymentEvent
          (PlatformPaymentSagaStartEvent.PaymentRequested e
@@ -463,8 +463,7 @@ let actorProps
             let (AccountMessage.Event evt) = unbox e
 
             let state = ParentAccount.applyEvent state evt
-            let accountSnapshot = state.Info[evt.AccountId]
-            let account = accountSnapshot.Info
+            let account = state.Info[evt.AccountId]
 
             broadcaster.accountEventPersisted evt account
 
@@ -474,7 +473,7 @@ let actorProps
                getBillingStatementRef
                getSagaRef
                mailbox
-               accountSnapshot
+               account
                evt
 
             return! loop <| Some state
@@ -509,10 +508,7 @@ let actorProps
             match msg with
             | AccountMessage.GetAccount -> mailbox.Sender() <! stateOpt
             | AccountMessage.GetVirtualAccount accountId ->
-               let account =
-                  stateOpt
-                  |> Option.bind (_.Info.TryFind(accountId))
-                  |> Option.map _.Info
+               let account = stateOpt |> Option.bind (_.Info.TryFind(accountId))
 
                mailbox.Sender() <! account
             | AccountMessage.AutoTransferCompute(frequency, accountId) ->

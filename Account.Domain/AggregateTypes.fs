@@ -455,25 +455,18 @@ type Account = {
       AutoTransferRule = None
    }
 
-type AccountSnapshot = {
-   Info: Account
-   Events: AccountEvent list
-}
-
-module AccountSnapshot =
-   let empty: AccountSnapshot = { Info = Account.empty; Events = [] }
-
 type ParentAccountSnapshot = {
    OrgId: OrgId
    ParentAccountId: ParentAccountId
-   Info: Map<AccountId, AccountSnapshot>
-}
+   Info: Map<AccountId, Account>
+   Events: AccountEvent list
+} with
 
-module ParentAccountSnapshot =
-   let empty: ParentAccountSnapshot = {
+   static member empty: ParentAccountSnapshot = {
       OrgId = OrgId Guid.Empty
       ParentAccountId = ParentAccountId Guid.Empty
       Info = Map.empty
+      Events = []
    }
 
 type AccountMetrics = {
