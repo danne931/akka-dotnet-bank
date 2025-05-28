@@ -4,10 +4,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="PlatformTransferSaga.fs" />
-    <Compile Include="PlatformPaymentSaga.fs" />
-    <Compile Include="DomesticTransferSaga.fs" />
-    <Compile Include="PurchaseSaga.fs" />
     <Compile Include="HistoryApi.fs" />
     <Compile Include="TransactionApi.fs" />
   </ItemGroup>

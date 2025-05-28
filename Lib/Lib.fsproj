@@ -9,12 +9,13 @@
     <Compile Include="Types.fs" />
     <Compile Include="Environment.fs" />
     <Compile Include="TCP.fs" />
+    <Compile Include="Postgres.fs" />
     <Compile Include="Actor.fs" />
     <Compile Include="Queue.fs" />
     <Compile Include="BulkWriteStreamFlow.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
-    <Compile Include="./Saga/Saga.fs" />
-    <Compile Include="./Saga/SagaActor.fs" />
+    <Compile Include="Saga/Saga.fs" />
+    <Compile Include="Saga/SagaActor.fs" />
   </ItemGroup>
 
   <ItemGroup>

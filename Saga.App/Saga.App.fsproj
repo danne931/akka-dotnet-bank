@@ -5,6 +5,10 @@
 
   <ItemGroup>
     <Compile Include="OrgOnboardingSaga.fs" />
+    <Compile Include="PlatformTransferSaga.fs" />
+    <Compile Include="PlatformPaymentSaga.fs" />
+    <Compile Include="DomesticTransferSaga.fs" />
+    <Compile Include="PurchaseSaga.fs" />
     <Compile Include="Saga.fs" />
     <Compile Include="SqlMapper.fs" />
     <Compile Include="AlarmClockActor.fs" />
@@ -12,6 +16,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Transaction.App/Transaction.App.fsproj" />
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akkling" />
+    <PackageReference Include="FSharp.Control.TaskSeq" />
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Lib/Lib.fsproj" />
+    <ProjectReference Include="../Scheduler.Domain/Scheduler.Domain.fsproj" />
+    <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
+    <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" />
+    <ProjectReference Include="../Org.Domain/Org.Domain.fsproj" /> 
+    <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
   </ItemGroup>
 </Project>
