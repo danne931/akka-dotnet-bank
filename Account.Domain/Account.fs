@@ -44,28 +44,45 @@ let private applyTransferDeposit (account: Account) (amount: decimal) = {
 
 let applyEvent (account: Account) (evt: AccountEvent) =
    match evt with
+   | InitializedPrimaryCheckingAccount e -> {
+      AccountId = e.Data.PrimaryChecking.AccountId
+      AccountNumber = e.Data.PrimaryChecking.AccountNumber
+      RoutingNumber = e.Data.PrimaryChecking.RoutingNumber
+      OrgId = e.OrgId
+      ParentAccountId = ParentAccountId.fromEntityId e.EntityId
+      Name = e.Data.PrimaryChecking.Name
+      Depository = AccountDepository.Checking
+      Currency = Currency.USD
+      Balance = 0m
+      Status = AccountStatus.Active
+      LastBillingCycleDate = None
+      MaintenanceFeeCriteria = {
+         QualifyingDepositFound = false
+         DailyBalanceThreshold = false
+      }
+      AutoTransferRule = None
+     }
    | BillingCycleStarted e -> {
       account with
          LastBillingCycleDate = Some e.Timestamp
      }
    | CreatedAccount e -> {
-      account with
-         AccountId = e.Data.AccountId
-         AccountNumber = e.Data.AccountNumber
-         RoutingNumber = e.Data.RoutingNumber
-         OrgId = e.OrgId
-         ParentAccountId = ParentAccountId.fromEntityId e.EntityId
-         Name = e.Data.Name
-         Depository = e.Data.Depository
-         Currency = e.Data.Currency
-         Balance = e.Data.Balance
-         Status = AccountStatus.Active
-         LastBillingCycleDate = None
-         MaintenanceFeeCriteria = {
-            QualifyingDepositFound = false
-            DailyBalanceThreshold = false
-         }
-         AutoTransferRule = None
+      AccountId = e.Data.AccountId
+      AccountNumber = e.Data.AccountNumber
+      RoutingNumber = e.Data.RoutingNumber
+      OrgId = e.OrgId
+      ParentAccountId = ParentAccountId.fromEntityId e.EntityId
+      Name = e.Data.Name
+      Depository = e.Data.Depository
+      Currency = e.Data.Currency
+      Balance = e.Data.Balance
+      Status = AccountStatus.Active
+      LastBillingCycleDate = None
+      MaintenanceFeeCriteria = {
+         QualifyingDepositFound = false
+         DailyBalanceThreshold = false
+      }
+      AutoTransferRule = None
      }
    | AccountEvent.AccountClosed _ -> {
       account with
@@ -212,6 +229,18 @@ module private StateTransition =
          let evt = eventTransform evt
          (evt, applyEvent account evt))
 
+   let initializePrimaryCheckingAccount
+      (account: Account)
+      (cmd: InitializePrimaryCheckingAccountCommand)
+      =
+      if account.Status <> AccountStatus.InitialEmptyState then
+         transitionErr AccountNotReadyToActivate
+      else
+         map
+            InitializedPrimaryCheckingAccount
+            account
+            (InitializePrimaryCheckingAccountCommand.toEvent cmd)
+
    let create (account: Account) (cmd: CreateAccountCommand) =
       if account.Status <> AccountStatus.InitialEmptyState then
          transitionErr AccountNotReadyToActivate
@@ -329,8 +358,6 @@ module private StateTransition =
       (account: Account)
       (cmd: FailInternalTransferBetweenOrgsCommand)
       =
-      let transferId = cmd.Data.BaseInfo.TransferId
-
       if account.Status <> AccountStatus.Active then
          transitionErr (AccountNotActive account.FullName)
       else
@@ -576,6 +603,8 @@ module private StateTransition =
 
 let stateTransition (account: Account) (command: AccountCommand) =
    match command with
+   | AccountCommand.InitializePrimaryCheckingAccount cmd ->
+      StateTransition.initializePrimaryCheckingAccount account cmd
    | AccountCommand.CreateAccount cmd -> StateTransition.create account cmd
    | AccountCommand.StartBillingCycle cmd ->
       StateTransition.startBillingcycle account cmd

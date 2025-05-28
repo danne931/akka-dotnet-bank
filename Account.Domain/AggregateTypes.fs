@@ -9,6 +9,7 @@ open AutomaticTransfer
 
 [<RequireQualifiedAccess>]
 type AccountCommand =
+   | InitializePrimaryCheckingAccount of InitializePrimaryCheckingAccountCommand
    | CreateAccount of CreateAccountCommand
    | DepositCash of DepositCashCommand
    | Debit of DebitCommand
@@ -44,6 +45,7 @@ type AccountCommand =
 
    member x.Envelope: Envelope =
       match x with
+      | InitializePrimaryCheckingAccount cmd -> Command.envelope cmd
       | CreateAccount cmd -> Command.envelope cmd
       | DepositCash cmd -> Command.envelope cmd
       | Debit cmd -> Command.envelope cmd
@@ -78,6 +80,7 @@ type AccountCommand =
 
    member x.AccountId =
       match x with
+      | InitializePrimaryCheckingAccount _ -> AccountId Guid.Empty
       | CreateAccount cmd -> cmd.Data.AccountId
       | DepositCash cmd -> cmd.Data.AccountId
       | Debit cmd -> cmd.Data.AccountId
@@ -106,12 +109,12 @@ type AccountCommand =
       | FulfillPlatformPayment cmd ->
          match cmd.Data.PaymentMethod with
          | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> Guid.Empty |> AccountId
+         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | DepositPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
       | RefundPlatformPayment cmd ->
          match cmd.Data.PaymentMethod with
          | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> Guid.Empty |> AccountId
+         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | CloseAccount cmd -> cmd.Data.AccountId
       | StartBillingCycle cmd -> cmd.Data.AccountId
       | ConfigureAutoTransferRule cmd -> cmd.Data.AccountId
@@ -121,6 +124,8 @@ type AccountCommand =
       | DepositInternalAutoTransfer cmd -> cmd.Data.BaseInfo.Recipient.AccountId
 
 type AccountEvent =
+   | InitializedPrimaryCheckingAccount of
+      BankEvent<InitializedPrimaryCheckingAccount>
    | CreatedAccount of BankEvent<CreatedAccount>
    | DepositedCash of BankEvent<DepositedCash>
    | DebitedAccount of BankEvent<DebitedAccount>
@@ -165,6 +170,8 @@ type AccountEvent =
 
    member x.AccountId =
       match x with
+      | InitializedPrimaryCheckingAccount evt ->
+         evt.Data.PrimaryChecking.AccountId
       | CreatedAccount evt -> evt.Data.AccountId
       | DepositedCash evt -> evt.Data.AccountId
       | DebitedAccount evt -> evt.Data.AccountId
@@ -196,12 +203,12 @@ type AccountEvent =
       | PlatformPaymentPaid evt ->
          match evt.Data.PaymentMethod with
          | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> Guid.Empty |> AccountId
+         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | PlatformPaymentDeposited evt -> evt.Data.BaseInfo.Payee.AccountId
       | PlatformPaymentRefunded evt ->
          match evt.Data.PaymentMethod with
          | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> Guid.Empty |> AccountId
+         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | AccountClosed evt -> evt.Data.AccountId
       | BillingCycleStarted evt -> evt.Data.AccountId
       | AutoTransferRuleConfigured evt -> evt.Data.AccountId
@@ -303,6 +310,8 @@ module AccountEnvelope =
 
    let wrap (o: BankEvent<_>) : AccountEvent =
       match box o with
+      | :? BankEvent<InitializedPrimaryCheckingAccount> as evt ->
+         InitializedPrimaryCheckingAccount evt
       | :? BankEvent<CreatedAccount> as evt -> CreatedAccount evt
       | :? BankEvent<DepositedCash> as evt -> DepositedCash evt
       | :? BankEvent<DebitedAccount> as evt -> DebitedAccount evt
@@ -360,6 +369,7 @@ module AccountEnvelope =
 
    let unwrap (o: AccountEvent) : OpenEventEnvelope =
       match o with
+      | InitializedPrimaryCheckingAccount evt -> wrap evt, get evt
       | CreatedAccount evt -> wrap evt, get evt
       | DepositedCash evt -> wrap evt, get evt
       | DebitedAccount evt -> wrap evt, get evt

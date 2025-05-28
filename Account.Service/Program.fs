@@ -97,6 +97,7 @@ builder.Services.AddAkka(
                      //       account env var here.
                      Env.config.AccountActorSupervisor
                      persistenceId
+                     (AppSaga.getEntityRef system)
                      (AccountActor.get system)
                      (EmployeeActor.get system)
                      Bank.Transfer.Api.getDomesticTransfersRetryableUponRecipientCorrection
@@ -157,6 +158,7 @@ builder.Services.AddAkka(
 
                let props =
                   AppSaga.initProps
+                     (OrgActor.get system)
                      (EmployeeActor.get system)
                      (AccountActor.get system)
                      EmailConsumerActor.getProducer

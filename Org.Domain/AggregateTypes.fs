@@ -9,8 +9,8 @@ open CommandApproval
 
 [<RequireQualifiedAccess>]
 type OrgCommand =
-   | CreateOrg of CreateOrgCommand
-   | FinalizeOrgOnboarding of FinalizeOrgOnboardingCommand
+   | SubmitOnboardingApplication of SubmitOrgOnboardingApplicationCommand
+   | FinishOrgOnboarding of FinishOrgOnboardingCommand
    | ConfigureFeatureFlag of ConfigureFeatureFlagCommand
    | ConfigureApprovalRule of CommandApprovalRule.ConfigureApprovalRuleCommand
    | DeleteApprovalRule of CommandApprovalRule.DeleteApprovalRuleCommand
@@ -30,8 +30,8 @@ type OrgCommand =
 
    member x.Envelope: Envelope =
       match x with
-      | CreateOrg cmd -> Command.envelope cmd
-      | FinalizeOrgOnboarding cmd -> Command.envelope cmd
+      | SubmitOnboardingApplication cmd -> Command.envelope cmd
+      | FinishOrgOnboarding cmd -> Command.envelope cmd
       | ConfigureFeatureFlag cmd -> Command.envelope cmd
       | ConfigureApprovalRule cmd -> Command.envelope cmd
       | DeleteApprovalRule cmd -> Command.envelope cmd
@@ -46,8 +46,9 @@ type OrgCommand =
       | DomesticTransferRetryConfirmsRecipient cmd -> Command.envelope cmd
 
 type OrgEvent =
-   | OrgCreated of BankEvent<OrgCreated>
-   | OrgOnboardingFinished of BankEvent<OrgOnboardingFinished>
+   | OnboardingApplicationSubmitted of
+      BankEvent<OrgOnboardingApplicationSubmitted>
+   | OnboardingFinished of BankEvent<OrgOnboardingFinished>
    | FeatureFlagConfigured of BankEvent<FeatureFlagConfigured>
    | CommandApprovalRuleConfigured of
       BankEvent<CommandApprovalRule.ConfigureApprovalRule>
@@ -90,8 +91,9 @@ module OrgEnvelope =
 
    let wrap (o: BankEvent<_>) : OrgEvent =
       match box o with
-      | :? BankEvent<OrgCreated> as evt -> OrgCreated evt
-      | :? BankEvent<OrgOnboardingFinished> as evt -> OrgOnboardingFinished evt
+      | :? BankEvent<OrgOnboardingApplicationSubmitted> as evt ->
+         OnboardingApplicationSubmitted evt
+      | :? BankEvent<OrgOnboardingFinished> as evt -> OnboardingFinished evt
       | :? BankEvent<FeatureFlagConfigured> as evt -> FeatureFlagConfigured evt
       | :? BankEvent<CommandApprovalRule.ConfigureApprovalRule> as evt ->
          CommandApprovalRuleConfigured evt
@@ -121,8 +123,8 @@ module OrgEnvelope =
 
    let unwrap (o: OrgEvent) : OpenEventEnvelope =
       match o with
-      | OrgCreated evt -> wrap evt, get evt
-      | OrgOnboardingFinished evt -> wrap evt, get evt
+      | OnboardingApplicationSubmitted evt -> wrap evt, get evt
+      | OnboardingFinished evt -> wrap evt, get evt
       | FeatureFlagConfigured evt -> wrap evt, get evt
       | CommandApprovalRuleConfigured evt -> wrap evt, get evt
       | CommandApprovalRuleDeleted evt -> wrap evt, get evt
@@ -148,6 +150,7 @@ type Org = {
       Map<CommandApprovalProgressId, CommandApprovalProgress.T>
    DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
    AdminTeamEmail: Email
+   EmployerIdentificationNumber: string
 }
 
 module Org =
@@ -163,6 +166,7 @@ module Org =
       CommandApprovalRules = Map.empty
       CommandApprovalProgress = Map.empty
       DomesticTransferRecipients = Map.empty
+      EmployerIdentificationNumber = ""
    }
 
 type OrgSnapshot = {

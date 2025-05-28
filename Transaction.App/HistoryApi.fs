@@ -19,7 +19,7 @@ let orgEventFilterNames (filters: OrgEventGroupFilter list) : string array =
          acc
          @ match e with
            | OrgEventGroupFilter.Onboarding -> [
-              typeof<OrgCreated>.Name
+              typeof<OrgOnboardingApplicationSubmitted>.Name
               typeof<OrgOnboardingFinished>.Name
              ]
            | OrgEventGroupFilter.FeatureFlagConfigured -> [

@@ -5,6 +5,21 @@ open System
 open Lib.SharedTypes
 open MaintenanceFee
 
+type PrimaryCheckingAccountInfo = {
+   AccountId: AccountId
+   Name: string
+   AccountNumber: AccountNumber
+   RoutingNumber: RoutingNumber
+}
+
+type InitializedPrimaryCheckingAccount = {
+   OrgId: OrgId
+   ParentAccountId: ParentAccountId
+   PartnerBankRoutingNumber: RoutingNumber
+   PartnerBankAccountNumber: AccountNumber
+   PrimaryChecking: PrimaryCheckingAccountInfo
+}
+
 type CreatedAccount = {
    AccountId: AccountId
    Name: string

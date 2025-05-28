@@ -12,6 +12,7 @@ open System.Threading.Tasks
 
 open Lib.SharedTypes
 open Lib.Types
+open Lib.Saga
 open ActorUtil
 open Bank.Org.Domain
 open Bank.Account.Domain
@@ -19,6 +20,7 @@ open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open CommandApproval
 open SignalRBroadcast
+open OrgOnboardingSaga
 
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
@@ -263,6 +265,7 @@ module private RetryDomesticTransfers =
 
 let actorProps
    (broadcaster: SignalRBroadcast)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
@@ -294,20 +297,21 @@ let actorProps
             broadcaster.orgEventPersisted evt state.Info
 
             match evt with
-            | OrgCreated e ->
-               // TODO: Research onboarding requirements for registering a
-               // business bank account in the US.  For now, just finalize the
-               // onboarding process to transition the org to an Active status.
-               let cmd =
-                  FinalizeOrgOnboardingCommand.create {
-                     OrgId = e.OrgId
-                     CorrelationId = e.CorrelationId
-                     InitiatedBy = e.InitiatedBy
-                     EmployerIdentificationNumber = 123456789
-                  }
-                  |> OrgCommand.FinalizeOrgOnboarding
+            | OnboardingApplicationSubmitted e ->
+               let msg =
+                  OrgOnboardingSagaStartEvent.ApplicationSubmitted e
+                  |> OrgOnboardingSagaEvent.Start
+                  |> AppSaga.Event.OrgOnboarding
+                  |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
-               mailbox.Parent() <! OrgMessage.StateChange cmd
+               getSagaRef e.CorrelationId <! msg
+            | OnboardingFinished e ->
+               let msg =
+                  OrgOnboardingSagaEvent.OrgActivated
+                  |> AppSaga.Event.OrgOnboarding
+                  |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+               getSagaRef e.CorrelationId <! msg
             | CommandApprovalRuleConfigured e ->
                let newRuleConfig = e.Data.Rule
                let approversCnt = newRuleConfig.Approvers.Length
@@ -514,6 +518,7 @@ let initProps
    (broadcaster: SignalRBroadcast)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
@@ -522,6 +527,7 @@ let initProps
    let childProps =
       actorProps
          broadcaster
+         getSagaRef
          getEmployeeRef
          getAccountRef
          getDomesticTransfersRetryableUponRecipientEdit

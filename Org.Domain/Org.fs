@@ -160,12 +160,13 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
 
    let updatedOrg =
       match evt with
-      | OrgCreated e -> {
+      | OnboardingApplicationSubmitted e -> {
          OrgId = e.OrgId
          ParentAccountId = e.Data.ParentAccountId
-         Name = e.Data.Name
+         Name = e.Data.LegalBusinessName
          Status = OrgStatus.PendingOnboardingTasksFulfilled
          AdminTeamEmail = e.Data.AdminTeamEmail
+         EmployerIdentificationNumber = e.Data.EmployerIdentificationNumber
          FeatureFlags = {
             SocialTransferDiscoveryPrimaryAccountId = None
          }
@@ -173,7 +174,7 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
          CommandApprovalProgress = Map.empty
          DomesticTransferRecipients = Map.empty
         }
-      | OrgOnboardingFinished _ -> { org with Status = OrgStatus.Active }
+      | OnboardingFinished _ -> { org with Status = OrgStatus.Active }
       | FeatureFlagConfigured e -> {
          org with
             FeatureFlags = e.Data.Config
@@ -382,23 +383,23 @@ module private StateTransition =
          let evt = eventTransform evt
          (evt, applyEvent state evt))
 
-   let create (state: OrgSnapshot) (cmd: CreateOrgCommand) =
+   let submitOnboardingApplication
+      (state: OrgSnapshot)
+      (cmd: SubmitOrgOnboardingApplicationCommand)
+      =
       if state.Info.Status <> OrgStatus.InitialEmptyState then
          transitionErr OrgStateTransitionError.OrgNotReadyToStartOnboarding
       else
-         map OrgCreated state (CreateOrgCommand.toEvent cmd)
+         map
+            OnboardingApplicationSubmitted
+            state
+            (SubmitOrgOnboardingApplicationCommand.toEvent cmd)
 
-   let finalizeOnboarding
-      (state: OrgSnapshot)
-      (cmd: FinalizeOrgOnboardingCommand)
-      =
+   let finishOnboarding (state: OrgSnapshot) (cmd: FinishOrgOnboardingCommand) =
       if state.Info.Status <> OrgStatus.PendingOnboardingTasksFulfilled then
          transitionErr OrgStateTransitionError.OrgNotReadyToActivate
       else
-         map
-            OrgOnboardingFinished
-            state
-            (FinalizeOrgOnboardingCommand.toEvent cmd)
+         map OnboardingFinished state (FinishOrgOnboardingCommand.toEvent cmd)
 
    let configureFeatureFlag
       (state: OrgSnapshot)
@@ -689,9 +690,10 @@ module private StateTransition =
 
 let stateTransition (state: OrgSnapshot) (command: OrgCommand) =
    match command with
-   | OrgCommand.CreateOrg cmd -> StateTransition.create state cmd
-   | OrgCommand.FinalizeOrgOnboarding cmd ->
-      StateTransition.finalizeOnboarding state cmd
+   | OrgCommand.SubmitOnboardingApplication cmd ->
+      StateTransition.submitOnboardingApplication state cmd
+   | OrgCommand.FinishOrgOnboarding cmd ->
+      StateTransition.finishOnboarding state cmd
    | OrgCommand.ConfigureFeatureFlag cmd ->
       StateTransition.configureFeatureFlag state cmd
    | OrgCommand.ConfigureApprovalRule cmd ->

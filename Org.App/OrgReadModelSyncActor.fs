@@ -98,8 +98,8 @@ let sqlParamReducer
    }
 
    match evt with
-   | OrgEvent.OrgCreated _
-   | OrgEvent.OrgOnboardingFinished _ -> acc
+   | OrgEvent.OnboardingApplicationSubmitted _
+   | OrgEvent.OnboardingFinished _ -> acc
    | OrgEvent.FeatureFlagConfigured e ->
       let features = e.Data.Config
 
@@ -393,6 +393,8 @@ let sqlParamsFromOrg (org: Org) : (string * SqlValue) list = [
    "status", OrgSqlWriter.status org.Status
    "statusDetail", OrgSqlWriter.statusDetail org.Status
    "adminTeamEmail", OrgSqlWriter.adminTeamEmail org.AdminTeamEmail
+   "employerIdentificationNumber",
+   OrgSqlWriter.employerIdentificationNumber org.EmployerIdentificationNumber
 ]
 
 let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
@@ -425,14 +427,16 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
           {OrgFields.name},
           {OrgFields.status},
           {OrgFields.statusDetail},
-          {OrgFields.adminTeamEmail})
+          {OrgFields.adminTeamEmail},
+          {OrgFields.employerIdentificationNumber})
       VALUES
          (@orgId,
           @parentAccountId,
           @name,
           @status::{OrgTypeCast.status},
           @statusDetail,
-          @adminTeamEmail)
+          @adminTeamEmail,
+          @employerIdentificationNumber)
       ON CONFLICT ({OrgFields.orgId})
       DO UPDATE SET
          {OrgFields.parentAccountId} = @parentAccountId,

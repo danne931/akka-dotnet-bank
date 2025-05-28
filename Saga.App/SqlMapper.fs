@@ -6,6 +6,7 @@ open PurchaseSaga
 open DomesticTransferSaga
 open PlatformPaymentSaga
 open PlatformTransferSaga
+open OrgOnboardingSaga
 open Bank.Transfer.Domain
 
 let table = "saga"
@@ -55,6 +56,7 @@ module Writer =
    let name (saga: AppSaga.Saga) =
       let name =
          match saga with
+         | AppSaga.Saga.OrgOnboarding _ -> "OrgOnboarding"
          | AppSaga.Saga.Purchase _ -> "Purchase"
          | AppSaga.Saga.DomesticTransfer _ -> "DomesticTransfer"
          | AppSaga.Saga.PlatformTransfer _ -> "PlatformTransfer"
@@ -65,6 +67,11 @@ module Writer =
    let status (saga: AppSaga.Saga) =
       let status =
          match saga with
+         | AppSaga.Saga.OrgOnboarding s ->
+            match s.Status with
+            | OrgOnboardingSagaStatus.InProgress -> "InProgress"
+            | OrgOnboardingSagaStatus.Completed -> "Completed"
+            | OrgOnboardingSagaStatus.Failed _ -> "Failed"
          | AppSaga.Saga.Purchase s ->
             match s.Status with
             | PurchaseSagaStatus.InProgress -> "InProgress"

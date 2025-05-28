@@ -10,6 +10,7 @@ open FSharp.Control
 open Lib.SharedTypes
 open Lib.Types
 open Lib.Saga
+open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
@@ -18,10 +19,12 @@ open PurchaseSaga
 open DomesticTransferSaga
 open PlatformTransferSaga
 open PlatformPaymentSaga
+open OrgOnboardingSaga
 open Bank.Scheduler
 
 [<RequireQualifiedAccess>]
 type Event =
+   | OrgOnboarding of OrgOnboardingSagaEvent
    | Purchase of PurchaseSagaEvent
    | DomesticTransfer of DomesticTransferSagaEvent
    | PlatformTransfer of PlatformTransferSagaEvent
@@ -29,6 +32,35 @@ type Event =
 
    member x.Name =
       match x with
+      | Event.OrgOnboarding e ->
+         match e with
+         | OrgOnboardingSagaEvent.Start e ->
+            match e with
+            | OrgOnboardingSagaStartEvent.ApplicationSubmitted _ ->
+               "OrgOnboardingApplicationSubmitted"
+         | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent ->
+            "OrgOnboardingApplicationProcessingNotificationSent"
+         | OrgOnboardingSagaEvent.KYCResponse _ ->
+            "OrgOnboardingKnowYourCustomerServiceResponse"
+         | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService _ ->
+            "OrgOnboardingReceivedInfoFixDemandedByKYCService"
+         | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse _ ->
+            "OrgOnboardingLinkAccountToPartnerBankResponse"
+         | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
+            "OrgOnboardingInitializedPrimaryVirtualAccount"
+         | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent ->
+            "OrgOnboardingApplicationAcceptedNotificationSent"
+         | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent ->
+            "OrgOnboardingApplicationRejectedNotificationSent"
+         | OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent ->
+            "OrgOnboardingApplicationRequiresRevisionForKYCServiceNotificationSent"
+         | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink ->
+            "OrgOnboardingSupportTeamResolvedPartnerBankLink"
+         | OrgOnboardingSagaEvent.EvaluateRemainingWork ->
+            "OrgOnboardingEvaluateRemainingWork"
+         | OrgOnboardingSagaEvent.ResetInProgressActivityAttempts ->
+            "OrgOnboardingResetInProgressActivityAttempts"
+         | OrgOnboardingSagaEvent.OrgActivated -> "OrgOnboardingOrgActivated"
       | Event.Purchase e ->
          match e with
          | PurchaseSagaEvent.Start e ->
@@ -163,6 +195,7 @@ type Event =
 
 [<RequireQualifiedAccess>]
 type Saga =
+   | OrgOnboarding of OrgOnboardingSaga
    | Purchase of PurchaseSaga
    | DomesticTransfer of DomesticTransferSaga
    | PlatformTransfer of PlatformTransferSaga
@@ -171,6 +204,7 @@ type Saga =
    interface ISaga with
       member x.SagaId =
          match x with
+         | Saga.OrgOnboarding s -> s.CorrelationId
          | Saga.Purchase s -> s.PurchaseInfo.CorrelationId
          | Saga.DomesticTransfer s ->
             TransferId.toCorrelationId s.TransferInfo.TransferId
@@ -180,6 +214,7 @@ type Saga =
 
       member x.OrgId =
          match x with
+         | Saga.OrgOnboarding s -> s.OrgId
          | Saga.Purchase s -> s.PurchaseInfo.OrgId
          | Saga.DomesticTransfer s -> s.TransferInfo.Sender.OrgId
          | Saga.PlatformTransfer s -> s.TransferInfo.Sender.OrgId
@@ -187,6 +222,7 @@ type Saga =
 
       member x.ActivityInProgressCount =
          match x with
+         | Saga.OrgOnboarding s -> s.LifeCycle.InProgress.Length
          | Saga.Purchase s -> s.LifeCycle.InProgress.Length
          | Saga.DomesticTransfer s -> s.LifeCycle.InProgress.Length
          | Saga.PlatformTransfer s -> s.LifeCycle.InProgress.Length
@@ -194,6 +230,8 @@ type Saga =
 
       member x.ActivityAttemptsExhaustedCount =
          match x with
+         | Saga.OrgOnboarding s ->
+            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
          | Saga.Purchase s -> s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
          | Saga.DomesticTransfer s ->
             s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
@@ -204,6 +242,8 @@ type Saga =
 
       member x.ActivityRetryableAfterInactivityCount =
          match x with
+         | Saga.OrgOnboarding s ->
+            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
          | Saga.Purchase s ->
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
          | Saga.DomesticTransfer s ->
@@ -215,6 +255,7 @@ type Saga =
 
       member x.ExhaustedAllAttempts =
          match x with
+         | Saga.OrgOnboarding s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.Purchase s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.DomesticTransfer s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.PlatformTransfer s -> s.LifeCycle.SagaExhaustedAttempts
@@ -222,6 +263,7 @@ type Saga =
 
       member x.InactivityTimeout =
          match x with
+         | Saga.OrgOnboarding s -> s.LifeCycle.InactivityTimeout
          | Saga.Purchase s -> s.LifeCycle.InactivityTimeout
          | Saga.DomesticTransfer s -> s.LifeCycle.InactivityTimeout
          | Saga.PlatformTransfer s -> s.LifeCycle.InactivityTimeout
@@ -233,6 +275,7 @@ let sagaMessage orgId correlationId (evt: Event) =
    SagaEvent.create orgId correlationId evt |> SagaMessage.Event
 
 let sagaHandler
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
@@ -244,6 +287,9 @@ let sagaHandler
       getEvaluateRemainingWorkEvent =
          fun saga ->
             match saga with
+            | Saga.OrgOnboarding _ ->
+               OrgOnboardingSagaEvent.EvaluateRemainingWork
+               |> Event.OrgOnboarding
             | Saga.Purchase _ ->
                PurchaseSagaEvent.EvaluateRemainingWork |> Event.Purchase
             | Saga.DomesticTransfer _ ->
@@ -258,6 +304,9 @@ let sagaHandler
       getResetInProgressActivitiesEvent =
          fun saga ->
             match saga with
+            | Saga.OrgOnboarding _ ->
+               OrgOnboardingSagaEvent.ResetInProgressActivityAttempts
+               |> Event.OrgOnboarding
             | Saga.Purchase _ ->
                PurchaseSagaEvent.ResetInProgressActivityAttempts
                |> Event.Purchase
@@ -273,6 +322,12 @@ let sagaHandler
       applyEvent =
          fun (state: Saga option) (evt: Event) (timestamp: DateTime) ->
             match evt, state with
+            | Event.OrgOnboarding e, None ->
+               OrgOnboardingSaga.applyEvent None e timestamp
+               |> Option.map Saga.OrgOnboarding
+            | Event.OrgOnboarding e, Some(Saga.OrgOnboarding state) ->
+               OrgOnboardingSaga.applyEvent (Some state) e timestamp
+               |> Option.map Saga.OrgOnboarding
             | Event.Purchase e, None ->
                PurchaseSaga.applyEvent None e timestamp
                |> Option.map Saga.Purchase
@@ -304,6 +359,12 @@ let sagaHandler
             | Event.Purchase e, None ->
                PurchaseSaga.stateTransition None e timestamp
                |> Result.map (Option.map Saga.Purchase)
+            | Event.OrgOnboarding e, Some(Saga.OrgOnboarding state) ->
+               OrgOnboardingSaga.stateTransition (Some state) e timestamp
+               |> Result.map (Option.map Saga.OrgOnboarding)
+            | Event.OrgOnboarding e, None ->
+               OrgOnboardingSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.OrgOnboarding)
             | Event.Purchase e, Some(Saga.Purchase state) ->
                PurchaseSaga.stateTransition (Some state) e timestamp
                |> Result.map (Option.map Saga.Purchase)
@@ -339,6 +400,34 @@ let sagaHandler
                   $"Can not handle saga event persisted -{priorState}- {evt}"
 
             match evt with
+            | Event.OrgOnboarding e ->
+               let deps: OrgOnboardingSaga.PersistenceHandlerDependencies = {
+                  getOrgRef = getOrgRef
+                  getEmployeeRef = getEmployeeRef
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  linkAccountToPartnerBank =
+                     OrgOnboardingSaga.linkAccountToPartnerBank
+                  kycVerification =
+                     OrgOnboardingSaga.KnowYourCustomerService.verifyOrg
+                  sendMessageToSelf =
+                     fun orgId corrId asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (
+                              Event.OrgOnboarding >> sagaMessage orgId corrId
+                           )
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match priorState, state, e with
+               | None, Saga.OrgOnboarding _, OrgOnboardingSagaEvent.Start evt ->
+                  OrgOnboardingSaga.onStartEventPersisted deps evt
+               | Some(Saga.OrgOnboarding priorState),
+                 Saga.OrgOnboarding state,
+                 _ -> OrgOnboardingSaga.onEventPersisted deps priorState state e
+               | _ -> notHandled ()
             | Event.Purchase e ->
                let purchaseDeps: PurchaseSaga.PersistenceHandlerDependencies = {
                   getEmployeeRef = getEmployeeRef
@@ -467,6 +556,7 @@ let sagaHandler
 let getEntityRef = SagaActor.get<Event>
 
 let initProps
+   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
@@ -481,6 +571,7 @@ let initProps
       sagaPassivateIdleEntityAfter
       persistenceId
       (sagaHandler
+         getOrgRef
          getEmployeeRef
          getAccountRef
          getEmailActor

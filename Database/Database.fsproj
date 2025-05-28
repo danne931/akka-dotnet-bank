@@ -8,6 +8,7 @@
     <Compile Include="OrganizationSqlMapper.fs" />
     <Compile Include="OrganizationEventSqlMapper.fs" /> 
     <Compile Include="AccountSqlMapper.fs" />
+    <Compile Include="PartnerBankSqlMapper.fs" />
     <Compile Include="CategorySqlMapper.fs" />
     <Compile Include="TransactionMerchantSqlMapper.fs" />
     <Compile Include="BillingSqlMapper.fs" />

@@ -83,6 +83,16 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
                Some updated)
    }
 
+
+   let updatedState =
+      match evt with
+      | AccountEvent.InitializedPrimaryCheckingAccount e -> {
+         updatedState with
+            OrgId = e.OrgId
+            ParentAccountId = e.Data.ParentAccountId
+        }
+      | _ -> updatedState
+
    let updatedEvents = evt :: state.Events
 
    (*
@@ -148,6 +158,13 @@ let stateTransition
    let virtualAccount = state.Info.TryFind accountId
 
    match command, virtualAccount with
+   | AccountCommand.InitializePrimaryCheckingAccount _, _ when
+      not state.Info.IsEmpty
+      ->
+      Account.transitionErr
+         AccountStateTransitionError.ParentAccountAlreadyInitialized
+   | AccountCommand.InitializePrimaryCheckingAccount _, None ->
+      virtualAccountTransition state Account.empty command
    | AccountCommand.CreateAccount _, Some _ ->
       Account.transitionErr
          AccountStateTransitionError.AccountNotReadyToActivate
@@ -189,7 +206,6 @@ let computeAutoTransferStateTransitions
          | Frequency.Schedule CronSchedule.Daily -> account.AutoTransfersDaily
          | Frequency.Schedule CronSchedule.TwiceMonthly ->
             account.AutoTransfersTwiceMonthly
-
 
       let transferOutCommands =
          transfers |> List.map (InternalAutoTransferCommand.create)

@@ -19,6 +19,7 @@ open BillingStatement
 open AutomaticTransfer
 open SignalRBroadcast
 open Email
+open OrgOnboardingSaga
 open PurchaseSaga
 open DomesticTransferSaga
 open PlatformTransferSaga
@@ -202,10 +203,9 @@ let private onValidationError
          err
 
       match fail with
-      | Some(correlationId, orgId, evt) ->
-         let msg = SagaEvent.create orgId correlationId evt |> SagaMessage.Event
-
-         getSagaRef correlationId <! msg
+      | Some(corrId, orgId, evt) ->
+         let msg = AppSaga.sagaMessage orgId corrId evt
+         getSagaRef corrId <! msg
       | None -> ()
 
 let onPersisted
@@ -236,11 +236,18 @@ let onPersisted
       getSagaRef corrId <! msg
 
    match evt with
-   | CreatedAccount evt ->
+   | InitializedPrimaryCheckingAccount e ->
+      let msg =
+         OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount
+         |> AppSaga.Event.OrgOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | CreatedAccount e ->
       let msg =
          EmailMessage.create
             account.OrgId
-            evt.CorrelationId
+            e.CorrelationId
             (EmailInfo.AccountOpen account.FullName)
 
       getEmailRef mailbox.System <! msg

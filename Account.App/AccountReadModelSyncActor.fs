@@ -84,6 +84,7 @@ type SqlParamsDerivedFromAccountEvents = {
    Transfer: (string * SqlValue) list list
    InternalTransfer: (string * SqlValue) list list
    DomesticTransfer: (string * SqlValue) list list
+   PartnerBank: (string * SqlValue) list list
 }
 
 let private internalTransferStatusReducer
@@ -174,6 +175,23 @@ let sqlParamReducer
    }
 
    match evt with
+   | AccountEvent.InitializedPrimaryCheckingAccount e ->
+      let qParams = [
+         "orgId", PartnerBankSqlMapper.SqlWriter.orgId e.OrgId
+         "parentAccountId",
+         PartnerBankSqlMapper.SqlWriter.parentAccountId e.Data.ParentAccountId
+         "routingNumber",
+         PartnerBankSqlMapper.SqlWriter.routingNumber
+            e.Data.PartnerBankRoutingNumber
+         "accountNumber",
+         PartnerBankSqlMapper.SqlWriter.accountNumber
+            e.Data.PartnerBankAccountNumber
+      ]
+
+      {
+         acc with
+            PartnerBank = qParams :: acc.PartnerBank
+      }
    | AccountEvent.InternalTransferWithinOrgPending e ->
       let info = e.Data.BaseInfo
 
@@ -528,6 +546,7 @@ let upsertReadModels
       accountEvents
       |> List.sortByDescending (AccountEnvelope.unwrap >> snd >> _.Timestamp)
       |> List.fold sqlParamReducer {
+         PartnerBank = []
          Transaction = []
          Payment = []
          PlatformPayment = []
@@ -537,6 +556,23 @@ let upsertReadModels
       }
 
    pgTransaction [
+      if not sqlParamsDerivedFromAccountEvents.PartnerBank.IsEmpty then
+         $"""
+         INSERT into {PartnerBankSqlMapper.table}
+            ({PartnerBankSqlMapper.Fields.parentAccountId},
+             {PartnerBankSqlMapper.Fields.accountNumber},
+             {PartnerBankSqlMapper.Fields.routingNumber},
+             {PartnerBankSqlMapper.Fields.orgId})
+         VALUES
+            (@parentAccountId,
+             @accountNumber,
+             @routingNumber,
+             @orgId)
+         ON CONFLICT ({PartnerBankSqlMapper.Fields.parentAccountId})
+         DO NOTHING;
+         """,
+         sqlParamsDerivedFromAccountEvents.PartnerBank
+
       $"""
       INSERT into {AccountSqlMapper.table}
          ({AccountFields.accountId},

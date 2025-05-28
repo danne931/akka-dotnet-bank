@@ -4,6 +4,18 @@ open Lib.SharedTypes
 open Bank.Employee.Domain
 open Bank.Account.Domain
 
+type OrgOnboardingEmailInfo = { Email: Email; BusinessName: string }
+
+type OrgOnboardingApplicationRejectedEmailInfo = {
+   Info: OrgOnboardingEmailInfo
+   Reason: string
+}
+
+type OrgOnboardingApplicationRequiresRevision = {
+   Info: OrgOnboardingEmailInfo
+   Reason: string
+}
+
 type EmployeeInviteEmailInfo = {
    Name: string
    Email: Email
@@ -48,6 +60,12 @@ type PurchaseFailEmailInfo = {
 
 [<RequireQualifiedAccess>]
 type EmailInfo =
+   | OrgOnboardingApplicationSubmitted of OrgOnboardingEmailInfo
+   | OrgOnboardingApplicationAccepted of OrgOnboardingEmailInfo
+   | OrgOnboardingApplicationRejected of
+      OrgOnboardingApplicationRejectedEmailInfo
+   | OrgOnboardingApplicationRequiresRevision of
+      OrgOnboardingApplicationRequiresRevision
    | AccountOpen of accountName: string
    | AccountClose of accountName: string
    | BillingStatement of accountName: string

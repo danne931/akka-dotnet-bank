@@ -82,11 +82,11 @@ let orgHistoryUIFriendly (org: Org) (history: OrgHistory) : HistoryUIFriendly =
             | None -> "Removed recipient nickname."
             | Some name -> $"Updated recipient nickname to {name}"
      }
-   | OrgEvent.OrgCreated _ -> {
+   | OrgEvent.OnboardingApplicationSubmitted _ -> {
       props with
-         Info = "Organization created"
+         Info = "Organization onboarding application submitted"
      }
-   | OrgEvent.OrgOnboardingFinished _ -> {
+   | OrgEvent.OnboardingFinished _ -> {
       props with
          Info = "Organization onboarding finished"
      }
@@ -278,6 +278,10 @@ let accountHistoryUIFriendly
       |> Option.defaultValue "Account"
 
    match history.Event with
+   | InitializedPrimaryCheckingAccount _ -> {
+      props with
+         Info = "Initialized Primary Checking Account"
+     }
    | CreatedAccount _ -> { props with Info = "Created Account" }
    | DepositedCash evt -> {
       props with
@@ -598,8 +602,8 @@ let private matchesOrgEventFilter
    match filter with
    | OrgEventGroupFilter.Onboarding ->
       match event with
-      | OrgEvent.OrgCreated _
-      | OrgEvent.OrgOnboardingFinished _ -> true
+      | OrgEvent.OnboardingApplicationSubmitted _
+      | OrgEvent.OnboardingFinished _ -> true
       | _ -> false
    | OrgEventGroupFilter.FeatureFlagConfigured ->
       match event with

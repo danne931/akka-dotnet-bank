@@ -36,6 +36,7 @@ DROP TABLE IF EXISTS account;
 DROP TABLE IF EXISTS employee_event;
 DROP TABLE IF EXISTS organization_event;
 DROP TABLE IF EXISTS employee;
+DROP TABLE IF EXISTS partner_bank_parent_account;
 DROP TABLE IF EXISTS organization;
 DROP TABLE IF EXISTS purchase_category;
 
@@ -154,6 +155,7 @@ CREATE TABLE organization (
    status organization_status NOT NULL,
    status_detail JSONB NOT NULL,
    admin_team_email VARCHAR(255) UNIQUE NOT NULL,
+   ein CHAR(9) UNIQUE NOT NULL CHECK (ein ~ '^\d{9}$'),
    parent_account_id UUID UNIQUE NOT NULL
 );
 
@@ -170,6 +172,33 @@ requests received.
 TODO: Consider creating extra fields on org_feature_flag table to allow the
 org to disable notifications pertaining to certain events.';
 
+
+--- PARTNER BANK PARENT ACCOUNT ---
+CREATE TABLE partner_bank_parent_account (
+   parent_account_id UUID PRIMARY KEY,
+   partner_bank_routing_number INT NOT NULL,
+   partner_bank_account_number BIGINT NOT NULL,
+   org_id UUID NOT NULL REFERENCES organization
+);
+
+
+SELECT add_created_at_column('partner_bank_parent_account');
+SELECT add_updated_at_column_and_trigger('partner_bank_parent_account');
+
+COMMENT ON COLUMN partner_bank_parent_account.parent_account_id IS
+'Refers to the parent account actor which manages transactions
+for all the virtual accounts for an org.';
+
+COMMENT ON COLUMN partner_bank_parent_account.partner_bank_account_number IS
+'Provided to us by our partner bank after submitting a verified org 
+banking application.  We give orgs the ability to manage multiple virtual 
+accounts tied to a single partner bank account number representing the 
+actual business checking account provided by the partner bank.
+
+This account number is not shared with customers.
+A separate account number is generated for each virtual account for that purpose.
+It is only used for syncing transactions with the partner bank.
+';
 
 --- ACCOUNT ---
 CREATE TYPE account_depository AS ENUM ('Checking', 'Savings');
@@ -868,6 +897,7 @@ SELECT add_updated_at_column_and_trigger('command_approval_progress');
 
 --- TRANSACTION SAGA ---
 CREATE TYPE saga_type AS ENUM (
+   'OrgOnboarding',
    'Purchase',
    'DomesticTransfer',
    'PlatformTransfer',
@@ -1366,14 +1396,22 @@ $$ LANGUAGE plpgsql;
 /**
  * Create a "system" organization for the "system" employee created below.
 **/
-INSERT INTO organization (org_name, status, status_detail, admin_team_email, parent_account_id)
+INSERT INTO organization (
+  org_name,
+  status,
+  status_detail,
+  admin_team_email,
+  ein,
+  parent_account_id
+)
 VALUES (
-  'system',
-  'Active',
-  '"Active"'::jsonb,
-  'team@system.com',
-  -- This parent_account_id is defined in Lib.SharedClientServer/Constants.fs
-  'd1240fcd-6080-45e6-a28d-7c840ece437b'
+   'system',
+   'Active',
+   '"Active"'::jsonb,
+   'team@system.com',
+   '123456789',
+   -- This parent_account_id is defined in Lib.SharedClientServer/Constants.fs
+   'd1240fcd-6080-45e6-a28d-7c840ece437b'
 );
 
 /**

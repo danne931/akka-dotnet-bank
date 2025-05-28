@@ -1,9 +1,61 @@
 namespace Bank.Account.Domain
 
 open Validus
+open System
 
 open Lib.SharedTypes
 open Lib.Validators
+
+type InitializePrimaryCheckingAccountInput = {
+   OrgId: OrgId
+   CorrelationId: CorrelationId
+   ParentAccountId: ParentAccountId
+   PartnerBankAccountNumber: AccountNumber
+   PartnerBankRoutingNumber: RoutingNumber
+}
+
+type InitializePrimaryCheckingAccountCommand =
+   Command<InitializePrimaryCheckingAccountInput>
+
+module InitializePrimaryCheckingAccountCommand =
+   let create (data: InitializePrimaryCheckingAccountInput) =
+      Command.create
+         (ParentAccountId.toEntityId data.ParentAccountId)
+         data.OrgId
+         data.CorrelationId
+         Initiator.System
+         data
+
+   let toEvent
+      (cmd: InitializePrimaryCheckingAccountCommand)
+      : ValidationResult<BankEvent<InitializedPrimaryCheckingAccount>>
+      =
+      validate {
+         let input = cmd.Data
+
+         let! checkingAccountNumber =
+            AccountNumber.generate ()
+            |> AccountNumber.fromString "Checking Account Number"
+
+         return
+            BankEvent.create2<
+               InitializePrimaryCheckingAccountInput,
+               InitializedPrimaryCheckingAccount
+             >
+               cmd
+               {
+                  OrgId = input.OrgId
+                  ParentAccountId = input.ParentAccountId
+                  PartnerBankAccountNumber = input.PartnerBankAccountNumber
+                  PartnerBankRoutingNumber = input.PartnerBankRoutingNumber
+                  PrimaryChecking = {
+                     Name = "Checking"
+                     AccountId = Guid.NewGuid() |> AccountId
+                     AccountNumber = checkingAccountNumber
+                     RoutingNumber = input.PartnerBankRoutingNumber
+                  }
+               }
+      }
 
 type CreateAccountInput = {
    Name: string

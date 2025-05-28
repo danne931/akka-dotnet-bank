@@ -18,6 +18,11 @@ open Lib.SharedTypes
 open SignalRBroadcast
 open Email
 open Lib.Saga
+open OrgOnboardingSaga
+open PlatformTransferSaga
+open PlatformPaymentSaga
+open PurchaseSaga
+open DomesticTransferSaga
 
 module EmailRequest =
    type PreliminaryT = {
@@ -48,6 +53,36 @@ let private emailPropsFromMessage
    : EmailRequest.PreliminaryT
    =
    match msg.Info with
+   | EmailInfo.OrgOnboardingApplicationSubmitted info -> {
+      OrgId = msg.OrgId
+      Event = "org-onboarding-application-submitted"
+      Email = Some(string info.Email)
+      Data = {| name = info.BusinessName |}
+     }
+   | EmailInfo.OrgOnboardingApplicationAccepted info -> {
+      OrgId = msg.OrgId
+      Event = "org-onboarding-application-accepted"
+      Email = Some(string info.Email)
+      Data = {| name = info.BusinessName |}
+     }
+   | EmailInfo.OrgOnboardingApplicationRejected info -> {
+      OrgId = msg.OrgId
+      Event = "org-onboarding-application-rejected"
+      Email = Some(string info.Info.Email)
+      Data = {|
+         name = info.Info.BusinessName
+         reason = info.Reason
+      |}
+     }
+   | EmailInfo.OrgOnboardingApplicationRequiresRevision info -> {
+      OrgId = msg.OrgId
+      Event = "org-onboarding-application-requires-revision"
+      Email = Some(string info.Info.Email)
+      Data = {|
+         name = info.Info.BusinessName
+         reason = info.Reason
+      |}
+     }
    | EmailInfo.AccountOpen(accountName) -> {
       OrgId = msg.OrgId
       Event = "account-opened"
@@ -262,36 +297,52 @@ let onSuccessfulServiceResponse
    =
    let txnSagaEvt =
       match msg.Info with
+      | EmailInfo.OrgOnboardingApplicationSubmitted _ ->
+         OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent
+         |> AppSaga.Event.OrgOnboarding
+         |> Some
+      | EmailInfo.OrgOnboardingApplicationAccepted _ ->
+         OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent
+         |> AppSaga.Event.OrgOnboarding
+         |> Some
+      | EmailInfo.OrgOnboardingApplicationRejected _ ->
+         OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent
+         |> AppSaga.Event.OrgOnboarding
+         |> Some
+      | EmailInfo.OrgOnboardingApplicationRequiresRevision _ ->
+         OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent
+         |> AppSaga.Event.OrgOnboarding
+         |> Some
       | EmailInfo.Purchase _ ->
-         PurchaseSaga.PurchaseSagaEvent.PurchaseNotificationSent
+         PurchaseSagaEvent.PurchaseNotificationSent
          |> AppSaga.Event.Purchase
          |> Some
       | EmailInfo.DomesticTransfer _ ->
-         DomesticTransferSaga.DomesticTransferSagaEvent.TransferInitiatedNotificationSent
+         DomesticTransferSagaEvent.TransferInitiatedNotificationSent
          |> AppSaga.Event.DomesticTransfer
          |> Some
       | EmailInfo.InternalTransferBetweenOrgs _ ->
-         PlatformTransferSaga.PlatformTransferSagaEvent.TransferNotificationSent
+         PlatformTransferSagaEvent.TransferNotificationSent
          |> AppSaga.Event.PlatformTransfer
          |> Some
       | EmailInfo.InternalTransferBetweenOrgsDeposited _ ->
-         PlatformTransferSaga.PlatformTransferSagaEvent.TransferDepositNotificationSent
+         PlatformTransferSagaEvent.TransferDepositNotificationSent
          |> AppSaga.Event.PlatformTransfer
          |> Some
       | EmailInfo.PlatformPaymentRequested _ ->
-         PlatformPaymentSaga.PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer
+         PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer
          |> AppSaga.Event.PlatformPayment
          |> Some
       | EmailInfo.PlatformPaymentPaid _ ->
-         PlatformPaymentSaga.PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer
+         PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer
          |> AppSaga.Event.PlatformPayment
          |> Some
       | EmailInfo.PlatformPaymentDeposited _ ->
-         PlatformPaymentSaga.PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee
+         PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee
          |> AppSaga.Event.PlatformPayment
          |> Some
       | EmailInfo.PlatformPaymentDeclined _ ->
-         PlatformPaymentSaga.PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee
+         PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee
          |> AppSaga.Event.PlatformPayment
          |> Some
       | _ -> None

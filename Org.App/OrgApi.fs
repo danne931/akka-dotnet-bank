@@ -23,8 +23,9 @@ let table = OrganizationSqlMapper.table
 let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
    let validation =
       match command with
-      | OrgCommand.CreateOrg cmd ->
-         CreateOrgCommand.toEvent cmd |> Result.map OrgEnvelope.get
+      | OrgCommand.SubmitOnboardingApplication cmd ->
+         SubmitOrgOnboardingApplicationCommand.toEvent cmd
+         |> Result.map OrgEnvelope.get
       | OrgCommand.ConfigureApprovalRule cmd ->
          CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
          |> Result.map OrgEnvelope.get
@@ -100,6 +101,7 @@ let getOrgAndAccountProfiles
             o.{Fields.name},
             o.{Fields.statusDetail},
             o.{Fields.adminTeamEmail},
+            o.{Fields.employerIdentificationNumber},
             features.{Fields.socialTransferDiscoveryAccountId},
             a.*,
             dta.internal_transfer_within_org_accrued as daily_internal_within,
@@ -246,6 +248,7 @@ let searchOrgTransferSocialDiscovery (fromOrgId: OrgId) (nameQuery: string) =
          o.{{Fields.name}},
          o.{{Fields.statusDetail}},
          o.{{Fields.adminTeamEmail}},
+         o.{{Fields.employerIdentificationNumber}},
          o.{{Fields.parentAccountId}},
          features.{{Fields.socialTransferDiscoveryAccountId}}
       FROM {{table}} o

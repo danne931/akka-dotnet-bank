@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Database/Database.fsproj" />
+    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />
     <ProjectReference Include="../SignalR.App/SignalR.App.fsproj" /> 
     <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
     <ProjectReference Include="../Org.Domain/Org.Domain.fsproj" />

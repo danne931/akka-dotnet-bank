@@ -4,6 +4,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="OrgOnboardingSaga.fs" />
     <Compile Include="Saga.fs" />
     <Compile Include="SqlMapper.fs" />
     <Compile Include="AlarmClockActor.fs" />

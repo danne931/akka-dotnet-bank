@@ -306,6 +306,7 @@ type OrgStateTransitionError =
    | RecipientAlreadyConfirmed
 
 type AccountStateTransitionError =
+   | ParentAccountAlreadyInitialized
    | AccountNotReadyToActivate
    | AccountNotFound of AccountId
    | AccountNotActive of accountName: string
@@ -402,6 +403,8 @@ type Err =
             "Recipient Already Confirmed"
       | AccountStateTransitionError e ->
          match e with
+         | ParentAccountAlreadyInitialized ->
+            "Parent account already initialized with primary accounts."
          | AccountNotFound accountId -> $"Account Not Found {accountId}"
          | AccountStateTransitionError.AccountNotActive accountName ->
             $"Account Not Active {accountName}"

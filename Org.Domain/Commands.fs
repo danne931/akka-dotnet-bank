@@ -4,18 +4,20 @@ open Validus
 
 open Lib.SharedTypes
 
-type CreateOrgInput = {
-   Name: string
+type SubmitOrgOnboardingApplicationInput = {
+   LegalBusinessName: string
    AdminTeamEmail: Email
+   EmployerIdentificationNumber: string
    OrgId: OrgId
    ParentAccountId: ParentAccountId
    InitiatedBy: Initiator
 }
 
-type CreateOrgCommand = Command<CreateOrgInput>
+type SubmitOrgOnboardingApplicationCommand =
+   Command<SubmitOrgOnboardingApplicationInput>
 
-module CreateOrgCommand =
-   let create (data: CreateOrgInput) =
+module SubmitOrgOnboardingApplicationCommand =
+   let create (data: SubmitOrgOnboardingApplicationInput) =
       Command.create
          (OrgId.toEntityId data.OrgId)
          data.OrgId
@@ -24,27 +26,33 @@ module CreateOrgCommand =
          data
 
    let toEvent
-      (cmd: CreateOrgCommand)
-      : ValidationResult<BankEvent<OrgCreated>>
+      (cmd: SubmitOrgOnboardingApplicationCommand)
+      : ValidationResult<BankEvent<OrgOnboardingApplicationSubmitted>>
       =
-      BankEvent.create2<CreateOrgInput, OrgCreated> cmd {
-         Name = cmd.Data.Name
-         AdminTeamEmail = cmd.Data.AdminTeamEmail
-         ParentAccountId = cmd.Data.ParentAccountId
-      }
+      BankEvent.create2<
+         SubmitOrgOnboardingApplicationInput,
+         OrgOnboardingApplicationSubmitted
+       >
+         cmd
+         {
+            LegalBusinessName = cmd.Data.LegalBusinessName
+            AdminTeamEmail = cmd.Data.AdminTeamEmail
+            EmployerIdentificationNumber = cmd.Data.EmployerIdentificationNumber
+            ParentAccountId = cmd.Data.ParentAccountId
+         }
       |> Ok
 
-type FinalizeOrgOnboardingInput = {
+type FinishOrgOnboardingInput = {
    OrgId: OrgId
    CorrelationId: CorrelationId
-   EmployerIdentificationNumber: int
    InitiatedBy: Initiator
+   ParentAccountId: ParentAccountId
 }
 
-type FinalizeOrgOnboardingCommand = Command<FinalizeOrgOnboardingInput>
+type FinishOrgOnboardingCommand = Command<FinishOrgOnboardingInput>
 
-module FinalizeOrgOnboardingCommand =
-   let create (data: FinalizeOrgOnboardingInput) =
+module FinishOrgOnboardingCommand =
+   let create (data: FinishOrgOnboardingInput) =
       Command.create
          (OrgId.toEntityId data.OrgId)
          data.OrgId
@@ -53,11 +61,11 @@ module FinalizeOrgOnboardingCommand =
          data
 
    let toEvent
-      (cmd: FinalizeOrgOnboardingCommand)
+      (cmd: FinishOrgOnboardingCommand)
       : ValidationResult<BankEvent<OrgOnboardingFinished>>
       =
-      BankEvent.create2<FinalizeOrgOnboardingInput, OrgOnboardingFinished> cmd {
-         EmployerIdentificationNumber = cmd.Data.EmployerIdentificationNumber
+      BankEvent.create2<FinishOrgOnboardingInput, OrgOnboardingFinished> cmd {
+         ParentAccountId = cmd.Data.ParentAccountId
       }
       |> Ok
 

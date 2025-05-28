@@ -167,7 +167,7 @@ let transactionInfoFromHistory
       | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
          Some(
             TransactionType.InternalTransferBetweenOrgs,
-            TransactionStatus.InProgress,
+            TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalAutomatedTransferPending e ->
