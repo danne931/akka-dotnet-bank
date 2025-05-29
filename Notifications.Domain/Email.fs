@@ -68,7 +68,7 @@ type EmailInfo =
       OrgOnboardingApplicationRequiresRevision
    | AccountOpen of accountName: string
    | AccountClose of accountName: string
-   | BillingStatement of accountName: string
+   | BillingStatement
    | Purchase of PurchaseEmailInfo
    | PurchaseFailed of PurchaseFailEmailInfo
    | InternalTransferBetweenOrgs of InternalTransferBetweenOrgsEmailInfo

@@ -1,9 +1,6 @@
 module AccountSqlMapper
 
-open System
-
 open Lib.SharedTypes
-open MaintenanceFee
 open Bank.Account.Domain
 open OrganizationSqlMapper
 open AutomaticTransfer
@@ -26,16 +23,7 @@ module AccountFields =
    let currency = "currency"
    let status = "status"
    let balance = "balance"
-   let lastBillingCycleDate = "last_billing_cycle_at"
-
-   let maintenanceFeeQualifyingDepositFound =
-      "maintenance_fee_qualifying_deposit_found"
-
-   let maintenanceFeeDailyBalanceThreshold =
-      "maintenance_fee_daily_balance_threshold"
-
    let autoTransferRule = "auto_transfer_rule"
-
    let autoTransferRuleFrequency = "auto_transfer_rule_frequency"
 
 module AccountSqlReader =
@@ -68,16 +56,6 @@ module AccountSqlReader =
 
    let balance (read: RowReader) = read.decimal AccountFields.balance
 
-   let lastBillingCycleDate (read: RowReader) =
-      read.dateTimeOrNone AccountFields.lastBillingCycleDate
-
-   let maintenanceFeeCriteria (read: RowReader) = {
-      QualifyingDepositFound =
-         read.bool AccountFields.maintenanceFeeQualifyingDepositFound
-      DailyBalanceThreshold =
-         read.bool AccountFields.maintenanceFeeDailyBalanceThreshold
-   }
-
    let autoTransferRule (read: RowReader) : AutomaticTransferConfig option =
       read.textOrNone AccountFields.autoTransferRule
       |> Option.map Serialization.deserializeUnsafe<AutomaticTransferConfig>
@@ -93,8 +71,6 @@ module AccountSqlReader =
       Currency = currency read
       Status = status read
       Balance = balance read
-      LastBillingCycleDate = lastBillingCycleDate read
-      MaintenanceFeeCriteria = maintenanceFeeCriteria read
       AutoTransferRule = autoTransferRule read
    }
 
@@ -107,19 +83,13 @@ module AccountSqlWriter =
       let (AccountNumber acctNum) = num
       Sql.int64 acctNum
 
-   let routingNumber (num: RoutingNumber) =
-      let (RoutingNumber routingNum) = num
-      Sql.int routingNum
+   let routingNumber (RoutingNumber num) = Sql.int num
 
    let depository (dep: AccountDepository) = dep |> string |> Sql.string
    let name = Sql.string
    let balance = Sql.money
    let currency (currency: Currency) = Sql.string <| string currency
    let status (status: AccountStatus) = status |> string |> Sql.string
-
-   let lastBillingCycleDate (date: DateTime option) = Sql.timestamptzOrNone date
-   let maintenanceFeeQualifyingDepositFound = Sql.bool
-   let maintenanceFeeDailyBalanceThreshold = Sql.bool
 
    let autoTransferRule (rule: AutomaticTransferConfig option) =
       rule |> Option.map Serialization.serialize |> Sql.jsonbOrNone

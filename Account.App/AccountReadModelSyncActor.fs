@@ -84,7 +84,8 @@ type SqlParamsDerivedFromAccountEvents = {
    Transfer: (string * SqlValue) list list
    InternalTransfer: (string * SqlValue) list list
    DomesticTransfer: (string * SqlValue) list list
-   PartnerBank: (string * SqlValue) list list
+   PartnerBankInitialized: (string * SqlValue) list list
+   BillingCycle: (string * SqlValue) list list
 }
 
 let private internalTransferStatusReducer
@@ -169,10 +170,18 @@ let sqlParamReducer
          )
       ]
 
-   let acc = {
-      acc with
-         Transaction = transactionSqlParams :: acc.Transaction
-   }
+   // Account events with empty AccountId are scoped to the parent account
+   // rather than one of the virtual accounts.  Do not record these in the
+   // account event read model for now.
+   // Consider creating a separate parent_account_event table.
+   let acc =
+      if evt.AccountId = AccountId Guid.Empty then
+         acc
+      else
+         {
+            acc with
+               Transaction = transactionSqlParams :: acc.Transaction
+         }
 
    match evt with
    | AccountEvent.InitializedPrimaryCheckingAccount e ->
@@ -180,9 +189,11 @@ let sqlParamReducer
          "orgId", PartnerBankSqlMapper.SqlWriter.orgId e.OrgId
          "parentAccountId",
          PartnerBankSqlMapper.SqlWriter.parentAccountId e.Data.ParentAccountId
+
          "routingNumber",
          PartnerBankSqlMapper.SqlWriter.routingNumber
             e.Data.PartnerBankRoutingNumber
+
          "accountNumber",
          PartnerBankSqlMapper.SqlWriter.accountNumber
             e.Data.PartnerBankAccountNumber
@@ -190,7 +201,22 @@ let sqlParamReducer
 
       {
          acc with
-            PartnerBank = qParams :: acc.PartnerBank
+            PartnerBankInitialized = qParams :: acc.PartnerBankInitialized
+      }
+   | AccountEvent.BillingCycleStarted e ->
+      let qParams = [
+         "parentAccountId",
+         PartnerBankSqlMapper.SqlWriter.parentAccountId (
+            ParentAccountId.fromEntityId e.EntityId
+         )
+
+         "lastBillingCycleDate",
+         PartnerBankSqlMapper.SqlWriter.lastBillingCycleDate (Some e.Timestamp)
+      ]
+
+      {
+         acc with
+            BillingCycle = qParams :: acc.BillingCycle
       }
    | AccountEvent.InternalTransferWithinOrgPending e ->
       let info = e.Data.BaseInfo
@@ -498,17 +524,6 @@ let sqlParamsFromAccount (account: Account) : (string * SqlValue) list = [
    "balance", AccountSqlWriter.balance account.Balance
    "currency", AccountSqlWriter.currency account.Currency
    "status", AccountSqlWriter.status account.Status
-   "lastBillingCycleDate",
-   AccountSqlWriter.lastBillingCycleDate account.LastBillingCycleDate
-
-   "maintenanceFeeQualifyingDepositFound",
-   AccountSqlWriter.maintenanceFeeQualifyingDepositFound
-      account.MaintenanceFeeCriteria.QualifyingDepositFound
-
-   "maintenanceFeeDailyBalanceThreshold",
-   AccountSqlWriter.maintenanceFeeDailyBalanceThreshold
-      account.MaintenanceFeeCriteria.DailyBalanceThreshold
-
    "autoTransferRule",
    AccountSqlWriter.autoTransferRule account.AutoTransferRule
 
@@ -523,7 +538,7 @@ let upsertReadModels
    =
    let accountsIndexed =
       parentAccounts
-      |> List.map (_.Info.Values >> Seq.toList)
+      |> List.map (_.VirtualAccounts.Values >> Seq.toList)
       |> List.collect id
       |> List.fold
             (fun acc account -> Map.add account.AccountId account acc)
@@ -546,7 +561,8 @@ let upsertReadModels
       accountEvents
       |> List.sortByDescending (AccountEnvelope.unwrap >> snd >> _.Timestamp)
       |> List.fold sqlParamReducer {
-         PartnerBank = []
+         PartnerBankInitialized = []
+         BillingCycle = []
          Transaction = []
          Payment = []
          PlatformPayment = []
@@ -556,7 +572,9 @@ let upsertReadModels
       }
 
    pgTransaction [
-      if not sqlParamsDerivedFromAccountEvents.PartnerBank.IsEmpty then
+      if
+         not sqlParamsDerivedFromAccountEvents.PartnerBankInitialized.IsEmpty
+      then
          $"""
          INSERT into {PartnerBankSqlMapper.table}
             ({PartnerBankSqlMapper.Fields.parentAccountId},
@@ -571,7 +589,15 @@ let upsertReadModels
          ON CONFLICT ({PartnerBankSqlMapper.Fields.parentAccountId})
          DO NOTHING;
          """,
-         sqlParamsDerivedFromAccountEvents.PartnerBank
+         sqlParamsDerivedFromAccountEvents.PartnerBankInitialized
+
+      if not sqlParamsDerivedFromAccountEvents.BillingCycle.IsEmpty then
+         $"""
+         UPDATE {PartnerBankSqlMapper.table}
+         SET {PartnerBankSqlMapper.Fields.lastBillingCycleDate} = @lastBillingCycleDate
+         WHERE {PartnerBankSqlMapper.Fields.parentAccountId} = @parentAccountId;
+         """,
+         sqlParamsDerivedFromAccountEvents.BillingCycle
 
       $"""
       INSERT into {AccountSqlMapper.table}
@@ -585,9 +611,6 @@ let upsertReadModels
           {AccountFields.balance},
           {AccountFields.currency},
           {AccountFields.status},
-          {AccountFields.lastBillingCycleDate},
-          {AccountFields.maintenanceFeeQualifyingDepositFound},
-          {AccountFields.maintenanceFeeDailyBalanceThreshold},
           {AccountFields.autoTransferRule},
           {AccountFields.autoTransferRuleFrequency})
       VALUES
@@ -601,18 +624,12 @@ let upsertReadModels
           @balance,
           @currency,
           @status::{AccountTypeCast.status},
-          @lastBillingCycleDate,
-          @maintenanceFeeQualifyingDepositFound,
-          @maintenanceFeeDailyBalanceThreshold,
           @autoTransferRule,
           @autoTransferRuleFrequency::{AccountTypeCast.autoTransferRuleFrequency})
       ON CONFLICT ({AccountFields.accountId})
       DO UPDATE SET
          {AccountFields.balance} = @balance,
          {AccountFields.status} = @status::{AccountTypeCast.status},
-         {AccountFields.lastBillingCycleDate} = @lastBillingCycleDate,
-         {AccountFields.maintenanceFeeQualifyingDepositFound} = @maintenanceFeeQualifyingDepositFound,
-         {AccountFields.maintenanceFeeDailyBalanceThreshold} = @maintenanceFeeDailyBalanceThreshold,
          {AccountFields.autoTransferRule} = @autoTransferRule,
          {AccountFields.autoTransferRuleFrequency} = @autoTransferRuleFrequency::{AccountTypeCast.autoTransferRuleFrequency};
       """,

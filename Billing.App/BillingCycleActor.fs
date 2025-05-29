@@ -11,14 +11,14 @@ open System
 
 open BillingStatement
 open Bank.Account.Domain
-open AccountSqlMapper
+open PartnerBankSqlMapper
 open ActorUtil
 open Lib.Types
 open Lib.Postgres
 open Lib.SharedTypes
 
 let getBillingCycleReadyAccounts () =
-   let prevCycle = AccountFields.lastBillingCycleDate
+   let prevCycle = Fields.lastBillingCycleDate
 
    let lookback =
       if Env.isProd then
@@ -26,20 +26,19 @@ let getBillingCycleReadyAccounts () =
       else
          "'1 minutes'::interval"
 
-   pgQuery<ParentAccountId * AccountId * OrgId>
+   // TODO:
+   // {AccountFields.status} = '{string AccountStatus.Active}'
+
+   pgQuery<ParentAccountId * OrgId>
       $"""
-      SELECT {AccountFields.accountId}, {AccountFields.orgId}, {AccountFields.parentAccountId}
-      FROM {AccountSqlMapper.table}
+      SELECT {Fields.parentAccountId}, {Fields.orgId}
+      FROM {PartnerBankSqlMapper.table}
       WHERE
-         {AccountFields.status} = '{string AccountStatus.Active}'
-         AND ({prevCycle} IS NULL
+         ({prevCycle} IS NULL
          OR {prevCycle} < current_timestamp - {lookback})
       """
       None
-   <| fun read ->
-      AccountSqlReader.parentAccountId read,
-      AccountSqlReader.accountId read,
-      AccountSqlReader.orgId read
+   <| fun read -> SqlReader.parentAccountId read, SqlReader.orgId read
 
 let private fanOutBillingCycleMessage
    (ctx: Actor<_>)
@@ -69,14 +68,13 @@ let private fanOutBillingCycleMessage
 
                opt)
          |> Source.collect id
-         |> Source.runForEach mat (fun (parentAccountId, accountId, orgId) ->
+         |> Source.runForEach mat (fun (parentAccountId, orgId) ->
             // This billing cycle actor is scheduled to run at the start of
             // every month.  The billing period refers to the previous month.
             let billingPeriod = DateTime.UtcNow.AddMonths -1
 
             let msg =
                StartBillingCycleCommand.create (parentAccountId, orgId) {
-                  AccountId = accountId
                   Month = billingPeriod.Month
                   Year = billingPeriod.Year
                   Reference = None

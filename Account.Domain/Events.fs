@@ -76,7 +76,6 @@ type AccountClosed = {
 }
 
 type BillingCycleStarted = {
-   AccountId: AccountId
    Month: int
    Year: int
    Reference: string option

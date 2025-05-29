@@ -14,7 +14,7 @@ DROP VIEW IF EXISTS daily_purchase_accrued_by_card;
 DROP VIEW IF EXISTS monthly_purchase_accrued_by_card;
 
 DROP TABLE IF EXISTS balance_history;
-DROP TABLE IF EXISTS billingstatement;
+DROP TABLE IF EXISTS billing_statement;
 DROP TABLE IF EXISTS payment_platform;
 DROP TABLE IF EXISTS payment_third_party;
 DROP TABLE IF EXISTS payment;
@@ -178,12 +178,14 @@ CREATE TABLE partner_bank_parent_account (
    parent_account_id UUID PRIMARY KEY,
    partner_bank_routing_number INT NOT NULL,
    partner_bank_account_number BIGINT NOT NULL,
+   last_billing_cycle_at TIMESTAMPTZ,
    org_id UUID NOT NULL REFERENCES organization
 );
 
-
 SELECT add_created_at_column('partner_bank_parent_account');
 SELECT add_updated_at_column_and_trigger('partner_bank_parent_account');
+
+CREATE INDEX last_billing_cycle_at_idx ON partner_bank_parent_account(last_billing_cycle_at);
 
 COMMENT ON COLUMN partner_bank_parent_account.parent_account_id IS
 'Refers to the parent account actor which manages transactions
@@ -216,17 +218,13 @@ CREATE TABLE account (
    status account_status NOT NULL,
    auto_transfer_rule JSONB,
    auto_transfer_rule_frequency auto_transfer_rule_frequency,
-   maintenance_fee_qualifying_deposit_found BOOLEAN NOT NULL,
-   maintenance_fee_daily_balance_threshold BOOLEAN NOT NULL,
    org_id UUID NOT NULL REFERENCES organization,
-   parent_account_id UUID NOT NULL,
-   last_billing_cycle_at TIMESTAMPTZ
+   parent_account_id UUID NOT NULL
 );
 
 SELECT add_created_at_column('account');
 SELECT add_updated_at_column_and_trigger('account');
 
-CREATE INDEX account_last_billing_cycle_at_idx ON account(last_billing_cycle_at);
 CREATE INDEX account_org_id_idx ON account(org_id);
 
 COMMENT ON TABLE account IS
@@ -262,10 +260,6 @@ COMMENT ON COLUMN account.auto_transfer_rule_frequency IS
 'How often to check whether an account should
 manage their balance by automatically transferring funds.';
 
-COMMENT ON COLUMN account.last_billing_cycle_at IS
-'Used by BillingCycleActor to determine which accounts to send a
-StartBillingCycleCommand to.';
-
 
 --- ORG FEATURE FLAGS ---
 CREATE TABLE org_feature_flag (
@@ -289,24 +283,23 @@ for this org.';
 
 
 --- BILLING STATEMENTS ---
-CREATE TABLE billingstatement (
-   name VARCHAR(100) NOT NULL,
-   account_id UUID NOT NULL REFERENCES account ON DELETE CASCADE,
-   last_persisted_event_sequence_number BIGINT NOT NULL,
+CREATE TABLE billing_statement (
+   account_name VARCHAR(100) NOT NULL,
    transactions JSONB NOT NULL,
    balance MONEY NOT NULL,
    month INT NOT NULL,
    year INT NOT NULL,
-   account_snapshot BYTEA NOT NULL,
    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+   account_id UUID NOT NULL REFERENCES account ON DELETE CASCADE,
+   parent_account_id UUID REFERENCES partner_bank_parent_account,
    org_id UUID NOT NULL REFERENCES organization
 );
 
-SELECT add_created_at_column('billingstatement');
-SELECT prevent_update('billingstatement');
+SELECT add_created_at_column('billing_statement');
+SELECT prevent_update('billing_statement');
 
-CREATE INDEX billingstatement_org_id_idx ON billingstatement(org_id);
-CREATE INDEX billingstatement_account_id_idx ON billingstatement(account_id);
+CREATE INDEX billing_statement_org_id_idx ON billing_statement(org_id);
+CREATE INDEX billing_statement_account_id_idx ON billing_statement(account_id);
 
 
 --- PURCHASE CATEGORIES ---

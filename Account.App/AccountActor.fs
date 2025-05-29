@@ -8,6 +8,7 @@ open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
+open System.Text.Json
 
 open Lib.SharedTypes
 open Lib.Types
@@ -28,7 +29,7 @@ open PlatformPaymentSaga
 // Pass monthly billing statement to BillingStatementActor.
 // Conditionally apply monthly maintenance fee.
 // Email account owner to notify of billing statement availability.
-(*
+
 let private billingCycle
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
@@ -36,32 +37,42 @@ let private billingCycle
    (state: ParentAccountSnapshot)
    (evt: BankEvent<BillingCycleStarted>)
    =
-   let account = state.Info
-
    let billingPeriod = {
       Month = evt.Data.Month
       Year = evt.Data.Year
    }
 
-   let lastSequenceNum = mailbox.LastSequenceNr()
-
-   let billing =
-      BillingStatement.billingStatement state billingPeriod lastSequenceNum
+   let billing: BillingPersistable = {
+      ParentAccountId = state.ParentAccountId
+      ParentAccountSnapshot =
+         JsonSerializer.SerializeToUtf8Bytes(state, Serialization.jsonOptions)
+      LastPersistedEventSequenceNumber = mailbox.LastSequenceNr()
+      Statements =
+         state.VirtualAccounts.Values
+         |> Seq.filter (fun a -> a.Status = AccountStatus.Active)
+         |> Seq.map (fun account ->
+            BillingStatement.billingStatement
+               account
+               (state.eventsForAccount account.AccountId)
+               billingPeriod)
+         |> Seq.toList
+   }
 
    getBillingStatementActor mailbox.System <! RegisterBillingStatement billing
 
-   let criteria = account.MaintenanceFeeCriteria
+   let criteria = state.MaintenanceFeeCriteria
+   let compositeId = state.PrimaryVirtualAccountCompositeId
 
    if criteria.CanSkipFee then
       let msg =
-         SkipMaintenanceFeeCommand.create account.CompositeId criteria
+         SkipMaintenanceFeeCommand.create compositeId criteria
          |> AccountCommand.SkipMaintenanceFee
          |> AccountMessage.StateChange
 
       mailbox.Parent() <! msg
    else
       let msg =
-         MaintenanceFeeCommand.create account.CompositeId
+         MaintenanceFeeCommand.create compositeId
          |> AccountCommand.MaintenanceFee
          |> AccountMessage.StateChange
 
@@ -69,12 +80,11 @@ let private billingCycle
 
    let msg =
       EmailMessage.create
-         account.OrgId
+         state.OrgId
          evt.CorrelationId
-         (EmailInfo.BillingStatement account.FullName)
+         EmailInfo.BillingStatement
 
    getEmailActor mailbox.System <! msg
-*)
 
 // Account events with an in/out money flow can produce an
 // automatic transfer.  Automated transfer account events have
@@ -214,7 +224,7 @@ let onPersisted
    (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (mailbox: Eventsourced<obj>)
-   (account: Account)
+   (state: ParentAccountSnapshot)
    (evt: AccountEvent)
    =
    let onPlatformPaymentEvent evt corrId orgId =
@@ -236,76 +246,79 @@ let onPersisted
       getSagaRef corrId <! msg
 
    match evt with
-   | InitializedPrimaryCheckingAccount e ->
+   | AccountEvent.InitializedPrimaryCheckingAccount e ->
       let msg =
          OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount
          |> AppSaga.Event.OrgOnboarding
          |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | CreatedAccount e ->
+   | AccountEvent.CreatedAccount e ->
       let msg =
          EmailMessage.create
-            account.OrgId
+            state.OrgId
             e.CorrelationId
-            (EmailInfo.AccountOpen account.FullName)
+            (EmailInfo.AccountOpen e.Data.Name)
 
       getEmailRef mailbox.System <! msg
    | AccountEvent.AccountClosed _ ->
+      (*
       getAccountClosureRef mailbox.System
       <! AccountClosureMessage.Register account
-   | DebitedAccount e ->
+      *)
+      ()
+   | AccountEvent.DebitedAccount e ->
       let msg =
          PurchaseSagaEvent.PurchaseConfirmedByAccount
          |> AppSaga.Event.Purchase
          |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | RefundedDebit e ->
+   | AccountEvent.RefundedDebit e ->
       let msg =
          PurchaseSagaEvent.PurchaseRefundedToAccount
          |> AppSaga.Event.Purchase
          |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | BillingCycleStarted e -> ()
-   //billingCycle getBillingStatementRef getEmailRef mailbox state e
-   | PlatformPaymentRequested e ->
+   | AccountEvent.BillingCycleStarted e ->
+      billingCycle getBillingStatementRef getEmailRef mailbox state e
+   | AccountEvent.PlatformPaymentRequested e ->
       onPlatformPaymentEvent
          (PlatformPaymentSagaStartEvent.PaymentRequested e
           |> PlatformPaymentSagaEvent.Start)
          e.CorrelationId
          e.OrgId
-   | PlatformPaymentPaid e ->
+   | AccountEvent.PlatformPaymentPaid e ->
       onPlatformPaymentEvent
          (PlatformPaymentSagaEvent.PayerAccountDeductedFunds e)
          e.CorrelationId
          e.Data.BaseInfo.Payee.OrgId
-   | PlatformPaymentDeposited e ->
+   | AccountEvent.PlatformPaymentDeposited e ->
       onPlatformPaymentEvent
          PlatformPaymentSagaEvent.PayeeAccountDepositedFunds
          e.CorrelationId
          e.OrgId
-   | PlatformPaymentDeclined e ->
+   | AccountEvent.PlatformPaymentDeclined e ->
       onPlatformPaymentEvent
          PlatformPaymentSagaEvent.PaymentRequestDeclined
          e.CorrelationId
          e.Data.BaseInfo.Payee.OrgId
-   | PlatformPaymentCancelled e ->
+   | AccountEvent.PlatformPaymentCancelled e ->
       onPlatformPaymentEvent
          PlatformPaymentSagaEvent.PaymentRequestCancelled
          e.CorrelationId
          e.OrgId
-   | PlatformPaymentRefunded e ->
+   | AccountEvent.PlatformPaymentRefunded e ->
       onPlatformPaymentEvent
          PlatformPaymentSagaEvent.PayerAccountRefunded
          e.CorrelationId
          e.OrgId
    (*
-   | ThirdPartyPaymentRequested e ->
+   | AccountEvent.ThirdPartyPaymentRequested e ->
       // TODO: Send email requesting payment
    *)
-   | InternalTransferBetweenOrgsPending e ->
+   | AccountEvent.InternalTransferBetweenOrgsPending e ->
       if e.Data.FromSchedule then
          onPlatformTransferEvent
             PlatformTransferSagaEvent.SenderAccountDeductedFunds
@@ -318,24 +331,24 @@ let onPersisted
             |> PlatformTransferSagaEvent.Start
 
          onPlatformTransferEvent evt e.CorrelationId e.OrgId
-   | InternalTransferBetweenOrgsScheduled e ->
+   | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
       let evt =
          PlatformTransferSagaStartEvent.ScheduleTransferRequest e
          |> PlatformTransferSagaEvent.Start
 
       onPlatformTransferEvent evt e.CorrelationId e.OrgId
-   | InternalTransferBetweenOrgsDeposited e ->
+   | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       onPlatformTransferEvent
          PlatformTransferSagaEvent.RecipientAccountDepositedFunds
          e.CorrelationId
          e.OrgId
-   | DomesticTransferScheduled e ->
+   | AccountEvent.DomesticTransferScheduled e ->
       let evt =
          DomesticTransferSagaStartEvent.ScheduleTransferRequest e
          |> DomesticTransferSagaEvent.Start
 
       onDomesticTransferEvent evt e.CorrelationId e.OrgId
-   | DomesticTransferPending e ->
+   | AccountEvent.DomesticTransferPending e ->
       if e.Data.FromSchedule then
          onDomesticTransferEvent
             DomesticTransferSagaEvent.SenderAccountDeductedFunds
@@ -347,12 +360,12 @@ let onPersisted
             |> DomesticTransferSagaEvent.Start
 
          onDomesticTransferEvent evt e.CorrelationId e.OrgId
-   | DomesticTransferFailed e ->
+   | AccountEvent.DomesticTransferFailed e ->
       onDomesticTransferEvent
          DomesticTransferSagaEvent.SenderAccountRefunded
          e.CorrelationId
          e.OrgId
-   | DomesticTransferCompleted e ->
+   | AccountEvent.DomesticTransferCompleted e ->
       onDomesticTransferEvent
          DomesticTransferSagaEvent.TransferMarkedAsSettled
          e.CorrelationId
@@ -470,9 +483,9 @@ let actorProps
             let (AccountMessage.Event evt) = unbox e
 
             let state = ParentAccount.applyEvent state evt
-            let account = state.Info[evt.AccountId]
 
-            broadcaster.accountEventPersisted evt account
+            state.VirtualAccounts.TryFind evt.AccountId
+            |> Option.iter (broadcaster.accountEventPersisted evt)
 
             onPersisted
                getEmailRef
@@ -480,7 +493,7 @@ let actorProps
                getBillingStatementRef
                getSagaRef
                mailbox
-               account
+               state
                evt
 
             return! loop <| Some state
@@ -515,7 +528,8 @@ let actorProps
             match msg with
             | AccountMessage.GetAccount -> mailbox.Sender() <! stateOpt
             | AccountMessage.GetVirtualAccount accountId ->
-               let account = stateOpt |> Option.bind (_.Info.TryFind(accountId))
+               let account =
+                  stateOpt |> Option.bind (_.VirtualAccounts.TryFind(accountId))
 
                mailbox.Sender() <! account
             | AccountMessage.AutoTransferCompute(frequency, accountId) ->

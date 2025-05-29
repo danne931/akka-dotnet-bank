@@ -116,7 +116,7 @@ type AccountCommand =
          | PaymentMethod.Platform accountId -> accountId
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | CloseAccount cmd -> cmd.Data.AccountId
-      | StartBillingCycle cmd -> cmd.Data.AccountId
+      | StartBillingCycle _ -> AccountId Guid.Empty
       | ConfigureAutoTransferRule cmd -> cmd.Data.AccountId
       | DeleteAutoTransferRule cmd -> cmd.Data.AccountId
       | InternalAutoTransfer cmd -> cmd.Data.Transfer.Sender.AccountId
@@ -210,7 +210,7 @@ type AccountEvent =
          | PaymentMethod.Platform accountId -> accountId
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | AccountClosed evt -> evt.Data.AccountId
-      | BillingCycleStarted evt -> evt.Data.AccountId
+      | BillingCycleStarted _ -> AccountId Guid.Empty
       | AutoTransferRuleConfigured evt -> evt.Data.AccountId
       | AutoTransferRuleDeleted evt -> evt.Data.AccountId
       | InternalAutomatedTransferPending evt ->
@@ -411,8 +411,6 @@ type Account = {
    Currency: Currency
    Status: AccountStatus
    Balance: decimal
-   LastBillingCycleDate: DateTime option
-   MaintenanceFeeCriteria: MaintenanceFeeCriteria
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
    AutoTransferRule: AutomaticTransferConfig option
@@ -455,11 +453,6 @@ type Account = {
       Currency = Currency.USD
       Status = AccountStatus.InitialEmptyState
       Balance = 0m
-      LastBillingCycleDate = None
-      MaintenanceFeeCriteria = {
-         QualifyingDepositFound = false
-         DailyBalanceThreshold = false
-      }
       AccountNumber = AccountNumber <| Int64.Parse "123456789123456"
       RoutingNumber = RoutingNumber 123456789
       AutoTransferRule = None
@@ -468,16 +461,35 @@ type Account = {
 type ParentAccountSnapshot = {
    OrgId: OrgId
    ParentAccountId: ParentAccountId
-   Info: Map<AccountId, Account>
+   PrimaryVirtualAccountId: AccountId
+   VirtualAccounts: Map<AccountId, Account>
+   LastBillingCycleDate: DateTime option
+   MaintenanceFeeCriteria: MaintenanceFeeCriteria
+   Status: AccountStatus
    Events: AccountEvent list
 } with
 
    static member empty: ParentAccountSnapshot = {
       OrgId = OrgId Guid.Empty
       ParentAccountId = ParentAccountId Guid.Empty
-      Info = Map.empty
+      PrimaryVirtualAccountId = AccountId Guid.Empty
+      VirtualAccounts = Map.empty
+      LastBillingCycleDate = None
+      Status = AccountStatus.InitialEmptyState
+      MaintenanceFeeCriteria = {
+         QualifyingDepositFound = false
+         DailyBalanceThreshold = false
+      }
       Events = []
    }
+
+   member x.eventsForAccount(accountId: AccountId) =
+      x.Events |> List.filter (fun evt -> evt.AccountId = accountId)
+
+   member x.Balance = x.VirtualAccounts.Values |> Seq.sumBy _.Balance
+
+   member x.PrimaryVirtualAccountCompositeId =
+      x.PrimaryVirtualAccountId, x.ParentAccountId, x.OrgId
 
 type AccountMetrics = {
    DailyInternalTransferWithinOrg: decimal

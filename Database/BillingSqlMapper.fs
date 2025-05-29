@@ -4,18 +4,17 @@ open BillingStatement
 open AccountSqlMapper
 open OrganizationSqlMapper
 
-let table = "billingstatement"
+let table = "billing_statement"
 
 module BillingFields =
    let transactions = "transactions"
    let month = "month"
    let year = "year"
    let balance = "balance"
-   let name = "name"
+   let accountName = "account_name"
    let accountId = AccountFields.accountId
+   let parentAccountId = AccountFields.parentAccountId
    let orgId = OrgFields.orgId
-   let lastPersistedEventSequenceNumber = "last_persisted_event_sequence_number"
-   let accountSnapshot = "account_snapshot"
 
 module BillingSqlReader =
    let transactions (read: RowReader) =
@@ -27,17 +26,13 @@ module BillingSqlReader =
 
    let balance (read: RowReader) = read.decimal BillingFields.balance
 
-   let name (read: RowReader) = read.text BillingFields.name
+   let accountName (read: RowReader) = read.text BillingFields.accountName
 
    let accountId = AccountSqlReader.accountId
 
+   let parentAccountId = AccountSqlReader.parentAccountId
+
    let orgId = OrgSqlReader.orgId
-
-   let lastPersistedEventSequenceNumber (read: RowReader) =
-      read.int64 BillingFields.lastPersistedEventSequenceNumber
-
-   let accountSnapshot (read: RowReader) =
-      read.bytea BillingFields.accountSnapshot
 
 module BillingSqlWriter =
    let transactions (txns: BillingTransaction list) =
@@ -46,8 +41,7 @@ module BillingSqlWriter =
    let month = Sql.int
    let year = Sql.int
    let balance = Sql.money
-   let name = Sql.text
+   let accountName = Sql.text
    let accountId = AccountSqlWriter.accountId
+   let parentAccountId = AccountSqlWriter.parentAccountId
    let orgId = OrgSqlWriter.orgId
-   let lastPersistedEventSequenceNumber = Sql.int64
-   let accountSnapshot = Sql.bytea

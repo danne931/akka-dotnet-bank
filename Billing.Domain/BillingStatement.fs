@@ -44,11 +44,17 @@ type BillingStatement = {
    Month: int
    Year: int
    Balance: decimal
-   Name: string
+   AccountName: string
+   AccountId: AccountId
    ParentAccountId: ParentAccountId
    OrgId: OrgId
-   LastPersistedEventSequenceNumber: Int64
+}
+
+type BillingPersistable = {
+   ParentAccountId: ParentAccountId
    ParentAccountSnapshot: byte[]
+   LastPersistedEventSequenceNumber: Int64
+   Statements: BillingStatement list
 }
 
 type BillingCycleMessage =
@@ -56,33 +62,25 @@ type BillingCycleMessage =
    | BillingCycleFinished
 
 type BillingStatementMessage =
-   | RegisterBillingStatement of BillingStatement
+   | RegisterBillingStatement of BillingPersistable
    | GetFailedWrites
 
 let billingTransactions (period: BillingPeriod) (evts: AccountEvent list) =
    List.choose (BillingTransaction.create period) evts
 
-#if !FABLE_COMPILER
-open System.Text.Json
-
 let billingStatement
-   (state: ParentAccountSnapshot)
+   (account: Account)
+   (events: AccountEvent list)
    (period: BillingPeriod)
-   (lastPersistedEventSequenceNumber: Int64)
    : BillingStatement
    =
-   let evts = state.Events
-
    {
-      Transactions = billingTransactions period evts
+      Transactions = billingTransactions period events
       Month = period.Month
       Year = period.Year
-      Balance = 100m //account.Balance
-      Name = "" //account.Name
-      ParentAccountId = state.ParentAccountId
-      OrgId = state.OrgId
-      LastPersistedEventSequenceNumber = lastPersistedEventSequenceNumber
-      ParentAccountSnapshot =
-         JsonSerializer.SerializeToUtf8Bytes(state, Serialization.jsonOptions)
+      Balance = account.Balance
+      AccountName = account.FullName
+      AccountId = account.AccountId
+      ParentAccountId = account.ParentAccountId
+      OrgId = account.OrgId
    }
-#endif

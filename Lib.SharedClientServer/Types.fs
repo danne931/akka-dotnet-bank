@@ -307,6 +307,7 @@ type OrgStateTransitionError =
 
 type AccountStateTransitionError =
    | ParentAccountAlreadyInitialized
+   | ParentAccountNotActive
    | AccountNotReadyToActivate
    | AccountNotFound of AccountId
    | AccountNotActive of accountName: string
@@ -405,6 +406,7 @@ type Err =
          match e with
          | ParentAccountAlreadyInitialized ->
             "Parent account already initialized with primary accounts."
+         | ParentAccountNotActive -> "Parent account not active."
          | AccountNotFound accountId -> $"Account Not Found {accountId}"
          | AccountStateTransitionError.AccountNotActive accountName ->
             $"Account Not Active {accountName}"

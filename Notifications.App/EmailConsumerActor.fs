@@ -96,11 +96,11 @@ let private emailPropsFromMessage
       Data = {| name = accountName |}
      }
    // TODO: Include link to view statement
-   | EmailInfo.BillingStatement(accountName) -> {
+   | EmailInfo.BillingStatement -> {
       OrgId = msg.OrgId
       Event = "billing-statement"
       Email = None
-      Data = {| name = accountName |}
+      Data = {| |}
      }
    | EmailInfo.Purchase info -> {
       OrgId = msg.OrgId

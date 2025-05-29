@@ -18,7 +18,7 @@ open Lib.Types
 open Lib.BulkWriteStreamFlow
 
 type BillingPersistence = {
-   saveBillingStatements: BillingStatement list -> Task<Result<int list, Err>>
+   saveBillingStatements: BillingPersistable list -> Task<Result<int list, Err>>
 }
 
 // NOTE:
@@ -41,14 +41,14 @@ let initQueueSource
    (billingStatementActorRef: IActorRef<obj>)
    =
    let flow, bulkWriteRef =
-      initBulkWriteFlow<BillingStatement> system restartSettings {
+      initBulkWriteFlow<BillingPersistable> system restartSettings {
          RetryAfter = retryAfter
          persist =
-            fun (statements: BillingStatement seq) ->
+            fun (statements: BillingPersistable seq) ->
                statements |> List.ofSeq |> persistence.saveBillingStatements
          // Feed failed inserts back into the stream
          onRetry =
-            fun (statements: BillingStatement seq) ->
+            fun (statements: BillingPersistable seq) ->
                for bill in statements do
                   billingStatementActorRef <! RegisterBillingStatement bill
          onPersistOk =
@@ -102,8 +102,8 @@ let actorProps
 
    and processing
       (ctx: Actor<obj>)
-      (queue: ISourceQueueWithComplete<BillingStatement>)
-      (bulkWriteRef: IActorRef<BulkWriteMessage<BillingStatement>>)
+      (queue: ISourceQueueWithComplete<BillingPersistable>)
+      (bulkWriteRef: IActorRef<BulkWriteMessage<BillingPersistable>>)
       =
       actor {
          let! msg = ctx.Receive()
@@ -111,8 +111,8 @@ let actorProps
          match msg with
          | :? BillingStatementMessage as msg ->
             match msg with
-            | RegisterBillingStatement statement ->
-               let! result = queueOffer<BillingStatement> queue statement
+            | RegisterBillingStatement persistable ->
+               let! result = queueOffer<BillingPersistable> queue persistable
 
                return
                   match result with
@@ -141,23 +141,19 @@ let private billingStatementSqlParams (bill: BillingStatement) = [
    "@month", BillingSqlWriter.month bill.Month
    "@year", BillingSqlWriter.year bill.Year
    "@balance", BillingSqlWriter.balance bill.Balance
-   "@name", BillingSqlWriter.name bill.Name
-   "@accountId", BillingSqlWriter.accountId (Guid.NewGuid() |> AccountId) //bill.ParentAccountId
+   "@accountName", BillingSqlWriter.accountName bill.AccountName
+   "@accountId", BillingSqlWriter.accountId bill.AccountId
+   "@parentAccountId", BillingSqlWriter.parentAccountId bill.ParentAccountId
    "@orgId", BillingSqlWriter.orgId bill.OrgId
-   "@lastPersistedEventSequenceNumber",
-   BillingSqlWriter.lastPersistedEventSequenceNumber
-      bill.LastPersistedEventSequenceNumber
-   "@accountSnapshot",
-   BillingSqlWriter.accountSnapshot bill.ParentAccountSnapshot
 ]
 
-let private snapshotStoreSqlParams (bill: BillingStatement) = [
-   "@persistenceId", Sql.text <| string bill.ParentAccountId
-   "@sequenceNumber", Sql.int64 bill.LastPersistedEventSequenceNumber
+let private snapshotStoreSqlParams (o: BillingPersistable) = [
+   "@persistenceId", Sql.text <| string o.ParentAccountId
+   "@sequenceNumber", Sql.int64 o.LastPersistedEventSequenceNumber
    "@created", Sql.int64 <| DateTime.UtcNow.ToFileTimeUtc()
-   "@snapshot", Sql.bytea bill.ParentAccountSnapshot
+   "@snapshot", Sql.bytea o.ParentAccountSnapshot
    "@serializerId", Sql.int 931
-   "@manifest", Sql.string "AccountSnapshot"
+   "@manifest", Sql.string "ParentAccountSnapshot"
 ]
 
 // NOTE:
@@ -167,13 +163,15 @@ let private snapshotStoreSqlParams (bill: BillingStatement) = [
 // To fix this I have removed this application logic from the AccountActor,
 // instead opting to carry out these DB ops in a transaction along with
 // insertion of the billing statements.
-let private saveBillingStatements (statements: BillingStatement list) =
+let private saveBillingStatements (items: BillingPersistable list) =
    let sqlParams =
-      statements
+      items
       |> List.fold
-         (fun acc bill -> {|
-            Billing = billingStatementSqlParams bill :: acc.Billing
-            SnapshotStore = snapshotStoreSqlParams bill :: acc.SnapshotStore
+         (fun acc item -> {|
+            Billing =
+               acc.Billing
+               @ (item.Statements |> List.map billingStatementSqlParams)
+            SnapshotStore = snapshotStoreSqlParams item :: acc.SnapshotStore
          |})
          {| Billing = []; SnapshotStore = [] |}
 
@@ -184,21 +182,19 @@ let private saveBillingStatements (statements: BillingStatement list) =
           {BillingFields.month},
           {BillingFields.year},
           {BillingFields.balance},
-          {BillingFields.name},
+          {BillingFields.accountName},
           {BillingFields.accountId},
-          {BillingFields.orgId},
-          {BillingFields.lastPersistedEventSequenceNumber},
-          {BillingFields.accountSnapshot})
+          {BillingFields.parentAccountId},
+          {BillingFields.orgId})
       VALUES
          (@transactions,
           @month,
           @year,
           @balance,
-          @name,
+          @accountName,
           @accountId,
-          @orgId,
-          @lastPersistedEventSequenceNumber,
-          @accountSnapshot)
+          @parentAccountId,
+          @orgId)
       """,
       sqlParams.Billing
 
