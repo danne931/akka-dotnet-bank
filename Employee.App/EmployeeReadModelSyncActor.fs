@@ -216,47 +216,46 @@ let upsertReadModels
       """,
       sqlParams.EmployeeEvent
 
-      if not sqlParams.Card.IsEmpty then
-         $"""
-         INSERT into {CardSqlMapper.table}
-            ({CardFields.cardId},
-             {CardFields.accountId},
-             {CardFields.orgId},
-             {CardFields.employeeId},
-             {CardFields.cardNumberLast4},
-             {CardFields.cardType},
-             {CardFields.status},
-             {CardFields.isVirtual},
-             {CardFields.dailyPurchaseLimit},
-             {CardFields.monthlyPurchaseLimit},
-             {CardFields.lastPurchaseAt},
-             {CardFields.cardNickname},
-             {CardFields.expMonth},
-             {CardFields.expYear})
-         VALUES
-            (@cardId,
-             @accountId,
-             @orgId,
-             @employeeId,
-             @cardNumberLast4,
-             @cardType::{CardTypeCast.cardType},
-             @status::{CardTypeCast.status},
-             @virtual,
-             @dailyPurchaseLimit,
-             @monthlyPurchaseLimit,
-             @lastPurchaseAt,
-             @cardNickname,
-             @expMonth,
-             @expYear)
-         ON CONFLICT ({CardFields.cardId})
-         DO UPDATE SET
-            {CardFields.status} = @status::{CardTypeCast.status},
-            {CardFields.dailyPurchaseLimit} = @dailyPurchaseLimit,
-            {CardFields.monthlyPurchaseLimit} = @monthlyPurchaseLimit,
-            {CardFields.lastPurchaseAt} = @lastPurchaseAt,
-            {CardFields.cardNickname} = @cardNickname;
-         """,
-         sqlParams.Card
+      $"""
+      INSERT into {CardSqlMapper.table}
+         ({CardFields.cardId},
+          {CardFields.accountId},
+          {CardFields.orgId},
+          {CardFields.employeeId},
+          {CardFields.cardNumberLast4},
+          {CardFields.cardType},
+          {CardFields.status},
+          {CardFields.isVirtual},
+          {CardFields.dailyPurchaseLimit},
+          {CardFields.monthlyPurchaseLimit},
+          {CardFields.lastPurchaseAt},
+          {CardFields.cardNickname},
+          {CardFields.expMonth},
+          {CardFields.expYear})
+      VALUES
+         (@cardId,
+          @accountId,
+          @orgId,
+          @employeeId,
+          @cardNumberLast4,
+          @cardType::{CardTypeCast.cardType},
+          @status::{CardTypeCast.status},
+          @virtual,
+          @dailyPurchaseLimit,
+          @monthlyPurchaseLimit,
+          @lastPurchaseAt,
+          @cardNickname,
+          @expMonth,
+          @expYear)
+      ON CONFLICT ({CardFields.cardId})
+      DO UPDATE SET
+         {CardFields.status} = @status::{CardTypeCast.status},
+         {CardFields.dailyPurchaseLimit} = @dailyPurchaseLimit,
+         {CardFields.monthlyPurchaseLimit} = @monthlyPurchaseLimit,
+         {CardFields.lastPurchaseAt} = @lastPurchaseAt,
+         {CardFields.cardNickname} = @cardNickname;
+      """,
+      sqlParams.Card
    ]
 
    pgTransaction query

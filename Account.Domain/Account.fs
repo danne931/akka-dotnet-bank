@@ -9,6 +9,7 @@ open Lib.SharedTypes
 
 let applyEvent (account: Account) (evt: AccountEvent) =
    match evt with
+   | ParentAccount _ -> account
    | InitializedPrimaryCheckingAccount e -> {
       AccountId = e.Data.PrimaryChecking.AccountId
       AccountNumber = e.Data.PrimaryChecking.AccountNumber
@@ -22,7 +23,6 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       Status = AccountStatus.Active
       AutoTransferRule = None
      }
-   | BillingCycleStarted _ -> account
    | CreatedAccount e -> {
       AccountId = e.Data.AccountId
       AccountNumber = e.Data.AccountNumber
@@ -575,7 +575,7 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.failInternalAutoTransfer account cmd
    | AccountCommand.DepositInternalAutoTransfer cmd ->
       StateTransition.depositInternalAutoTransfer account cmd
-   | AccountCommand.StartBillingCycle _ ->
+   | AccountCommand.ParentAccount _ ->
       account.AccountId
       |> AccountStateTransitionError.AccountNotFound
       |> transitionErr

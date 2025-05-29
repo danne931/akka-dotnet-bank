@@ -281,7 +281,7 @@ let onPersisted
          |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.BillingCycleStarted e ->
+   | AccountEvent.ParentAccount(ParentAccountEvent.BillingCycleStarted e) ->
       billingCycle getBillingStatementRef getEmailRef mailbox state e
    | AccountEvent.PlatformPaymentRequested e ->
       onPlatformPaymentEvent

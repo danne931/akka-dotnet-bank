@@ -79,7 +79,8 @@ let private fanOutBillingCycleMessage
                   Year = billingPeriod.Year
                   Reference = None
                }
-               |> AccountCommand.StartBillingCycle
+               |> ParentAccountCommand.StartBillingCycle
+               |> AccountCommand.ParentAccount
                |> AccountMessage.StateChange
 
             getAccountRef parentAccountId <! msg)

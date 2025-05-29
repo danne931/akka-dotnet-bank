@@ -71,36 +71,31 @@ module TransferLimits =
 
 let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
    let updated =
-      // Represents an event scoped to a parent account rather than
-      // a virtual account.
-      if evt.AccountId = AccountId Guid.Empty then
-         state
-      else
-         {
-            state with
-               VirtualAccounts =
-                  state.VirtualAccounts
-                  |> Map.change evt.AccountId (fun accountOpt ->
-                     let updated =
-                        Account.applyEvent
-                           (accountOpt |> Option.defaultValue Account.empty)
-                           evt
-
-                     Some updated)
-         }
+      match evt with
+      | AccountEvent.ParentAccount _ -> state
+      | _ -> {
+         state with
+            VirtualAccounts =
+               state.VirtualAccounts
+               |> Map.change evt.AccountId (fun accountOpt ->
+                  Account.applyEvent
+                     (accountOpt |> Option.defaultValue Account.empty)
+                     evt
+                  |> Some)
+        }
 
    let updated =
       match evt with
+      | AccountEvent.ParentAccount(ParentAccountEvent.BillingCycleStarted e) -> {
+         updated with
+            LastBillingCycleDate = Some e.Timestamp
+        }
       | AccountEvent.InitializedPrimaryCheckingAccount e -> {
          updated with
             OrgId = e.OrgId
             ParentAccountId = e.Data.ParentAccountId
             PrimaryVirtualAccountId = e.Data.PrimaryChecking.AccountId
             Status = AccountStatus.Active
-        }
-      | AccountEvent.BillingCycleStarted e -> {
-         updated with
-            LastBillingCycleDate = Some e.Timestamp
         }
       | AccountEvent.MaintenanceFeeSkipped _
       | AccountEvent.MaintenanceFeeDebited _ -> {
@@ -276,13 +271,17 @@ let stateTransition
       |> Result.bind (
          validateDomesticTransferLimit cmd.Data.Amount cmd.Timestamp
       )
-   | AccountCommand.StartBillingCycle cmd, _ ->
+   | AccountCommand.ParentAccount(ParentAccountCommand.StartBillingCycle cmd), _ ->
       validateParentAccountActive state
       |> Result.bind (fun _ ->
          StartBillingCycleCommand.toEvent cmd
          |> Result.mapError ValidationError)
       |> Result.map (fun evt ->
-         let evt = AccountEvent.BillingCycleStarted evt
+         let evt =
+            AccountEvent.ParentAccount(
+               ParentAccountEvent.BillingCycleStarted evt
+            )
+
          evt, (applyEvent state evt))
    | _, None -> Account.transitionErr (AccountNotFound accountId)
    | _, Some account ->

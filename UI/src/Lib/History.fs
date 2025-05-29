@@ -466,10 +466,6 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
       }
-   | BillingCycleStarted _ -> {
-      props with
-         Info = "New billing cycle.."
-     }
    | AccountClosed evt -> {
       props with
          Info = $"Closed Account - Reference: {evt.Data.Reference}"
@@ -584,6 +580,12 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
       }
+   | ParentAccount evt ->
+      match evt with
+      | ParentAccountEvent.BillingCycleStarted _ -> {
+         props with
+            Info = "New billing cycle.."
+        }
 
 let historyUIFriendly
    (org: OrgWithAccountProfiles)

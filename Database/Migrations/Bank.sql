@@ -25,6 +25,7 @@ DROP TABLE IF EXISTS transfer_domestic_recipient;
 DROP TABLE IF EXISTS merchant;
 DROP TABLE IF EXISTS saga;
 DROP TABLE IF EXISTS ancillary_transaction_info;
+DROP TABLE IF EXISTS parent_account_event;
 DROP TABLE IF EXISTS account_event;
 DROP TABLE IF EXISTS card;
 DROP TABLE IF EXISTS command_approval_progress;
@@ -538,6 +539,26 @@ COMMENT ON COLUMN account_event.correlation_id IS
 'Correlation ID allows us to trace the lifecycle of some transaction
 (ex: DomesticTransferRequested -> DomesticTransferProgressUpdate -> DomesticTransferCompleted)
 is an example where 3 events share the same correlation_id.';
+
+
+--- PARENT ACCOUNT EVENTS ---
+CREATE TABLE parent_account_event (
+   name VARCHAR(50) NOT NULL,
+   timestamp TIMESTAMPTZ NOT NULL,
+   event JSONB NOT NULL,
+   event_id UUID PRIMARY KEY,
+   initiated_by_id UUID NOT NULL REFERENCES employee(employee_id),
+   correlation_id UUID NOT NULL,
+   parent_account_id UUID NOT NULL,
+   org_id UUID NOT NULL REFERENCES organization
+);
+
+SELECT add_created_at_column('parent_account_event');
+SELECT prevent_update('parent_account_event');
+
+COMMENT ON TABLE parent_account_event IS
+'parent_account_event is the read model representation of Akka event sourced parent account events.';
+
 
 --- ANCILLARY TRANSACTION INFO ---
 CREATE TABLE ancillary_transaction_info (
@@ -1274,7 +1295,7 @@ RETURNS TABLE (
 BEGIN
   RETURN QUERY
   SELECT
-     account.account_id,
+     ae.account_id,
 
      COALESCE(
         SUM(
@@ -1333,7 +1354,7 @@ BEGIN
         0
      ) AS payment_paid_accrued
   FROM account_event ae
-  JOIN account using(account_id)
+  JOIN partner_bank_parent_account using(parent_account_id)
   -- Account events related to transfers are represented as "transfer" read models.
   -- Account events related to platform payments are represented as "payment_platform" read models.
   -- Use LEFT JOIN instead of JOIN on transfer or we will miss out on payments paid metrics.
@@ -1348,7 +1369,10 @@ BEGIN
         'DomesticTransferPending', 'DomesticTransferFailed',
         'PlatformPaymentPaid'
      )
-     AND (account.last_billing_cycle_at IS NULL OR ae.timestamp > account.last_billing_cycle_at)
+     AND (
+       partner_bank_parent_account.last_billing_cycle_at IS NULL 
+       OR ae.timestamp > partner_bank_parent_account.last_billing_cycle_at
+     )
      AND
        CASE
        WHEN timeFrame = 'Day'
@@ -1372,7 +1396,7 @@ BEGIN
           ELSE transfer.scheduled_at::date >= date_trunc('month', CURRENT_DATE)
           END
        END
-  GROUP BY account.account_id;
+  GROUP BY ae.account_id;
 END
 $$ LANGUAGE plpgsql;
 

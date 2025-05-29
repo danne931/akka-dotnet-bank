@@ -7,6 +7,11 @@ open Bank.Transfer.Domain
 open MaintenanceFee
 open AutomaticTransfer
 
+/// Commands which pertain to the parent account rather
+/// than one of the subacounts.
+[<RequireQualifiedAccess>]
+type ParentAccountCommand = StartBillingCycle of StartBillingCycleCommand
+
 [<RequireQualifiedAccess>]
 type AccountCommand =
    | InitializePrimaryCheckingAccount of InitializePrimaryCheckingAccountCommand
@@ -36,12 +41,12 @@ type AccountCommand =
    | DepositPlatformPayment of DepositPlatformPaymentCommand
    | RefundPlatformPayment of RefundPlatformPaymentCommand
    | CloseAccount of CloseAccountCommand
-   | StartBillingCycle of StartBillingCycleCommand
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
    | DeleteAutoTransferRule of DeleteAutoTransferRuleCommand
    | InternalAutoTransfer of InternalAutoTransferCommand
    | FailInternalAutoTransfer of FailInternalAutoTransferCommand
    | DepositInternalAutoTransfer of DepositInternalAutoTransferCommand
+   | ParentAccount of ParentAccountCommand
 
    member x.Envelope: Envelope =
       match x with
@@ -71,12 +76,14 @@ type AccountCommand =
       | DepositPlatformPayment cmd -> Command.envelope cmd
       | RefundPlatformPayment cmd -> Command.envelope cmd
       | CloseAccount cmd -> Command.envelope cmd
-      | StartBillingCycle cmd -> Command.envelope cmd
       | ConfigureAutoTransferRule cmd -> Command.envelope cmd
       | DeleteAutoTransferRule cmd -> Command.envelope cmd
       | InternalAutoTransfer cmd -> Command.envelope cmd
       | FailInternalAutoTransfer cmd -> Command.envelope cmd
       | DepositInternalAutoTransfer cmd -> Command.envelope cmd
+      | ParentAccount cmd ->
+         match cmd with
+         | ParentAccountCommand.StartBillingCycle cmd -> Command.envelope cmd
 
    member x.AccountId =
       match x with
@@ -116,12 +123,17 @@ type AccountCommand =
          | PaymentMethod.Platform accountId -> accountId
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | CloseAccount cmd -> cmd.Data.AccountId
-      | StartBillingCycle _ -> AccountId Guid.Empty
       | ConfigureAutoTransferRule cmd -> cmd.Data.AccountId
       | DeleteAutoTransferRule cmd -> cmd.Data.AccountId
       | InternalAutoTransfer cmd -> cmd.Data.Transfer.Sender.AccountId
       | FailInternalAutoTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
       | DepositInternalAutoTransfer cmd -> cmd.Data.BaseInfo.Recipient.AccountId
+      // Commands pertaining to the parent account do not have
+      // an AccountId, only a ParentAccountId.
+      | ParentAccount _ -> AccountId Guid.Empty
+
+[<RequireQualifiedAccess>]
+type ParentAccountEvent = BillingCycleStarted of BankEvent<BillingCycleStarted>
 
 type AccountEvent =
    | InitializedPrimaryCheckingAccount of
@@ -158,7 +170,6 @@ type AccountEvent =
    | PlatformPaymentDeposited of BankEvent<PlatformPaymentDeposited>
    | PlatformPaymentRefunded of BankEvent<PlatformPaymentRefunded>
    | AccountClosed of BankEvent<AccountClosed>
-   | BillingCycleStarted of BankEvent<BillingCycleStarted>
    | AutoTransferRuleConfigured of BankEvent<AutomaticTransferRuleConfigured>
    | AutoTransferRuleDeleted of BankEvent<AutomaticTransferRuleDeleted>
    | InternalAutomatedTransferPending of
@@ -167,6 +178,7 @@ type AccountEvent =
       BankEvent<InternalAutomatedTransferFailed>
    | InternalAutomatedTransferDeposited of
       BankEvent<InternalAutomatedTransferDeposited>
+   | ParentAccount of ParentAccountEvent
 
    member x.AccountId =
       match x with
@@ -210,7 +222,6 @@ type AccountEvent =
          | PaymentMethod.Platform accountId -> accountId
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | AccountClosed evt -> evt.Data.AccountId
-      | BillingCycleStarted _ -> AccountId Guid.Empty
       | AutoTransferRuleConfigured evt -> evt.Data.AccountId
       | AutoTransferRuleDeleted evt -> evt.Data.AccountId
       | InternalAutomatedTransferPending evt ->
@@ -219,6 +230,7 @@ type AccountEvent =
          evt.Data.BaseInfo.Sender.AccountId
       | InternalAutomatedTransferDeposited evt ->
          evt.Data.BaseInfo.Recipient.AccountId
+      | ParentAccount _ -> AccountId Guid.Empty
 
 module AccountEvent =
    let moneyTransaction =
@@ -354,7 +366,6 @@ module AccountEnvelope =
       | :? BankEvent<PlatformPaymentRefunded> as evt ->
          PlatformPaymentRefunded evt
       | :? BankEvent<AccountClosed> as evt -> AccountClosed evt
-      | :? BankEvent<BillingCycleStarted> as evt -> BillingCycleStarted evt
       | :? BankEvent<AutomaticTransferRuleConfigured> as evt ->
          AutoTransferRuleConfigured evt
       | :? BankEvent<AutomaticTransferRuleDeleted> as evt ->
@@ -365,6 +376,10 @@ module AccountEnvelope =
          InternalAutomatedTransferFailed evt
       | :? BankEvent<InternalAutomatedTransferDeposited> as evt ->
          InternalAutomatedTransferDeposited evt
+      | :? BankEvent<BillingCycleStarted> as evt ->
+         evt
+         |> ParentAccountEvent.BillingCycleStarted
+         |> AccountEvent.ParentAccount
       | _ -> failwith "Missing definition for AccountEvent message"
 
    let unwrap (o: AccountEvent) : OpenEventEnvelope =
@@ -395,12 +410,14 @@ module AccountEnvelope =
       | PlatformPaymentDeposited evt -> wrap evt, get evt
       | PlatformPaymentRefunded evt -> wrap evt, get evt
       | AccountClosed evt -> wrap evt, get evt
-      | BillingCycleStarted evt -> wrap evt, get evt
       | AutoTransferRuleConfigured evt -> wrap evt, get evt
       | AutoTransferRuleDeleted evt -> wrap evt, get evt
       | InternalAutomatedTransferPending evt -> wrap evt, get evt
       | InternalAutomatedTransferFailed evt -> wrap evt, get evt
       | InternalAutomatedTransferDeposited evt -> wrap evt, get evt
+      | ParentAccount evt ->
+         match evt with
+         | ParentAccountEvent.BillingCycleStarted evt -> wrap evt, get evt
 
 type Account = {
    AccountId: AccountId

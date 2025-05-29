@@ -468,17 +468,16 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
       """,
       sqlParams.OrgEvent
 
-      if not sqlParams.FeatureFlags.IsEmpty then
-         $"""
-         INSERT into {OrganizationSqlMapper.featureFlagsTable}
-            ({OrgFields.orgId},
-             {OrgFields.socialTransferDiscoveryAccountId})
-         VALUES (@orgId, @socialTransferDiscovery)
-         ON CONFLICT ({OrgFields.orgId})
-         DO UPDATE SET
-            {OrgFields.socialTransferDiscoveryAccountId} = @socialTransferDiscovery;
-         """,
-         sqlParams.FeatureFlags
+      $"""
+      INSERT into {OrganizationSqlMapper.featureFlagsTable}
+         ({OrgFields.orgId},
+          {OrgFields.socialTransferDiscoveryAccountId})
+      VALUES (@orgId, @socialTransferDiscovery)
+      ON CONFLICT ({OrgFields.orgId})
+      DO UPDATE SET
+         {OrgFields.socialTransferDiscoveryAccountId} = @socialTransferDiscovery;
+      """,
+      sqlParams.FeatureFlags
 
       let commandId = CommandApprovalProgressSqlMapper.Fields.commandId
       let status = CommandApprovalProgressSqlMapper.Fields.status
@@ -490,196 +489,181 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
 
       let approvedBy = CommandApprovalProgressSqlMapper.Fields.approvedBy
 
-      if not sqlParams.CommandApprovalRuleConfigured.IsEmpty then
-         let criteriaTypecast =
-            CommandApprovalRuleSqlMapper.TypeCast.approvalCriteria
+      let criteriaTypecast =
+         CommandApprovalRuleSqlMapper.TypeCast.approvalCriteria
 
-         $"""
-         INSERT into {CommandApprovalRuleSqlMapper.table}
-            ({CommandApprovalRuleSqlMapper.Fields.ruleId},
-             {CommandApprovalRuleSqlMapper.Fields.orgId},
-             {CommandApprovalRuleSqlMapper.Fields.approvableCommandType},
-             {CommandApprovalRuleSqlMapper.Fields.criteria},
-             {CommandApprovalRuleSqlMapper.Fields.criteriaDetail},
-             {CommandApprovalRuleSqlMapper.Fields.permittedApprovers})
-         VALUES
-            (@ruleId,
-             @orgId,
-             @approvableCommandType::{commandTypecast},
-             @criteria::{criteriaTypecast},
-             @criteriaDetail,
-             @approvers)
-         ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
-         DO UPDATE SET
-            {CommandApprovalRuleSqlMapper.Fields.criteria} = @criteria::{criteriaTypecast},
-            {CommandApprovalRuleSqlMapper.Fields.criteriaDetail} = @criteriaDetail,
-            {CommandApprovalRuleSqlMapper.Fields.permittedApprovers} = @approvers;
-         """,
-         sqlParams.CommandApprovalRuleConfigured
+      $"""
+      INSERT into {CommandApprovalRuleSqlMapper.table}
+         ({CommandApprovalRuleSqlMapper.Fields.ruleId},
+          {CommandApprovalRuleSqlMapper.Fields.orgId},
+          {CommandApprovalRuleSqlMapper.Fields.approvableCommandType},
+          {CommandApprovalRuleSqlMapper.Fields.criteria},
+          {CommandApprovalRuleSqlMapper.Fields.criteriaDetail},
+          {CommandApprovalRuleSqlMapper.Fields.permittedApprovers})
+      VALUES
+         (@ruleId,
+          @orgId,
+          @approvableCommandType::{commandTypecast},
+          @criteria::{criteriaTypecast},
+          @criteriaDetail,
+          @approvers)
+      ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
+      DO UPDATE SET
+         {CommandApprovalRuleSqlMapper.Fields.criteria} = @criteria::{criteriaTypecast},
+         {CommandApprovalRuleSqlMapper.Fields.criteriaDetail} = @criteriaDetail,
+         {CommandApprovalRuleSqlMapper.Fields.permittedApprovers} = @approvers;
+      """,
+      sqlParams.CommandApprovalRuleConfigured
 
-      if not sqlParams.CommandApprovalRuleDeleted.IsEmpty then
-         $"""
-         UPDATE {CommandApprovalRuleSqlMapper.table}
-         SET {CommandApprovalRuleSqlMapper.Fields.deletedAt} = @deletedAt
-         WHERE {CommandApprovalRuleSqlMapper.Fields.ruleId} = @ruleId;
-         """,
-         sqlParams.CommandApprovalRuleDeleted
+      $"""
+      UPDATE {CommandApprovalRuleSqlMapper.table}
+      SET {CommandApprovalRuleSqlMapper.Fields.deletedAt} = @deletedAt
+      WHERE {CommandApprovalRuleSqlMapper.Fields.ruleId} = @ruleId;
+      """,
+      sqlParams.CommandApprovalRuleDeleted
 
-      if
-         not sqlParams.CommandApprovalRuleConfiguredWithAmountDailyLimit.IsEmpty
-      then
-         $"""
-         INSERT into {CommandApprovalRuleSqlMapper.dailyLimitTable}
-            ({CommandApprovalRuleSqlMapper.Fields.ruleId},
-             {CommandApprovalRuleSqlMapper.Fields.orgId},
-             {CommandApprovalRuleSqlMapper.Fields.dailyLimit})
-         VALUES (@ruleId, @orgId, @dailyLimit)
-         ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
-         DO UPDATE SET {CommandApprovalRuleSqlMapper.Fields.dailyLimit} = @dailyLimit;
-         """,
-         sqlParams.CommandApprovalRuleConfiguredWithAmountDailyLimit
+      $"""
+      INSERT into {CommandApprovalRuleSqlMapper.dailyLimitTable}
+         ({CommandApprovalRuleSqlMapper.Fields.ruleId},
+          {CommandApprovalRuleSqlMapper.Fields.orgId},
+          {CommandApprovalRuleSqlMapper.Fields.dailyLimit})
+      VALUES (@ruleId, @orgId, @dailyLimit)
+      ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
+      DO UPDATE SET {CommandApprovalRuleSqlMapper.Fields.dailyLimit} = @dailyLimit;
+      """,
+      sqlParams.CommandApprovalRuleConfiguredWithAmountDailyLimit
 
-      if
-         not sqlParams.CommandApprovalRuleConfiguredWithAmountPerCommand.IsEmpty
-      then
-         $"""
-         INSERT into {CommandApprovalRuleSqlMapper.amountPerCommandTable}
-            ({CommandApprovalRuleSqlMapper.Fields.ruleId},
-             {CommandApprovalRuleSqlMapper.Fields.orgId},
-             {CommandApprovalRuleSqlMapper.Fields.amountPerCommandLowerBound},
-             {CommandApprovalRuleSqlMapper.Fields.amountPerCommandUpperBound})
-         VALUES (@ruleId, @orgId, @lowerBound, @upperBound)
-         ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
-         DO UPDATE SET
-            {CommandApprovalRuleSqlMapper.Fields.amountPerCommandLowerBound} = @lowerBound,
-            {CommandApprovalRuleSqlMapper.Fields.amountPerCommandUpperBound} = @upperBound;
-         """,
-         sqlParams.CommandApprovalRuleConfiguredWithAmountPerCommand
+      $"""
+      INSERT into {CommandApprovalRuleSqlMapper.amountPerCommandTable}
+         ({CommandApprovalRuleSqlMapper.Fields.ruleId},
+          {CommandApprovalRuleSqlMapper.Fields.orgId},
+          {CommandApprovalRuleSqlMapper.Fields.amountPerCommandLowerBound},
+          {CommandApprovalRuleSqlMapper.Fields.amountPerCommandUpperBound})
+      VALUES (@ruleId, @orgId, @lowerBound, @upperBound)
+      ON CONFLICT ({CommandApprovalRuleSqlMapper.Fields.ruleId})
+      DO UPDATE SET
+         {CommandApprovalRuleSqlMapper.Fields.amountPerCommandLowerBound} = @lowerBound,
+         {CommandApprovalRuleSqlMapper.Fields.amountPerCommandUpperBound} = @upperBound;
+      """,
+      sqlParams.CommandApprovalRuleConfiguredWithAmountPerCommand
 
-      if not sqlParams.CommandApprovalRequested.IsEmpty then
-         let commandTypecast =
-            CommandApprovalProgressSqlMapper.TypeCast.approvableCommandType
+      let commandTypecast =
+         CommandApprovalProgressSqlMapper.TypeCast.approvableCommandType
 
-         $"""
-         INSERT into {CommandApprovalProgressSqlMapper.table}
-            ({CommandApprovalProgressSqlMapper.Fields.commandId},
-             {CommandApprovalProgressSqlMapper.Fields.ruleId},
-             {CommandApprovalProgressSqlMapper.Fields.orgId},
-             {CommandApprovalProgressSqlMapper.Fields.requestedBy},
-             {CommandApprovalProgressSqlMapper.Fields.status},
-             {CommandApprovalProgressSqlMapper.Fields.statusDetail},
-             {CommandApprovalProgressSqlMapper.Fields.approvedBy},
-             {CommandApprovalProgressSqlMapper.Fields.approvableCommandType},
-             {CommandApprovalProgressSqlMapper.Fields.commandToInitiateOnApproval})
-         VALUES
-            (@commandId,
-             @ruleId,
-             @orgId,
-             @requestedById,
-             @status::{CommandApprovalProgressSqlMapper.TypeCast.status},
-             @statusDetail,
-             @approvedBy,
-             @approvableCommandType::{commandTypecast},
-             @command)
-         ON CONFLICT ({CommandApprovalProgressSqlMapper.Fields.commandId})
-         DO NOTHING;
-         """,
-         sqlParams.CommandApprovalRequested
+      $"""
+      INSERT into {CommandApprovalProgressSqlMapper.table}
+         ({CommandApprovalProgressSqlMapper.Fields.commandId},
+          {CommandApprovalProgressSqlMapper.Fields.ruleId},
+          {CommandApprovalProgressSqlMapper.Fields.orgId},
+          {CommandApprovalProgressSqlMapper.Fields.requestedBy},
+          {CommandApprovalProgressSqlMapper.Fields.status},
+          {CommandApprovalProgressSqlMapper.Fields.statusDetail},
+          {CommandApprovalProgressSqlMapper.Fields.approvedBy},
+          {CommandApprovalProgressSqlMapper.Fields.approvableCommandType},
+          {CommandApprovalProgressSqlMapper.Fields.commandToInitiateOnApproval})
+      VALUES
+         (@commandId,
+          @ruleId,
+          @orgId,
+          @requestedById,
+          @status::{CommandApprovalProgressSqlMapper.TypeCast.status},
+          @statusDetail,
+          @approvedBy,
+          @approvableCommandType::{commandTypecast},
+          @command)
+      ON CONFLICT ({CommandApprovalProgressSqlMapper.Fields.commandId})
+      DO NOTHING;
+      """,
+      sqlParams.CommandApprovalRequested
 
-      if not sqlParams.CommandApprovalAcquired.IsEmpty then
-         $"""
-         UPDATE {CommandApprovalProgressSqlMapper.table}
-         SET
-            {approvedBy} = {approvedBy} || @approvedBy,
-            {status} = @status::{statusTypecast},
-            {statusDetail} = @statusDetail
-         WHERE
-            {commandId} = @commandId
-            AND {status} = @expectedCurrentStatus::{statusTypecast}
-            AND NOT {approvedBy} @> ARRAY[@approvedBy::uuid]
-         """,
-         sqlParams.CommandApprovalAcquired
+      $"""
+      UPDATE {CommandApprovalProgressSqlMapper.table}
+      SET
+         {approvedBy} = {approvedBy} || @approvedBy,
+         {status} = @status::{statusTypecast},
+         {statusDetail} = @statusDetail
+      WHERE
+         {commandId} = @commandId
+         AND {status} = @expectedCurrentStatus::{statusTypecast}
+         AND NOT {approvedBy} @> ARRAY[@approvedBy::uuid]
+      """,
+      sqlParams.CommandApprovalAcquired
 
-      if not sqlParams.CommandApprovalDeclined.IsEmpty then
-         $"""
-         UPDATE {CommandApprovalProgressSqlMapper.table}
-         SET
-            {status} = @status::{statusTypecast},
-            {statusDetail} = @statusDetail,
-            {CommandApprovalProgressSqlMapper.Fields.declinedBy} = @declinedBy
-         WHERE
-            {commandId} = @commandId
-            AND {status} = @expectedCurrentStatus::{statusTypecast};
-         """,
-         sqlParams.CommandApprovalDeclined
+      $"""
+      UPDATE {CommandApprovalProgressSqlMapper.table}
+      SET
+         {status} = @status::{statusTypecast},
+         {statusDetail} = @statusDetail,
+         {CommandApprovalProgressSqlMapper.Fields.declinedBy} = @declinedBy
+      WHERE
+         {commandId} = @commandId
+         AND {status} = @expectedCurrentStatus::{statusTypecast};
+      """,
+      sqlParams.CommandApprovalDeclined
 
-      if not sqlParams.CommandApprovalTerminated.IsEmpty then
-         $"""
-         UPDATE {CommandApprovalProgressSqlMapper.table}
-         SET
-            {status} = @status::{statusTypecast},
-            {statusDetail} = @statusDetail
-         WHERE
-            {commandId} = @commandId
-            AND {status} = @expectedCurrentStatus::{statusTypecast};
-         """,
-         sqlParams.CommandApprovalTerminated
+      $"""
+      UPDATE {CommandApprovalProgressSqlMapper.table}
+      SET
+         {status} = @status::{statusTypecast},
+         {statusDetail} = @statusDetail
+      WHERE
+         {commandId} = @commandId
+         AND {status} = @expectedCurrentStatus::{statusTypecast};
+      """,
+      sqlParams.CommandApprovalTerminated
 
-      if not sqlParams.DomesticTransferRecipient.IsEmpty then
-         $"""
-         INSERT into {TransferSqlMapper.Table.domesticRecipient}
-            ({TransferFields.DomesticRecipient.recipientAccountId},
-             {TransferFields.DomesticRecipient.senderOrgId},
-             {TransferFields.DomesticRecipient.firstName},
-             {TransferFields.DomesticRecipient.lastName},
-             {TransferFields.DomesticRecipient.nickname},
-             {TransferFields.DomesticRecipient.routingNumber},
-             {TransferFields.DomesticRecipient.accountNumber},
-             {TransferFields.DomesticRecipient.status},
-             {TransferFields.DomesticRecipient.depository},
-             {TransferFields.DomesticRecipient.paymentNetwork})
-         VALUES
-            (@recipientAccountId,
-             @senderOrgId,
-             @firstName,
-             @lastName,
-             @nickname,
-             @routingNumber,
-             @accountNumber,
-             @status::{TransferTypeCast.domesticRecipientStatus},
-             @depository::{TransferTypeCast.domesticRecipientAccountDepository},
-             @paymentNetwork::{TransferTypeCast.paymentNetwork})
-         ON CONFLICT ({TransferFields.DomesticRecipient.recipientAccountId})
-         DO UPDATE SET
-            {TransferFields.DomesticRecipient.firstName} = @firstName,
-            {TransferFields.DomesticRecipient.lastName} = @lastName,
-            {TransferFields.DomesticRecipient.nickname} = @nickname,
-            {TransferFields.DomesticRecipient.routingNumber} = @routingNumber,
-            {TransferFields.DomesticRecipient.accountNumber} = @accountNumber,
-            {TransferFields.DomesticRecipient.status} =
-               @status::{TransferTypeCast.domesticRecipientStatus},
-            {TransferFields.DomesticRecipient.depository} =
-               @depository::{TransferTypeCast.domesticRecipientAccountDepository},
-            {TransferFields.DomesticRecipient.paymentNetwork} =
-               @paymentNetwork::{TransferTypeCast.paymentNetwork};
-         """,
-         sqlParams.DomesticTransferRecipient
+      $"""
+      INSERT into {TransferSqlMapper.Table.domesticRecipient}
+         ({TransferFields.DomesticRecipient.recipientAccountId},
+          {TransferFields.DomesticRecipient.senderOrgId},
+          {TransferFields.DomesticRecipient.firstName},
+          {TransferFields.DomesticRecipient.lastName},
+          {TransferFields.DomesticRecipient.nickname},
+          {TransferFields.DomesticRecipient.routingNumber},
+          {TransferFields.DomesticRecipient.accountNumber},
+          {TransferFields.DomesticRecipient.status},
+          {TransferFields.DomesticRecipient.depository},
+          {TransferFields.DomesticRecipient.paymentNetwork})
+      VALUES
+         (@recipientAccountId,
+          @senderOrgId,
+          @firstName,
+          @lastName,
+          @nickname,
+          @routingNumber,
+          @accountNumber,
+          @status::{TransferTypeCast.domesticRecipientStatus},
+          @depository::{TransferTypeCast.domesticRecipientAccountDepository},
+          @paymentNetwork::{TransferTypeCast.paymentNetwork})
+      ON CONFLICT ({TransferFields.DomesticRecipient.recipientAccountId})
+      DO UPDATE SET
+         {TransferFields.DomesticRecipient.firstName} = @firstName,
+         {TransferFields.DomesticRecipient.lastName} = @lastName,
+         {TransferFields.DomesticRecipient.nickname} = @nickname,
+         {TransferFields.DomesticRecipient.routingNumber} = @routingNumber,
+         {TransferFields.DomesticRecipient.accountNumber} = @accountNumber,
+         {TransferFields.DomesticRecipient.status} =
+            @status::{TransferTypeCast.domesticRecipientStatus},
+         {TransferFields.DomesticRecipient.depository} =
+            @depository::{TransferTypeCast.domesticRecipientAccountDepository},
+         {TransferFields.DomesticRecipient.paymentNetwork} =
+            @paymentNetwork::{TransferTypeCast.paymentNetwork};
+      """,
+      sqlParams.DomesticTransferRecipient
 
-      if not sqlParams.UpdatedDomesticTransferRecipientStatus.IsEmpty then
-         $"""
-         UPDATE {TransferSqlMapper.Table.domesticRecipient}
-         SET {TransferFields.DomesticRecipient.status} = @status::{TransferTypeCast.domesticRecipientStatus}
-         WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
-         """,
-         sqlParams.UpdatedDomesticTransferRecipientStatus
+      $"""
+      UPDATE {TransferSqlMapper.Table.domesticRecipient}
+      SET {TransferFields.DomesticRecipient.status} = @status::{TransferTypeCast.domesticRecipientStatus}
+      WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
+      """,
+      sqlParams.UpdatedDomesticTransferRecipientStatus
 
-      if not sqlParams.UpdatedDomesticTransferRecipientNickname.IsEmpty then
-         $"""
-         UPDATE {TransferSqlMapper.Table.domesticRecipient}
-         SET {TransferFields.DomesticRecipient.nickname} = @nickname
-         WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
-         """,
-         sqlParams.UpdatedDomesticTransferRecipientNickname
+      $"""
+      UPDATE {TransferSqlMapper.Table.domesticRecipient}
+      SET {TransferFields.DomesticRecipient.nickname} = @nickname
+      WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
+      """,
+      sqlParams.UpdatedDomesticTransferRecipientNickname
    ]
 
    pgTransaction query

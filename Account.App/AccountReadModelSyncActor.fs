@@ -19,6 +19,10 @@ module aeSqlMapper = AccountEventSqlMapper
 module aeSqlWriter = AccountEventSqlMapper.SqlWriter
 module aeFields = AccountEventSqlMapper.Fields
 
+module paeSqlMapper = ParentAccountEventSqlMapper
+module paeSqlWriter = ParentAccountEventSqlMapper.SqlWriter
+module paeFields = ParentAccountEventSqlMapper.Fields
+
 let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [
    "paymentId", PaymentSqlWriter.paymentId p.Id
 
@@ -78,7 +82,8 @@ let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
 ]
 
 type SqlParamsDerivedFromAccountEvents = {
-   Transaction: (string * SqlValue) list list
+   AccountEvent: (string * SqlValue) list list
+   ParentAccountEvent: (string * SqlValue) list list
    Payment: (string * SqlValue) list list
    PlatformPayment: (string * SqlValue) list list
    Transfer: (string * SqlValue) list list
@@ -122,14 +127,12 @@ let private domesticTransferStatusReducer
          DomesticTransfer = qParams :: acc.DomesticTransfer
    }
 
-let sqlParamReducer
+let private accountEventReducer
    (acc: SqlParamsDerivedFromAccountEvents)
    (evt: AccountEvent)
-   : SqlParamsDerivedFromAccountEvents
+   (envelope: Envelope)
    =
-   let evt, envelope = AccountEnvelope.unwrap evt
-
-   let transactionSqlParams = [
+   let sqlParams = [
       "eventId", aeSqlWriter.eventId envelope.Id
 
       "accountId", aeSqlWriter.accountId evt.AccountId
@@ -152,8 +155,8 @@ let sqlParamReducer
 
    let amountOpt, moneyFlowOpt, sourceOpt = AccountEvent.moneyTransaction evt
 
-   let transactionSqlParams =
-      transactionSqlParams
+   let sqlParams =
+      sqlParams
       @ [
          "amount", aeSqlWriter.amount amountOpt
          "moneyFlow", aeSqlWriter.moneyFlow moneyFlowOpt
@@ -170,18 +173,52 @@ let sqlParamReducer
          )
       ]
 
-   // Account events with empty AccountId are scoped to the parent account
-   // rather than one of the virtual accounts.  Do not record these in the
-   // account event read model for now.
-   // Consider creating a separate parent_account_event table.
+   {
+      acc with
+         AccountEvent = sqlParams :: acc.AccountEvent
+   }
+
+let private parentAccountEventReducer
+   (acc: SqlParamsDerivedFromAccountEvents)
+   (evt: ParentAccountEvent)
+   (envelope: Envelope)
+   =
+   let sqlParams = [
+      "eventId", paeSqlWriter.eventId envelope.Id
+
+      "orgId", paeSqlWriter.orgId envelope.OrgId
+
+      "parentAccountId",
+      envelope.EntityId
+      |> ParentAccountId.fromEntityId
+      |> paeSqlWriter.parentAccountId
+
+      "correlationId", paeSqlWriter.correlationId envelope.CorrelationId
+
+      "initiatedById", paeSqlWriter.initiatedById envelope.InitiatedBy.Id
+
+      "name", paeSqlWriter.name envelope.EventName
+      "timestamp", paeSqlWriter.timestamp envelope.Timestamp
+      "event", paeSqlWriter.event evt
+   ]
+
+   {
+      acc with
+         ParentAccountEvent = sqlParams :: acc.ParentAccountEvent
+   }
+
+let sqlParamReducer
+   (acc: SqlParamsDerivedFromAccountEvents)
+   (evt: AccountEvent)
+   : SqlParamsDerivedFromAccountEvents
+   =
+   let evt, envelope = AccountEnvelope.unwrap evt
+
    let acc =
-      if evt.AccountId = AccountId Guid.Empty then
-         acc
-      else
-         {
-            acc with
-               Transaction = transactionSqlParams :: acc.Transaction
-         }
+      match evt with
+      | AccountEvent.ParentAccount evt ->
+         parentAccountEventReducer acc evt envelope
+      | _ -> accountEventReducer acc evt envelope
 
    match evt with
    | AccountEvent.InitializedPrimaryCheckingAccount e ->
@@ -203,7 +240,7 @@ let sqlParamReducer
          acc with
             PartnerBankInitialized = qParams :: acc.PartnerBankInitialized
       }
-   | AccountEvent.BillingCycleStarted e ->
+   | AccountEvent.ParentAccount(ParentAccountEvent.BillingCycleStarted e) ->
       let qParams = [
          "parentAccountId",
          PartnerBankSqlMapper.SqlWriter.parentAccountId (
@@ -561,9 +598,10 @@ let upsertReadModels
       accountEvents
       |> List.sortByDescending (AccountEnvelope.unwrap >> snd >> _.Timestamp)
       |> List.fold sqlParamReducer {
+         AccountEvent = []
+         ParentAccountEvent = []
          PartnerBankInitialized = []
          BillingCycle = []
-         Transaction = []
          Payment = []
          PlatformPayment = []
          Transfer = []
@@ -572,32 +610,28 @@ let upsertReadModels
       }
 
    pgTransaction [
-      if
-         not sqlParamsDerivedFromAccountEvents.PartnerBankInitialized.IsEmpty
-      then
-         $"""
-         INSERT into {PartnerBankSqlMapper.table}
-            ({PartnerBankSqlMapper.Fields.parentAccountId},
-             {PartnerBankSqlMapper.Fields.accountNumber},
-             {PartnerBankSqlMapper.Fields.routingNumber},
-             {PartnerBankSqlMapper.Fields.orgId})
-         VALUES
-            (@parentAccountId,
-             @accountNumber,
-             @routingNumber,
-             @orgId)
-         ON CONFLICT ({PartnerBankSqlMapper.Fields.parentAccountId})
-         DO NOTHING;
-         """,
-         sqlParamsDerivedFromAccountEvents.PartnerBankInitialized
+      $"""
+      INSERT into {PartnerBankSqlMapper.table}
+         ({PartnerBankSqlMapper.Fields.parentAccountId},
+          {PartnerBankSqlMapper.Fields.accountNumber},
+          {PartnerBankSqlMapper.Fields.routingNumber},
+          {PartnerBankSqlMapper.Fields.orgId})
+      VALUES
+         (@parentAccountId,
+          @accountNumber,
+          @routingNumber,
+          @orgId)
+      ON CONFLICT ({PartnerBankSqlMapper.Fields.parentAccountId})
+      DO NOTHING;
+      """,
+      sqlParamsDerivedFromAccountEvents.PartnerBankInitialized
 
-      if not sqlParamsDerivedFromAccountEvents.BillingCycle.IsEmpty then
-         $"""
-         UPDATE {PartnerBankSqlMapper.table}
-         SET {PartnerBankSqlMapper.Fields.lastBillingCycleDate} = @lastBillingCycleDate
-         WHERE {PartnerBankSqlMapper.Fields.parentAccountId} = @parentAccountId;
-         """,
-         sqlParamsDerivedFromAccountEvents.BillingCycle
+      $"""
+      UPDATE {PartnerBankSqlMapper.table}
+      SET {PartnerBankSqlMapper.Fields.lastBillingCycleDate} = @lastBillingCycleDate
+      WHERE {PartnerBankSqlMapper.Fields.parentAccountId} = @parentAccountId;
+      """,
+      sqlParamsDerivedFromAccountEvents.BillingCycle
 
       $"""
       INSERT into {AccountSqlMapper.table}
@@ -667,124 +701,143 @@ let upsertReadModels
       ON CONFLICT ({aeFields.eventId})
       DO NOTHING;
       """,
-      sqlParamsDerivedFromAccountEvents.Transaction
+      sqlParamsDerivedFromAccountEvents.AccountEvent
 
-      if not sqlParamsDerivedFromAccountEvents.Payment.IsEmpty then
-         $"""
-         INSERT into {PaymentSqlMapper.Table.payment}
-            ({PaymentFields.paymentId},
-             {PaymentFields.initiatedById},
-             {PaymentFields.amount},
-             {PaymentFields.memo},
-             {PaymentFields.paymentType},
-             {PaymentFields.expiration},
-             {PaymentFields.payeeOrgId},
-             {PaymentFields.payeeAccountId},
-             {PaymentFields.payeeParentAccountId})
-         VALUES
-            (@paymentId,
-             @initiatedById,
-             @amount,
-             @memo,
-             @paymentType::{PaymentTypeCast.paymentType},
-             @expiration,
-             @payeeOrgId,
-             @payeeAccountId,
-             @payeeParentAccountId)
-         ON CONFLICT ({PaymentFields.paymentId})
-         DO NOTHING;
-         """,
-         sqlParamsDerivedFromAccountEvents.Payment
+      $"""
+      INSERT into {paeSqlMapper.table}
+         ({aeFields.eventId},
+          {aeFields.orgId},
+          {aeFields.parentAccountId},
+          {aeFields.correlationId},
+          {aeFields.initiatedById},
+          {aeFields.name},
+          {aeFields.timestamp},
+          {aeFields.event})
+      VALUES
+         (@eventId,
+          @orgId,
+          @parentAccountId,
+          @correlationId,
+          @initiatedById,
+          @name,
+          @timestamp,
+          @event)
+      ON CONFLICT ({paeFields.eventId})
+      DO NOTHING;
+      """,
+      sqlParamsDerivedFromAccountEvents.ParentAccountEvent
 
-      if not sqlParamsDerivedFromAccountEvents.PlatformPayment.IsEmpty then
-         let table = PaymentSqlMapper.Table.platformPayment
-         let payByField = PaymentFields.Platform.payByAccount
+      $"""
+      INSERT into {PaymentSqlMapper.Table.payment}
+         ({PaymentFields.paymentId},
+          {PaymentFields.initiatedById},
+          {PaymentFields.amount},
+          {PaymentFields.memo},
+          {PaymentFields.paymentType},
+          {PaymentFields.expiration},
+          {PaymentFields.payeeOrgId},
+          {PaymentFields.payeeAccountId},
+          {PaymentFields.payeeParentAccountId})
+      VALUES
+         (@paymentId,
+          @initiatedById,
+          @amount,
+          @memo,
+          @paymentType::{PaymentTypeCast.paymentType},
+          @expiration,
+          @payeeOrgId,
+          @payeeAccountId,
+          @payeeParentAccountId)
+      ON CONFLICT ({PaymentFields.paymentId})
+      DO NOTHING;
+      """,
+      sqlParamsDerivedFromAccountEvents.Payment
 
-         $"""
-         INSERT into {table}
-            ({PaymentFields.paymentId},
-             {PaymentFields.Platform.status},
-             {PaymentFields.Platform.statusDetail},
-             {PaymentFields.Platform.payerOrgId},
-             {PaymentFields.Platform.payerParentAccountId})
-         VALUES
-            (@paymentId,
-             @status::{PaymentTypeCast.platformPaymentStatus},
-             @statusDetail,
-             @payerOrgId,
-             @payerParentAccountId)
-         ON CONFLICT ({PaymentFields.paymentId})
-         DO UPDATE SET
-            {PaymentFields.Platform.status} = @status::{PaymentTypeCast.platformPaymentStatus},
-            {PaymentFields.Platform.statusDetail} = @statusDetail,
-            {payByField} = COALESCE(@payByAccount, {table}.{payByField});
-         """,
-         sqlParamsDerivedFromAccountEvents.PlatformPayment
+      let paymentTable = PaymentSqlMapper.Table.platformPayment
+      let payByField = PaymentFields.Platform.payByAccount
 
-      if not sqlParamsDerivedFromAccountEvents.Transfer.IsEmpty then
-         $"""
-         INSERT into {TransferSqlMapper.Table.transfer}
-            ({TransferFields.transferId},
-             {TransferFields.initiatedById},
-             {TransferFields.amount},
-             {TransferFields.transferCategory},
-             {TransferFields.scheduledAt},
-             {TransferFields.senderOrgId},
-             {TransferFields.senderAccountId},
-             {TransferFields.memo})
-         VALUES
-            (@transferId,
-             @initiatedById,
-             @amount,
-             @transferCategory::{TransferTypeCast.transferCategory},
-             @scheduledAt,
-             @senderOrgId,
-             @senderAccountId,
-             @memo)
-         ON CONFLICT ({TransferFields.transferId})
-         DO NOTHING;
-         """,
-         sqlParamsDerivedFromAccountEvents.Transfer
+      $"""
+      INSERT into {paymentTable}
+         ({PaymentFields.paymentId},
+          {PaymentFields.Platform.status},
+          {PaymentFields.Platform.statusDetail},
+          {PaymentFields.Platform.payerOrgId},
+          {PaymentFields.Platform.payerParentAccountId})
+      VALUES
+         (@paymentId,
+          @status::{PaymentTypeCast.platformPaymentStatus},
+          @statusDetail,
+          @payerOrgId,
+          @payerParentAccountId)
+      ON CONFLICT ({PaymentFields.paymentId})
+      DO UPDATE SET
+         {PaymentFields.Platform.status} = @status::{PaymentTypeCast.platformPaymentStatus},
+         {PaymentFields.Platform.statusDetail} = @statusDetail,
+         {payByField} = COALESCE(@payByAccount, {paymentTable}.{payByField});
+      """,
+      sqlParamsDerivedFromAccountEvents.PlatformPayment
 
-      if not sqlParamsDerivedFromAccountEvents.InternalTransfer.IsEmpty then
-         $"""
-         INSERT into {TransferSqlMapper.Table.internalTransfer}
-            ({TransferFields.transferId},
-             {TransferFields.Internal.status},
-             {TransferFields.Internal.statusDetail},
-             {TransferFields.Internal.recipientOrgId},
-             {TransferFields.Internal.recipientAccountId})
-         VALUES
-            (@transferId,
-             @status::{TransferTypeCast.internalTransferStatus},
-             @statusDetail,
-             @recipientOrgId,
-             @recipientAccountId)
-         ON CONFLICT ({TransferFields.transferId})
-         DO UPDATE SET
-            {TransferFields.Internal.status} = @status::{TransferTypeCast.internalTransferStatus},
-            {TransferFields.Internal.statusDetail} = @statusDetail;
-         """,
-         sqlParamsDerivedFromAccountEvents.InternalTransfer
+      $"""
+      INSERT into {TransferSqlMapper.Table.transfer}
+         ({TransferFields.transferId},
+          {TransferFields.initiatedById},
+          {TransferFields.amount},
+          {TransferFields.transferCategory},
+          {TransferFields.scheduledAt},
+          {TransferFields.senderOrgId},
+          {TransferFields.senderAccountId},
+          {TransferFields.memo})
+      VALUES
+         (@transferId,
+          @initiatedById,
+          @amount,
+          @transferCategory::{TransferTypeCast.transferCategory},
+          @scheduledAt,
+          @senderOrgId,
+          @senderAccountId,
+          @memo)
+      ON CONFLICT ({TransferFields.transferId})
+      DO NOTHING;
+      """,
+      sqlParamsDerivedFromAccountEvents.Transfer
 
-      if not sqlParamsDerivedFromAccountEvents.DomesticTransfer.IsEmpty then
-         $"""
-         INSERT into {TransferSqlMapper.Table.domesticTransfer}
-            ({TransferFields.transferId},
-             {TransferFields.Domestic.status},
-             {TransferFields.Domestic.statusDetail},
-             {TransferFields.Domestic.recipientAccountId})
-         VALUES
-            (@transferId,
-             @status::{TransferTypeCast.domesticTransferStatus},
-             @statusDetail,
-             @recipientAccountId)
-         ON CONFLICT ({TransferFields.transferId})
-         DO UPDATE SET
-            {TransferFields.Domestic.status} = @status::{TransferTypeCast.domesticTransferStatus},
-            {TransferFields.Domestic.statusDetail} = @statusDetail;
-         """,
-         sqlParamsDerivedFromAccountEvents.DomesticTransfer
+      $"""
+      INSERT into {TransferSqlMapper.Table.internalTransfer}
+         ({TransferFields.transferId},
+          {TransferFields.Internal.status},
+          {TransferFields.Internal.statusDetail},
+          {TransferFields.Internal.recipientOrgId},
+          {TransferFields.Internal.recipientAccountId})
+      VALUES
+         (@transferId,
+          @status::{TransferTypeCast.internalTransferStatus},
+          @statusDetail,
+          @recipientOrgId,
+          @recipientAccountId)
+      ON CONFLICT ({TransferFields.transferId})
+      DO UPDATE SET
+         {TransferFields.Internal.status} = @status::{TransferTypeCast.internalTransferStatus},
+         {TransferFields.Internal.statusDetail} = @statusDetail;
+      """,
+      sqlParamsDerivedFromAccountEvents.InternalTransfer
+
+      $"""
+      INSERT into {TransferSqlMapper.Table.domesticTransfer}
+         ({TransferFields.transferId},
+          {TransferFields.Domestic.status},
+          {TransferFields.Domestic.statusDetail},
+          {TransferFields.Domestic.recipientAccountId})
+      VALUES
+         (@transferId,
+          @status::{TransferTypeCast.domesticTransferStatus},
+          @statusDetail,
+          @recipientAccountId)
+      ON CONFLICT ({TransferFields.transferId})
+      DO UPDATE SET
+         {TransferFields.Domestic.status} = @status::{TransferTypeCast.domesticTransferStatus},
+         {TransferFields.Domestic.statusDetail} = @statusDetail;
+      """,
+      sqlParamsDerivedFromAccountEvents.DomesticTransfer
    ]
 
 let initProps

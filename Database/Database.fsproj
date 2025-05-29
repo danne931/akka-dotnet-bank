@@ -14,6 +14,7 @@
     <Compile Include="EmployeeSqlMapper.fs" />
     <Compile Include="EmployeeEventSqlMapper.fs" />
     <Compile Include="CardSqlMapper.fs" />
+    <Compile Include="ParentAccountEventSqlMapper.fs" />
     <Compile Include="AccountEventSqlMapper.fs" />
     <Compile Include="AncillaryTransactionInfoSqlMapper.fs" />
     <Compile Include="PaymentSqlMapper.fs" />
