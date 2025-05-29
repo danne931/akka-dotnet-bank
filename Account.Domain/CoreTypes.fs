@@ -12,30 +12,56 @@ type Currency =
    | VND
 
 [<RequireQualifiedAccess>]
-type AccountStatus =
+type ParentAccountStatus =
    | InitialEmptyState
-   | Pending
    | Active
    | Closed
-   | ReadyForDelete
+   /// Freezes the parent account, probably due to suspected fraud detected,
+   /// disabling activity for all virtual accounts.
+   | Frozen
+
+   override x.ToString() =
+      match x with
+      | ParentAccountStatus.InitialEmptyState -> "InitialEmptyState"
+      | ParentAccountStatus.Active -> "Active"
+      | ParentAccountStatus.Frozen -> "Frozen"
+      | ParentAccountStatus.Closed -> "Closed"
+
+   static member fromString(status: string) : ParentAccountStatus option =
+      if String.IsNullOrEmpty status then
+         None
+      else
+         match status.ToLower() with
+         | "active" -> Some ParentAccountStatus.Active
+         | "closed" -> Some ParentAccountStatus.Closed
+         | "frozen" -> Some ParentAccountStatus.Frozen
+         | _ -> None
+
+   static member fromStringUnsafe(status: string) : ParentAccountStatus =
+      match ParentAccountStatus.fromString status with
+      | None ->
+         failwith "Error attempting to cast string to ParentAccountStatus"
+      | Some status -> status
+
+[<RequireQualifiedAccess>]
+type AccountStatus =
+   | InitialEmptyState
+   | Active
+   | Closed
 
    override x.ToString() =
       match x with
       | AccountStatus.InitialEmptyState -> "InitialEmptyState"
-      | AccountStatus.Pending -> "Pending"
       | AccountStatus.Active -> "Active"
       | AccountStatus.Closed -> "Closed"
-      | AccountStatus.ReadyForDelete -> "ReadyForDelete"
 
    static member fromString(status: string) : AccountStatus option =
       if String.IsNullOrEmpty status then
          None
       else
          match status.ToLower() with
-         | "pending" -> Some AccountStatus.Pending
          | "active" -> Some AccountStatus.Active
          | "closed" -> Some AccountStatus.Closed
-         | "readyfordelete" -> Some AccountStatus.ReadyForDelete
          | _ -> None
 
    static member fromStringUnsafe(status: string) : AccountStatus =

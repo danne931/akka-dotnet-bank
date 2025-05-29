@@ -49,6 +49,7 @@ DROP TYPE IF EXISTS organization_status;
 DROP TYPE IF EXISTS employee_role;
 DROP TYPE IF EXISTS account_depository;
 DROP TYPE IF EXISTS account_status;
+DROP TYPE IF EXISTS parent_account_status;
 DROP TYPE IF EXISTS auto_transfer_rule_frequency;
 DROP TYPE IF EXISTS card_status;
 DROP TYPE IF EXISTS card_type;
@@ -173,12 +174,14 @@ requests received.
 TODO: Consider creating extra fields on org_feature_flag table to allow the
 org to disable notifications pertaining to certain events.';
 
+CREATE TYPE parent_account_status AS ENUM ('Active', 'Closed', 'Frozen');
 
 --- PARTNER BANK PARENT ACCOUNT ---
 CREATE TABLE partner_bank_parent_account (
    parent_account_id UUID PRIMARY KEY,
    partner_bank_routing_number INT NOT NULL,
    partner_bank_account_number BIGINT NOT NULL,
+   status parent_account_status NOT NULL,
    last_billing_cycle_at TIMESTAMPTZ,
    org_id UUID NOT NULL REFERENCES organization
 );
@@ -205,7 +208,7 @@ It is only used for syncing transactions with the partner bank.
 
 --- ACCOUNT ---
 CREATE TYPE account_depository AS ENUM ('Checking', 'Savings');
-CREATE TYPE account_status AS ENUM ('Pending', 'Active', 'Closed', 'ReadyForDelete');
+CREATE TYPE account_status AS ENUM ('Active', 'Closed');
 CREATE TYPE auto_transfer_rule_frequency AS ENUM ('PerTransaction', 'Daily', 'TwiceMonthly');
 
 CREATE TABLE account (

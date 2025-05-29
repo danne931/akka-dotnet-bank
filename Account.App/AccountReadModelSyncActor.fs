@@ -234,6 +234,9 @@ let sqlParamReducer
          "accountNumber",
          PartnerBankSqlMapper.SqlWriter.accountNumber
             e.Data.PartnerBankAccountNumber
+
+         "status",
+         PartnerBankSqlMapper.SqlWriter.status ParentAccountStatus.Active
       ]
 
       {
@@ -615,11 +618,13 @@ let upsertReadModels
          ({PartnerBankSqlMapper.Fields.parentAccountId},
           {PartnerBankSqlMapper.Fields.accountNumber},
           {PartnerBankSqlMapper.Fields.routingNumber},
+          {PartnerBankSqlMapper.Fields.status},
           {PartnerBankSqlMapper.Fields.orgId})
       VALUES
          (@parentAccountId,
           @accountNumber,
           @routingNumber,
+          @status::{PartnerBankSqlMapper.TypeCast.status},
           @orgId)
       ON CONFLICT ({PartnerBankSqlMapper.Fields.parentAccountId})
       DO NOTHING;

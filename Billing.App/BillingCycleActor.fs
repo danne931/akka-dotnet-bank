@@ -26,16 +26,16 @@ let getBillingCycleReadyAccounts () =
       else
          "'1 minutes'::interval"
 
-   // TODO:
-   // {AccountFields.status} = '{string AccountStatus.Active}'
-
    pgQuery<ParentAccountId * OrgId>
       $"""
       SELECT {Fields.parentAccountId}, {Fields.orgId}
       FROM {PartnerBankSqlMapper.table}
       WHERE
-         ({prevCycle} IS NULL
-         OR {prevCycle} < current_timestamp - {lookback})
+         {Fields.status} = '{string ParentAccountStatus.Active}'
+         AND (
+            {prevCycle} IS NULL
+            OR {prevCycle} < current_timestamp - {lookback}
+         )
       """
       None
    <| fun read -> SqlReader.parentAccountId read, SqlReader.orgId read

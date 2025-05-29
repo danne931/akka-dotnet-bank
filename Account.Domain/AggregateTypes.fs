@@ -482,7 +482,7 @@ type ParentAccountSnapshot = {
    VirtualAccounts: Map<AccountId, Account>
    LastBillingCycleDate: DateTime option
    MaintenanceFeeCriteria: MaintenanceFeeCriteria
-   Status: AccountStatus
+   Status: ParentAccountStatus
    Events: AccountEvent list
 } with
 
@@ -492,7 +492,7 @@ type ParentAccountSnapshot = {
       PrimaryVirtualAccountId = AccountId Guid.Empty
       VirtualAccounts = Map.empty
       LastBillingCycleDate = None
-      Status = AccountStatus.InitialEmptyState
+      Status = ParentAccountStatus.InitialEmptyState
       MaintenanceFeeCriteria = {
          QualifyingDepositFound = false
          DailyBalanceThreshold = false

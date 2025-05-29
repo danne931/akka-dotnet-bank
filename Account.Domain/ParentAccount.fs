@@ -95,7 +95,7 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
             OrgId = e.OrgId
             ParentAccountId = e.Data.ParentAccountId
             PrimaryVirtualAccountId = e.Data.PrimaryChecking.AccountId
-            Status = AccountStatus.Active
+            Status = ParentAccountStatus.Active
         }
       | AccountEvent.MaintenanceFeeSkipped _
       | AccountEvent.MaintenanceFeeDebited _ -> {
@@ -224,7 +224,7 @@ let validateDomesticTransferLimit amount timestamp (evt, state) =
       Ok(evt, state)
 
 let validateParentAccountActive (state: ParentAccountSnapshot) =
-   if state.Status <> AccountStatus.Active then
+   if state.Status <> ParentAccountStatus.Active then
       Account.transitionErr AccountStateTransitionError.ParentAccountNotActive
    else
       Ok state
