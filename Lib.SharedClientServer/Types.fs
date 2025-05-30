@@ -300,10 +300,6 @@ type OrgStateTransitionError =
    | ApprovalProgressWorklowNotActive
    | ApproverUnrecognized of EmployeeId * name: string
    | ApproverAlreadyApprovedCommand of EmployeeId * name: string
-   | RecipientRegistered
-   | RecipientDeactivated
-   | RecipientNotFound
-   | RecipientAlreadyConfirmed
 
 type AccountStateTransitionError =
    | ParentAccountAlreadyInitialized
@@ -317,6 +313,10 @@ type AccountStateTransitionError =
    | TransferExpectedToOccurWithinOrg
    | OnlyOneAutoTransferRuleMayExistAtATime
    | AutoTransferRuleDoesNotExist
+   | RecipientRegistered
+   | RecipientDeactivated
+   | RecipientNotFound
+   | RecipientAlreadyConfirmed
 
 type EmployeeStateTransitionError =
    | EmployeeNotReadyToActivate
@@ -396,12 +396,6 @@ type Err =
          | OrgStateTransitionError.ApproverAlreadyApprovedCommand(employeeId,
                                                                   name) ->
             $"Approver already approved command {name}-{employeeId}"
-         | OrgStateTransitionError.RecipientRegistered -> "Recipient Registered"
-         | OrgStateTransitionError.RecipientDeactivated ->
-            "Recipient Deactivated"
-         | OrgStateTransitionError.RecipientNotFound -> "Recipient Not Found"
-         | OrgStateTransitionError.RecipientAlreadyConfirmed ->
-            "Recipient Already Confirmed"
       | AccountStateTransitionError e ->
          match e with
          | ParentAccountAlreadyInitialized ->
@@ -424,6 +418,14 @@ type Err =
             "Only one auto transfer rule may exist at time."
          | AccountStateTransitionError.AutoTransferRuleDoesNotExist ->
             "Attempted to update an auto transfer rule which does not exist."
+         | AccountStateTransitionError.RecipientRegistered ->
+            "Recipient Registered"
+         | AccountStateTransitionError.RecipientDeactivated ->
+            "Recipient Deactivated"
+         | AccountStateTransitionError.RecipientNotFound ->
+            "Recipient Not Found"
+         | AccountStateTransitionError.RecipientAlreadyConfirmed ->
+            "Recipient Already Confirmed"
       | EmployeeStateTransitionError e ->
          match e with
          | EmployeeStateTransitionError.EmployeeNotActive ->

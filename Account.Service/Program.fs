@@ -100,7 +100,6 @@ builder.Services.AddAkka(
                      (AppSaga.getEntityRef system)
                      (AccountActor.get system)
                      (EmployeeActor.get system)
-                     Bank.Transfer.Api.getDomesticTransfersRetryableUponRecipientCorrection
 
                props),
             ClusterMetadata.orgShardRegion.messageExtractor,
@@ -123,6 +122,7 @@ builder.Services.AddAkka(
                      EmailConsumerActor.getProducer
                      AccountClosureActor.get
                      BillingStatementActor.get
+                     Bank.Transfer.Api.getDomesticTransfersRetryableUponRecipientCorrection
 
                props),
             ClusterMetadata.accountShardRegion.messageExtractor,

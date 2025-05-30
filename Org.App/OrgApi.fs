@@ -41,15 +41,6 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
       | OrgCommand.DeclineCommandApproval cmd ->
          CommandApprovalProgress.DeclineCommandApproval.toEvent cmd
          |> Result.map OrgEnvelope.get
-      | OrgCommand.RegisterDomesticTransferRecipient cmd ->
-         RegisterDomesticTransferRecipientCommand.toEvent cmd
-         |> Result.map OrgEnvelope.get
-      | OrgCommand.EditDomesticTransferRecipient cmd ->
-         EditDomesticTransferRecipientCommand.toEvent cmd
-         |> Result.map OrgEnvelope.get
-      | OrgCommand.NicknameDomesticTransferRecipient cmd ->
-         NicknameDomesticTransferRecipientCommand.toEvent cmd
-         |> Result.map OrgEnvelope.get
       | cmd ->
          ValidationErrors.create "" [
             $"Command processing not implemented for {cmd}"
@@ -62,21 +53,6 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
    return res
 }
 
-let getDomesticTransferRecipients
-   (orgId: OrgId)
-   : Result<DomesticTransferRecipient list option, Err> Task
-   =
-   pgQuery<DomesticTransferRecipient>
-      $"""
-      {TransferSqlMapper.Query.domesticTransferRecipient}
-      WHERE dr.{TransferSqlMapper.TransferFields.DomesticRecipient.senderOrgId} = @orgId
-      """
-      (Some [
-         "orgId",
-         TransferSqlMapper.TransferSqlWriter.DomesticRecipient.senderOrgId orgId
-      ])
-      TransferSqlMapper.TransferSqlReader.DomesticRecipient.recipient
-
 type private OrgDBResult =
    | AccountProfilesWithOrg of (Org * AccountProfile) list option
    | CommandApprovalRules of CommandApprovalRule list option
@@ -85,6 +61,8 @@ type private OrgDBResult =
 
 let getOrgAndAccountProfiles
    (orgId: OrgId)
+   (getDomesticTransferRecipients:
+      OrgId -> Task<Result<DomesticTransferRecipient list option, Err>>)
    : Task<Result<Option<OrgWithAccountProfiles>, Err>>
    =
    taskResult {
@@ -215,16 +193,6 @@ let getOrgAndAccountProfiles
                         [ for p in progress -> p.ProgressId, p ] |> Map.ofList
                  }
 
-            let org =
-               match recipientsOpt with
-               | None -> org
-               | Some recipients -> {
-                  org with
-                     DomesticTransferRecipients =
-                        [ for r in recipients -> r.RecipientAccountId, r ]
-                        |> Map.ofList
-                 }
-
             Some {
                Org = org
                AccountProfiles =
@@ -236,6 +204,12 @@ let getOrgAndAccountProfiles
                Balance =
                   accountProfilesWithOrg
                   |> List.sumBy (snd >> _.Account.Balance)
+               DomesticTransferRecipients =
+                  match recipientsOpt with
+                  | Some recipients ->
+                     [ for r in recipients -> r.RecipientAccountId, r ]
+                     |> Map.ofList
+                  | None -> Map.empty
             }
          | _ -> None
    }

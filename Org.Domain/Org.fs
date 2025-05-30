@@ -6,7 +6,6 @@ open System
 
 open Bank.Org.Domain
 open Bank.Employee.Domain
-open Bank.Transfer.Domain
 open Lib.SharedTypes
 open Lib.Time
 open CommandApproval
@@ -172,7 +171,6 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
          }
          CommandApprovalRules = Map.empty
          CommandApprovalProgress = Map.empty
-         DomesticTransferRecipients = Map.empty
         }
       | OnboardingFinished _ -> { org with Status = OrgStatus.Active }
       | FeatureFlagConfigured e -> {
@@ -297,69 +295,6 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
                                  e.Data.Reason
                            LastUpdate = e.Timestamp
                      }))
-        }
-      | RegisteredDomesticTransferRecipient e ->
-         let recipient = e.Data.Recipient
-
-         {
-            org with
-               DomesticTransferRecipients =
-                  org.DomesticTransferRecipients.Add(
-                     recipient.RecipientAccountId,
-                     recipient
-                  )
-         }
-      | EditedDomesticTransferRecipient e ->
-         let recipient = e.Data.Recipient
-
-         {
-            org with
-               DomesticTransferRecipients =
-                  org.DomesticTransferRecipients.Change(
-                     recipient.RecipientAccountId,
-                     Option.map (fun _ -> recipient)
-                  )
-         }
-      | DomesticTransferRecipientFailed e -> {
-         org with
-            DomesticTransferRecipients =
-               org.DomesticTransferRecipients.Change(
-                  e.Data.RecipientId,
-                  Option.map (fun recipient -> {
-                     recipient with
-                        Status =
-                           match e.Data.Reason with
-                           | DomesticTransferRecipientFailReason.InvalidAccountInfo ->
-                              RecipientRegistrationStatus.InvalidAccount
-                           | DomesticTransferRecipientFailReason.ClosedAccount ->
-                              RecipientRegistrationStatus.Closed
-                  })
-               )
-        }
-      // When a domestic transfer lifecycle is as follows:
-      // (fails due to invalid account info -> retries -> completed)
-      // then update the recipient status to Confirmed.
-      | DomesticTransferRetryConfirmsRecipient e -> {
-         org with
-            DomesticTransferRecipients =
-               org.DomesticTransferRecipients.Change(
-                  e.Data.RecipientId,
-                  Option.map (fun recipient -> {
-                     recipient with
-                        Status = RecipientRegistrationStatus.Confirmed
-                  })
-               )
-        }
-      | NicknamedDomesticTransferRecipient e -> {
-         org with
-            DomesticTransferRecipients =
-               Map.change
-                  e.Data.RecipientId
-                  (Option.map (fun acct -> {
-                     acct with
-                        Nickname = e.Data.Nickname
-                  }))
-                  org.DomesticTransferRecipients
         }
 
    {
@@ -573,121 +508,6 @@ module private StateTransition =
                state
                (CommandApprovalProgress.TerminateCommandApproval.toEvent cmd)
 
-   let registerDomesticTransferRecipient
-      (state: OrgSnapshot)
-      (cmd: RegisterDomesticTransferRecipientCommand)
-      =
-      let org = state.Info
-
-      if org.Status <> OrgStatus.Active then
-         transitionErr OrgStateTransitionError.OrgNotActive
-      elif
-         org.DomesticTransferRecipients
-         |> Map.exists (fun _ recipient ->
-            string recipient.AccountNumber = cmd.Data.AccountNumber
-            && string recipient.RoutingNumber = cmd.Data.RoutingNumber)
-      then
-         transitionErr OrgStateTransitionError.RecipientRegistered
-      else
-         map RegisteredDomesticTransferRecipient state
-         <| RegisterDomesticTransferRecipientCommand.toEvent cmd
-
-   let editDomesticTransferRecipient
-      (state: OrgSnapshot)
-      (cmd: EditDomesticTransferRecipientCommand)
-      =
-      let org = state.Info
-
-      if org.Status <> OrgStatus.Active then
-         transitionErr OrgStateTransitionError.OrgNotActive
-      elif
-         org.DomesticTransferRecipients
-         |> Map.tryFind
-               cmd.Data.RecipientWithoutAppliedUpdates.RecipientAccountId
-         |> Option.bind (fun recipient ->
-            if recipient.Status = RecipientRegistrationStatus.Closed then
-               Some recipient
-            else
-               None)
-         |> Option.isSome
-      then
-         transitionErr OrgStateTransitionError.RecipientDeactivated
-      else
-         map EditedDomesticTransferRecipient state
-         <| EditDomesticTransferRecipientCommand.toEvent cmd
-
-   let nicknameDomesticTransferRecipient
-      (state: OrgSnapshot)
-      (cmd: NicknameDomesticTransferRecipientCommand)
-      =
-      let org = state.Info
-
-      let recipientExists, recipientIsActive =
-         match org.DomesticTransferRecipients.TryFind cmd.Data.RecipientId with
-         | None -> false, false
-         | Some recipient ->
-            true, recipient.Status <> RecipientRegistrationStatus.Closed
-
-      if org.Status <> OrgStatus.Active then
-         transitionErr OrgStateTransitionError.OrgNotActive
-      elif not recipientExists then
-         transitionErr OrgStateTransitionError.RecipientNotFound
-      else if not recipientIsActive then
-         transitionErr OrgStateTransitionError.RecipientDeactivated
-      else
-         map
-            NicknamedDomesticTransferRecipient
-            state
-            (NicknameDomesticTransferRecipientCommand.toEvent cmd)
-
-   let failDomesticTransferRecipient
-      (state: OrgSnapshot)
-      (cmd: FailDomesticTransferRecipientCommand)
-      =
-      let org = state.Info
-
-      let recipient =
-         org.DomesticTransferRecipients.TryFind cmd.Data.RecipientId
-
-      if org.Status <> OrgStatus.Active then
-         transitionErr OrgStateTransitionError.OrgNotActive
-      else
-         match recipient with
-         | None -> transitionErr OrgStateTransitionError.RecipientNotFound
-         | Some recipient when
-            recipient.Status <> RecipientRegistrationStatus.Confirmed
-            ->
-            transitionErr OrgStateTransitionError.RecipientDeactivated
-         | _ ->
-            map
-               DomesticTransferRecipientFailed
-               state
-               (FailDomesticTransferRecipientCommand.toEvent cmd)
-
-   let domesticTransferRetryConfirmsRecipient
-      (state: OrgSnapshot)
-      (cmd: DomesticTransferRetryConfirmsRecipientCommand)
-      =
-      let org = state.Info
-
-      let recipient =
-         org.DomesticTransferRecipients.TryFind cmd.Data.RecipientId
-
-      if org.Status <> OrgStatus.Active then
-         transitionErr OrgStateTransitionError.OrgNotActive
-      else
-         match recipient with
-         | None -> transitionErr OrgStateTransitionError.RecipientNotFound
-         | Some recipient when
-            recipient.Status = RecipientRegistrationStatus.Confirmed
-            ->
-            transitionErr OrgStateTransitionError.RecipientAlreadyConfirmed
-         | _ ->
-            map
-               DomesticTransferRetryConfirmsRecipient
-               state
-               (DomesticTransferRetryConfirmsRecipientCommand.toEvent cmd)
-
 let stateTransition (state: OrgSnapshot) (command: OrgCommand) =
    match command with
    | OrgCommand.SubmitOnboardingApplication cmd ->
@@ -708,13 +528,3 @@ let stateTransition (state: OrgSnapshot) (command: OrgCommand) =
       StateTransition.declineCommandApproval state cmd
    | OrgCommand.TerminateCommandApproval cmd ->
       StateTransition.terminateCommandApproval state cmd
-   | OrgCommand.RegisterDomesticTransferRecipient cmd ->
-      StateTransition.registerDomesticTransferRecipient state cmd
-   | OrgCommand.EditDomesticTransferRecipient cmd ->
-      StateTransition.editDomesticTransferRecipient state cmd
-   | OrgCommand.NicknameDomesticTransferRecipient cmd ->
-      StateTransition.nicknameDomesticTransferRecipient state cmd
-   | OrgCommand.FailDomesticTransferRecipient cmd ->
-      StateTransition.failDomesticTransferRecipient state cmd
-   | OrgCommand.DomesticTransferRetryConfirmsRecipient cmd ->
-      StateTransition.domesticTransferRetryConfirmsRecipient state cmd

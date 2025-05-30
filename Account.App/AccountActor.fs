@@ -9,6 +9,7 @@ open Akkling.Persistence
 open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 open System.Text.Json
+open System.Threading.Tasks
 
 open Lib.SharedTypes
 open Lib.Types
@@ -25,6 +26,58 @@ open PurchaseSaga
 open DomesticTransferSaga
 open PlatformTransferSaga
 open PlatformPaymentSaga
+
+// Child actor handles retrying domestic transfers which failed
+// due to the mock third party transfer service regarding the
+// Recipient of the Transfer as having invalid account info.
+module private RetryDomesticTransfers =
+   let private actorProps
+      (getRetryableTransfers:
+         AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+      : Props<AccountId>
+      =
+      let handler (ctx: Actor<_>) (recipientId: AccountId) = actor {
+         let! res = getRetryableTransfers recipientId
+
+         match res with
+         | Error err ->
+            logError ctx $"Error getting retryable transfers {err}"
+            return unhandled ()
+         | Ok None -> return ignored ()
+         | Ok(Some transfers) ->
+            for (transfer: DomesticTransfer) in transfers do
+               let msg =
+                  DomesticTransferCommand.create
+                     (transfer.TransferId |> TransferId.get |> CorrelationId)
+                     transfer.InitiatedBy
+                     {
+                        Amount = transfer.Amount
+                        Sender = transfer.Sender
+                        Recipient = transfer.Recipient
+                        Memo = transfer.Memo
+                        ScheduledDateSeedOverride = None
+                        OriginatedFromSchedule = false
+                     }
+                  |> AccountCommand.DomesticTransfer
+                  |> AccountMessage.StateChange
+
+               ctx.Parent() <! msg
+
+            return ignored ()
+      }
+
+      props (actorOf2 handler)
+
+   let getOrStart
+      (getRetryableTransfers:
+         AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+      (mailbox: Actor<_>)
+      =
+      let name = "retry-domestic-transfers"
+
+      getChildActorRef<_, AccountId> mailbox name
+      |> Option.defaultWith (fun _ ->
+         spawn mailbox name <| actorProps getRetryableTransfers)
 
 // Pass monthly billing statement to BillingStatementActor.
 // Conditionally apply monthly maintenance fee.
@@ -223,6 +276,8 @@ let onPersisted
    (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
    (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getRetryableTransfers:
+      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    (mailbox: Eventsourced<obj>)
    (state: ParentAccountSnapshot)
    (evt: AccountEvent)
@@ -370,6 +425,10 @@ let onPersisted
          DomesticTransferSagaEvent.TransferMarkedAsSettled
          e.CorrelationId
          e.OrgId
+   | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient e) ->
+      let aref = RetryDomesticTransfers.getOrStart getRetryableTransfers mailbox
+
+      aref <! e.Data.Recipient.RecipientAccountId
    | _ -> ()
 
 let persistInternalTransferWithinOrgEvent
@@ -466,6 +525,8 @@ let actorProps
    (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
    (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getDomesticTransfersRetryableUponRecipientEdit:
+      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -492,6 +553,7 @@ let actorProps
                getAccountClosureRef
                getBillingStatementRef
                getSagaRef
+               getDomesticTransfersRetryableUponRecipientEdit
                mailbox
                state
                evt
@@ -619,6 +681,8 @@ let initProps
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    (getAccountClosureActor: ActorSystem -> IActorRef<AccountClosureMessage>)
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
+   (getDomesticTransfersRetryableUponRecipientEdit:
+      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
    let childProps =
       actorProps
@@ -627,6 +691,7 @@ let initProps
          getAccountClosureActor
          getBillingStatementActor
          getSagaRef
+         getDomesticTransfersRetryableUponRecipientEdit
 
    persistenceSupervisor
       supervisorOpts

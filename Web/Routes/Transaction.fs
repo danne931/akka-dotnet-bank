@@ -64,7 +64,8 @@ let startTransactionRoutes (app: WebApplication) =
                      EmployeeEventGroupFilter.fromQueryString
                         employeeEventFilters
                   AccountEventType =
-                     TransactionGroupFilter.fromQueryString accountEventFilters
+                     AccountEventGroupFilter.fromQueryString
+                        accountEventFilters
                   InitiatedByIds =
                      HistoryQuery.initiatedByIdsFromQueryString initiatedByIds
                }
@@ -152,7 +153,7 @@ let startTransactionRoutes (app: WebApplication) =
                   InitiatedByIds =
                      TransactionQuery.initiatedByIdsFromQueryString
                         initiatedByIds
-                  EventType = TransactionGroupFilter.fromQueryString events
+                  EventType = AccountEventGroupFilter.fromQueryString events
                }
 
                getTransactions query |> RouteUtil.unwrapTaskResultOption)

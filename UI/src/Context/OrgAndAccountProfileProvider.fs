@@ -144,6 +144,7 @@ let update msg state =
                Org = state.Org
                AccountProfiles = profiles
                Balance = profiles |> Map.values |> Seq.sumBy _.Account.Balance
+               DomesticTransferRecipients = state.DomesticTransferRecipients
             })
          |> Option.defaultValue state
 
@@ -191,6 +192,7 @@ let update msg state =
             Org = state.Org
             AccountProfiles = profiles
             Balance = state.Balance
+            DomesticTransferRecipients = state.DomesticTransferRecipients
          }
 
       let state = updateState state internalTransferTransform

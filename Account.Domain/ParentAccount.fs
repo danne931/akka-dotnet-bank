@@ -2,6 +2,7 @@
 module ParentAccount
 
 open System
+open Validus
 
 open Bank.Account.Domain
 open Bank.Transfer.Domain
@@ -72,7 +73,75 @@ module TransferLimits =
 let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
    let updated =
       match evt with
-      | AccountEvent.ParentAccount _ -> state
+      | AccountEvent.ParentAccount evt ->
+         match evt with
+         | ParentAccountEvent.BillingCycleStarted e -> {
+            state with
+               LastBillingCycleDate = Some e.Timestamp
+           }
+         | ParentAccountEvent.RegisteredDomesticTransferRecipient e ->
+            let recipient = e.Data.Recipient
+
+            {
+               state with
+                  DomesticTransferRecipients =
+                     state.DomesticTransferRecipients.Add(
+                        recipient.RecipientAccountId,
+                        recipient
+                     )
+            }
+         | ParentAccountEvent.EditedDomesticTransferRecipient e ->
+            let recipient = e.Data.Recipient
+
+            {
+               state with
+                  DomesticTransferRecipients =
+                     state.DomesticTransferRecipients.Change(
+                        recipient.RecipientAccountId,
+                        Option.map (fun _ -> recipient)
+                     )
+            }
+         | ParentAccountEvent.DomesticTransferRecipientFailed e -> {
+            state with
+               DomesticTransferRecipients =
+                  state.DomesticTransferRecipients.Change(
+                     e.Data.RecipientId,
+                     Option.map (fun recipient -> {
+                        recipient with
+                           Status =
+                              match e.Data.Reason with
+                              | DomesticTransferRecipientFailReason.InvalidAccountInfo ->
+                                 RecipientRegistrationStatus.InvalidAccount
+                              | DomesticTransferRecipientFailReason.ClosedAccount ->
+                                 RecipientRegistrationStatus.Closed
+                     })
+                  )
+           }
+         // When a domestic transfer lifecycle is as follows:
+         // (fails due to invalid account info -> retries -> completed)
+         // then update the recipient status to Confirmed.
+         | ParentAccountEvent.DomesticTransferRetryConfirmsRecipient e -> {
+            state with
+               DomesticTransferRecipients =
+                  state.DomesticTransferRecipients.Change(
+                     e.Data.RecipientId,
+                     Option.map (fun recipient -> {
+                        recipient with
+                           Status = RecipientRegistrationStatus.Confirmed
+                     })
+                  )
+           }
+         | ParentAccountEvent.NicknamedDomesticTransferRecipient e -> {
+            state with
+               DomesticTransferRecipients =
+                  Map.change
+                     e.Data.RecipientId
+                     (Option.map (fun acct -> {
+                        acct with
+                           Nickname = e.Data.Nickname
+                     }))
+                     state.DomesticTransferRecipients
+           }
       | _ -> {
          state with
             VirtualAccounts =
@@ -86,10 +155,6 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
 
    let updated =
       match evt with
-      | AccountEvent.ParentAccount(ParentAccountEvent.BillingCycleStarted e) -> {
-         updated with
-            LastBillingCycleDate = Some e.Timestamp
-        }
       | AccountEvent.InitializedPrimaryCheckingAccount e -> {
          updated with
             OrgId = e.OrgId
@@ -229,6 +294,151 @@ let validateParentAccountActive (state: ParentAccountSnapshot) =
    else
       Ok state
 
+module private StateTransition =
+   let mapParent
+      (eventTransform: BankEvent<'t> -> ParentAccountEvent)
+      (state: ParentAccountSnapshot)
+      (eventValidation: ValidationResult<BankEvent<'t>>)
+      =
+      eventValidation
+      |> Result.mapError ValidationError
+      |> Result.map (fun evt ->
+         let evt = AccountEvent.ParentAccount(eventTransform evt)
+         (evt, applyEvent state evt))
+
+   let startBillingCycle
+      (state: ParentAccountSnapshot)
+      (cmd: StartBillingCycleCommand)
+      =
+      if state.Status <> ParentAccountStatus.Active then
+         Account.transitionErr
+            AccountStateTransitionError.ParentAccountNotActive
+      else
+         mapParent
+            ParentAccountEvent.BillingCycleStarted
+            state
+            (StartBillingCycleCommand.toEvent cmd)
+
+   let registerDomesticTransferRecipient
+      (state: ParentAccountSnapshot)
+      (cmd: RegisterDomesticTransferRecipientCommand)
+      =
+      if state.Status <> ParentAccountStatus.Active then
+         Account.transitionErr
+            AccountStateTransitionError.ParentAccountNotActive
+      elif
+         state.DomesticTransferRecipients
+         |> Map.exists (fun _ recipient ->
+            string recipient.AccountNumber = cmd.Data.AccountNumber
+            && string recipient.RoutingNumber = cmd.Data.RoutingNumber)
+      then
+         Account.transitionErr AccountStateTransitionError.RecipientRegistered
+      else
+         mapParent
+            ParentAccountEvent.RegisteredDomesticTransferRecipient
+            state
+            (RegisterDomesticTransferRecipientCommand.toEvent cmd)
+
+   let editDomesticTransferRecipient
+      (state: ParentAccountSnapshot)
+      (cmd: EditDomesticTransferRecipientCommand)
+      =
+      if state.Status <> ParentAccountStatus.Active then
+         Account.transitionErr
+            AccountStateTransitionError.ParentAccountNotActive
+      elif
+         state.DomesticTransferRecipients
+         |> Map.tryFind
+               cmd.Data.RecipientWithoutAppliedUpdates.RecipientAccountId
+         |> Option.bind (fun recipient ->
+            if recipient.Status = RecipientRegistrationStatus.Closed then
+               Some recipient
+            else
+               None)
+         |> Option.isSome
+      then
+         Account.transitionErr AccountStateTransitionError.RecipientDeactivated
+      else
+         mapParent
+            ParentAccountEvent.EditedDomesticTransferRecipient
+            state
+            (EditDomesticTransferRecipientCommand.toEvent cmd)
+
+   let nicknameDomesticTransferRecipient
+      (state: ParentAccountSnapshot)
+      (cmd: NicknameDomesticTransferRecipientCommand)
+      =
+      let recipientExists, recipientIsActive =
+         match
+            state.DomesticTransferRecipients.TryFind cmd.Data.RecipientId
+         with
+         | None -> false, false
+         | Some recipient ->
+            true, recipient.Status <> RecipientRegistrationStatus.Closed
+
+      if state.Status <> ParentAccountStatus.Active then
+         Account.transitionErr
+            AccountStateTransitionError.ParentAccountNotActive
+      elif not recipientExists then
+         Account.transitionErr AccountStateTransitionError.RecipientNotFound
+      else if not recipientIsActive then
+         Account.transitionErr AccountStateTransitionError.RecipientDeactivated
+      else
+         mapParent
+            ParentAccountEvent.NicknamedDomesticTransferRecipient
+            state
+            (NicknameDomesticTransferRecipientCommand.toEvent cmd)
+
+   let failDomesticTransferRecipient
+      (state: ParentAccountSnapshot)
+      (cmd: FailDomesticTransferRecipientCommand)
+      =
+      let recipient =
+         state.DomesticTransferRecipients.TryFind cmd.Data.RecipientId
+
+      if state.Status <> ParentAccountStatus.Active then
+         Account.transitionErr
+            AccountStateTransitionError.ParentAccountNotActive
+      else
+         match recipient with
+         | None ->
+            Account.transitionErr AccountStateTransitionError.RecipientNotFound
+         | Some recipient when
+            recipient.Status <> RecipientRegistrationStatus.Confirmed
+            ->
+            Account.transitionErr
+               AccountStateTransitionError.RecipientDeactivated
+         | _ ->
+            mapParent
+               ParentAccountEvent.DomesticTransferRecipientFailed
+               state
+               (FailDomesticTransferRecipientCommand.toEvent cmd)
+
+   let domesticTransferRetryConfirmsRecipient
+      (state: ParentAccountSnapshot)
+      (cmd: DomesticTransferRetryConfirmsRecipientCommand)
+      =
+      let recipient =
+         state.DomesticTransferRecipients.TryFind cmd.Data.RecipientId
+
+      if state.Status <> ParentAccountStatus.Active then
+         Account.transitionErr
+            AccountStateTransitionError.ParentAccountNotActive
+      else
+         match recipient with
+         | None ->
+            Account.transitionErr AccountStateTransitionError.RecipientNotFound
+         | Some recipient when
+            recipient.Status = RecipientRegistrationStatus.Confirmed
+            ->
+            Account.transitionErr
+               AccountStateTransitionError.RecipientAlreadyConfirmed
+         | _ ->
+            mapParent
+               ParentAccountEvent.DomesticTransferRetryConfirmsRecipient
+               state
+               (DomesticTransferRetryConfirmsRecipientCommand.toEvent cmd)
+
 let stateTransition
    (state: ParentAccountSnapshot)
    (command: AccountCommand)
@@ -238,6 +448,20 @@ let stateTransition
    let virtualAccount = state.VirtualAccounts.TryFind accountId
 
    match command, virtualAccount with
+   | AccountCommand.ParentAccount cmd, _ ->
+      match cmd with
+      | ParentAccountCommand.StartBillingCycle cmd ->
+         StateTransition.startBillingCycle state cmd
+      | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
+         StateTransition.registerDomesticTransferRecipient state cmd
+      | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
+         StateTransition.editDomesticTransferRecipient state cmd
+      | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
+         StateTransition.nicknameDomesticTransferRecipient state cmd
+      | ParentAccountCommand.FailDomesticTransferRecipient cmd ->
+         StateTransition.failDomesticTransferRecipient state cmd
+      | ParentAccountCommand.DomesticTransferRetryConfirmsRecipient cmd ->
+         StateTransition.domesticTransferRetryConfirmsRecipient state cmd
    | AccountCommand.InitializePrimaryCheckingAccount _, _ when
       not state.VirtualAccounts.IsEmpty
       ->
@@ -271,18 +495,6 @@ let stateTransition
       |> Result.bind (
          validateDomesticTransferLimit cmd.Data.Amount cmd.Timestamp
       )
-   | AccountCommand.ParentAccount(ParentAccountCommand.StartBillingCycle cmd), _ ->
-      validateParentAccountActive state
-      |> Result.bind (fun _ ->
-         StartBillingCycleCommand.toEvent cmd
-         |> Result.mapError ValidationError)
-      |> Result.map (fun evt ->
-         let evt =
-            AccountEvent.ParentAccount(
-               ParentAccountEvent.BillingCycleStarted evt
-            )
-
-         evt, (applyEvent state evt))
    | _, None -> Account.transitionErr (AccountNotFound accountId)
    | _, Some account ->
       validateParentAccountActive state

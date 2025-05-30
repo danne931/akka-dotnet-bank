@@ -102,6 +102,18 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
 
 open TransferSqlMapper
 
+let getDomesticTransferRecipients
+   (orgId: OrgId)
+   : Result<DomesticTransferRecipient list option, Err> Task
+   =
+   pgQuery<DomesticTransferRecipient>
+      $"""
+      {Query.domesticTransferRecipient}
+      WHERE dr.{TransferFields.DomesticRecipient.senderOrgId} = @orgId
+      """
+      (Some [ "orgId", TransferSqlWriter.DomesticRecipient.senderOrgId orgId ])
+      TransferSqlReader.DomesticRecipient.recipient
+
 let getFailedDomesticTransfersByRecipient
    (recipientAccountId: AccountId)
    : Task<Result<DomesticTransfer list option, Err>>

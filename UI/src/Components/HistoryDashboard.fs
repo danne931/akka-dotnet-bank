@@ -30,7 +30,7 @@ type HistoryFilter =
    | EventFilter of
       {|
          Employee: (EmployeeEventGroupFilter list) option
-         Account: (TransactionGroupFilter list) option
+         Account: (AccountEventGroupFilter list) option
          Org: (OrgEventGroupFilter list) option
       |}
    | InitiatedBy of (SelectedEmployee list) option
@@ -205,13 +205,13 @@ let renderPagination state dispatch =
 
 let withoutPurchaseFilter =
    function
-   | TransactionGroupFilter.Purchase -> false
+   | AccountEventGroupFilter.Purchase -> false
    | _ -> true
 
 // The EmployeeEventGroupFilter will handle filtering employee events
 // & account events for purchase events.
 let selectableAccountFilters =
-   TransactionGroupFilter.All |> List.filter withoutPurchaseFilter
+   AccountEventGroupFilter.All |> List.filter withoutPurchaseFilter
 
 let private filterCount (filters: ('t list) option) : int =
    filters |> Option.map _.Length |> Option.defaultValue 0
@@ -238,9 +238,9 @@ let private renderEventFilterCheckboxes state dispatch browserQuery =
                   match
                      isPurchaseFilterSelected, state.Query.AccountEventType
                   with
-                  | true, None -> Some [ TransactionGroupFilter.Purchase ]
+                  | true, None -> Some [ AccountEventGroupFilter.Purchase ]
                   | true, Some filters ->
-                     Some(TransactionGroupFilter.Purchase :: filters)
+                     Some(AccountEventGroupFilter.Purchase :: filters)
                   | false, Some filters ->
                      Some(filters |> List.filter withoutPurchaseFilter)
                   | _ -> state.Query.AccountEventType
@@ -358,7 +358,7 @@ let renderTableControlPanel
                         employeeFilters
                         |> Option.map EmployeeEventGroupFilter.listToDisplay
                         accountFilters
-                        |> Option.map TransactionGroupFilter.listToDisplay
+                        |> Option.map AccountEventGroupFilter.listToDisplay
                         orgFilters
                         |> Option.map OrgEventGroupFilter.listToDisplay
                      ]

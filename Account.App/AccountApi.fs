@@ -65,6 +65,15 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
       | AccountCommand.DeleteAutoTransferRule cmd ->
          DeleteAutoTransferRuleCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
+      | AccountCommand.ParentAccount(ParentAccountCommand.RegisterDomesticTransferRecipient cmd) ->
+         RegisterDomesticTransferRecipientCommand.toEvent cmd
+         |> Result.map AccountEnvelope.get
+      | AccountCommand.ParentAccount(ParentAccountCommand.EditDomesticTransferRecipient cmd) ->
+         EditDomesticTransferRecipientCommand.toEvent cmd
+         |> Result.map AccountEnvelope.get
+      | AccountCommand.ParentAccount(ParentAccountCommand.NicknameDomesticTransferRecipient cmd) ->
+         NicknameDomesticTransferRecipientCommand.toEvent cmd
+         |> Result.map AccountEnvelope.get
       | cmd ->
          Error
          <| ValidationErrors.create "" [

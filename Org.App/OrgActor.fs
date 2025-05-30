@@ -8,7 +8,6 @@ open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
 open System
-open System.Threading.Tasks
 
 open Lib.SharedTypes
 open Lib.Types
@@ -21,40 +20,6 @@ open Bank.Employee.Domain
 open CommandApproval
 open SignalRBroadcast
 open OrgOnboardingSaga
-
-let private handleValidationError
-   (broadcaster: SignalRBroadcast)
-   mailbox
-   (orgId: OrgId)
-   (err: Err)
-   (cmd: OrgCommand)
-   =
-   match cmd, err with
-   | OrgCommand.FailDomesticTransferRecipient cmd,
-     Err.OrgStateTransitionError OrgStateTransitionError.RecipientDeactivated ->
-      let msg =
-         $"""
-         Domestic transfer failed ({cmd.Data.TransferId}).
-         No need to update recipient status.
-         """
-
-      logDebug mailbox msg
-   | OrgCommand.DomesticTransferRetryConfirmsRecipient cmd,
-     Err.OrgStateTransitionError OrgStateTransitionError.RecipientAlreadyConfirmed ->
-      let msg =
-         $"""
-         Domestic transfer retried successfully ({cmd.Data.TransferId}).
-         No need to update recipient status."
-         """
-
-      logDebug mailbox msg
-   | _ ->
-      broadcaster.orgEventError orgId cmd.Envelope.CorrelationId err
-
-      logWarning
-         mailbox
-         $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
-
 
 // Sends the ApprovableCommand to the appropriate Account or Employee actor
 // when the approval process is complete or no approval required.
@@ -209,67 +174,107 @@ let private terminateProgressAssociatedWithRule
 
       mailbox <! OrgMessage.StateChange cmd
 
-// Child actor handles retrying domestic transfers which failed
-// due to the mock third party transfer service regarding the
-// Recipient of the Transfer as having invalid account info.
-module private RetryDomesticTransfers =
-   let private actorProps
-      (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-      (getRetryableTransfers:
-         AccountId -> Task<Result<DomesticTransfer list option, Err>>)
-      : Props<AccountId>
-      =
-      let handler (ctx: Actor<_>) (recipientId: AccountId) = actor {
-         let! res = getRetryableTransfers recipientId
+let onPersisted
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (mailbox: Eventsourced<obj>)
+   (previousState: OrgSnapshot)
+   (state: OrgSnapshot)
+   (evt: OrgEvent)
+   =
+   let sendApprovedCommand =
+      sendApprovedCommand getEmployeeRef getAccountRef (mailbox.Parent())
 
-         match res with
-         | Error err ->
-            logError ctx $"Error getting retryable transfers {err}"
-            return unhandled ()
-         | Ok None -> return ignored ()
-         | Ok(Some transfers) ->
-            for (transfer: DomesticTransfer) in transfers do
-               let msg =
-                  DomesticTransferCommand.create
-                     (transfer.TransferId |> TransferId.get |> CorrelationId)
-                     transfer.InitiatedBy
-                     {
-                        Amount = transfer.Amount
-                        Sender = transfer.Sender
-                        Recipient = transfer.Recipient
-                        Memo = transfer.Memo
-                        ScheduledDateSeedOverride = None
-                        OriginatedFromSchedule = false
-                     }
-                  |> AccountCommand.DomesticTransfer
-                  |> AccountMessage.StateChange
+   match evt with
+   | OnboardingApplicationSubmitted e ->
+      let msg =
+         OrgOnboardingSagaStartEvent.ApplicationSubmitted e
+         |> OrgOnboardingSagaEvent.Start
+         |> AppSaga.Event.OrgOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
-               getAccountRef transfer.Sender.ParentAccountId <! msg
+      getSagaRef e.CorrelationId <! msg
+   | OnboardingFinished e ->
+      let msg =
+         OrgOnboardingSagaEvent.OrgActivated
+         |> AppSaga.Event.OrgOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
-            return ignored ()
-      }
+      getSagaRef e.CorrelationId <! msg
+   | CommandApprovalRuleConfigured e ->
+      let newRuleConfig = e.Data.Rule
+      let approversCnt = newRuleConfig.Approvers.Length
 
-      props (actorOf2 handler)
+      let previousApproversCnt =
+         previousState.Info.CommandApprovalRules
+         |> Map.tryFind newRuleConfig.RuleId
+         |> Option.map _.Approvers.Length
+         |> Option.defaultValue approversCnt
 
-   let getOrStart
-      (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-      (getRetryableTransfers:
-         AccountId -> Task<Result<DomesticTransfer list option, Err>>)
-      (mailbox: Actor<_>)
-      =
-      let name = "retry-domestic-transfers"
+      // If an approver was removed from the rule config then we should
+      // see if there are any approval processes which can be
+      // terminated to have their commands initiated immediately.
+      if approversCnt < previousApproversCnt then
+         let progressPertainingToRule =
+            state.Info.CommandApprovalProgress.Values
+            |> Seq.filter (fun p ->
+               p.RuleId = newRuleConfig.RuleId
+               && p.ApprovedBy.Length = newRuleConfig.Approvers.Length)
 
-      getChildActorRef<_, AccountId> mailbox name
-      |> Option.defaultWith (fun _ ->
-         spawn mailbox name <| actorProps getAccountRef getRetryableTransfers)
+         terminateProgressAssociatedWithRule
+            (mailbox.Parent())
+            progressPertainingToRule
+            CommandApprovalProgress.CommandApprovalTerminationReason.AssociatedRuleApproverDeleted
+   | CommandApprovalRuleDeleted e ->
+      let progressPertainingToRule =
+         state.Info.CommandApprovalProgress.Values
+         |> Seq.filter (fun p -> p.RuleId = e.Data.RuleId)
+
+      terminateProgressAssociatedWithRule
+         (mailbox.Parent())
+         progressPertainingToRule
+         CommandApprovalProgress.CommandApprovalTerminationReason.AssociatedRuleDeleted
+   | CommandApprovalProcessCompleted e -> sendApprovedCommand e.Data.Command
+   | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
+   | CommandApprovalDeclined e ->
+      match e.Data.Command with
+      | ApprovableCommand.PerCommand(InviteEmployee cmd) ->
+         let employeeId = EmployeeId.fromEntityId cmd.EntityId
+
+         let msg =
+            CancelInvitationCommand.create (employeeId, e.OrgId) e.InitiatedBy {
+               Reason =
+                  Some
+                     $"Employee invite declined by {e.Data.DeclinedBy.EmployeeName}"
+            }
+            |> EmployeeCommand.CancelInvitation
+            |> EmployeeMessage.StateChange
+
+         (getEmployeeRef employeeId) <! msg
+      | ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
+         let accountRef =
+            getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
+
+         let msg =
+            DeclinePlatformPaymentCommand.create e.InitiatedBy {
+               RequestedPayment = cmd.Data.RequestedPayment
+               Reason =
+                  Some
+                     $"Outgoing payment declined by {e.Data.DeclinedBy.EmployeeName}"
+            }
+            |> AccountCommand.DeclinePlatformPayment
+            |> AccountMessage.StateChange
+
+         accountRef <! msg
+      | _ -> ()
+   | _ -> ()
 
 let actorProps
    (broadcaster: SignalRBroadcast)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getDomesticTransfersRetryableUponRecipientEdit:
-      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -277,15 +282,19 @@ let actorProps
       let sendApprovedCommand =
          sendApprovedCommand getEmployeeRef getAccountRef (mailbox.Parent())
 
+      let handleValidationError orgId (cmd: OrgCommand) (err: Err) =
+         broadcaster.orgEventError orgId cmd.Envelope.CorrelationId err
+
+         logWarning
+            mailbox
+            $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
+
       let rec loop (stateOpt: OrgSnapshot option) = actor {
          let! msg = mailbox.Receive()
 
          let state = stateOpt |> Option.defaultValue OrgSnapshot.empty
 
          let org = state.Info
-
-         let handleValidationError =
-            handleValidationError broadcaster mailbox org.OrgId
 
          match msg with
          | Persisted mailbox e ->
@@ -296,101 +305,14 @@ let actorProps
 
             broadcaster.orgEventPersisted evt state.Info
 
-            match evt with
-            | OnboardingApplicationSubmitted e ->
-               let msg =
-                  OrgOnboardingSagaStartEvent.ApplicationSubmitted e
-                  |> OrgOnboardingSagaEvent.Start
-                  |> AppSaga.Event.OrgOnboarding
-                  |> AppSaga.sagaMessage e.OrgId e.CorrelationId
-
-               getSagaRef e.CorrelationId <! msg
-            | OnboardingFinished e ->
-               let msg =
-                  OrgOnboardingSagaEvent.OrgActivated
-                  |> AppSaga.Event.OrgOnboarding
-                  |> AppSaga.sagaMessage e.OrgId e.CorrelationId
-
-               getSagaRef e.CorrelationId <! msg
-            | CommandApprovalRuleConfigured e ->
-               let newRuleConfig = e.Data.Rule
-               let approversCnt = newRuleConfig.Approvers.Length
-
-               let previousApproversCnt =
-                  previousState.Info.CommandApprovalRules
-                  |> Map.tryFind newRuleConfig.RuleId
-                  |> Option.map _.Approvers.Length
-                  |> Option.defaultValue approversCnt
-
-               // If an approver was removed from the rule config then we should
-               // see if there are any approval processes which can be
-               // terminated to have their commands initiated immediately.
-               if approversCnt < previousApproversCnt then
-                  let progressPertainingToRule =
-                     state.Info.CommandApprovalProgress.Values
-                     |> Seq.filter (fun p ->
-                        p.RuleId = newRuleConfig.RuleId
-                        && p.ApprovedBy.Length = newRuleConfig.Approvers.Length)
-
-                  terminateProgressAssociatedWithRule
-                     (mailbox.Parent())
-                     progressPertainingToRule
-                     CommandApprovalProgress.CommandApprovalTerminationReason.AssociatedRuleApproverDeleted
-            | CommandApprovalRuleDeleted e ->
-               let progressPertainingToRule =
-                  state.Info.CommandApprovalProgress.Values
-                  |> Seq.filter (fun p -> p.RuleId = e.Data.RuleId)
-
-               terminateProgressAssociatedWithRule
-                  (mailbox.Parent())
-                  progressPertainingToRule
-                  CommandApprovalProgress.CommandApprovalTerminationReason.AssociatedRuleDeleted
-            | CommandApprovalProcessCompleted e ->
-               sendApprovedCommand e.Data.Command
-            | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
-            | CommandApprovalDeclined e ->
-               match e.Data.Command with
-               | ApprovableCommand.PerCommand(InviteEmployee cmd) ->
-                  let employeeId = EmployeeId.fromEntityId cmd.EntityId
-
-                  let msg =
-                     CancelInvitationCommand.create
-                        (employeeId, e.OrgId)
-                        e.InitiatedBy
-                        {
-                           Reason =
-                              Some
-                                 $"Employee invite declined by {e.Data.DeclinedBy.EmployeeName}"
-                        }
-                     |> EmployeeCommand.CancelInvitation
-                     |> EmployeeMessage.StateChange
-
-                  (getEmployeeRef employeeId) <! msg
-               | ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
-                  let accountRef =
-                     getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
-
-                  let msg =
-                     DeclinePlatformPaymentCommand.create e.InitiatedBy {
-                        RequestedPayment = cmd.Data.RequestedPayment
-                        Reason =
-                           Some
-                              $"Outgoing payment declined by {e.Data.DeclinedBy.EmployeeName}"
-                     }
-                     |> AccountCommand.DeclinePlatformPayment
-                     |> AccountMessage.StateChange
-
-                  accountRef <! msg
-               | _ -> ()
-            | EditedDomesticTransferRecipient e ->
-               let aref =
-                  RetryDomesticTransfers.getOrStart
-                     getAccountRef
-                     getDomesticTransfersRetryableUponRecipientEdit
-                     mailbox
-
-               aref <! e.Data.Recipient.RecipientAccountId
-            | _ -> ()
+            onPersisted
+               getSagaRef
+               getEmployeeRef
+               getAccountRef
+               mailbox
+               previousState
+               state
+               evt
 
             let state =
                match evt with
@@ -427,7 +349,7 @@ let actorProps
 
                   match validation with
                   | Ok(evt, _) -> return! confirmPersist (OrgMessage.Event evt)
-                  | Error err -> handleValidationError err cmd
+                  | Error err -> handleValidationError org.OrgId cmd err
                | msg -> return unknownMsg msg
             | msg -> return unknownMsg msg
          | :? OrgMessage as msg ->
@@ -521,16 +443,9 @@ let initProps
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getDomesticTransfersRetryableUponRecipientEdit:
-      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
    let childProps =
-      actorProps
-         broadcaster
-         getSagaRef
-         getEmployeeRef
-         getAccountRef
-         getDomesticTransfersRetryableUponRecipientEdit
+      actorProps broadcaster getSagaRef getEmployeeRef getAccountRef
 
    persistenceSupervisor
       supervisorOpts

@@ -36,19 +36,12 @@ let orgEventFilterNames (filters: OrgEventGroupFilter list) : string array =
               typeof<CommandApprovalProgress.CommandApprovalTerminated>.Name
               typeof<CommandApprovalProgress.CommandApprovalProcessCompleted>
                  .Name
-             ]
-           | OrgEventGroupFilter.DomesticTransferRecipient -> [
-              typeof<RegisteredDomesticTransferRecipient>.Name
-              typeof<EditedDomesticTransferRecipient>.Name
-              typeof<NicknamedDomesticTransferRecipient>.Name
-              typeof<DomesticTransferRetryConfirmsRecipientCommand>.Name
-              typeof<DomesticTransferRecipientFailed>.Name
              ])
       []
    |> List.toArray
 
 let accountEventFilterNames
-   (filters: TransactionGroupFilter list)
+   (filters: AccountEventGroupFilter list)
    : string array
    =
    filters
@@ -56,35 +49,44 @@ let accountEventFilterNames
       (fun acc e ->
          acc
          @ match e with
-           | TransactionGroupFilter.Purchase -> [ typeof<DebitedAccount>.Name ]
-           | TransactionGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
-           | TransactionGroupFilter.InternalTransferWithinOrg -> [
+           | AccountEventGroupFilter.Purchase -> [
+              typeof<DebitedAccount>.Name
+             ]
+           | AccountEventGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
+           | AccountEventGroupFilter.InternalTransferWithinOrg -> [
               typeof<InternalTransferWithinOrgPending>.Name
               typeof<InternalTransferWithinOrgFailed>.Name
               typeof<InternalTransferWithinOrgDeposited>.Name
              ]
-           | TransactionGroupFilter.InternalTransferBetweenOrgs -> [
+           | AccountEventGroupFilter.InternalTransferBetweenOrgs -> [
               typeof<InternalTransferBetweenOrgsPending>.Name
               typeof<InternalTransferBetweenOrgsFailed>.Name
               typeof<InternalTransferBetweenOrgsDeposited>.Name
              ]
-           | TransactionGroupFilter.InternalAutomatedTransfer -> [
+           | AccountEventGroupFilter.InternalAutomatedTransfer -> [
               typeof<InternalAutomatedTransferPending>.Name
               typeof<InternalAutomatedTransferFailed>.Name
               typeof<InternalAutomatedTransferDeposited>.Name
              ]
-           | TransactionGroupFilter.DomesticTransfer -> [
+           | AccountEventGroupFilter.DomesticTransfer -> [
               typeof<DomesticTransferPending>.Name
               typeof<DomesticTransferCompleted>.Name
               typeof<DomesticTransferFailed>.Name
               typeof<DomesticTransferProgressUpdate>.Name
              ]
-           | TransactionGroupFilter.PlatformPayment -> [
+           | AccountEventGroupFilter.PlatformPayment -> [
               typeof<PlatformPaymentRequested>.Name
               typeof<PlatformPaymentPaid>.Name
               typeof<PlatformPaymentDeposited>.Name
               typeof<PlatformPaymentDeclined>.Name
               typeof<PlatformPaymentCancelled>.Name
+             ]
+           | AccountEventGroupFilter.DomesticTransferRecipient -> [
+              typeof<RegisteredDomesticTransferRecipient>.Name
+              typeof<EditedDomesticTransferRecipient>.Name
+              typeof<NicknamedDomesticTransferRecipient>.Name
+              typeof<DomesticTransferRetryConfirmsRecipientCommand>.Name
+              typeof<DomesticTransferRecipientFailed>.Name
              ])
       []
    |> List.toArray
@@ -146,7 +148,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
       | None, None, None -> {
          query with
             OrgEventType = Some OrgEventGroupFilter.All
-            AccountEventType = Some TransactionGroupFilter.All
+            AccountEventType = Some AccountEventGroupFilter.All
             EmployeeEventType = Some EmployeeEventGroupFilter.All
         }
       | _ -> query

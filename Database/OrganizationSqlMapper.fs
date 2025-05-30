@@ -54,7 +54,6 @@ module OrgSqlReader =
       }
       CommandApprovalRules = Map.empty
       CommandApprovalProgress = Map.empty
-      DomesticTransferRecipients = Map.empty
    }
 
 module OrgSqlWriter =

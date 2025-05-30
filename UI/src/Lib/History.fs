@@ -28,7 +28,7 @@ let amountFromApprovableCommand cmd =
    | ApprovableCommand.AmountBased _ -> Some(Money.format cmd.Amount)
    | _ -> None
 
-let orgHistoryUIFriendly (org: Org) (history: OrgHistory) : HistoryUIFriendly =
+let orgHistoryUIFriendly (history: OrgHistory) : HistoryUIFriendly =
    let _, envelope = OrgEnvelope.unwrap history.Event
 
    let props = {
@@ -41,47 +41,7 @@ let orgHistoryUIFriendly (org: Org) (history: OrgHistory) : HistoryUIFriendly =
       Initiator = history.InitiatedByName
    }
 
-   let domesticRecipientName (recipientAccountId: AccountId) =
-      org.DomesticTransferRecipients
-      |> Map.tryFind recipientAccountId
-      |> Option.map _.FullName
-
    match history.Event with
-   | RegisteredDomesticTransferRecipient evt ->
-      let name =
-         domesticRecipientName evt.Data.Recipient.RecipientAccountId
-         |> Option.defaultValue evt.Data.Recipient.FullName
-
-      {
-         props with
-            Info = $"Created domestic recipient: {name}"
-      }
-   | OrgEvent.DomesticTransferRetryConfirmsRecipient evt -> {
-      props with
-         Info =
-            $"Recipient confirmed upon transfer retry: {domesticRecipientName evt.Data.RecipientId}"
-     }
-   | OrgEvent.DomesticTransferRecipientFailed evt -> {
-      props with
-         Info =
-            $"Recipient {domesticRecipientName evt.Data.RecipientId} invalid due to {evt.Data.Reason}"
-     }
-   | EditedDomesticTransferRecipient evt ->
-      let name =
-         domesticRecipientName evt.Data.Recipient.RecipientAccountId
-         |> Option.defaultValue evt.Data.Recipient.FullName
-
-      {
-         props with
-            Info = $"Edited recipient: {name}"
-      }
-   | NicknamedDomesticTransferRecipient evt -> {
-      props with
-         Info =
-            match evt.Data.Nickname with
-            | None -> "Removed recipient nickname."
-            | Some name -> $"Updated recipient nickname to {name}"
-     }
    | OrgEvent.OnboardingApplicationSubmitted _ -> {
       props with
          Info = "Organization onboarding application submitted"
@@ -267,10 +227,16 @@ let accountHistoryUIFriendly
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      org.Org.DomesticTransferRecipients
+      org.DomesticTransferRecipients
       |> Map.tryFind recipientFromEvt.RecipientAccountId
       |> Option.map _.FullName
       |> Option.defaultValue recipientFromEvt.FullName
+
+   let domesticRecipientNameFromId (recipientId: AccountId) =
+      org.DomesticTransferRecipients
+      |> Map.tryFind recipientId
+      |> Option.map _.FullName
+      |> Option.defaultValue "Unknown"
 
    let accountName =
       org.AccountProfiles.TryFind(history.Event.AccountId)
@@ -435,12 +401,13 @@ let accountHistoryUIFriendly
    | DomesticTransferProgress evt ->
       let info = evt.Data.BaseInfo
       let payNetwork = info.Recipient.PaymentNetwork
+      let recipientName = domesticRecipientName info.Recipient
 
       {
          props with
             Info =
                $"Progress update received for {payNetwork} transfer 
-                 to {domesticRecipientName info.Recipient} from {accountName}
+                 to {recipientName} from {accountName}
                  - {evt.Data.InProgressInfo}"
             Amount = Some <| Money.format info.Amount
       }
@@ -586,6 +553,41 @@ let accountHistoryUIFriendly
          props with
             Info = "New billing cycle.."
         }
+      | ParentAccountEvent.RegisteredDomesticTransferRecipient evt ->
+         let name = domesticRecipientName evt.Data.Recipient
+
+         {
+            props with
+               Info = $"Created domestic recipient: {name}"
+         }
+      | ParentAccountEvent.DomesticTransferRetryConfirmsRecipient evt ->
+         let name = domesticRecipientNameFromId evt.Data.RecipientId
+
+         {
+            props with
+               Info = $"Recipient confirmed upon transfer retry: {name}"
+         }
+      | ParentAccountEvent.DomesticTransferRecipientFailed evt ->
+         let name = domesticRecipientNameFromId evt.Data.RecipientId
+
+         {
+            props with
+               Info = $"Recipient {name} invalid due to {evt.Data.Reason}"
+         }
+      | ParentAccountEvent.EditedDomesticTransferRecipient evt ->
+         let name = domesticRecipientName evt.Data.Recipient
+
+         {
+            props with
+               Info = $"Edited recipient: {name}"
+         }
+      | ParentAccountEvent.NicknamedDomesticTransferRecipient evt -> {
+         props with
+            Info =
+               match evt.Data.Nickname with
+               | None -> "Removed recipient nickname."
+               | Some name -> $"Updated recipient nickname to {name}"
+        }
 
 let historyUIFriendly
    (org: OrgWithAccountProfiles)
@@ -593,7 +595,7 @@ let historyUIFriendly
    : HistoryUIFriendly
    =
    match history with
-   | History.Org h -> orgHistoryUIFriendly org.Org h
+   | History.Org h -> orgHistoryUIFriendly h
    | History.Employee h -> employeeHistoryUIFriendly h
    | History.Account h -> accountHistoryUIFriendly org h
 
@@ -624,60 +626,61 @@ let private matchesOrgEventFilter
       | OrgEvent.CommandApprovalTerminated _
       | OrgEvent.CommandApprovalProcessCompleted _ -> true
       | _ -> false
-   | OrgEventGroupFilter.DomesticTransferRecipient ->
-      match event with
-      | OrgEvent.RegisteredDomesticTransferRecipient _
-      | OrgEvent.EditedDomesticTransferRecipient _
-      | OrgEvent.NicknamedDomesticTransferRecipient _
-      | OrgEvent.DomesticTransferRetryConfirmsRecipient _
-      | OrgEvent.DomesticTransferRecipientFailed _ -> true
-      | _ -> false
 
 let private matchesAccountEventFilter
    (event: AccountEvent)
-   (filter: TransactionGroupFilter)
+   (filter: AccountEventGroupFilter)
    =
    match filter with
-   | TransactionGroupFilter.Purchase ->
+   | AccountEventGroupFilter.Purchase ->
       match event with
       | AccountEvent.DebitedAccount _ -> true
       | _ -> false
-   | TransactionGroupFilter.Deposit ->
+   | AccountEventGroupFilter.Deposit ->
       match event with
       | AccountEvent.DepositedCash _ -> true
       | _ -> false
-   | TransactionGroupFilter.InternalTransferWithinOrg ->
+   | AccountEventGroupFilter.InternalTransferWithinOrg ->
       match event with
       | AccountEvent.InternalTransferWithinOrgPending _
       | AccountEvent.InternalTransferWithinOrgFailed _
       | AccountEvent.InternalTransferWithinOrgDeposited _ -> true
       | _ -> false
-   | TransactionGroupFilter.InternalTransferBetweenOrgs ->
+   | AccountEventGroupFilter.InternalTransferBetweenOrgs ->
       match event with
       | AccountEvent.InternalTransferBetweenOrgsPending _
       | AccountEvent.InternalTransferBetweenOrgsFailed _
       | AccountEvent.InternalTransferBetweenOrgsDeposited _ -> true
       | _ -> false
-   | TransactionGroupFilter.InternalAutomatedTransfer ->
+   | AccountEventGroupFilter.InternalAutomatedTransfer ->
       match event with
       | AccountEvent.InternalAutomatedTransferPending _
       | AccountEvent.InternalAutomatedTransferFailed _
       | AccountEvent.InternalAutomatedTransferDeposited _ -> true
       | _ -> false
-   | TransactionGroupFilter.DomesticTransfer ->
+   | AccountEventGroupFilter.DomesticTransfer ->
       match event with
       | AccountEvent.DomesticTransferPending _
       | AccountEvent.DomesticTransferCompleted _
       | AccountEvent.DomesticTransferFailed _
       | AccountEvent.DomesticTransferProgress _ -> true
       | _ -> false
-   | TransactionGroupFilter.PlatformPayment ->
+   | AccountEventGroupFilter.PlatformPayment ->
       match event with
       | AccountEvent.PlatformPaymentRequested _
       | AccountEvent.PlatformPaymentPaid _
       | AccountEvent.PlatformPaymentDeposited _
       | AccountEvent.PlatformPaymentDeclined _
       | AccountEvent.PlatformPaymentCancelled _ -> true
+      | _ -> false
+   | AccountEventGroupFilter.DomesticTransferRecipient ->
+      match event with
+      | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient _)
+      | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient _)
+      | AccountEvent.ParentAccount(ParentAccountEvent.NicknamedDomesticTransferRecipient _)
+      | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRetryConfirmsRecipient _)
+      | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRecipientFailed _) ->
+         true
       | _ -> false
 
 let private matchesEmployeeEventFilter
@@ -778,7 +781,7 @@ type HistoryBrowserQuery = {
    Date: UIDomain.DateFilter option
    OrgEventType: (OrgEventGroupFilter list) option
    EmployeeEventType: (EmployeeEventGroupFilter list) option
-   AccountEventType: (TransactionGroupFilter list) option
+   AccountEventType: (AccountEventGroupFilter list) option
    SelectedInitiatedBy: (UIDomain.Employee.SelectedEmployee list) option
 }
 
@@ -839,7 +842,7 @@ module HistoryBrowserQuery =
             |> Option.bind EmployeeEventGroupFilter.fromQueryString
          AccountEventType =
             Map.tryFind "accountEventFilters" queryParams
-            |> Option.bind TransactionGroupFilter.fromQueryString
+            |> Option.bind AccountEventGroupFilter.fromQueryString
          SelectedInitiatedBy =
             Map.tryFind "initiatedBy" queryParams
             |> Option.bind UIDomain.Employee.parseEmployees

@@ -29,43 +29,7 @@ type SqlParamsDerivedFromOrgEvents = {
    CommandApprovalAcquired: (string * SqlValue) list list
    CommandApprovalDeclined: (string * SqlValue) list list
    CommandApprovalTerminated: (string * SqlValue) list list
-   DomesticTransferRecipient: (string * SqlValue) list list
-   UpdatedDomesticTransferRecipientStatus: (string * SqlValue) list list
-   UpdatedDomesticTransferRecipientNickname: (string * SqlValue) list list
 }
-
-let private domesticRecipientReducer
-   (acc: SqlParamsDerivedFromOrgEvents)
-   (recipient: DomesticTransferRecipient)
-   =
-   let qParams = [
-      "recipientAccountId",
-      TransferSqlWriter.DomesticRecipient.recipientAccountId
-         recipient.RecipientAccountId
-      "senderOrgId",
-      TransferSqlWriter.DomesticRecipient.senderOrgId recipient.SenderOrgId
-      "lastName",
-      TransferSqlWriter.DomesticRecipient.lastName recipient.LastName
-      "firstName",
-      TransferSqlWriter.DomesticRecipient.firstName recipient.FirstName
-      "accountNumber",
-      TransferSqlWriter.DomesticRecipient.accountNumber recipient.AccountNumber
-      "routingNumber",
-      TransferSqlWriter.DomesticRecipient.routingNumber recipient.RoutingNumber
-      "status", TransferSqlWriter.DomesticRecipient.status recipient.Status
-      "depository",
-      TransferSqlWriter.DomesticRecipient.depository recipient.Depository
-      "paymentNetwork",
-      TransferSqlWriter.DomesticRecipient.paymentNetwork
-         recipient.PaymentNetwork
-      "nickname",
-      TransferSqlWriter.DomesticRecipient.nickname recipient.Nickname
-   ]
-
-   {
-      acc with
-         DomesticTransferRecipient = qParams :: acc.DomesticTransferRecipient
-   }
 
 let sqlParamReducer
    (acc: SqlParamsDerivedFromOrgEvents)
@@ -330,61 +294,6 @@ let sqlParamReducer
          acc with
             CommandApprovalTerminated = qParams :: acc.CommandApprovalTerminated
       }
-   | OrgEvent.RegisteredDomesticTransferRecipient e ->
-      domesticRecipientReducer acc e.Data.Recipient
-   | OrgEvent.EditedDomesticTransferRecipient e ->
-      domesticRecipientReducer acc e.Data.Recipient
-   | OrgEvent.NicknamedDomesticTransferRecipient e ->
-      let qParams = [
-         "recipientAccountId",
-         TransferSqlWriter.DomesticRecipient.recipientAccountId
-            e.Data.RecipientId
-         "nickname",
-         TransferSqlWriter.DomesticRecipient.nickname e.Data.Nickname
-      ]
-
-      {
-         acc with
-            UpdatedDomesticTransferRecipientNickname =
-               qParams :: acc.UpdatedDomesticTransferRecipientNickname
-      }
-   | OrgEvent.DomesticTransferRecipientFailed e ->
-      let updatedStatus =
-         match e.Data.Reason with
-         | DomesticTransferRecipientFailReason.ClosedAccount ->
-            RecipientRegistrationStatus.Closed
-         | DomesticTransferRecipientFailReason.InvalidAccountInfo ->
-            RecipientRegistrationStatus.InvalidAccount
-
-      let qParams = [
-         "recipientAccountId",
-         TransferSqlWriter.DomesticRecipient.recipientAccountId
-            e.Data.RecipientId
-
-         "status", TransferSqlWriter.DomesticRecipient.status updatedStatus
-      ]
-
-      {
-         acc with
-            UpdatedDomesticTransferRecipientStatus =
-               qParams :: acc.UpdatedDomesticTransferRecipientStatus
-      }
-   | OrgEvent.DomesticTransferRetryConfirmsRecipient e ->
-      let qParams = [
-         "recipientAccountId",
-         TransferSqlWriter.DomesticRecipient.recipientAccountId
-            e.Data.RecipientId
-
-         "status",
-         TransferSqlWriter.DomesticRecipient.status
-            RecipientRegistrationStatus.Confirmed
-      ]
-
-      {
-         acc with
-            UpdatedDomesticTransferRecipientStatus =
-               qParams :: acc.UpdatedDomesticTransferRecipientStatus
-      }
 
 let sqlParamsFromOrg (org: Org) : (string * SqlValue) list = [
    "orgId", OrgSqlWriter.orgId org.OrgId
@@ -414,9 +323,6 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
          CommandApprovalAcquired = []
          CommandApprovalDeclined = []
          CommandApprovalTerminated = []
-         DomesticTransferRecipient = []
-         UpdatedDomesticTransferRecipientStatus = []
-         UpdatedDomesticTransferRecipientNickname = []
       }
 
    let query = [
@@ -611,59 +517,6 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
          AND {status} = @expectedCurrentStatus::{statusTypecast};
       """,
       sqlParams.CommandApprovalTerminated
-
-      $"""
-      INSERT into {TransferSqlMapper.Table.domesticRecipient}
-         ({TransferFields.DomesticRecipient.recipientAccountId},
-          {TransferFields.DomesticRecipient.senderOrgId},
-          {TransferFields.DomesticRecipient.firstName},
-          {TransferFields.DomesticRecipient.lastName},
-          {TransferFields.DomesticRecipient.nickname},
-          {TransferFields.DomesticRecipient.routingNumber},
-          {TransferFields.DomesticRecipient.accountNumber},
-          {TransferFields.DomesticRecipient.status},
-          {TransferFields.DomesticRecipient.depository},
-          {TransferFields.DomesticRecipient.paymentNetwork})
-      VALUES
-         (@recipientAccountId,
-          @senderOrgId,
-          @firstName,
-          @lastName,
-          @nickname,
-          @routingNumber,
-          @accountNumber,
-          @status::{TransferTypeCast.domesticRecipientStatus},
-          @depository::{TransferTypeCast.domesticRecipientAccountDepository},
-          @paymentNetwork::{TransferTypeCast.paymentNetwork})
-      ON CONFLICT ({TransferFields.DomesticRecipient.recipientAccountId})
-      DO UPDATE SET
-         {TransferFields.DomesticRecipient.firstName} = @firstName,
-         {TransferFields.DomesticRecipient.lastName} = @lastName,
-         {TransferFields.DomesticRecipient.nickname} = @nickname,
-         {TransferFields.DomesticRecipient.routingNumber} = @routingNumber,
-         {TransferFields.DomesticRecipient.accountNumber} = @accountNumber,
-         {TransferFields.DomesticRecipient.status} =
-            @status::{TransferTypeCast.domesticRecipientStatus},
-         {TransferFields.DomesticRecipient.depository} =
-            @depository::{TransferTypeCast.domesticRecipientAccountDepository},
-         {TransferFields.DomesticRecipient.paymentNetwork} =
-            @paymentNetwork::{TransferTypeCast.paymentNetwork};
-      """,
-      sqlParams.DomesticTransferRecipient
-
-      $"""
-      UPDATE {TransferSqlMapper.Table.domesticRecipient}
-      SET {TransferFields.DomesticRecipient.status} = @status::{TransferTypeCast.domesticRecipientStatus}
-      WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
-      """,
-      sqlParams.UpdatedDomesticTransferRecipientStatus
-
-      $"""
-      UPDATE {TransferSqlMapper.Table.domesticRecipient}
-      SET {TransferFields.DomesticRecipient.nickname} = @nickname
-      WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
-      """,
-      sqlParams.UpdatedDomesticTransferRecipientNickname
    ]
 
    pgTransaction query

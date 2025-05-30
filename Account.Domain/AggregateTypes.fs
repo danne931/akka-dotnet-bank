@@ -10,7 +10,16 @@ open AutomaticTransfer
 /// Commands which pertain to the parent account rather
 /// than one of the subacounts.
 [<RequireQualifiedAccess>]
-type ParentAccountCommand = StartBillingCycle of StartBillingCycleCommand
+type ParentAccountCommand =
+   | StartBillingCycle of StartBillingCycleCommand
+   | RegisterDomesticTransferRecipient of
+      RegisterDomesticTransferRecipientCommand
+   | EditDomesticTransferRecipient of EditDomesticTransferRecipientCommand
+   | NicknameDomesticTransferRecipient of
+      NicknameDomesticTransferRecipientCommand
+   | FailDomesticTransferRecipient of FailDomesticTransferRecipientCommand
+   | DomesticTransferRetryConfirmsRecipient of
+      DomesticTransferRetryConfirmsRecipientCommand
 
 [<RequireQualifiedAccess>]
 type AccountCommand =
@@ -84,6 +93,16 @@ type AccountCommand =
       | ParentAccount cmd ->
          match cmd with
          | ParentAccountCommand.StartBillingCycle cmd -> Command.envelope cmd
+         | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
+            Command.envelope cmd
+         | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
+            Command.envelope cmd
+         | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
+            Command.envelope cmd
+         | ParentAccountCommand.FailDomesticTransferRecipient cmd ->
+            Command.envelope cmd
+         | ParentAccountCommand.DomesticTransferRetryConfirmsRecipient cmd ->
+            Command.envelope cmd
 
    member x.AccountId =
       match x with
@@ -133,7 +152,18 @@ type AccountCommand =
       | ParentAccount _ -> AccountId Guid.Empty
 
 [<RequireQualifiedAccess>]
-type ParentAccountEvent = BillingCycleStarted of BankEvent<BillingCycleStarted>
+type ParentAccountEvent =
+   | BillingCycleStarted of BankEvent<BillingCycleStarted>
+   | RegisteredDomesticTransferRecipient of
+      BankEvent<RegisteredDomesticTransferRecipient>
+   | EditedDomesticTransferRecipient of
+      BankEvent<EditedDomesticTransferRecipient>
+   | NicknamedDomesticTransferRecipient of
+      BankEvent<NicknamedDomesticTransferRecipient>
+   | DomesticTransferRecipientFailed of
+      BankEvent<DomesticTransferRecipientFailed>
+   | DomesticTransferRetryConfirmsRecipient of
+      BankEvent<DomesticTransferRetryConfirmsRecipient>
 
 type AccountEvent =
    | InitializedPrimaryCheckingAccount of
@@ -380,6 +410,26 @@ module AccountEnvelope =
          evt
          |> ParentAccountEvent.BillingCycleStarted
          |> AccountEvent.ParentAccount
+      | :? BankEvent<RegisteredDomesticTransferRecipient> as evt ->
+         evt
+         |> ParentAccountEvent.RegisteredDomesticTransferRecipient
+         |> AccountEvent.ParentAccount
+      | :? BankEvent<EditedDomesticTransferRecipient> as evt ->
+         evt
+         |> ParentAccountEvent.EditedDomesticTransferRecipient
+         |> AccountEvent.ParentAccount
+      | :? BankEvent<NicknamedDomesticTransferRecipient> as evt ->
+         evt
+         |> ParentAccountEvent.NicknamedDomesticTransferRecipient
+         |> AccountEvent.ParentAccount
+      | :? BankEvent<DomesticTransferRecipientFailed> as evt ->
+         evt
+         |> ParentAccountEvent.DomesticTransferRecipientFailed
+         |> AccountEvent.ParentAccount
+      | :? BankEvent<DomesticTransferRetryConfirmsRecipient> as evt ->
+         evt
+         |> ParentAccountEvent.DomesticTransferRetryConfirmsRecipient
+         |> AccountEvent.ParentAccount
       | _ -> failwith "Missing definition for AccountEvent message"
 
    let unwrap (o: AccountEvent) : OpenEventEnvelope =
@@ -418,6 +468,16 @@ module AccountEnvelope =
       | ParentAccount evt ->
          match evt with
          | ParentAccountEvent.BillingCycleStarted evt -> wrap evt, get evt
+         | ParentAccountEvent.RegisteredDomesticTransferRecipient evt ->
+            wrap evt, get evt
+         | ParentAccountEvent.EditedDomesticTransferRecipient evt ->
+            wrap evt, get evt
+         | ParentAccountEvent.NicknamedDomesticTransferRecipient evt ->
+            wrap evt, get evt
+         | ParentAccountEvent.DomesticTransferRetryConfirmsRecipient evt ->
+            wrap evt, get evt
+         | ParentAccountEvent.DomesticTransferRecipientFailed evt ->
+            wrap evt, get evt
 
 type Account = {
    AccountId: AccountId
@@ -483,6 +543,7 @@ type ParentAccountSnapshot = {
    LastBillingCycleDate: DateTime option
    MaintenanceFeeCriteria: MaintenanceFeeCriteria
    Status: ParentAccountStatus
+   DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
    Events: AccountEvent list
 } with
 
@@ -497,6 +558,7 @@ type ParentAccountSnapshot = {
          QualifyingDepositFound = false
          DailyBalanceThreshold = false
       }
+      DomesticTransferRecipients = Map.empty
       Events = []
    }
 

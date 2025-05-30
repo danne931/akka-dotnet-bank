@@ -249,28 +249,6 @@ module DepositInternalTransferBetweenOrgsCommand =
       =
       BankEvent.create<InternalTransferBetweenOrgsDeposited> cmd |> Ok
 
-type NicknameDomesticTransferRecipientCommand =
-   Command<NicknamedDomesticTransferRecipient>
-
-module NicknameDomesticTransferRecipientCommand =
-   let create
-      (orgId: OrgId)
-      (initiatedBy: Initiator)
-      (data: NicknamedDomesticTransferRecipient)
-      =
-      Command.create
-         (OrgId.toEntityId orgId)
-         orgId
-         (CorrelationId.create ())
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: NicknameDomesticTransferRecipientCommand)
-      : ValidationResult<BankEvent<NicknamedDomesticTransferRecipient>>
-      =
-      BankEvent.create<NicknamedDomesticTransferRecipient> cmd |> Ok
-
 type DomesticTransferRecipientInput = {
    AccountId: AccountId
    LastName: string
@@ -291,7 +269,7 @@ type RegisterDomesticTransferRecipientCommand =
 module RegisterDomesticTransferRecipientCommand =
    let create (initiatedBy: Initiator) (data: DomesticTransferRecipientInput) =
       Command.create
-         (OrgId.toEntityId data.Sender.OrgId)
+         (ParentAccountId.toEntityId data.Sender.ParentAccountId)
          data.Sender.OrgId
          (CorrelationId.create ())
          initiatedBy
@@ -349,12 +327,13 @@ type EditDomesticTransferRecipientCommand =
 
 module EditDomesticTransferRecipientCommand =
    let create
+      (parentAccountId: ParentAccountId)
       (orgId: OrgId)
       (initiatedBy: Initiator)
       (data: EditDomesticTransferRecipientInput)
       =
       Command.create
-         (OrgId.toEntityId orgId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -398,12 +377,13 @@ type FailDomesticTransferRecipientCommand =
 
 module FailDomesticTransferRecipientCommand =
    let create
+      (parentAccountId: ParentAccountId)
       (orgId: OrgId)
       (initiatedBy: Initiator)
       (data: DomesticTransferRecipientFailed)
       =
       Command.create
-         (OrgId.toEntityId orgId)
+         (ParentAccountId.toEntityId parentAccountId)
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -414,6 +394,29 @@ module FailDomesticTransferRecipientCommand =
       : ValidationResult<BankEvent<DomesticTransferRecipientFailed>>
       =
       BankEvent.create<DomesticTransferRecipientFailed> cmd |> Ok
+
+type NicknameDomesticTransferRecipientCommand =
+   Command<NicknamedDomesticTransferRecipient>
+
+module NicknameDomesticTransferRecipientCommand =
+   let create
+      (orgId: OrgId)
+      (parentAccountId: ParentAccountId)
+      (initiatedBy: Initiator)
+      (data: NicknamedDomesticTransferRecipient)
+      =
+      Command.create
+         (ParentAccountId.toEntityId parentAccountId)
+         orgId
+         (CorrelationId.create ())
+         initiatedBy
+         data
+
+   let toEvent
+      (cmd: NicknameDomesticTransferRecipientCommand)
+      : ValidationResult<BankEvent<NicknamedDomesticTransferRecipient>>
+      =
+      BankEvent.create<NicknamedDomesticTransferRecipient> cmd |> Ok
 
 type DomesticTransferRetryConfirmsRecipientCommand =
    Command<DomesticTransferRetryConfirmsRecipient>

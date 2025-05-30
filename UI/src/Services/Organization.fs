@@ -30,12 +30,6 @@ let private postJson (command: OrgCommand) =
          Serialization.serialize cmd, OrgPath.AcquireCommandApproval
       | OrgCommand.DeclineCommandApproval cmd ->
          Serialization.serialize cmd, OrgPath.DeclineCommandApproval
-      | OrgCommand.RegisterDomesticTransferRecipient cmd ->
-         Serialization.serialize cmd, TransferPath.DomesticTransferRecipient
-      | OrgCommand.EditDomesticTransferRecipient cmd ->
-         Serialization.serialize cmd, TransferPath.DomesticTransferRecipientEdit
-      | OrgCommand.NicknameDomesticTransferRecipient cmd ->
-         Serialization.serialize cmd, TransferPath.NicknameRecipient
       | other -> notImplemented other
 
    Http.postJson url serialized

@@ -45,6 +45,16 @@ let postJson (command: AccountCommand) =
          Serialization.serialize cmd, TransferPath.ConfigureAutoTransferRule
       | AccountCommand.DeleteAutoTransferRule cmd ->
          Serialization.serialize cmd, TransferPath.DeleteAutoTransferRule
+      | AccountCommand.ParentAccount cmd ->
+         match cmd with
+         | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
+            Serialization.serialize cmd, TransferPath.DomesticTransferRecipient
+         | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
+            Serialization.serialize cmd,
+            TransferPath.DomesticTransferRecipientEdit
+         | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
+            Serialization.serialize cmd, TransferPath.NicknameRecipient
+         | other -> notImplemented (AccountCommand.ParentAccount other)
       | other -> notImplemented other
 
    Http.postJson url serialized

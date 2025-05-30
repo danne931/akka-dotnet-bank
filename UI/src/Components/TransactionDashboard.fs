@@ -43,7 +43,7 @@ type TransactionFilter =
    | Category of CategoryFilter option
    | Cards of (SelectedCard list) option
    | InitiatedBy of (UIDomain.Employee.SelectedEmployee list) option
-   | EventFilter of (TransactionGroupFilter list) option
+   | EventFilter of (AccountEventGroupFilter list) option
    | Accounts of (SelectedAccount list) option
 
 let navigation (view: AccountActionView option) =
@@ -252,13 +252,13 @@ let renderControlPanel
             CheckboxFieldset.render {|
                Options =
                   [
-                     TransactionGroupFilter.Purchase
-                     TransactionGroupFilter.Deposit
-                     TransactionGroupFilter.InternalTransferWithinOrg
-                     TransactionGroupFilter.InternalTransferBetweenOrgs
-                     TransactionGroupFilter.InternalAutomatedTransfer
-                     TransactionGroupFilter.DomesticTransfer
-                     TransactionGroupFilter.PlatformPayment
+                     AccountEventGroupFilter.Purchase
+                     AccountEventGroupFilter.Deposit
+                     AccountEventGroupFilter.InternalTransferWithinOrg
+                     AccountEventGroupFilter.InternalTransferBetweenOrgs
+                     AccountEventGroupFilter.InternalAutomatedTransfer
+                     AccountEventGroupFilter.DomesticTransfer
+                     AccountEventGroupFilter.PlatformPayment
                   ]
                   |> List.map (fun o -> { Id = o; Display = o.Display })
                SelectedItems = query.EventType
@@ -285,7 +285,7 @@ let renderControlPanel
                      |> dispatch
                Content =
                   state.Query.EventType
-                  |> Option.map TransactionGroupFilter.listToDisplay
+                  |> Option.map AccountEventGroupFilter.listToDisplay
             }
             {
                View = TransactionFilterView.Amount
@@ -484,11 +484,11 @@ let renderForm session org (view: AccountActionView) dispatch =
       | AccountActionView.RegisterTransferRecipient ->
          RegisterTransferRecipientForm.RegisterTransferRecipientFormComponent
             session
-            org.Org
+            org
             None
             (fun conf ->
                match conf.PendingEvent with
-               | OrgEvent.RegisteredDomesticTransferRecipient e ->
+               | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient e) ->
                   let recipientId = e.Data.Recipient.RecipientAccountId
 
                   let redirectTo =
@@ -506,7 +506,7 @@ let renderForm session org (view: AccountActionView) dispatch =
       | AccountActionView.EditTransferRecipient accountId ->
          RegisterTransferRecipientForm.RegisterTransferRecipientFormComponent
             session
-            org.Org
+            org
             (Some accountId)
             (fun _ ->
                ("Edit Domestic Transfer Recipient", None)

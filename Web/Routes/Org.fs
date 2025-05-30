@@ -19,7 +19,9 @@ let startOrgRoutes (app: WebApplication) =
       .MapGet(
          OrgPath.Get,
          Func<Guid, Task<IResult>>(fun orgId ->
-            getOrgAndAccountProfiles (OrgId orgId)
+            getOrgAndAccountProfiles
+               (OrgId orgId)
+               Bank.Transfer.Api.getDomesticTransferRecipients
             |> RouteUtil.unwrapTaskResultOption)
       )
       .RBAC(Permissions.GetOrgAndAccountProfiles)

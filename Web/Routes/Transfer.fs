@@ -19,7 +19,6 @@ open RoutePaths
 open Bank.UserSession.Middleware
 
 let processAccountCommand = Bank.Account.Api.processCommand
-let processOrgCommand = Bank.Org.Api.processCommand
 
 let startTransferRoutes (app: WebApplication) =
    app
@@ -31,9 +30,10 @@ let startTransferRoutes (app: WebApplication) =
             Task<IResult>
           >
             (fun sys cmd ->
-               processOrgCommand
-                  sys
-                  (OrgCommand.RegisterDomesticTransferRecipient cmd)
+               cmd
+               |> ParentAccountCommand.RegisterDomesticTransferRecipient
+               |> AccountCommand.ParentAccount
+               |> processAccountCommand sys
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -44,9 +44,10 @@ let startTransferRoutes (app: WebApplication) =
          TransferPath.DomesticTransferRecipientEdit,
          Func<ActorSystem, EditDomesticTransferRecipientCommand, Task<IResult>>
             (fun sys cmd ->
-               processOrgCommand
-                  sys
-                  (OrgCommand.EditDomesticTransferRecipient cmd)
+               cmd
+               |> ParentAccountCommand.EditDomesticTransferRecipient
+               |> AccountCommand.ParentAccount
+               |> processAccountCommand sys
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -168,9 +169,10 @@ let startTransferRoutes (app: WebApplication) =
             Task<IResult>
           >
             (fun sys cmd ->
-               processOrgCommand
-                  sys
-                  (OrgCommand.NicknameDomesticTransferRecipient cmd)
+               cmd
+               |> ParentAccountCommand.NicknameDomesticTransferRecipient
+               |> AccountCommand.ParentAccount
+               |> processAccountCommand sys
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)

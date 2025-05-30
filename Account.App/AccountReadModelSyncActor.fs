@@ -23,6 +23,21 @@ module paeSqlMapper = ParentAccountEventSqlMapper
 module paeSqlWriter = ParentAccountEventSqlMapper.SqlWriter
 module paeFields = ParentAccountEventSqlMapper.Fields
 
+type SqlParamsDerivedFromAccountEvents = {
+   AccountEvent: (string * SqlValue) list list
+   ParentAccountEvent: (string * SqlValue) list list
+   Payment: (string * SqlValue) list list
+   PlatformPayment: (string * SqlValue) list list
+   Transfer: (string * SqlValue) list list
+   InternalTransfer: (string * SqlValue) list list
+   DomesticTransfer: (string * SqlValue) list list
+   PartnerBankInitialized: (string * SqlValue) list list
+   BillingCycle: (string * SqlValue) list list
+   DomesticTransferRecipient: (string * SqlValue) list list
+   UpdatedDomesticTransferRecipientStatus: (string * SqlValue) list list
+   UpdatedDomesticTransferRecipientNickname: (string * SqlValue) list list
+}
+
 let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [
    "paymentId", PaymentSqlWriter.paymentId p.Id
 
@@ -81,18 +96,6 @@ let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
    "memo", TransferSqlWriter.memo o.Memo
 ]
 
-type SqlParamsDerivedFromAccountEvents = {
-   AccountEvent: (string * SqlValue) list list
-   ParentAccountEvent: (string * SqlValue) list list
-   Payment: (string * SqlValue) list list
-   PlatformPayment: (string * SqlValue) list list
-   Transfer: (string * SqlValue) list list
-   InternalTransfer: (string * SqlValue) list list
-   DomesticTransfer: (string * SqlValue) list list
-   PartnerBankInitialized: (string * SqlValue) list list
-   BillingCycle: (string * SqlValue) list list
-}
-
 let private internalTransferStatusReducer
    (acc: SqlParamsDerivedFromAccountEvents)
    (status: InternalTransferStatus)
@@ -108,6 +111,39 @@ let private internalTransferStatusReducer
    {
       acc with
          InternalTransfer = qParams :: acc.InternalTransfer
+   }
+
+let private domesticRecipientReducer
+   (acc: SqlParamsDerivedFromAccountEvents)
+   (recipient: DomesticTransferRecipient)
+   =
+   let qParams = [
+      "recipientAccountId",
+      TransferSqlWriter.DomesticRecipient.recipientAccountId
+         recipient.RecipientAccountId
+      "senderOrgId",
+      TransferSqlWriter.DomesticRecipient.senderOrgId recipient.SenderOrgId
+      "lastName",
+      TransferSqlWriter.DomesticRecipient.lastName recipient.LastName
+      "firstName",
+      TransferSqlWriter.DomesticRecipient.firstName recipient.FirstName
+      "accountNumber",
+      TransferSqlWriter.DomesticRecipient.accountNumber recipient.AccountNumber
+      "routingNumber",
+      TransferSqlWriter.DomesticRecipient.routingNumber recipient.RoutingNumber
+      "status", TransferSqlWriter.DomesticRecipient.status recipient.Status
+      "depository",
+      TransferSqlWriter.DomesticRecipient.depository recipient.Depository
+      "paymentNetwork",
+      TransferSqlWriter.DomesticRecipient.paymentNetwork
+         recipient.PaymentNetwork
+      "nickname",
+      TransferSqlWriter.DomesticRecipient.nickname recipient.Nickname
+   ]
+
+   {
+      acc with
+         DomesticTransferRecipient = qParams :: acc.DomesticTransferRecipient
    }
 
 let private domesticTransferStatusReducer
@@ -257,6 +293,61 @@ let sqlParamReducer
       {
          acc with
             BillingCycle = qParams :: acc.BillingCycle
+      }
+   | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient e) ->
+      domesticRecipientReducer acc e.Data.Recipient
+   | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient e) ->
+      domesticRecipientReducer acc e.Data.Recipient
+   | AccountEvent.ParentAccount(ParentAccountEvent.NicknamedDomesticTransferRecipient e) ->
+      let qParams = [
+         "recipientAccountId",
+         TransferSqlWriter.DomesticRecipient.recipientAccountId
+            e.Data.RecipientId
+         "nickname",
+         TransferSqlWriter.DomesticRecipient.nickname e.Data.Nickname
+      ]
+
+      {
+         acc with
+            UpdatedDomesticTransferRecipientNickname =
+               qParams :: acc.UpdatedDomesticTransferRecipientNickname
+      }
+   | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRecipientFailed e) ->
+      let updatedStatus =
+         match e.Data.Reason with
+         | DomesticTransferRecipientFailReason.ClosedAccount ->
+            RecipientRegistrationStatus.Closed
+         | DomesticTransferRecipientFailReason.InvalidAccountInfo ->
+            RecipientRegistrationStatus.InvalidAccount
+
+      let qParams = [
+         "recipientAccountId",
+         TransferSqlWriter.DomesticRecipient.recipientAccountId
+            e.Data.RecipientId
+
+         "status", TransferSqlWriter.DomesticRecipient.status updatedStatus
+      ]
+
+      {
+         acc with
+            UpdatedDomesticTransferRecipientStatus =
+               qParams :: acc.UpdatedDomesticTransferRecipientStatus
+      }
+   | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRetryConfirmsRecipient e) ->
+      let qParams = [
+         "recipientAccountId",
+         TransferSqlWriter.DomesticRecipient.recipientAccountId
+            e.Data.RecipientId
+
+         "status",
+         TransferSqlWriter.DomesticRecipient.status
+            RecipientRegistrationStatus.Confirmed
+      ]
+
+      {
+         acc with
+            UpdatedDomesticTransferRecipientStatus =
+               qParams :: acc.UpdatedDomesticTransferRecipientStatus
       }
    | AccountEvent.InternalTransferWithinOrgPending e ->
       let info = e.Data.BaseInfo
@@ -610,6 +701,9 @@ let upsertReadModels
          Transfer = []
          InternalTransfer = []
          DomesticTransfer = []
+         DomesticTransferRecipient = []
+         UpdatedDomesticTransferRecipientStatus = []
+         UpdatedDomesticTransferRecipientNickname = []
       }
 
    pgTransaction [
@@ -825,6 +919,59 @@ let upsertReadModels
          {TransferFields.Internal.statusDetail} = @statusDetail;
       """,
       sqlParamsDerivedFromAccountEvents.InternalTransfer
+
+      $"""
+      INSERT into {TransferSqlMapper.Table.domesticRecipient}
+         ({TransferFields.DomesticRecipient.recipientAccountId},
+          {TransferFields.DomesticRecipient.senderOrgId},
+          {TransferFields.DomesticRecipient.firstName},
+          {TransferFields.DomesticRecipient.lastName},
+          {TransferFields.DomesticRecipient.nickname},
+          {TransferFields.DomesticRecipient.routingNumber},
+          {TransferFields.DomesticRecipient.accountNumber},
+          {TransferFields.DomesticRecipient.status},
+          {TransferFields.DomesticRecipient.depository},
+          {TransferFields.DomesticRecipient.paymentNetwork})
+      VALUES
+         (@recipientAccountId,
+          @senderOrgId,
+          @firstName,
+          @lastName,
+          @nickname,
+          @routingNumber,
+          @accountNumber,
+          @status::{TransferTypeCast.domesticRecipientStatus},
+          @depository::{TransferTypeCast.domesticRecipientAccountDepository},
+          @paymentNetwork::{TransferTypeCast.paymentNetwork})
+      ON CONFLICT ({TransferFields.DomesticRecipient.recipientAccountId})
+      DO UPDATE SET
+         {TransferFields.DomesticRecipient.firstName} = @firstName,
+         {TransferFields.DomesticRecipient.lastName} = @lastName,
+         {TransferFields.DomesticRecipient.nickname} = @nickname,
+         {TransferFields.DomesticRecipient.routingNumber} = @routingNumber,
+         {TransferFields.DomesticRecipient.accountNumber} = @accountNumber,
+         {TransferFields.DomesticRecipient.status} =
+            @status::{TransferTypeCast.domesticRecipientStatus},
+         {TransferFields.DomesticRecipient.depository} =
+            @depository::{TransferTypeCast.domesticRecipientAccountDepository},
+         {TransferFields.DomesticRecipient.paymentNetwork} =
+            @paymentNetwork::{TransferTypeCast.paymentNetwork};
+      """,
+      sqlParamsDerivedFromAccountEvents.DomesticTransferRecipient
+
+      $"""
+      UPDATE {TransferSqlMapper.Table.domesticRecipient}
+      SET {TransferFields.DomesticRecipient.status} = @status::{TransferTypeCast.domesticRecipientStatus}
+      WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
+      """,
+      sqlParamsDerivedFromAccountEvents.UpdatedDomesticTransferRecipientStatus
+
+      $"""
+      UPDATE {TransferSqlMapper.Table.domesticRecipient}
+      SET {TransferFields.DomesticRecipient.nickname} = @nickname
+      WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
+      """,
+      sqlParamsDerivedFromAccountEvents.UpdatedDomesticTransferRecipientNickname
 
       $"""
       INSERT into {TransferSqlMapper.Table.domesticTransfer}

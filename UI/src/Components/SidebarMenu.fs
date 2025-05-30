@@ -149,11 +149,11 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                               Some [ EmployeeEventGroupFilter.Purchase ]
                            AccountEventType =
                               Some [
-                                 TransactionGroupFilter.Deposit
-                                 TransactionGroupFilter.Purchase
-                                 TransactionGroupFilter.PlatformPayment
-                                 TransactionGroupFilter.InternalTransferBetweenOrgs
-                                 TransactionGroupFilter.DomesticTransfer
+                                 AccountEventGroupFilter.Deposit
+                                 AccountEventGroupFilter.Purchase
+                                 AccountEventGroupFilter.PlatformPayment
+                                 AccountEventGroupFilter.InternalTransferBetweenOrgs
+                                 AccountEventGroupFilter.DomesticTransfer
                               ]
                      }
                      |> HistoryBrowserQuery.toQueryParams

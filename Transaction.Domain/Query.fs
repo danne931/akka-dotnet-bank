@@ -11,7 +11,6 @@ type OrgEventGroupFilter =
    | FeatureFlagConfigured
    | CommandApprovalRule
    | CommandApprovalProgress
-   | DomesticTransferRecipient
 
    member x.Display =
       match x with
@@ -21,15 +20,12 @@ type OrgEventGroupFilter =
       | OrgEventGroupFilter.CommandApprovalRule -> "Command Approval Rule"
       | OrgEventGroupFilter.CommandApprovalProgress ->
          "Command Approval Progress"
-      | OrgEventGroupFilter.DomesticTransferRecipient ->
-         "Domestic Transfer Recipient"
 
    static member All = [
       OrgEventGroupFilter.Onboarding
       OrgEventGroupFilter.FeatureFlagConfigured
       OrgEventGroupFilter.CommandApprovalRule
       OrgEventGroupFilter.CommandApprovalProgress
-      OrgEventGroupFilter.DomesticTransferRecipient
    ]
 
    static member fromString =
@@ -40,8 +36,6 @@ type OrgEventGroupFilter =
       | "CommandApprovalRule" -> Some OrgEventGroupFilter.CommandApprovalRule
       | "CommandApprovalProgress" ->
          Some OrgEventGroupFilter.CommandApprovalProgress
-      | "DomesticTransferRecipient" ->
-         Some OrgEventGroupFilter.DomesticTransferRecipient
       | _ -> None
 
    static member fromQueryString: string -> OrgEventGroupFilter list option =
@@ -58,7 +52,7 @@ type OrgEventGroupFilter =
          items
 
 [<RequireQualifiedAccess>]
-type TransactionGroupFilter =
+type AccountEventGroupFilter =
    | Purchase
    | Deposit
    | InternalTransferWithinOrg
@@ -67,55 +61,61 @@ type TransactionGroupFilter =
    | DomesticTransfer
    | PlatformPayment
    //| ThirdPartyPayment
+   | DomesticTransferRecipient
 
    member x.Display =
       match x with
-      | TransactionGroupFilter.Purchase -> "Purchases"
-      | TransactionGroupFilter.Deposit -> "Deposits"
-      | TransactionGroupFilter.InternalTransferWithinOrg ->
+      | AccountEventGroupFilter.Purchase -> "Purchases"
+      | AccountEventGroupFilter.Deposit -> "Deposits"
+      | AccountEventGroupFilter.InternalTransferWithinOrg ->
          "Transfers within your org"
-      | TransactionGroupFilter.InternalTransferBetweenOrgs ->
+      | AccountEventGroupFilter.InternalTransferBetweenOrgs ->
          "Transfers between orgs on the platform"
-      | TransactionGroupFilter.InternalAutomatedTransfer ->
+      | AccountEventGroupFilter.InternalAutomatedTransfer ->
          "Automated balance management transfers"
-      | TransactionGroupFilter.DomesticTransfer ->
+      | AccountEventGroupFilter.DomesticTransfer ->
          "Domestic transfers outside the platform"
-      | TransactionGroupFilter.PlatformPayment ->
+      | AccountEventGroupFilter.PlatformPayment ->
          "Payments between orgs on the platform"
-   //| TransactionGroupFilter.ThirdPartyPayment ->
-   //   "Payments outside the platform"
+      //| AccountEventGroupFilter.ThirdPartyPayment ->
+      //   "Payments outside the platform"
+      | AccountEventGroupFilter.DomesticTransferRecipient ->
+         "Domestic Transfer Recipient"
 
    static member All = [
-      TransactionGroupFilter.Purchase
-      TransactionGroupFilter.Deposit
-      TransactionGroupFilter.InternalTransferWithinOrg
-      TransactionGroupFilter.InternalTransferBetweenOrgs
-      TransactionGroupFilter.InternalAutomatedTransfer
-      TransactionGroupFilter.DomesticTransfer
-      TransactionGroupFilter.PlatformPayment
+      AccountEventGroupFilter.Purchase
+      AccountEventGroupFilter.Deposit
+      AccountEventGroupFilter.InternalTransferWithinOrg
+      AccountEventGroupFilter.InternalTransferBetweenOrgs
+      AccountEventGroupFilter.InternalAutomatedTransfer
+      AccountEventGroupFilter.DomesticTransfer
+      AccountEventGroupFilter.PlatformPayment
+      AccountEventGroupFilter.DomesticTransferRecipient
    ]
 
    static member fromString =
       function
-      | "Purchase" -> Some TransactionGroupFilter.Purchase
-      | "Deposit" -> Some TransactionGroupFilter.Deposit
+      | "Purchase" -> Some AccountEventGroupFilter.Purchase
+      | "Deposit" -> Some AccountEventGroupFilter.Deposit
       | "InternalTransferWithinOrg" ->
-         Some TransactionGroupFilter.InternalTransferWithinOrg
+         Some AccountEventGroupFilter.InternalTransferWithinOrg
       | "InternalTransferBetweenOrgs" ->
-         Some TransactionGroupFilter.InternalTransferBetweenOrgs
+         Some AccountEventGroupFilter.InternalTransferBetweenOrgs
       | "InternalAutomatedTransfer" ->
-         Some TransactionGroupFilter.InternalAutomatedTransfer
-      | "DomesticTransfer" -> Some TransactionGroupFilter.DomesticTransfer
-      | "PlatformPayment" -> Some TransactionGroupFilter.PlatformPayment
-      //| "ThirdPartyPayment" -> Some TransactionGroupFilter.ThirdPartyPayment
+         Some AccountEventGroupFilter.InternalAutomatedTransfer
+      | "DomesticTransfer" -> Some AccountEventGroupFilter.DomesticTransfer
+      | "PlatformPayment" -> Some AccountEventGroupFilter.PlatformPayment
+      //| "ThirdPartyPayment" -> Some AccountEventGroupFilter.ThirdPartyPayment
+      | "DomesticTransferRecipient" ->
+         Some AccountEventGroupFilter.DomesticTransferRecipient
       | _ -> None
 
-   static member fromQueryString: string -> TransactionGroupFilter list option =
-      listFromQueryString TransactionGroupFilter.fromString
+   static member fromQueryString: string -> AccountEventGroupFilter list option =
+      listFromQueryString AccountEventGroupFilter.fromString
 
-   static member listToDisplay(items: TransactionGroupFilter list) =
+   static member listToDisplay(items: AccountEventGroupFilter list) =
       List.fold
-         (fun acc (filter: TransactionGroupFilter) ->
+         (fun acc (filter: AccountEventGroupFilter) ->
             if acc = "" then
                filter.Display
             else
@@ -135,7 +135,7 @@ type HistoryQuery = {
    DateRange: (DateTime * DateTime) option
    EmployeeEventType:
       (Bank.Employee.Domain.EmployeeEventGroupFilter list) option
-   AccountEventType: (TransactionGroupFilter list) option
+   AccountEventType: (AccountEventGroupFilter list) option
    OrgEventType: (OrgEventGroupFilter list) option
    InitiatedByIds: (InitiatedById list) option
 }
@@ -163,7 +163,7 @@ type TransactionQuery = {
    DateRange: (DateTime * DateTime) option
    CardIds: (CardId list) option
    InitiatedByIds: (InitiatedById list) option
-   EventType: (TransactionGroupFilter list) option
+   EventType: (AccountEventGroupFilter list) option
 }
 
 module TransactionQuery =

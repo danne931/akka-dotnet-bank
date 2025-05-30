@@ -1048,7 +1048,6 @@ let configureAutoTransferRules
    socialTransferCandidates |> List.iter initZeroBalanceRule
 
 let seedAccountOwnerActions
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (timestamp: DateTime)
    (account: Account)
@@ -1075,13 +1074,13 @@ let seedAccountOwnerActions
       |> Result.toValueOption
       |> _.Value
 
-
    let msg =
       domesticRecipientCmd
-      |> OrgCommand.RegisterDomesticTransferRecipient
-      |> OrgMessage.StateChange
+      |> ParentAccountCommand.RegisterDomesticTransferRecipient
+      |> AccountCommand.ParentAccount
+      |> AccountMessage.StateChange
 
-   getOrgRef myOrg.OrgId <! msg
+   getAccountRef myOrg.ParentAccountId <! msg
 
    let accountRef = getAccountRef myOrg.ParentAccountId
 
@@ -1483,7 +1482,6 @@ let getEmployeeCardPair
 
 let seedAccountTransactions
    (mailbox: Actor<AccountSeederMessage>)
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (command: CreateAccountCommand)
@@ -1533,7 +1531,7 @@ let seedAccountTransactions
                mailbox
                $"Can not proceed with account owner actions - eId: {accountOwnerId}"
          | Some account ->
-            seedAccountOwnerActions getOrgRef getAccountRef timestamp account
+            seedAccountOwnerActions getAccountRef timestamp account
 
          for cmd in
             cardCreateCmds.AccountOwnerTravelCard :: cardCreateCmds.Employee do
@@ -1677,7 +1675,6 @@ let actorProps
                do!
                   seedAccountTransactions
                      ctx
-                     getOrgRef
                      getAccountRef
                      getEmployeeRef
                      state.AccountsToCreate[acct.AccountId]

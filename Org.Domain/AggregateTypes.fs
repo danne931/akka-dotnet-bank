@@ -19,14 +19,6 @@ type OrgCommand =
    | DeclineCommandApproval of CommandApprovalProgress.DeclineCommandApproval
    | TerminateCommandApproval of
       CommandApprovalProgress.TerminateCommandApproval
-   | RegisterDomesticTransferRecipient of
-      RegisterDomesticTransferRecipientCommand
-   | EditDomesticTransferRecipient of EditDomesticTransferRecipientCommand
-   | NicknameDomesticTransferRecipient of
-      NicknameDomesticTransferRecipientCommand
-   | FailDomesticTransferRecipient of FailDomesticTransferRecipientCommand
-   | DomesticTransferRetryConfirmsRecipient of
-      DomesticTransferRetryConfirmsRecipientCommand
 
    member x.Envelope: Envelope =
       match x with
@@ -39,11 +31,6 @@ type OrgCommand =
       | AcquireCommandApproval cmd -> Command.envelope cmd
       | DeclineCommandApproval cmd -> Command.envelope cmd
       | TerminateCommandApproval cmd -> Command.envelope cmd
-      | RegisterDomesticTransferRecipient cmd -> Command.envelope cmd
-      | EditDomesticTransferRecipient cmd -> Command.envelope cmd
-      | NicknameDomesticTransferRecipient cmd -> Command.envelope cmd
-      | FailDomesticTransferRecipient cmd -> Command.envelope cmd
-      | DomesticTransferRetryConfirmsRecipient cmd -> Command.envelope cmd
 
 type OrgEvent =
    | OnboardingApplicationSubmitted of
@@ -64,16 +51,6 @@ type OrgEvent =
       BankEvent<CommandApprovalProgress.CommandApprovalDeclined>
    | CommandApprovalTerminated of
       BankEvent<CommandApprovalProgress.CommandApprovalTerminated>
-   | RegisteredDomesticTransferRecipient of
-      BankEvent<RegisteredDomesticTransferRecipient>
-   | EditedDomesticTransferRecipient of
-      BankEvent<EditedDomesticTransferRecipient>
-   | NicknamedDomesticTransferRecipient of
-      BankEvent<NicknamedDomesticTransferRecipient>
-   | DomesticTransferRecipientFailed of
-      BankEvent<DomesticTransferRecipientFailed>
-   | DomesticTransferRetryConfirmsRecipient of
-      BankEvent<DomesticTransferRetryConfirmsRecipient>
 
 type OpenEventEnvelope = OrgEvent * Envelope
 
@@ -109,16 +86,6 @@ module OrgEnvelope =
          CommandApprovalDeclined evt
       | :? BankEvent<CommandApprovalProgress.CommandApprovalTerminated> as evt ->
          CommandApprovalTerminated evt
-      | :? BankEvent<RegisteredDomesticTransferRecipient> as evt ->
-         RegisteredDomesticTransferRecipient evt
-      | :? BankEvent<EditedDomesticTransferRecipient> as evt ->
-         EditedDomesticTransferRecipient evt
-      | :? BankEvent<NicknamedDomesticTransferRecipient> as evt ->
-         NicknamedDomesticTransferRecipient evt
-      | :? BankEvent<DomesticTransferRecipientFailed> as evt ->
-         DomesticTransferRecipientFailed evt
-      | :? BankEvent<DomesticTransferRetryConfirmsRecipient> as evt ->
-         DomesticTransferRetryConfirmsRecipient evt
       | _ -> failwith "Missing definition for OrgEvent message"
 
    let unwrap (o: OrgEvent) : OpenEventEnvelope =
@@ -133,11 +100,6 @@ module OrgEnvelope =
       | CommandApprovalProcessCompleted evt -> wrap evt, get evt
       | CommandApprovalDeclined evt -> wrap evt, get evt
       | CommandApprovalTerminated evt -> wrap evt, get evt
-      | RegisteredDomesticTransferRecipient evt -> wrap evt, get evt
-      | EditedDomesticTransferRecipient evt -> wrap evt, get evt
-      | NicknamedDomesticTransferRecipient evt -> wrap evt, get evt
-      | DomesticTransferRetryConfirmsRecipient evt -> wrap evt, get evt
-      | DomesticTransferRecipientFailed evt -> wrap evt, get evt
 
 type Org = {
    OrgId: OrgId
@@ -148,7 +110,6 @@ type Org = {
    CommandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule>
    CommandApprovalProgress:
       Map<CommandApprovalProgressId, CommandApprovalProgress.T>
-   DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
    AdminTeamEmail: Email
    EmployerIdentificationNumber: string
 }
@@ -165,7 +126,6 @@ module Org =
       }
       CommandApprovalRules = Map.empty
       CommandApprovalProgress = Map.empty
-      DomesticTransferRecipients = Map.empty
       EmployerIdentificationNumber = ""
    }
 
@@ -186,6 +146,7 @@ type OrgWithAccountProfiles = {
    Org: Org
    AccountProfiles: Map<AccountId, AccountProfile>
    Balance: decimal
+   DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
 } with
 
    member x.Accounts: Map<AccountId, Account> =

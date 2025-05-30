@@ -23,7 +23,7 @@ module atiReader = AncillaryTransactionSqlReader
 let private atiTable = AncillaryTransactionInfoSqlMapper.table
 
 let filtersToOriginatingEventNames
-   (filters: TransactionGroupFilter list)
+   (filters: AccountEventGroupFilter list)
    : string array
    =
    filters
@@ -31,23 +31,32 @@ let filtersToOriginatingEventNames
       (fun acc e ->
          acc
          @ match e with
-           | TransactionGroupFilter.Purchase -> [ typeof<DebitedAccount>.Name ]
-           | TransactionGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
-           | TransactionGroupFilter.InternalTransferWithinOrg -> [
+           | AccountEventGroupFilter.Purchase -> [
+              typeof<DebitedAccount>.Name
+             ]
+           | AccountEventGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
+           | AccountEventGroupFilter.InternalTransferWithinOrg -> [
               typeof<InternalTransferWithinOrgPending>.Name
              ]
-           | TransactionGroupFilter.InternalTransferBetweenOrgs -> [
+           | AccountEventGroupFilter.InternalTransferBetweenOrgs -> [
               typeof<InternalTransferBetweenOrgsPending>.Name
              ]
-           | TransactionGroupFilter.InternalAutomatedTransfer -> [
+           | AccountEventGroupFilter.InternalAutomatedTransfer -> [
               typeof<InternalAutomatedTransferPending>.Name
              ]
-           | TransactionGroupFilter.DomesticTransfer -> [
+           | AccountEventGroupFilter.DomesticTransfer -> [
               typeof<DomesticTransferPending>.Name
              ]
-           | TransactionGroupFilter.PlatformPayment -> [
+           | AccountEventGroupFilter.PlatformPayment -> [
               typeof<PlatformPaymentPaid>.Name // Outgoing payments
               typeof<PlatformPaymentDeposited>.Name // Incoming payments
+             ]
+           | AccountEventGroupFilter.DomesticTransferRecipient -> [
+              typeof<RegisteredDomesticTransferRecipient>.Name
+              typeof<EditedDomesticTransferRecipient>.Name
+              typeof<NicknamedDomesticTransferRecipient>.Name
+              typeof<DomesticTransferRetryConfirmsRecipientCommand>.Name
+              typeof<DomesticTransferRecipientFailed>.Name
              ])
       []
    |> List.toArray
@@ -221,7 +230,7 @@ let transactionQuery (query: TransactionQuery) =
       let queryParams, where, joinAncillary = agg
 
       let filters =
-         query.EventType |> Option.defaultValue TransactionGroupFilter.All
+         query.EventType |> Option.defaultValue AccountEventGroupFilter.All
 
       let queryParams =
          [

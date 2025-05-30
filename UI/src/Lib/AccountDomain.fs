@@ -57,7 +57,7 @@ type AccountBrowserQuery = {
    Transaction: TransactionId option
    SelectedCards: (SelectedCard list) option
    SelectedInitiatedBy: (UIDomain.Employee.SelectedEmployee list) option
-   EventType: (TransactionGroupFilter list) option
+   EventType: (AccountEventGroupFilter list) option
 } with
 
    member x.ChangeDetection =
@@ -225,7 +225,7 @@ module AccountBrowserQuery =
             |> Option.bind UIDomain.Employee.parseEmployees
          EventType =
             Map.tryFind "events" queryParams
-            |> Option.bind TransactionGroupFilter.fromQueryString
+            |> Option.bind AccountEventGroupFilter.fromQueryString
       }
 
    let empty: AccountBrowserQuery = {
@@ -309,7 +309,7 @@ let transactionUIFriendly
    }
 
    let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
-      org.Org.DomesticTransferRecipients
+      org.DomesticTransferRecipients
       |> Map.tryFind recipientFromEvt.RecipientAccountId
       |> Option.map _.FullName
       |> Option.defaultValue recipientFromEvt.FullName
@@ -527,51 +527,60 @@ let transactionUIFriendly
             Destination = recipient
       }
 
-let private matchesTransactionGroupFilter
+let private matchesAccountEventGroupFilter
    (event: AccountEvent)
-   (filter: TransactionGroupFilter)
+   (filter: AccountEventGroupFilter)
    =
    match filter with
-   | TransactionGroupFilter.Purchase ->
+   | AccountEventGroupFilter.Purchase ->
       match event with
       | AccountEvent.DebitedAccount _ -> true
       | _ -> false
-   | TransactionGroupFilter.Deposit ->
+   | AccountEventGroupFilter.Deposit ->
       match event with
       | AccountEvent.DepositedCash _ -> true
       | _ -> false
-   | TransactionGroupFilter.InternalTransferWithinOrg ->
+   | AccountEventGroupFilter.InternalTransferWithinOrg ->
       match event with
       | AccountEvent.InternalTransferWithinOrgPending _
       | AccountEvent.InternalTransferWithinOrgFailed _
       | AccountEvent.InternalTransferWithinOrgDeposited _ -> true
       | _ -> false
-   | TransactionGroupFilter.InternalTransferBetweenOrgs ->
+   | AccountEventGroupFilter.InternalTransferBetweenOrgs ->
       match event with
       | AccountEvent.InternalTransferBetweenOrgsPending _
       | AccountEvent.InternalTransferBetweenOrgsFailed _
       | AccountEvent.InternalTransferBetweenOrgsDeposited _ -> true
       | _ -> false
-   | TransactionGroupFilter.InternalAutomatedTransfer ->
+   | AccountEventGroupFilter.InternalAutomatedTransfer ->
       match event with
       | AccountEvent.InternalAutomatedTransferPending _
       | AccountEvent.InternalAutomatedTransferFailed _
       | AccountEvent.InternalAutomatedTransferDeposited _ -> true
       | _ -> false
-   | TransactionGroupFilter.DomesticTransfer ->
+   | AccountEventGroupFilter.DomesticTransfer ->
       match event with
       | AccountEvent.DomesticTransferPending _
       | AccountEvent.DomesticTransferCompleted _
       | AccountEvent.DomesticTransferFailed _
       | AccountEvent.DomesticTransferProgress _ -> true
       | _ -> false
-   | TransactionGroupFilter.PlatformPayment ->
+   | AccountEventGroupFilter.PlatformPayment ->
       match event with
       | AccountEvent.PlatformPaymentRequested _
       | AccountEvent.PlatformPaymentPaid _
       | AccountEvent.PlatformPaymentDeposited _
       | AccountEvent.PlatformPaymentDeclined _
       | AccountEvent.PlatformPaymentCancelled _ -> true
+      | _ -> false
+   | AccountEventGroupFilter.DomesticTransferRecipient ->
+      match event with
+      | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient _)
+      | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient _)
+      | AccountEvent.ParentAccount(ParentAccountEvent.NicknamedDomesticTransferRecipient _)
+      | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRetryConfirmsRecipient _)
+      | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRecipientFailed _) ->
+         true
       | _ -> false
 
 /// Apply the selected filter logic to events arriving via SignalR.
@@ -643,7 +652,7 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
       match query.EventType with
       | None -> true
       | Some filters ->
-         filters |> List.exists (matchesTransactionGroupFilter evt)
+         filters |> List.exists (matchesAccountEventGroupFilter evt)
 
    qualifiedDate
    && qualifiedAccount
