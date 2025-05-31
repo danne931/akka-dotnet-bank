@@ -31,6 +31,7 @@ let startTransactionRoutes (app: WebApplication) =
             string,
             string,
             string,
+            string,
             Task<IResult>
           >
             (fun
@@ -41,6 +42,7 @@ let startTransactionRoutes (app: WebApplication) =
                  ([<FromQuery>] date)
                  ([<FromQuery>] employeeEventFilters)
                  ([<FromQuery>] accountEventFilters)
+                 ([<FromQuery>] parentAccountEventFilters)
                  ([<FromQuery>] orgEventFilters)
                  ([<FromQuery>] initiatedByIds) ->
                let query = {
@@ -66,6 +68,9 @@ let startTransactionRoutes (app: WebApplication) =
                   AccountEventType =
                      AccountEventGroupFilter.fromQueryString
                         accountEventFilters
+                  ParentAccountEventType =
+                     ParentAccountEventGroupFilter.fromQueryString
+                        parentAccountEventFilters
                   InitiatedByIds =
                      HistoryQuery.initiatedByIdsFromQueryString initiatedByIds
                }

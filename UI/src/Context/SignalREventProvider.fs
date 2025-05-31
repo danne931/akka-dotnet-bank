@@ -13,11 +13,18 @@ open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
 type EventType =
+   | ParentAccount
    | Account
    | Employee
    | Org
 
 type SignalREventContext = {
+   ParentAccountSubscribers:
+      Map<
+         string,
+         (ParentAccountEventPersistedConfirmation -> unit) *
+         (EventProcessingError -> unit)
+       >
    AccountSubscribers:
       Map<
          string,
@@ -36,6 +43,7 @@ type SignalREventContext = {
          (OrgEventPersistedConfirmation -> unit) *
          (EventProcessingError -> unit)
        >
+   RealtimeParentAccountEvents: ParentAccountEvent list
    RealtimeAccountEvents: AccountEvent list
    RealtimeEmployeeEvents: EmployeeEvent list
    RealtimeOrgEvents: OrgEvent list
@@ -45,9 +53,11 @@ type SignalREventContext = {
 }
 
 let private initState = {
+   ParentAccountSubscribers = Map.empty
    AccountSubscribers = Map.empty
    EmployeeSubscribers = Map.empty
    OrgSubscribers = Map.empty
+   RealtimeParentAccountEvents = []
    RealtimeAccountEvents = []
    RealtimeEmployeeEvents = []
    RealtimeOrgEvents = []
@@ -88,6 +98,7 @@ let context =
    )
 
 type Msg =
+   | ParentAccountEventPersisted of ParentAccountEventPersistedConfirmation
    | AccountEventPersisted of AccountEventPersistedConfirmation
    | EmployeeEventPersisted of EmployeeEventPersistedConfirmation
    | OrgEventPersisted of OrgEventPersistedConfirmation
@@ -150,6 +161,13 @@ let update msg state =
 
       let state = {
          state with
+            ParentAccountSubscribers =
+               if List.contains EventType.ParentAccount eventTypes then
+                  updateSubscribers
+                     state.ParentAccountSubscribers
+                     (EventPersistedConfirmation.ParentAccount >> onPersist)
+               else
+                  state.ParentAccountSubscribers
             AccountSubscribers =
                if List.contains EventType.Account eventTypes then
                   updateSubscribers
@@ -177,6 +195,11 @@ let update msg state =
    | RemoveEventSubscriber(componentName, eventTypes) ->
       let state = {
          state with
+            ParentAccountSubscribers =
+               if List.contains EventType.ParentAccount eventTypes then
+                  state.ParentAccountSubscribers.Remove componentName
+               else
+                  state.ParentAccountSubscribers
             AccountSubscribers =
                if List.contains EventType.Account eventTypes then
                   state.AccountSubscribers.Remove componentName
@@ -195,6 +218,16 @@ let update msg state =
       }
 
       state, Cmd.none
+   | ParentAccountEventPersisted conf ->
+      for onPersist, _ in state.ParentAccountSubscribers.Values do
+         onPersist conf
+
+      {
+         state with
+            RealtimeParentAccountEvents =
+               conf.EventPersisted :: state.RealtimeParentAccountEvents
+      },
+      Cmd.none
    | AccountEventPersisted conf ->
       for onPersist, _ in state.AccountSubscribers.Values do
          onPersist conf
@@ -227,6 +260,8 @@ let update msg state =
    | ErrorReceived error ->
       let errorHandlers =
          match error with
+         | EventProcessingError.ParentAccount _ ->
+            state.ParentAccountSubscribers.Values |> Seq.map snd
          | EventProcessingError.Account _ ->
             state.AccountSubscribers.Values |> Seq.map snd
          | EventProcessingError.Org _ ->
@@ -262,6 +297,9 @@ let SignalREventProvider (child: Fable.React.ReactElement) =
                   | Ok err -> dispatch (Msg.ErrorReceived err)
             )
 
+            let deseriParentAccount =
+               Serialization.deserialize<ParentAccountEventPersistedConfirmation>
+
             let deseriAccount =
                Serialization.deserialize<AccountEventPersistedConfirmation>
 
@@ -270,6 +308,14 @@ let SignalREventProvider (child: Fable.React.ReactElement) =
 
             let deseriOrg =
                Serialization.deserialize<OrgEventPersistedConfirmation>
+
+            conn.on (
+               "ParentAccountEventPersistenceConfirmation",
+               fun (msg: string) ->
+                  match deseriParentAccount msg with
+                  | Error err -> Log.error (string err)
+                  | Ok msg -> dispatch (Msg.ParentAccountEventPersisted msg)
+            )
 
             conn.on (
                "AccountEventPersistenceConfirmation",

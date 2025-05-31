@@ -5,6 +5,7 @@ open Feliz.UseElmish
 open Elmish
 open Fable.Form.Simple
 open Fable.Form.Simple.Pico
+open System
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
@@ -14,18 +15,22 @@ open SignalRBroadcast
 
 [<RequireQualifiedAccess>]
 type FormCommand =
+   | ParentAccount of ParentAccountCommand
    | Account of AccountCommand
    | Employee of EmployeeCommand
    | Org of OrgCommand
 
    member x.Envelope =
       match x with
+      | FormCommand.ParentAccount cmd ->
+         (AccountCommand.ParentAccount cmd).Envelope
       | FormCommand.Account cmd -> cmd.Envelope
       | FormCommand.Employee cmd -> cmd.Envelope
       | FormCommand.Org cmd -> cmd.Envelope
 
 [<RequireQualifiedAccess>]
 type FormEntity =
+   | ParentAccount
    | Account of Account
    | Employee of Employee
    | Org of Org
@@ -37,6 +42,7 @@ type FormEntityId = Account of AccountId
 
 [<RequireQualifiedAccess>]
 type FormSubmitReceipt =
+   | ParentAccount of UIDomain.Account.ParentAccountCommandReceipt
    | Account of UIDomain.Account.AccountCommandReceipt
    | Employee of UIDomain.Employee.EmployeeCommandReceipt
    | Org of UIDomain.Org.OrgCommandReceipt
@@ -69,6 +75,9 @@ let submitCommand (entity: FormEntity) (cmd: FormCommand) = async {
    | FormEntity.Org org, FormCommand.Org cmd ->
       let! res = OrgService.submitCommand org cmd
       return res |> Result.map FormSubmitReceipt.Org
+   | FormEntity.ParentAccount, FormCommand.ParentAccount cmd ->
+      let! res = AccountService.submitParentAccountCommand cmd
+      return res |> Result.map FormSubmitReceipt.ParentAccount
    | FormEntity.Account account, FormCommand.Account cmd ->
       let! res = AccountService.submitCommand account cmd
       return res |> Result.map FormSubmitReceipt.Account
@@ -224,26 +233,32 @@ let update
    | CheckForEventConfirmation(receipt, attemptNumber) ->
       let correlationId, confirmation =
          match receipt with
+         | FormSubmitReceipt.ParentAccount r ->
+            r.Envelope.CorrelationId,
+            EventPersistedConfirmation.ParentAccount {
+               EventPersisted = r.PendingEvent
+               Date = DateTime.Now
+            }
          | FormSubmitReceipt.Account r ->
             r.Envelope.CorrelationId,
             EventPersistedConfirmation.Account {
                Account = r.PendingState
                EventPersisted = r.PendingEvent
-               Date = System.DateTime.Now
+               Date = DateTime.Now
             }
          | FormSubmitReceipt.Employee r ->
             r.Envelope.CorrelationId,
             EventPersistedConfirmation.Employee {
                Employee = r.PendingState
                EventPersisted = r.PendingEvent
-               Date = System.DateTime.Now
+               Date = DateTime.Now
             }
          | FormSubmitReceipt.Org r ->
             r.Envelope.CorrelationId,
             EventPersistedConfirmation.Org {
                Org = r.PendingState
                EventPersisted = r.PendingEvent
-               Date = System.DateTime.Now
+               Date = DateTime.Now
             }
 
       let checkAgainMsg =
@@ -297,6 +312,10 @@ let FormContainer
    // to mimick a SignalR EventPersisted event being received.
    let handlePollingConfirmation (conf: EventPersistedConfirmation) =
       match conf with
+      | EventPersistedConfirmation.ParentAccount c ->
+         signalRDispatch (
+            SignalREventProvider.Msg.ParentAccountEventPersisted c
+         )
       | EventPersistedConfirmation.Account c ->
          signalRDispatch (SignalREventProvider.Msg.AccountEventPersisted c)
       | EventPersistedConfirmation.Org c ->
@@ -331,15 +350,19 @@ let FormContainer
          OnPersist =
             fun conf ->
                match conf with
+               | EventPersistedConfirmation.ParentAccount conf ->
+                  let evt = AccountEvent.ParentAccount conf.EventPersisted
+                  let _, env = AccountEnvelope.unwrap evt
+                  dispatch (Msg.SignalREventReceived env.CorrelationId)
                | EventPersistedConfirmation.Account conf ->
-                  let _, evt = AccountEnvelope.unwrap conf.EventPersisted
-                  dispatch (Msg.SignalREventReceived evt.CorrelationId)
+                  let _, env = AccountEnvelope.unwrap conf.EventPersisted
+                  dispatch (Msg.SignalREventReceived env.CorrelationId)
                | EventPersistedConfirmation.Org conf ->
-                  let _, evt = OrgEnvelope.unwrap conf.EventPersisted
-                  dispatch (Msg.SignalREventReceived evt.CorrelationId)
+                  let _, env = OrgEnvelope.unwrap conf.EventPersisted
+                  dispatch (Msg.SignalREventReceived env.CorrelationId)
                | EventPersistedConfirmation.Employee conf ->
-                  let _, evt = EmployeeEnvelope.unwrap conf.EventPersisted
-                  dispatch (Msg.SignalREventReceived evt.CorrelationId)
+                  let _, env = EmployeeEnvelope.unwrap conf.EventPersisted
+                  dispatch (Msg.SignalREventReceived env.CorrelationId)
       }
    | None -> ()
 

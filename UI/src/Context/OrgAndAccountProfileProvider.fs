@@ -26,6 +26,7 @@ type Msg =
       AsyncOperationStatus<Result<OrgWithAccountProfiles option, Err>>
    | AccountCreated of Account
    | AccountUpdated of AccountEventPersistedConfirmation
+   | ParentAccountUpdated of ParentAccountEventPersistedConfirmation
    | OrgUpdated of Org
    | OrgCommand of OrgCommand
    | CommandApprovalRulesLoaded of CommandApprovalRule list
@@ -66,6 +67,42 @@ let update msg state =
       state, Cmd.none
    | OrgUpdated org ->
       let state = updateState state (fun o -> { o with Org = org })
+      state, Cmd.none
+   | ParentAccountUpdated conf ->
+      let state =
+         match conf.EventPersisted with
+         | ParentAccountEvent.RegisteredDomesticTransferRecipient e ->
+            updateState state (fun o -> {
+               o with
+                  DomesticTransferRecipients =
+                     o.DomesticTransferRecipients
+                     |> Map.add
+                           e.Data.Recipient.RecipientAccountId
+                           e.Data.Recipient
+            })
+         | ParentAccountEvent.EditedDomesticTransferRecipient e ->
+            updateState state (fun o -> {
+               o with
+                  DomesticTransferRecipients =
+                     o.DomesticTransferRecipients
+                     |> Map.add
+                           e.Data.Recipient.RecipientAccountId
+                           e.Data.Recipient
+            })
+         | ParentAccountEvent.NicknamedDomesticTransferRecipient e ->
+            updateState state (fun o -> {
+               o with
+                  DomesticTransferRecipients =
+                     o.DomesticTransferRecipients
+                     |> Map.change
+                           e.Data.RecipientId
+                           (Option.map (fun recipient -> {
+                              recipient with
+                                 Nickname = e.Data.Nickname
+                           }))
+            })
+         | _ -> state
+
       state, Cmd.none
    | AccountUpdated conf ->
       let accountId = conf.Account.AccountId

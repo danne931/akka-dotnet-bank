@@ -25,6 +25,7 @@ let networkQueryFromHistoryBrowserQuery
       DateRange = query.Date |> Option.map UIDomain.DateFilter.toDateRange
       EmployeeEventType = query.EmployeeEventType
       AccountEventType = query.AccountEventType
+      ParentAccountEventType = query.ParentAccountEventType
       OrgEventType = query.OrgEventType
       InitiatedByIds =
          query.SelectedInitiatedBy
@@ -121,6 +122,11 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) : Async<HistoryMaybe> = asyn
          match query.AccountEventType with
          | None -> ()
          | Some filters -> "accountEventFilters", listToQueryString filters
+
+         match query.ParentAccountEventType with
+         | None -> ()
+         | Some filters ->
+            "parentAccountEventFilters", listToQueryString filters
 
          match query.OrgEventType with
          | None -> ()

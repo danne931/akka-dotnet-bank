@@ -167,7 +167,7 @@ let update msg state =
 
 /// May edit transfer recipient if domestic and status is not Closed.
 let private canEditTransferRecipient
-   (org: Org)
+   (recipients: Map<AccountId, DomesticTransferRecipient>)
    (txn: Transaction)
    : DomesticTransferRecipient option
    =
@@ -179,8 +179,7 @@ let private canEditTransferRecipient
             Some e.Data.BaseInfo.Recipient.RecipientAccountId
          | _ -> None
       | _ -> None)
-   |> Option.bind (fun recipientId ->
-      Map.tryFind recipientId org.DomesticTransferRecipients)
+   |> Option.bind (fun recipientId -> Map.tryFind recipientId recipients)
    |> Option.filter (fun r -> r.Status <> RecipientRegistrationStatus.Closed)
 
 let private canAddCategoryAndNotes =
@@ -211,7 +210,10 @@ let renderTransactionInfo
             | _ -> None
          | _ -> None)
 
-   let editableRecipient = canEditTransferRecipient org.Org txnInfo.Transaction
+   let editableRecipient =
+      canEditTransferRecipient
+         org.DomesticTransferRecipients
+         txnInfo.Transaction
 
    React.fragment [
       Html.h6 txn.Name
@@ -250,10 +252,11 @@ let renderTransactionInfo
          with
          | true, TransactionType.DomesticTransfer, _, Some recipient ->
             let recipientId = recipient.RecipientAccountId
+            let domesticRecipients = org.DomesticTransferRecipients
             let org = org.Org
 
             let originalName, nickname =
-               org.DomesticTransferRecipients
+               domesticRecipients
                |> Map.tryFind recipientId
                |> Option.map (fun r -> r.Name, r.Nickname)
                |> Option.defaultValue ("", None)
@@ -267,6 +270,7 @@ let renderTransactionInfo
                      let command =
                         NicknameDomesticTransferRecipientCommand.create
                            org.OrgId
+                           org.ParentAccountId
                            session.AsInitiator
                            {
                               RecipientId = recipientId
@@ -274,9 +278,11 @@ let renderTransactionInfo
                                  RecipientAccountEnvironment.Domestic
                               Nickname = alias |> Option.map _.Trim()
                            }
-                        |> OrgCommand.NicknameDomesticTransferRecipient
+                        |> ParentAccountCommand.NicknameDomesticTransferRecipient
 
-                     let! res = OrgService.submitCommand org command
+                     let! res =
+                        AccountService.submitParentAccountCommand command
+
                      return res |> Result.map ignore
                   }
                onNicknameSaved = ignore
@@ -471,7 +477,7 @@ let renderNoteInput (txnInfo: TransactionMaybe) dispatch =
    ]
 
 let renderFooterMenuControls
-   (org: Org)
+   (org: OrgWithAccountProfiles)
    (txnInfo: TransactionMaybe)
    (isEditingNickname: bool)
    dispatch
@@ -479,6 +485,11 @@ let renderFooterMenuControls
    let dropdownItems =
       match txnInfo with
       | Deferred.Resolved(Ok(Some txn)) ->
+         let isEditable =
+            canEditTransferRecipient
+               org.DomesticTransferRecipients
+               txn.Transaction
+
          match txn.Transaction.Type with
          | TransactionType.DomesticTransfer ->
             Some(
@@ -490,7 +501,7 @@ let renderFooterMenuControls
                   }
 
                ]
-               @ match canEditTransferRecipient org txn.Transaction with
+               @ match isEditable with
                  | None -> []
                  | Some recipient -> [
                     {
@@ -622,7 +633,7 @@ let TransactionDetailComponent
 
          attr.children [
             renderFooterMenuControls
-               org.Org
+               org
                state.Transaction
                state.EditingNickname
                dispatch

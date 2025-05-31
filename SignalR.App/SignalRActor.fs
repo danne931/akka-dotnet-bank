@@ -15,6 +15,7 @@ open SignalRBroadcast
 
 [<RequireQualifiedAccess>]
 type Msg =
+   | ParentAccountEventPersisted of ParentAccountEventPersistedConfirmation
    | AccountEventPersisted of AccountEventPersistedConfirmation
    | EmployeeEventPersisted of EmployeeEventPersistedConfirmation
    | OrgEventPersisted of OrgEventPersistedConfirmation
@@ -29,6 +30,17 @@ let actorProps (hub: IHubContext<BankHub, IBankClient>) =
          let! msg = ctx.Receive()
 
          match msg with
+         | Msg.ParentAccountEventPersisted msg ->
+            let _, envelope =
+               AccountEvent.ParentAccount msg.EventPersisted
+               |> AccountEnvelope.unwrap
+
+            hub.Clients
+               .Group(string envelope.OrgId)
+               .ParentAccountEventPersistenceConfirmation(
+                  Serialization.serialize msg
+               )
+            |> ignore
          | Msg.AccountEventPersisted msg ->
             hub.Clients
                .Group(string msg.Account.OrgId)

@@ -598,6 +598,13 @@ let historyUIFriendly
    | History.Org h -> orgHistoryUIFriendly h
    | History.Employee h -> employeeHistoryUIFriendly h
    | History.Account h -> accountHistoryUIFriendly org h
+   | History.ParentAccount h ->
+      let h: AccountHistory = {
+         InitiatedByName = h.InitiatedByName
+         Event = AccountEvent.ParentAccount h.Event
+      }
+
+      accountHistoryUIFriendly org h
 
 let private matchesOrgEventFilter
    (event: OrgEvent)
@@ -625,6 +632,20 @@ let private matchesOrgEventFilter
       | OrgEvent.CommandApprovalDeclined _
       | OrgEvent.CommandApprovalTerminated _
       | OrgEvent.CommandApprovalProcessCompleted _ -> true
+      | _ -> false
+
+let private matchesParentAccountEventFilter
+   (event: ParentAccountEvent)
+   (filter: ParentAccountEventGroupFilter)
+   =
+   match filter with
+   | ParentAccountEventGroupFilter.DomesticTransferRecipient ->
+      match event with
+      | ParentAccountEvent.RegisteredDomesticTransferRecipient _
+      | ParentAccountEvent.EditedDomesticTransferRecipient _
+      | ParentAccountEvent.NicknamedDomesticTransferRecipient _
+      | ParentAccountEvent.DomesticTransferRetryConfirmsRecipient _
+      | ParentAccountEvent.DomesticTransferRecipientFailed _ -> true
       | _ -> false
 
 let private matchesAccountEventFilter
@@ -672,15 +693,6 @@ let private matchesAccountEventFilter
       | AccountEvent.PlatformPaymentDeposited _
       | AccountEvent.PlatformPaymentDeclined _
       | AccountEvent.PlatformPaymentCancelled _ -> true
-      | _ -> false
-   | AccountEventGroupFilter.DomesticTransferRecipient ->
-      match event with
-      | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient _)
-      | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient _)
-      | AccountEvent.ParentAccount(ParentAccountEvent.NicknamedDomesticTransferRecipient _)
-      | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRetryConfirmsRecipient _)
-      | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRecipientFailed _) ->
-         true
       | _ -> false
 
 let private matchesEmployeeEventFilter
@@ -733,6 +745,8 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
    let envelope =
       match history with
       | History.Account o -> AccountEnvelope.unwrap o.Event |> snd
+      | History.ParentAccount o ->
+         o.Event |> AccountEvent.ParentAccount |> AccountEnvelope.unwrap |> snd
       | History.Employee o -> EmployeeEnvelope.unwrap o.Event |> snd
       | History.Org o -> OrgEnvelope.unwrap o.Event |> snd
 
@@ -756,20 +770,26 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
          history,
          query.OrgEventType,
          query.AccountEventType,
+         query.ParentAccountEventType,
          query.EmployeeEventType
       with
-      | _, None, None, None -> true
-      | History.Org o, orgEventFilter, _, _ ->
+      | _, None, None, None, None -> true
+      | History.Org o, orgEventFilter, _, _, _ ->
          match orgEventFilter with
          | None -> false
          | Some filters ->
             filters |> List.exists (matchesOrgEventFilter o.Event)
-      | History.Account o, _, accountEventFilter, _ ->
+      | History.Account o, _, accountEventFilter, _, _ ->
          match accountEventFilter with
          | None -> false
          | Some filters ->
             filters |> List.exists (matchesAccountEventFilter o.Event)
-      | History.Employee o, _, _, employeeEventFilter ->
+      | History.ParentAccount o, _, _, eventFilter, _ ->
+         match eventFilter with
+         | None -> false
+         | Some filters ->
+            filters |> List.exists (matchesParentAccountEventFilter o.Event)
+      | History.Employee o, _, _, _, employeeEventFilter ->
          match employeeEventFilter with
          | None -> false
          | Some filters ->
@@ -782,6 +802,7 @@ type HistoryBrowserQuery = {
    OrgEventType: (OrgEventGroupFilter list) option
    EmployeeEventType: (EmployeeEventGroupFilter list) option
    AccountEventType: (AccountEventGroupFilter list) option
+   ParentAccountEventType: (ParentAccountEventGroupFilter list) option
    SelectedInitiatedBy: (UIDomain.Employee.SelectedEmployee list) option
 }
 
@@ -811,6 +832,12 @@ module HistoryBrowserQuery =
          | None -> agg
          | Some filters ->
             ("accountEventFilters", listToQueryString filters) :: agg
+
+      let agg =
+         match query.ParentAccountEventType with
+         | None -> agg
+         | Some filters ->
+            ("parentAccountEventFilters", listToQueryString filters) :: agg
 
       // If custom date range selected, date query param will consist
       // of a start & end date.  Otherwise it will be something like
@@ -843,6 +870,9 @@ module HistoryBrowserQuery =
          AccountEventType =
             Map.tryFind "accountEventFilters" queryParams
             |> Option.bind AccountEventGroupFilter.fromQueryString
+         ParentAccountEventType =
+            Map.tryFind "parentAccountEventFilters" queryParams
+            |> Option.bind ParentAccountEventGroupFilter.fromQueryString
          SelectedInitiatedBy =
             Map.tryFind "initiatedBy" queryParams
             |> Option.bind UIDomain.Employee.parseEmployees
@@ -853,5 +883,6 @@ module HistoryBrowserQuery =
       OrgEventType = None
       EmployeeEventType = None
       AccountEventType = None
+      ParentAccountEventType = None
       SelectedInitiatedBy = None
    }

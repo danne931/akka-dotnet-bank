@@ -24,6 +24,12 @@ type AccountCommandReceipt = {
    Envelope: Envelope
 }
 
+type ParentAccountCommandReceipt = {
+   PendingCommand: ParentAccountCommand
+   PendingEvent: ParentAccountEvent
+   Envelope: Envelope
+}
+
 type SelectedCard = { Display: string; CardId: CardId }
 
 type SelectedAccount = {
@@ -572,15 +578,6 @@ let private matchesAccountEventGroupFilter
       | AccountEvent.PlatformPaymentDeposited _
       | AccountEvent.PlatformPaymentDeclined _
       | AccountEvent.PlatformPaymentCancelled _ -> true
-      | _ -> false
-   | AccountEventGroupFilter.DomesticTransferRecipient ->
-      match event with
-      | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient _)
-      | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient _)
-      | AccountEvent.ParentAccount(ParentAccountEvent.NicknamedDomesticTransferRecipient _)
-      | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRetryConfirmsRecipient _)
-      | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRecipientFailed _) ->
-         true
       | _ -> false
 
 /// Apply the selected filter logic to events arriving via SignalR.

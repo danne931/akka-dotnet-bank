@@ -4,6 +4,7 @@ open Microsoft.AspNetCore.SignalR
 open System.Threading.Tasks
 
 type IBankClient =
+   abstract member ParentAccountEventPersistenceConfirmation: string -> Task
    abstract member AccountEventPersistenceConfirmation: string -> Task
    abstract member EmployeeEventPersistenceConfirmation: string -> Task
    abstract member OrgEventPersistenceConfirmation: string -> Task

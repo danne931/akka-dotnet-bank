@@ -545,8 +545,12 @@ let actorProps
 
             let state = ParentAccount.applyEvent state evt
 
-            state.VirtualAccounts.TryFind evt.AccountId
-            |> Option.iter (broadcaster.accountEventPersisted evt)
+            match evt with
+            | AccountEvent.ParentAccount evt ->
+               broadcaster.parentAccountEventPersisted evt
+            | _ ->
+               state.VirtualAccounts.TryFind evt.AccountId
+               |> Option.iter (broadcaster.accountEventPersisted evt)
 
             onPersisted
                getEmailRef

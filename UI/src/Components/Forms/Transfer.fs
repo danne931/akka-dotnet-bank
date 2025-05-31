@@ -249,7 +249,7 @@ let formInternalBetweenOrgs
    )
 
 let formDomestic
-   (org: Org)
+   (recipients: Map<AccountId, DomesticTransferRecipient>)
    (senderAccounts: Map<AccountId, Account>)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
@@ -264,7 +264,7 @@ let formDomestic
             Label = "Recipient:"
             Placeholder = "No selection"
             Options =
-               org.DomesticTransferRecipients
+               recipients
                |> Map.toList
                |> List.map (fun (recipientId, recipient) ->
                   let name =
@@ -333,7 +333,7 @@ let formDomestic
 
          Form.succeed (fun (recipientId: string) amount memo scheduledAt ->
             let recipientId = recipientId |> Guid.Parse |> AccountId
-            let recipient = org.DomesticTransferRecipients[recipientId]
+            let recipient = recipients[recipientId]
             sender, recipient, amount, memo, scheduledAt)
          |> Form.append fieldDomesticSelect
          |> Form.append (amountField sender)
@@ -445,8 +445,9 @@ let TransferInternalBetweenOrgsComponent
 [<ReactComponent>]
 let TransferDomesticFormComponent
    (session: UserSession)
-   (org: Org)
+   (recipients: Map<AccountId, DomesticTransferRecipient>)
    (senderAccounts: Map<AccountId, Account>)
+   (commandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule>)
    (employeeAccrual: CommandApprovalDailyAccrual)
    (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
    (onSubmit: AccountCommandReceipt -> unit)
@@ -457,7 +458,7 @@ let TransferDomesticFormComponent
       | Some(env, accountId) when env = RecipientAccountEnvironment.Domestic ->
          string accountId
       | _ ->
-         org.DomesticTransferRecipients.Values
+         recipients.Values
          |> Seq.tryHead
          |> Option.map (_.RecipientAccountId >> string)
          |> Option.defaultValue ""
@@ -471,7 +472,7 @@ let TransferDomesticFormComponent
          Memo = ""
          ScheduledAt = "TODAY"
       }
-      Form = formDomestic org senderAccounts session.AsInitiator
+      Form = formDomestic recipients senderAccounts session.AsInitiator
       Action = None
       OnSubmit =
          function
@@ -486,7 +487,7 @@ let TransferDomesticFormComponent
                   CommandApprovalRule.commandRequiresApproval
                      cmd
                      employeeAccrual
-                     org.CommandApprovalRules
+                     commandApprovalRules
 
                match requiresApproval with
                | None -> onSubmit receipt
@@ -595,7 +596,7 @@ let TransferFormComponent
       | RecipientAccountEnvironment.InternalWithinOrg ->
          TransferInternalWithinOrgComponent session org.Accounts onSubmit
       | RecipientAccountEnvironment.Domestic ->
-         if org.Org.DomesticTransferRecipients.Count = 0 then
+         if org.DomesticTransferRecipients.Count = 0 then
             Html.button [
                attr.classes [ "outline" ]
                attr.text "No recipients.  Click here to create."
@@ -613,8 +614,9 @@ let TransferFormComponent
             | Deferred.Resolved(Ok accrual) ->
                TransferDomesticFormComponent
                   session
-                  org.Org
+                  org.DomesticTransferRecipients
                   org.CheckingAccounts
+                  org.Org.CommandApprovalRules
                   accrual
                   selectedRecipient
                   onSubmit

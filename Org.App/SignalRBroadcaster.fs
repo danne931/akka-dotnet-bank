@@ -22,6 +22,17 @@ let init (system: ActorSystem) : SignalRBroadcast =
    let sendError = SignalRActor.Msg.Error >> sendToSignalR
 
    {
+      parentAccountEventPersisted =
+         fun event ->
+            let msg =
+               SignalRActor.Msg.ParentAccountEventPersisted(
+                  {
+                     Date = DateTime.UtcNow
+                     EventPersisted = event
+                  }
+               )
+
+            sendToSignalR msg
       accountEventPersisted =
          fun event account ->
             let msg =

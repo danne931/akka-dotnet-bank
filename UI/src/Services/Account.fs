@@ -6,6 +6,7 @@ open FsToolkit.ErrorHandling
 
 open UIDomain.Account
 open Bank.Account.Domain
+open Bank.Transfer.Domain
 open Lib.SharedTypes
 open RoutePaths
 
@@ -98,6 +99,58 @@ let submitCommand
          return {
             Envelope = envelope
             PendingState = updatedAccount
+            PendingEvent = evt
+            PendingCommand = command
+         }
+   }
+
+let submitParentAccountCommand
+   (command: ParentAccountCommand)
+   : Async<Result<ParentAccountCommandReceipt, Err>>
+   =
+   asyncResult {
+      // Pre-network request validation typically checks the command itself
+      // and the Result of applying the command to the current state as
+      // seen with AccountService.submitCommand, OrgService.submitcommand,
+      // and EmployeeService.submitCommand
+      // This same validation occurs on the server when an actor is
+      // processing a command.
+      //
+      // However, for the small selection of commands applied to the parent
+      // account, rather than one of its subaccounts, we will simply validate
+      // the command itself since we do not have access to the
+      // ParentAccountSnapshot type in the client at this moment.
+      // The application of the command to the aggregate ParentAccountSnapshot
+      // state will still happen on the server & we will get success/error
+      // via SignalR so no need to bother with providing the UI with the
+      // ParentAccountSnapshot at this time.  The application of these
+      // ParentAccount-specific commands have minimal if any validation
+      // during ParentAccount.stateTransition anyway.
+      let evtResult =
+         match command with
+         | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
+            RegisterDomesticTransferRecipientCommand.toEvent cmd
+            |> Result.map ParentAccountEvent.RegisteredDomesticTransferRecipient
+         | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
+            EditDomesticTransferRecipientCommand.toEvent cmd
+            |> Result.map ParentAccountEvent.EditedDomesticTransferRecipient
+         | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
+            NicknameDomesticTransferRecipientCommand.toEvent cmd
+            |> Result.map ParentAccountEvent.NicknamedDomesticTransferRecipient
+         | _ -> notImplemented (AccountCommand.ParentAccount command)
+
+      let! evt = evtResult |> Result.mapError ValidationError
+
+      let! res = postJson (AccountCommand.ParentAccount command)
+      let code = res.statusCode
+
+      if code <> 200 then
+         return! Error <| Err.InvalidStatusCodeError(serviceName, code)
+      else
+         let! envelope = Serialization.deserialize<Envelope> res.responseText
+
+         return {
+            Envelope = envelope
             PendingEvent = evt
             PendingCommand = command
          }

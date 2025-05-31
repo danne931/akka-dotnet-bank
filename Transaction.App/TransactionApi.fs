@@ -50,13 +50,6 @@ let filtersToOriginatingEventNames
            | AccountEventGroupFilter.PlatformPayment -> [
               typeof<PlatformPaymentPaid>.Name // Outgoing payments
               typeof<PlatformPaymentDeposited>.Name // Incoming payments
-             ]
-           | AccountEventGroupFilter.DomesticTransferRecipient -> [
-              typeof<RegisteredDomesticTransferRecipient>.Name
-              typeof<EditedDomesticTransferRecipient>.Name
-              typeof<NicknamedDomesticTransferRecipient>.Name
-              typeof<DomesticTransferRetryConfirmsRecipientCommand>.Name
-              typeof<DomesticTransferRecipientFailed>.Name
              ])
       []
    |> List.toArray
@@ -436,7 +429,7 @@ let isEventPersistenceConfirmed
       let query =
          $"""
          SELECT EXISTS (
-            SELECT 1 FROM {OrganizationEventSqlMapper.table}
+            SELECT 1 FROM {table}
             WHERE {Fields.correlationId} = @corrId
 
             UNION ALL
@@ -446,7 +439,12 @@ let isEventPersistenceConfirmed
 
             UNION ALL
 
-            SELECT 1 FROM {table}
+            SELECT 1 FROM {OrganizationEventSqlMapper.table}
+            WHERE {Fields.correlationId} = @corrId
+
+            UNION ALL
+
+            SELECT 1 FROM {ParentAccountEventSqlMapper.table}
             WHERE {Fields.correlationId} = @corrId
          ) AS correlation_id_exists;
          """

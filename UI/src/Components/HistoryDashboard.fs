@@ -32,6 +32,7 @@ type HistoryFilter =
          Employee: (EmployeeEventGroupFilter list) option
          Account: (AccountEventGroupFilter list) option
          Org: (OrgEventGroupFilter list) option
+         ParentAccount: (ParentAccountEventGroupFilter list) option
       |}
    | InitiatedBy of (SelectedEmployee list) option
 
@@ -100,6 +101,7 @@ let update orgId msg state =
                EmployeeEventType = filter.Employee
                AccountEventType = filter.Account
                OrgEventType = filter.Org
+               ParentAccountEventType = filter.ParentAccount
            }
          | HistoryFilter.InitiatedBy selected -> {
             browserQuery with
@@ -137,6 +139,7 @@ let renderTableRow (org: OrgWithAccountProfiles) (history: History) =
          | EmployeeEvent.PurchaseApplied _ ->
             Some(TransactionId envelope.CorrelationId)
          | _ -> None
+      | History.ParentAccount _
       | History.Org _ -> None
 
    Html.tr [
@@ -249,6 +252,7 @@ let private renderEventFilterCheckboxes state dispatch browserQuery =
                   Account = accountEventFilters
                   Employee = employeeEventFilters
                   Org = state.Query.OrgEventType
+                  ParentAccount = state.Query.ParentAccountEventType
                |}
                |> Msg.UpdateFilter
                |> dispatch
@@ -265,6 +269,7 @@ let private renderEventFilterCheckboxes state dispatch browserQuery =
                   Account = accountEventFilters
                   Employee = state.Query.EmployeeEventType
                   Org = state.Query.OrgEventType
+                  ParentAccount = state.Query.ParentAccountEventType
                |}
                |> Msg.UpdateFilter
                |> dispatch
@@ -281,6 +286,24 @@ let private renderEventFilterCheckboxes state dispatch browserQuery =
                   Org = orgEventFilters
                   Account = state.Query.AccountEventType
                   Employee = state.Query.EmployeeEventType
+                  ParentAccount = state.Query.ParentAccountEventType
+               |}
+               |> Msg.UpdateFilter
+               |> dispatch
+      |}
+
+      CheckboxFieldset.render {|
+         Options =
+            ParentAccountEventGroupFilter.All
+            |> List.map (fun o -> { Id = o; Display = o.Display })
+         SelectedItems = browserQuery.ParentAccountEventType
+         OnChange =
+            fun parentAccountEventFilters ->
+               HistoryFilter.EventFilter {|
+                  Org = state.Query.OrgEventType
+                  Account = state.Query.AccountEventType
+                  Employee = state.Query.EmployeeEventType
+                  ParentAccount = parentAccountEventFilters
                |}
                |> Msg.UpdateFilter
                |> dispatch
@@ -335,6 +358,7 @@ let renderTableControlPanel
                         Org = None
                         Account = None
                         Employee = None
+                        ParentAccount = None
                      |}
                      |> Msg.UpdateFilter
                      |> dispatch
@@ -353,6 +377,8 @@ let renderTableControlPanel
 
                         if filters.IsEmpty then None else Some filters)
 
+                  let parentAccountFilters = state.Query.ParentAccountEventType
+
                   let filters =
                      [
                         employeeFilters
@@ -361,6 +387,9 @@ let renderTableControlPanel
                         |> Option.map AccountEventGroupFilter.listToDisplay
                         orgFilters
                         |> Option.map OrgEventGroupFilter.listToDisplay
+                        parentAccountFilters
+                        |> Option.map
+                              ParentAccountEventGroupFilter.listToDisplay
                      ]
                      |> List.choose id
 
@@ -368,6 +397,7 @@ let renderTableControlPanel
                      filterCount orgFilters
                      + filterCount accountFilters
                      + filterCount employeeFilters
+                     + filterCount parentAccountFilters
 
                   if selectedFilterCount = 0 then
                      None
@@ -424,6 +454,7 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
       ComponentName = "HistoryDashboard"
       OrgId = Some session.OrgId
       EventTypes = [
+         SignalREventProvider.EventType.ParentAccount
          SignalREventProvider.EventType.Account
          SignalREventProvider.EventType.Org
          SignalREventProvider.EventType.Employee
@@ -433,6 +464,16 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
          React.useCallbackRef (fun conf ->
             let history =
                match conf with
+               | EventPersistedConfirmation.ParentAccount conf ->
+                  History.ParentAccount {
+                     Event = conf.EventPersisted
+                     InitiatedByName =
+                        conf.EventPersisted
+                        |> AccountEvent.ParentAccount
+                        |> AccountEnvelope.unwrap
+                        |> snd
+                        |> _.InitiatedBy.Name
+                  }
                | EventPersistedConfirmation.Account conf ->
                   History.Account {
                      Event = conf.EventPersisted

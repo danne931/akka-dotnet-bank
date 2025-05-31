@@ -52,6 +52,39 @@ type OrgEventGroupFilter =
          items
 
 [<RequireQualifiedAccess>]
+type ParentAccountEventGroupFilter =
+   | DomesticTransferRecipient
+
+   member x.Display =
+      match x with
+      | ParentAccountEventGroupFilter.DomesticTransferRecipient ->
+         "Domestic Transfer Recipient"
+
+   static member All = [
+      ParentAccountEventGroupFilter.DomesticTransferRecipient
+   ]
+
+   static member fromString =
+      function
+      | "DomesticTransferRecipient" ->
+         Some ParentAccountEventGroupFilter.DomesticTransferRecipient
+      | _ -> None
+
+   static member fromQueryString
+      : string -> ParentAccountEventGroupFilter list option =
+      listFromQueryString ParentAccountEventGroupFilter.fromString
+
+   static member listToDisplay(items: ParentAccountEventGroupFilter list) =
+      List.fold
+         (fun acc (filter: ParentAccountEventGroupFilter) ->
+            if acc = "" then
+               filter.Display
+            else
+               $"{acc}, {filter.Display}")
+         ""
+         items
+
+[<RequireQualifiedAccess>]
 type AccountEventGroupFilter =
    | Purchase
    | Deposit
@@ -61,7 +94,6 @@ type AccountEventGroupFilter =
    | DomesticTransfer
    | PlatformPayment
    //| ThirdPartyPayment
-   | DomesticTransferRecipient
 
    member x.Display =
       match x with
@@ -77,10 +109,8 @@ type AccountEventGroupFilter =
          "Domestic transfers outside the platform"
       | AccountEventGroupFilter.PlatformPayment ->
          "Payments between orgs on the platform"
-      //| AccountEventGroupFilter.ThirdPartyPayment ->
-      //   "Payments outside the platform"
-      | AccountEventGroupFilter.DomesticTransferRecipient ->
-         "Domestic Transfer Recipient"
+   //| AccountEventGroupFilter.ThirdPartyPayment ->
+   //   "Payments outside the platform"
 
    static member All = [
       AccountEventGroupFilter.Purchase
@@ -90,7 +120,6 @@ type AccountEventGroupFilter =
       AccountEventGroupFilter.InternalAutomatedTransfer
       AccountEventGroupFilter.DomesticTransfer
       AccountEventGroupFilter.PlatformPayment
-      AccountEventGroupFilter.DomesticTransferRecipient
    ]
 
    static member fromString =
@@ -106,8 +135,6 @@ type AccountEventGroupFilter =
       | "DomesticTransfer" -> Some AccountEventGroupFilter.DomesticTransfer
       | "PlatformPayment" -> Some AccountEventGroupFilter.PlatformPayment
       //| "ThirdPartyPayment" -> Some AccountEventGroupFilter.ThirdPartyPayment
-      | "DomesticTransferRecipient" ->
-         Some AccountEventGroupFilter.DomesticTransferRecipient
       | _ -> None
 
    static member fromQueryString: string -> AccountEventGroupFilter list option =
@@ -136,6 +163,7 @@ type HistoryQuery = {
    EmployeeEventType:
       (Bank.Employee.Domain.EmployeeEventGroupFilter list) option
    AccountEventType: (AccountEventGroupFilter list) option
+   ParentAccountEventType: (ParentAccountEventGroupFilter list) option
    OrgEventType: (OrgEventGroupFilter list) option
    InitiatedByIds: (InitiatedById list) option
 }

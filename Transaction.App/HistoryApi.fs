@@ -40,6 +40,25 @@ let orgEventFilterNames (filters: OrgEventGroupFilter list) : string array =
       []
    |> List.toArray
 
+let parentAccountEventFilterNames
+   (filters: ParentAccountEventGroupFilter list)
+   : string array
+   =
+   filters
+   |> List.fold
+      (fun acc e ->
+         acc
+         @ match e with
+           | ParentAccountEventGroupFilter.DomesticTransferRecipient -> [
+              typeof<RegisteredDomesticTransferRecipient>.Name
+              typeof<EditedDomesticTransferRecipient>.Name
+              typeof<NicknamedDomesticTransferRecipient>.Name
+              typeof<DomesticTransferRetryConfirmsRecipientCommand>.Name
+              typeof<DomesticTransferRecipientFailed>.Name
+             ])
+      []
+   |> List.toArray
+
 let accountEventFilterNames
    (filters: AccountEventGroupFilter list)
    : string array
@@ -80,13 +99,6 @@ let accountEventFilterNames
               typeof<PlatformPaymentDeposited>.Name
               typeof<PlatformPaymentDeclined>.Name
               typeof<PlatformPaymentCancelled>.Name
-             ]
-           | AccountEventGroupFilter.DomesticTransferRecipient -> [
-              typeof<RegisteredDomesticTransferRecipient>.Name
-              typeof<EditedDomesticTransferRecipient>.Name
-              typeof<NicknamedDomesticTransferRecipient>.Name
-              typeof<DomesticTransferRetryConfirmsRecipientCommand>.Name
-              typeof<DomesticTransferRecipientFailed>.Name
              ])
       []
    |> List.toArray
@@ -132,6 +144,7 @@ let employeeEventFilterNames
 type private HistoryWhere = {
    Employee: string
    Account: string
+   ParentAccount: string
    Org: string
 }
 
@@ -139,22 +152,28 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
    let employeeTable = EmployeeSqlMapper.table
    let employeeEventTable = EmployeeEventSqlMapper.table
    let accountEventTable = AccountEventSqlMapper.table
+   let parentAccountEventTable = ParentAccountEventSqlMapper.table
    let orgEventTable = OrganizationEventSqlMapper.table
 
    let query =
       match
-         query.OrgEventType, query.AccountEventType, query.EmployeeEventType
+         query.OrgEventType,
+         query.AccountEventType,
+         query.ParentAccountEventType,
+         query.EmployeeEventType
       with
-      | None, None, None -> {
+      | None, None, None, None -> {
          query with
             OrgEventType = Some OrgEventGroupFilter.All
             AccountEventType = Some AccountEventGroupFilter.All
+            ParentAccountEventType = Some ParentAccountEventGroupFilter.All
             EmployeeEventType = Some EmployeeEventGroupFilter.All
         }
       | _ -> query
 
    let where = {
       Employee = $"{employeeEventTable}.{Fields.orgId} = @orgId"
+      ParentAccount = $"{parentAccountEventTable}.{Fields.orgId} = @orgId"
       Account = $"{accountEventTable}.{Fields.orgId} = @orgId"
       Org = $"{orgEventTable}.{Fields.orgId} = @orgId"
    }
@@ -171,6 +190,8 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             {
                Employee =
                   $"{where.Employee} AND {employeeEventTable}.{Fields.initiatedById} = ANY(@iIds)"
+               ParentAccount =
+                  $"{where.ParentAccount} AND {parentAccountEventTable}.{Fields.initiatedById} = ANY(@iIds)"
                Account =
                   $"{where.Account} AND {accountEventTable}.{Fields.initiatedById} = ANY(@iIds)"
                Org =
@@ -195,6 +216,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             {
                Employee = $"{where.Employee} AND {timestampQuery}"
                Account = $"{where.Account} AND {timestampQuery}"
+               ParentAccount = $"{where.ParentAccount} AND {timestampQuery}"
                Org = $"{where.Org} AND {timestampQuery}"
             })
          agg
@@ -226,6 +248,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             {
                Employee = $"{where.Employee} AND {cursorWhere}"
                Account = $"{where.Account} AND {cursorWhere}"
+               ParentAccount = $"{where.ParentAccount} AND {cursorWhere}"
                Org = $"{where.Org} AND {cursorWhere}"
             })
          agg
@@ -267,6 +290,22 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
       Option.fold
          (fun (queryParams, (where: HistoryWhere)) filters ->
             [
+               "parentAccountEventTypes",
+               filters |> parentAccountEventFilterNames |> Sql.stringArray
+            ]
+            @ queryParams,
+            {
+               where with
+                  ParentAccount =
+                     $"{where.ParentAccount} AND {Fields.name} = ANY(@parentAccountEventTypes)"
+            })
+         agg
+         query.ParentAccountEventType
+
+   let agg =
+      Option.fold
+         (fun (queryParams, (where: HistoryWhere)) filters ->
+            [
                "orgEventTypes",
                filters |> orgEventFilterNames |> Sql.stringArray
             ]
@@ -290,7 +329,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             timestamp,
             {Fields.initiatedById},
             {Fields.eventId},
-            employee_event.event
+            {employeeEventTable}.event
          FROM {employeeEventTable}
          JOIN {employeeTable} e using({Fields.employeeId})
          WHERE {where.Employee}
@@ -311,6 +350,21 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
          WHERE {where.Account}
          """)
 
+   let parentAccountEventQuery =
+      query.ParentAccountEventType
+      |> Option.map (fun _ ->
+         $"""
+         SELECT 
+            'parent_account' as event_type,
+            '' as employee_name,
+            timestamp,
+            {Fields.initiatedById},
+            {Fields.eventId},
+            {parentAccountEventTable}.event
+         FROM {parentAccountEventTable}
+         WHERE {where.ParentAccount}
+         """)
+
    let orgEventQuery =
       query.OrgEventType
       |> Option.map (fun _ ->
@@ -321,13 +375,18 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
             timestamp,
             {Fields.initiatedById},
             {Fields.eventId},
-            organization_event.event
+            {orgEventTable}.event
          FROM {orgEventTable}
          WHERE {where.Org}
          """)
 
    let historySubQueries =
-      [ employeeEventQuery; accountEventQuery; orgEventQuery ]
+      [
+         employeeEventQuery
+         accountEventQuery
+         orgEventQuery
+         parentAccountEventQuery
+      ]
       |> List.choose id
       |> List.map (fun query -> "(" + query + ")")
       |> String.concat (" UNION ALL ")
@@ -367,6 +426,11 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
          Transaction.History.Account {
             InitiatedByName = initiator
             Event = AccountEventSqlMapper.SqlReader.event read
+         }
+      | "parent_account" ->
+         Transaction.History.ParentAccount {
+            InitiatedByName = initiator
+            Event = ParentAccountEventSqlMapper.SqlReader.event read
          }
       | "org" ->
          Transaction.History.Org {

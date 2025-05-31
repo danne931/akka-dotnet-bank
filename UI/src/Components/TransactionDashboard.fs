@@ -488,7 +488,7 @@ let renderForm session org (view: AccountActionView) dispatch =
             None
             (fun conf ->
                match conf.PendingEvent with
-               | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient e) ->
+               | ParentAccountEvent.RegisteredDomesticTransferRecipient e ->
                   let recipientId = e.Data.Recipient.RecipientAccountId
 
                   let redirectTo =
@@ -655,6 +655,7 @@ let TransactionDashboardComponent
       ComponentName = "TransactionDashboard"
       OrgId = Some session.OrgId
       EventTypes = [
+         SignalREventProvider.EventType.ParentAccount
          SignalREventProvider.EventType.Account
          SignalREventProvider.EventType.Org
       ]
@@ -669,6 +670,17 @@ let TransactionDashboardComponent
                orgDispatch (OrgProvider.Msg.AccountUpdated conf)
             | EventPersistedConfirmation.Org conf ->
                orgDispatch (OrgProvider.Msg.OrgUpdated conf.Org)
+            | EventPersistedConfirmation.ParentAccount conf ->
+               // The ParentAccountSnapshot type is currently not fetched from
+               // the server but a portion of its data, it's subaccounts
+               // and DomesticTransferRecipients are.  This info is
+               // located within the OrgWithAccountProfiles type which is
+               // fetched on app startup & updated as SignalR events arrive
+               // and are propagated up to the Org context provider.
+               // While subaccount related updated are dispatched above via
+               // Msg.AccountUpdated, other updates such as
+               // DomesticTransferRecipient related ones are dispatched here.
+               orgDispatch (OrgProvider.Msg.ParentAccountUpdated conf)
             | _ -> ()
       OnError = ignore
    }

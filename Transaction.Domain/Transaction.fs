@@ -18,6 +18,11 @@ type AccountHistory = {
    Event: AccountEvent
 }
 
+type ParentAccountHistory = {
+   InitiatedByName: string
+   Event: ParentAccountEvent
+}
+
 type EmployeeHistory = {
    InitiatedByName: string
    EmployeeName: string
@@ -28,12 +33,15 @@ type EmployeeHistory = {
 type History =
    | Org of OrgHistory
    | Account of AccountHistory
+   | ParentAccount of ParentAccountHistory
    | Employee of EmployeeHistory
 
    member x.Envelope =
       match x with
       | Org h -> OrgEnvelope.unwrap h.Event |> snd
       | Account h -> AccountEnvelope.unwrap h.Event |> snd
+      | ParentAccount h ->
+         h.Event |> AccountEvent.ParentAccount |> AccountEnvelope.unwrap |> snd
       | Employee h -> EmployeeEnvelope.unwrap h.Event |> snd
 
 [<RequireQualifiedAccess>]
@@ -98,6 +106,7 @@ let transactionInfoFromHistory
    : (TransactionType * TransactionStatus * decimal) option
    =
    match history with
+   | History.ParentAccount _ -> None
    | History.Org orgHistory ->
       let info =
          match orgHistory.Event with

@@ -6,9 +6,10 @@ open System
 
 open Fable.Form.Simple.Pico
 open Bank.Org.Domain
+open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Employee.Domain
-open UIDomain.Org
+open UIDomain.Account
 open Lib.Validators
 open Bank.Forms.FormContainer
 open Lib.SharedTypes
@@ -159,20 +160,28 @@ let domesticRecipientForm
                   ParentAccountId = org.ParentAccountId
                |}
             }
-            |> OrgCommand.RegisterDomesticTransferRecipient
+            |> ParentAccountCommand.RegisterDomesticTransferRecipient
          | Some recipient ->
-            EditDomesticTransferRecipientCommand.create org.OrgId initiatedBy {
-               LastName = last
-               FirstName = first
-               AccountNumber = accountNum
-               RoutingNumber = routingNum
-               Depository = depository
-               PaymentNetwork = paymentNetwork
-               RecipientWithoutAppliedUpdates = recipient
-            }
-            |> OrgCommand.EditDomesticTransferRecipient
+            EditDomesticTransferRecipientCommand.create
+               org.ParentAccountId
+               org.OrgId
+               initiatedBy
+               {
+                  LastName = last
+                  FirstName = first
+                  AccountNumber = accountNum
+                  RoutingNumber = routingNum
+                  Depository = depository
+                  PaymentNetwork = paymentNetwork
+                  RecipientWithoutAppliedUpdates = recipient
+               }
+            |> ParentAccountCommand.EditDomesticTransferRecipient
 
-      Msg.Submit(FormEntity.Org org, FormCommand.Org cmd, Started)
+      Msg.Submit(
+         FormEntity.ParentAccount,
+         FormCommand.ParentAccount cmd,
+         Started
+      )
 
    Form.succeed onSubmit
    |> Form.append fieldPaymentNetwork
@@ -224,9 +233,9 @@ let form
 [<ReactComponent>]
 let RegisterTransferRecipientFormComponent
    (session: UserSession)
-   (org: Org)
+   (org: OrgWithAccountProfiles)
    (recipientIdForEdit: AccountId option)
-   (onSubmit: OrgCommandReceipt -> unit)
+   (onSubmit: ParentAccountCommandReceipt -> unit)
    =
    let transfersToRetry, setTransfersToRetry =
       React.useState<Deferred<DomesticTransfer list option>> Deferred.Idle
@@ -305,18 +314,18 @@ let RegisterTransferRecipientFormComponent
 
          FormContainer {|
             InitialValues = formProps
-            Form = form org recipient session.AsInitiator
+            Form = form org.Org recipient session.AsInitiator
             Action = None
             OnSubmit =
                function
-               | FormSubmitReceipt.Org receipt -> onSubmit receipt
+               | FormSubmitReceipt.ParentAccount receipt -> onSubmit receipt
                | _ -> ()
             Session = session
             ComponentName = "RegisterTransferRecipientForm"
             UseEventSubscription =
                Some [
-                  // Listen for recipient registered
-                  SignalREventProvider.EventType.Org
+                  // Listen for recipient registered/edited
+                  SignalREventProvider.EventType.ParentAccount
                ]
          |}
       | _ -> Html.progress []
