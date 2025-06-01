@@ -53,7 +53,7 @@ type AccountActionView =
       | RegisterTransferRecipient -> "Add a Transfer Recipient"
       | EditTransferRecipient _ -> "Edit a Transfer Recipient"
 
-type AccountBrowserQuery = {
+type TransactionBrowserQuery = {
    Accounts: (SelectedAccount list) option
    MoneyFlow: MoneyFlow option
    Category: CategoryFilter option
@@ -78,8 +78,8 @@ type AccountBrowserQuery = {
          EventType = x.EventType
       |}
 
-module AccountBrowserQuery =
-   let toQueryParams (query: AccountBrowserQuery) : (string * string) list =
+module TransactionBrowserQuery =
+   let toQueryParams (query: TransactionBrowserQuery) : (string * string) list =
       let agg =
          query.Amount
          |> Option.map AmountFilter.toQuery
@@ -157,7 +157,7 @@ module AccountBrowserQuery =
 
    let fromQueryParams
       (queryParams: (string * string) list)
-      : AccountBrowserQuery
+      : TransactionBrowserQuery
       =
       let queryParams = Map.ofList queryParams
 
@@ -234,7 +234,7 @@ module AccountBrowserQuery =
             |> Option.bind AccountEventGroupFilter.fromQueryString
       }
 
-   let empty: AccountBrowserQuery = {
+   let empty: TransactionBrowserQuery = {
       Category = None
       MoneyFlow = None
       Amount = None

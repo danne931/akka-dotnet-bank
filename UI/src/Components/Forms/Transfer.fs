@@ -602,7 +602,7 @@ let TransferFormComponent
                attr.text "No recipients.  Click here to create."
                attr.onClick (fun _ ->
                   {
-                     AccountBrowserQuery.empty with
+                     TransactionBrowserQuery.empty with
                         Action =
                            Some AccountActionView.RegisterTransferRecipient
                   }

@@ -439,7 +439,7 @@ let CardDetailComponent
             ]
             attr.onClick (fun _ ->
                {
-                  AccountBrowserQuery.empty with
+                  TransactionBrowserQuery.empty with
                      Date = Some UIDomain.DateFilter.Last30Days
                      SelectedCards =
                         Some [

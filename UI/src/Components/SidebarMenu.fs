@@ -118,10 +118,10 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                Href =
                   let query =
                      {
-                        AccountBrowserQuery.empty with
+                        TransactionBrowserQuery.empty with
                            Date = Some(UIDomain.DateFilter.Last7Days)
                      }
-                     |> AccountBrowserQuery.toQueryParams
+                     |> TransactionBrowserQuery.toQueryParams
                      |> Router.encodeQueryString
 
                   Router.formatPath [| Routes.TransactionsUrl.BasePath; query |]

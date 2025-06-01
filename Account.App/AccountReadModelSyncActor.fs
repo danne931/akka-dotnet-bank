@@ -23,19 +23,21 @@ module paeSqlMapper = ParentAccountEventSqlMapper
 module paeSqlWriter = ParentAccountEventSqlMapper.SqlWriter
 module paeFields = ParentAccountEventSqlMapper.Fields
 
+type private SqlParams = (string * SqlValue) list list
+
 type SqlParamsDerivedFromAccountEvents = {
-   AccountEvent: (string * SqlValue) list list
-   ParentAccountEvent: (string * SqlValue) list list
-   Payment: (string * SqlValue) list list
-   PlatformPayment: (string * SqlValue) list list
-   Transfer: (string * SqlValue) list list
-   InternalTransfer: (string * SqlValue) list list
-   DomesticTransfer: (string * SqlValue) list list
-   PartnerBankInitialized: (string * SqlValue) list list
-   BillingCycle: (string * SqlValue) list list
-   DomesticTransferRecipient: (string * SqlValue) list list
-   UpdatedDomesticTransferRecipientStatus: (string * SqlValue) list list
-   UpdatedDomesticTransferRecipientNickname: (string * SqlValue) list list
+   AccountEvent: SqlParams
+   ParentAccountEvent: SqlParams
+   Payment: SqlParams
+   PlatformPayment: SqlParams
+   Transfer: SqlParams
+   InternalTransfer: SqlParams
+   DomesticTransfer: SqlParams
+   PartnerBankInitialized: SqlParams
+   BillingCycle: SqlParams
+   DomesticTransferRecipient: SqlParams
+   UpdatedDomesticTransferRecipientStatus: SqlParams
+   UpdatedDomesticTransferRecipientNickname: SqlParams
 }
 
 let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [

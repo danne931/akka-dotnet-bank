@@ -152,7 +152,7 @@ let update msg state =
       },
       Cmd.none
    | EditTransferRecipient recipientId ->
-      let browserQuery = Routes.IndexUrl.accountBrowserQuery ()
+      let browserQuery = Routes.IndexUrl.transactionBrowserQuery ()
 
       let path =
          {
@@ -330,6 +330,7 @@ let renderTransactionInfo
                for t in txnInfo.Transaction.History do
                   Html.li [
                      match t with
+                     | History.ParentAccount _ -> ()
                      | History.Org orgHistory ->
                         match orgHistory.Event with
                         | OrgEvent.CommandApprovalRequested e ->
@@ -595,7 +596,7 @@ let TransactionDetailComponent
    classyNode Html.article [ "transaction-detail" ] [
       CloseButton.render (fun _ ->
          {
-            Routes.IndexUrl.accountBrowserQuery () with
+            Routes.IndexUrl.transactionBrowserQuery () with
                Transaction = None
          }
          |> Routes.TransactionsUrl.queryPath

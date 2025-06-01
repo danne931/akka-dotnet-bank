@@ -34,7 +34,7 @@ let networkQueryFromHistoryBrowserQuery
 
 let transactionQueryFromAccountBrowserQuery
    (orgId: OrgId)
-   (query: AccountBrowserQuery)
+   (query: TransactionBrowserQuery)
    : TransactionQuery
    =
    {
@@ -56,7 +56,7 @@ let transactionQueryFromAccountBrowserQuery
 let transactionQueryParams (query: TransactionQuery) : (string * string) list =
    let queryParams =
       ("pageLimit", string query.PageLimit)
-      :: AccountBrowserQuery.toQueryParams {
+      :: TransactionBrowserQuery.toQueryParams {
          Amount = query.Amount
          Category = query.Category
          MoneyFlow = query.MoneyFlow

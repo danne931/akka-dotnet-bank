@@ -48,7 +48,7 @@ type TransactionFilter =
 
 let navigation (view: AccountActionView option) =
    {
-      Routes.IndexUrl.accountBrowserQuery () with
+      Routes.IndexUrl.transactionBrowserQuery () with
          Action = view
    }
    |> Routes.TransactionsUrl.queryPath
@@ -111,7 +111,7 @@ let update msg state =
    match msg with
    | PaginationMsg msg -> handlePaginationMsg state msg
    | UpdateFilter filter ->
-      let browserQuery = Routes.IndexUrl.accountBrowserQuery ()
+      let browserQuery = Routes.IndexUrl.transactionBrowserQuery ()
 
       let browserQuery =
          match filter with
@@ -152,7 +152,7 @@ let update msg state =
    | ViewTransaction(txnId) ->
       let path =
          Routes.TransactionsUrl.queryPath {
-            Routes.IndexUrl.accountBrowserQuery () with
+            Routes.IndexUrl.transactionBrowserQuery () with
                Action = None
                Transaction = Some txnId
          }
@@ -182,7 +182,7 @@ let renderControlPanel
    (categories: Map<int, TransactionCategory>)
    (session: UserSession)
    =
-   let query = Routes.IndexUrl.accountBrowserQuery ()
+   let query = Routes.IndexUrl.transactionBrowserQuery ()
 
    TableControlPanelComponent {|
       FilterViewOptions = [
@@ -613,7 +613,7 @@ let TransactionDashboardComponent
    (url: Routes.TransactionsUrl)
    (session: UserSession)
    =
-   let browserQuery = Routes.IndexUrl.accountBrowserQuery ()
+   let browserQuery = Routes.IndexUrl.transactionBrowserQuery ()
 
    let txnQuery =
       TransactionService.transactionQueryFromAccountBrowserQuery
@@ -723,7 +723,7 @@ let TransactionDashboardComponent
                | _ -> Html.progress []
             ]
 
-            match orgCtx, Routes.IndexUrl.accountBrowserQuery().Action with
+            match orgCtx, Routes.IndexUrl.transactionBrowserQuery().Action with
             | Deferred.Resolved(Ok(Some org)), Some action ->
                renderForm session org action dispatch |> ScreenOverlay.Portal
             | _ ->

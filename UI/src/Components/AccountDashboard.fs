@@ -101,7 +101,7 @@ let renderAccounts (orgCtx: OrgProvider.State) =
 
                      attr.onClick (fun _ ->
                         {
-                           AccountBrowserQuery.empty with
+                           TransactionBrowserQuery.empty with
                               Accounts =
                                  Some [
                                     {

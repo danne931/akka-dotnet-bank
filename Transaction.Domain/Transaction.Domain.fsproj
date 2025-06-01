@@ -5,7 +5,8 @@
 
   <ItemGroup>
     <Compile Include="Transaction.fs" />
-    <Compile Include="Query.fs" />
+    <Compile Include="TransactionQuery.fs" />
+    <Compile Include="HistoryQuery.fs" />
   </ItemGroup>
 
   <ItemGroup>

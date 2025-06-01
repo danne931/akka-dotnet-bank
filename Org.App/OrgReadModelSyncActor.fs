@@ -9,26 +9,24 @@ open Lib.SharedTypes
 open Lib.Types
 open Lib.Postgres
 open Bank.Org.Domain
-open Bank.Transfer.Domain
 open Lib.ReadModelSyncActor
 open OrganizationSqlMapper
 open OrganizationEventSqlMapper
-open TransferSqlMapper
 open CommandApproval
 
+type private SqlParams = (string * SqlValue) list list
+
 type SqlParamsDerivedFromOrgEvents = {
-   OrgEvent: (string * SqlValue) list list
-   FeatureFlags: (string * SqlValue) list list
-   CommandApprovalRuleConfigured: (string * SqlValue) list list
-   CommandApprovalRuleDeleted: (string * SqlValue) list list
-   CommandApprovalRuleConfiguredWithAmountDailyLimit:
-      (string * SqlValue) list list
-   CommandApprovalRuleConfiguredWithAmountPerCommand:
-      (string * SqlValue) list list
-   CommandApprovalRequested: (string * SqlValue) list list
-   CommandApprovalAcquired: (string * SqlValue) list list
-   CommandApprovalDeclined: (string * SqlValue) list list
-   CommandApprovalTerminated: (string * SqlValue) list list
+   OrgEvent: SqlParams
+   FeatureFlags: SqlParams
+   CommandApprovalRuleConfigured: SqlParams
+   CommandApprovalRuleDeleted: SqlParams
+   CommandApprovalRuleConfiguredWithAmountDailyLimit: SqlParams
+   CommandApprovalRuleConfiguredWithAmountPerCommand: SqlParams
+   CommandApprovalRequested: SqlParams
+   CommandApprovalAcquired: SqlParams
+   CommandApprovalDeclined: SqlParams
+   CommandApprovalTerminated: SqlParams
 }
 
 let sqlParamReducer

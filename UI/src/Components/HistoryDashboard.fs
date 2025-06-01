@@ -151,7 +151,7 @@ let renderTableRow (org: OrgWithAccountProfiles) (history: History) =
             e.preventDefault ()
 
             let query = {
-               UIDomain.Account.AccountBrowserQuery.empty with
+               UIDomain.Account.TransactionBrowserQuery.empty with
                   Transaction = Some txnId
             }
 

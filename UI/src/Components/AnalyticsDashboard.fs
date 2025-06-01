@@ -535,7 +535,7 @@ let txnsButton (flow: MoneyFlow) (selectedTopNMonth: DateTime) =
 
       attr.onClick (fun _ ->
          {
-            AccountBrowserQuery.empty with
+            TransactionBrowserQuery.empty with
                MoneyFlow = Some flow
                Date = Some filter
          }

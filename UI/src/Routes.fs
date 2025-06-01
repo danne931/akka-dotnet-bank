@@ -104,16 +104,16 @@ module ApprovalsUrl =
 [<RequireQualifiedAccess>]
 type TransactionsUrl =
    | Transactions
-   | TransactionsWithQuery of AccountBrowserQuery
+   | TransactionsWithQuery of TransactionBrowserQuery
    | NotFound
 
 module TransactionsUrl =
    [<Literal>]
    let BasePath = "transactions"
 
-   let queryPath (query: AccountBrowserQuery) = [|
+   let queryPath (query: TransactionBrowserQuery) = [|
       BasePath
-      query |> AccountBrowserQuery.toQueryParams |> Router.encodeQueryString
+      query |> TransactionBrowserQuery.toQueryParams |> Router.encodeQueryString
    |]
 
    let parse =
@@ -122,7 +122,7 @@ module TransactionsUrl =
       | [] -> TransactionsUrl.Transactions
       // ?action=deposit&isCategorized=false&date=Last30Days
       | [ Route.Query queryParams ] ->
-         let query = AccountBrowserQuery.fromQueryParams queryParams
+         let query = TransactionBrowserQuery.fromQueryParams queryParams
          TransactionsUrl.TransactionsWithQuery query
       | _ -> TransactionsUrl.NotFound
 
@@ -259,13 +259,13 @@ module IndexUrl =
 
    let current () = Router.currentUrl () |> parse
 
-   let accountBrowserQuery () =
+   let transactionBrowserQuery () =
       match current () with
       | IndexUrl.Transactions url ->
          match url with
          | TransactionsUrl.TransactionsWithQuery query -> query
-         | _ -> AccountBrowserQuery.empty
-      | _ -> AccountBrowserQuery.empty
+         | _ -> TransactionBrowserQuery.empty
+      | _ -> TransactionBrowserQuery.empty
 
    let employeeBrowserQuery () =
       match current () with

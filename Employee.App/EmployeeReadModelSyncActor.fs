@@ -15,9 +15,11 @@ open EmployeeSqlMapper
 open EmployeeEventSqlMapper
 open CardSqlMapper
 
+type private SqlParams = (string * SqlValue) list list
+
 type SqlParamsDerivedFromEmployeeEvents = {
-   Card: (string * SqlValue) list list
-   EmployeeEvent: (string * SqlValue) list list
+   Card: SqlParams
+   EmployeeEvent: SqlParams
 }
 
 let private cardReducer
