@@ -129,6 +129,7 @@ let form
                      LinkedAccountId = accountId
                      DailyPurchaseLimit = dailyPurchaseLimit
                      MonthlyPurchaseLimit = monthlyPurchaseLimit
+                     CardType = CardType.Debit
                   }
 
                onSubmit role cardInfo fName lName email)

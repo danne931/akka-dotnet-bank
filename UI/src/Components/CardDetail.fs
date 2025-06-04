@@ -330,10 +330,15 @@ let CardDetailComponent
          Html.small " "
          Html.small [
             attr.text $"({card.Card.Status})"
-            match card.Card.Status with
-            | CardStatus.Frozen
-            | CardStatus.Closed -> attr.style [ style.color "var(--del-color)" ]
-            | CardStatus.Active -> attr.style [ style.color "var(--primary)" ]
+
+            let color =
+               match card.Card.Status with
+               | CardStatus.Frozen _
+               | CardStatus.Closed -> "var(--del-color)"
+               | CardStatus.Pending -> "var(--secondary)"
+               | CardStatus.Active _ -> "var(--primary)"
+
+            attr.style [ style.color color ]
          ]
       ]
 
@@ -386,7 +391,7 @@ let CardDetailComponent
 
       classyNode Html.div [ "grid"; "card-detail-menu" ] [
          match card.Card.Status with
-         | CardStatus.Active ->
+         | CardStatus.Active _ ->
             Html.div [
                attr.role "button"
                attr.classes [ "outline" ]
@@ -397,7 +402,7 @@ let CardDetailComponent
                attr.onClick (fun _ ->
                   dispatch <| Msg.ShowCardLockConfirmation lockCardMsg)
             ]
-         | CardStatus.Frozen ->
+         | CardStatus.Frozen _ ->
             let cardUnlockInProgress =
                org.Org.CommandApprovalProgress
                |> Map.exists (fun _ p ->
@@ -428,6 +433,7 @@ let CardDetailComponent
                         WillLock = false
                   })
             ]
+         | CardStatus.Pending -> ()
          | CardStatus.Closed -> ()
 
          Html.div [

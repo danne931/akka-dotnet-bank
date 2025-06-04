@@ -144,8 +144,6 @@ builder.Services.AddAkka(
                      persistenceId
                      (provider.GetRequiredService<SignalRBroadcast>())
                      (AppSaga.getEntityRef system)
-                     (OrgActor.get system)
-                     EmailConsumerActor.getProducer
 
                props),
             ClusterMetadata.employeeShardRegion.messageExtractor,

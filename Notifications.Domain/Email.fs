@@ -22,6 +22,15 @@ type EmployeeInviteEmailInfo = {
    Token: InviteToken
 }
 
+type EmployeeOnboardingFailInfo = { Name: string; Reason: string }
+
+type CardSetupSuccessEmailInfo = {
+   EmployeeName: string
+   EmployeeEmail: Email
+}
+
+type CardSetupFailEmailInfo = { EmployeeName: string; Reason: string }
+
 type InternalTransferBetweenOrgsEmailInfo = {
    SenderAccountName: string
    RecipientBusinessName: string
@@ -81,6 +90,9 @@ type EmailInfo =
    | DomesticTransfer of DomesticTransferEmailInfo
    | ApplicationErrorRequiresSupport of error: string
    | EmployeeInvite of EmployeeInviteEmailInfo
+   | EmployeeOnboardingFail of EmployeeOnboardingFailInfo
+   | CardSetupSuccess of CardSetupSuccessEmailInfo
+   | CardSetupFail of CardSetupFailEmailInfo
 
 type EmailMessage = {
    OrgId: OrgId

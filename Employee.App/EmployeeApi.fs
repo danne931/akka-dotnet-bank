@@ -84,13 +84,21 @@ let getEmployee (id: EmployeeId) =
       (Some [ "id", Writer.employeeId id ])
       Reader.employee
 
-let employeeReadyForInviteConfirmation
+let private employeeReadyForInviteConfirmation
    (em: Employee)
-   : (Employee * InviteToken) option
+   : EmployeePendingInviteConfirmation option
    =
    match em.Status with
-   | EmployeeStatus.PendingInviteConfirmation token when not (token.IsExpired()) ->
-      Some(em, token)
+   | EmployeeStatus.PendingInviteConfirmation info when
+      not (info.Token.IsExpired())
+      ->
+      Some {
+         Email = em.Email
+         Name = em.Name
+         InviteConfirmation = info
+         EmployeeId = em.EmployeeId
+         OrgId = em.OrgId
+      }
    | _ -> None
 
 let getEmployeeByInviteToken (token: Guid) = taskResult {
@@ -258,7 +266,7 @@ let getCards (orgId: OrgId) (query: CardQuery) =
            {table}.{Fields.accountId},
            {table}.{Fields.cardType},
            {table}.{Fields.isVirtual},
-           {table}.{Fields.status},
+           {table}.{Fields.statusDetail},
            {table}.{Fields.expYear},
            {table}.{Fields.expMonth},
            {table}.{Fields.lastPurchaseAt},

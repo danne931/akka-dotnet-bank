@@ -19,6 +19,7 @@ type CreatedEmployee = {
    LastName: string
    OrgRequiresEmployeeInviteApproval: CommandApprovalRuleId option
    CardInfo: EmployeeInviteSupplementaryCardInfo option
+   InviteToken: InviteToken
 }
 
 type InvitationConfirmed = {
@@ -35,6 +36,12 @@ type InvitationTokenRefreshed = {
 type InvitationCancelled = { Reason: string option }
 
 type CreatedCard = { PersonName: string; Card: Card }
+
+type ThirdPartyProviderCardLinked = {
+   CardId: CardId
+   ProviderCardId: ThirdPartyProviderCardId
+   CardNumberLast4: string
+}
 
 type PurchaseApplied = { Info: PurchaseInfo }
 
@@ -95,4 +102,5 @@ type AccessApproved = {
 type AccessRestored = {
    Name: string
    Reference: string option
+   InviteToken: InviteToken
 }

@@ -5,6 +5,15 @@ open Validus
 
 open Lib.SharedTypes
 
+type ThirdPartyProviderCardId =
+   | ThirdPartyProviderCardId of Guid
+
+   override x.ToString() =
+      let (ThirdPartyProviderCardId id) = x
+      string id
+
+   static member get(ThirdPartyProviderCardId id) = id
+
 type EmployeeReference = {
    EmployeeName: string
    EmployeeId: EmployeeId
@@ -29,33 +38,33 @@ type CardType =
       | None -> failwith "Error attempting to cast string to CardType"
       | Some status -> status
 
+type ActiveCardDetail = {
+   ThirdPartyProviderCardId: ThirdPartyProviderCardId
+}
+
+[<RequireQualifiedAccess>]
+type CardFrozenReason =
+   | UserRequested
+   | SuspectedFraud
+
+type FrozenCardDetail = {
+   ThirdPartyProviderCardId: ThirdPartyProviderCardId
+   Reason: CardFrozenReason
+}
+
 [<RequireQualifiedAccess>]
 type CardStatus =
-   //| Pending
-   | Active
-   | Frozen
+   | Pending
+   | Active of ActiveCardDetail
+   | Frozen of FrozenCardDetail
    | Closed
 
    override x.ToString() =
       match x with
-      | Active -> "Active"
-      | Frozen -> "Frozen"
+      | Pending -> "Pending"
+      | Active _ -> "Active"
+      | Frozen _ -> "Frozen"
       | Closed -> "Closed"
-
-   static member fromString(status: string) : CardStatus option =
-      if String.IsNullOrEmpty status then
-         None
-      else
-         match status.ToLower() with
-         | "active" -> Some Active
-         | "frozen" -> Some Frozen
-         | "closed" -> Some Closed
-         | _ -> None
-
-   static member fromStringUnsafe(status: string) : CardStatus =
-      match CardStatus.fromString status with
-      | None -> failwith "Error attempting to cast string to CardStatus"
-      | Some status -> status
 
 type CardExpiration = { Month: int; Year: int }
 
@@ -81,6 +90,16 @@ type Card = {
    member x.IsExpired() =
       DateTime(x.Expiration.Year, x.Expiration.Month, 1) <= DateTime.UtcNow
 
+   member x.IsPending =
+      match x.Status with
+      | CardStatus.Pending -> true
+      | _ -> false
+
+   member x.IsFrozen =
+      match x.Status with
+      | CardStatus.Frozen detail -> Some detail.Reason
+      | _ -> None
+
    member x.Display =
       $"""
       {x.CardNickname |> Option.defaultValue ""}
@@ -98,6 +117,7 @@ type EmployeeInviteSupplementaryCardInfo = {
    DailyPurchaseLimit: decimal
    MonthlyPurchaseLimit: decimal
    LinkedAccountId: AccountId
+   CardType: CardType
 }
 
 type InviteToken = {
@@ -119,6 +139,19 @@ type InviteApproval = {
    ProgressId: CommandApprovalProgressId
 }
 
+type PendingInviteConfirmation = {
+   Token: InviteToken
+   CorrelationId: CorrelationId
+}
+
+type EmployeePendingInviteConfirmation = {
+   Email: Email
+   Name: string
+   InviteConfirmation: PendingInviteConfirmation
+   EmployeeId: EmployeeId
+   OrgId: OrgId
+}
+
 [<RequireQualifiedAccess>]
 type EmployeeStatus =
    | InitialEmptyState
@@ -126,7 +159,7 @@ type EmployeeStatus =
    | PendingInviteApproval of InviteApproval
    /// Approval obtained (or no approval rule configured) so employee is ready
    /// for invite email.
-   | PendingInviteConfirmation of InviteToken
+   | PendingInviteConfirmation of PendingInviteConfirmation
    /// Employee has confirmed their invitation.
    | Active
    | Closed
@@ -152,9 +185,6 @@ type EmployeeStatus =
       | Closed -> "Closed"
       | PendingRestoreAccessApproval -> "PendingRestoreAccessApproval"
       | ReadyForDelete -> "ReadyForDelete"
-
-/// Tasks to initiate upon employee invite confirmation.
-type EmployeeOnboardingTask = CreateCard of EmployeeInviteSupplementaryCardInfo
 
 type UserSession = {
    OrgId: OrgId

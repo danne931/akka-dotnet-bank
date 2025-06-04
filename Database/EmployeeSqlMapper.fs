@@ -22,7 +22,6 @@ module EmployeeFields =
    let cards = "cards"
    let status = "status"
    let statusDetail = "status_detail"
-   let onboardingTasks = "onboarding_tasks"
    let searchQuery = "search_query"
    let inviteToken = "invite_token"
    let inviteExpiration = "invite_expiration"
@@ -61,10 +60,6 @@ module EmployeeSqlReader =
       read.text EmployeeFields.statusDetail
       |> Serialization.deserializeUnsafe<EmployeeStatus>
 
-   let onboardingTasks (read: RowReader) =
-      read.text EmployeeFields.onboardingTasks
-      |> Serialization.deserializeUnsafe<EmployeeOnboardingTask list>
-
    let authProviderUserId (read: RowReader) =
       read.uuidOrNone EmployeeFields.authProviderUserId
 
@@ -77,7 +72,6 @@ module EmployeeSqlReader =
       LastName = lastName read
       Cards = cards read |> List.map (fun o -> o.CardId, o) |> Map.ofList
       Status = statusDetail read
-      OnboardingTasks = onboardingTasks read
       AuthProviderUserId = authProviderUserId read
    }
 
@@ -106,22 +100,19 @@ module EmployeeSqlWriter =
    let statusDetail (status: EmployeeStatus) =
       status |> Serialization.serialize |> Sql.jsonb
 
-   let onboardingTasks (tasks: EmployeeOnboardingTask list) =
-      tasks |> Serialization.serialize |> Sql.jsonb
-
    let inviteToken = Sql.uuidOrNone
    let inviteExpiration (date: DateTime option) = Sql.timestamptzOrNone date
 
    let inviteTokenFromStatus (status: EmployeeStatus) =
       match status with
-      | EmployeeStatus.PendingInviteConfirmation token ->
-         inviteToken (Some token.Token)
+      | EmployeeStatus.PendingInviteConfirmation invite ->
+         inviteToken (Some invite.Token.Token)
       | _ -> inviteToken None
 
    let inviteExpirationFromStatus (status: EmployeeStatus) =
       match status with
-      | EmployeeStatus.PendingInviteConfirmation token ->
-         inviteExpiration (Some token.Expiration)
+      | EmployeeStatus.PendingInviteConfirmation invite ->
+         inviteExpiration (Some invite.Token.Expiration)
       | _ -> inviteExpiration None
 
    let authProviderUserId = Sql.uuidOrNone

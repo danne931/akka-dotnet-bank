@@ -14,11 +14,11 @@ open Lib.Types
 open ActorUtil
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Bank.Org.Domain
-open CommandApproval
 open SignalRBroadcast
-open Email
 open Lib.Saga
+open PurchaseSaga
+open EmployeeOnboardingSaga
+open CardSetupSaga
 
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
@@ -62,39 +62,146 @@ let private handleValidationError
    | Some(purchaseInfo, reason) ->
       let msg =
          (purchaseInfo, reason)
-         |> PurchaseSaga.PurchaseSagaStartEvent.PurchaseRejectedByCard
-         |> PurchaseSaga.PurchaseSagaEvent.Start
+         |> PurchaseSagaStartEvent.PurchaseRejectedByCard
+         |> PurchaseSagaEvent.Start
          |> AppSaga.Event.Purchase
          |> AppSaga.sagaMessage purchaseInfo.OrgId purchaseInfo.CorrelationId
 
       getSagaRef cmd.Envelope.CorrelationId <! msg
    | None -> ()
 
-let supplementaryCardInfoToCreateCardCommand
+let private onPersist
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (mailbox: Eventsourced<obj>)
    (employee: Employee)
-   (initiatedBy: Initiator)
-   (info: EmployeeInviteSupplementaryCardInfo)
+   evt
    =
-   CreateCardCommand.create {
-      AccountId = info.LinkedAccountId
-      DailyPurchaseLimit = Some info.DailyPurchaseLimit
-      MonthlyPurchaseLimit = Some info.MonthlyPurchaseLimit
-      PersonName = employee.Name
-      CardNickname = None
-      OrgId = employee.OrgId
-      EmployeeId = employee.EmployeeId
-      CardId = CardId <| Guid.NewGuid()
-      Virtual = true
-      CardType = CardType.Debit
-      InitiatedBy = initiatedBy
-   }
-   |> EmployeeCommand.CreateCard
+   match evt with
+   | EmployeeEvent.CreatedAccountOwner e ->
+      let msg =
+         EmployeeOnboardingSagaStartEvent.AccountOwnerCreated e
+         |> EmployeeOnboardingSagaEvent.Start
+         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.CreatedEmployee e ->
+      let msg =
+         EmployeeOnboardingSagaStartEvent.EmployeeCreated e
+         |> EmployeeOnboardingSagaEvent.Start
+         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.AccessApproved e ->
+      let msg =
+         EmployeeOnboardingSagaEvent.AccessApproved
+         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.AccessRestored e ->
+      let msg =
+         EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored {|
+            Event = e
+            EmployeeEmail = employee.Email
+            EmployeeName = employee.Name
+            InviteToken = e.Data.InviteToken
+         |}
+         |> EmployeeOnboardingSagaEvent.Start
+         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.InvitationTokenRefreshed e ->
+      let msg =
+         e.Data.InviteToken
+         |> EmployeeOnboardingSagaEvent.InviteTokenRefreshed
+         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.InvitationConfirmed e ->
+      let msg =
+         EmployeeOnboardingSagaEvent.InviteConfirmed
+         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.CreatedCard e ->
+      match e.Data.Card.Status with
+      | CardStatus.Pending ->
+         let start: CardSetupSagaStartEvent = {
+            Event = e
+            EmployeeName = employee.Name
+            EmployeeEmail = employee.Email
+         }
+
+         let msg =
+            start
+            |> CardSetupSagaEvent.Start
+            |> AppSaga.Event.CardSetup
+            |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+         getSagaRef e.CorrelationId <! msg
+      | CardStatus.Active _ ->
+         let msg =
+            EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee
+            |> AppSaga.Event.EmployeeOnboarding
+            |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+         getSagaRef e.CorrelationId <! msg
+      | _ -> ()
+   | EmployeeEvent.UpdatedRole e ->
+      match e.Data.CardInfo with
+      | Some info ->
+         let msg =
+            CreateCardCommand.create {
+               AccountId = info.LinkedAccountId
+               DailyPurchaseLimit = Some info.DailyPurchaseLimit
+               MonthlyPurchaseLimit = Some info.MonthlyPurchaseLimit
+               PersonName = employee.Name
+               CardNickname = None
+               OrgId = e.OrgId
+               EmployeeId = employee.EmployeeId
+               CardId = CardId <| Guid.NewGuid()
+               ProviderCardId = None
+               Virtual = true
+               CardType = CardType.Debit
+               InitiatedBy = e.InitiatedBy
+            }
+            |> EmployeeCommand.CreateCard
+            |> EmployeeMessage.StateChange
+
+         mailbox.Parent() <! msg
+      | None -> ()
+   | EmployeeEvent.ThirdPartyProviderCardLinked e ->
+      let msg =
+         CardSetupSagaEvent.ProviderCardIdLinked
+         |> AppSaga.Event.CardSetup
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.PurchaseApplied e ->
+      let msg =
+         PurchaseSagaStartEvent.DeductedCardFunds e.Data.Info
+         |> PurchaseSagaEvent.Start
+         |> AppSaga.Event.Purchase
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.PurchaseRefunded e ->
+      let msg =
+         PurchaseSagaEvent.PurchaseRefundedToCard
+         |> AppSaga.Event.Purchase
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | _ -> ()
 
 let actorProps
    (broadcaster: SignalRBroadcast)
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
-   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -111,16 +218,6 @@ let actorProps
          let handleValidationError =
             handleValidationError broadcaster mailbox getSagaRef employee
 
-         let employeeInviteMsg corrId token =
-            EmailMessage.create
-               employee.OrgId
-               corrId
-               (EmailInfo.EmployeeInvite {
-                  Name = employee.Name
-                  Email = employee.Email
-                  Token = token
-               })
-
          match box msg with
          | Persisted mailbox e ->
             let (EmployeeMessage.Event evt) = unbox e
@@ -129,83 +226,7 @@ let actorProps
 
             broadcaster.employeeEventPersisted evt employee
 
-            match evt with
-            | EmployeeEvent.CreatedAccountOwner e ->
-               getEmailActor mailbox.System
-               <! employeeInviteMsg e.CorrelationId e.Data.InviteToken
-            | EmployeeEvent.CreatedEmployee e ->
-               match employee.Status with
-               | EmployeeStatus.PendingInviteApproval _ ->
-                  let orgId = employee.OrgId
-
-                  let cmd =
-                     ApproveAccessCommand.create
-                        employee.CompositeId
-                        e.InitiatedBy
-                        e.CorrelationId
-                        {
-                           Name = employee.Name
-                           Reference = None
-                        }
-                     |> InviteEmployee
-                     |> ApprovableCommand.PerCommand
-
-                  getOrgRef orgId <! OrgMessage.ApprovableRequest cmd
-               | EmployeeStatus.PendingInviteConfirmation token ->
-                  getEmailActor mailbox.System
-                  <! employeeInviteMsg e.CorrelationId token
-               | _ -> ()
-            | EmployeeEvent.AccessApproved e ->
-               getEmailActor mailbox.System
-               <! employeeInviteMsg e.CorrelationId e.Data.InviteToken
-            | EmployeeEvent.AccessRestored e ->
-               match employee.Status with
-               | EmployeeStatus.PendingInviteConfirmation token ->
-                  getEmailActor mailbox.System
-                  <! employeeInviteMsg e.CorrelationId token
-               | _ -> ()
-            | EmployeeEvent.InvitationTokenRefreshed e ->
-               getEmailActor mailbox.System
-               <! employeeInviteMsg e.CorrelationId e.Data.InviteToken
-            | EmployeeEvent.InvitationConfirmed e ->
-               for task in employee.OnboardingTasks do
-                  match task with
-                  | EmployeeOnboardingTask.CreateCard info ->
-                     let cmd =
-                        supplementaryCardInfoToCreateCardCommand
-                           employee
-                           e.InitiatedBy
-                           info
-
-                     mailbox.Parent() <! (EmployeeMessage.StateChange cmd)
-            | EmployeeEvent.UpdatedRole e ->
-               match e.Data.CardInfo with
-               | Some info ->
-                  let cmd =
-                     supplementaryCardInfoToCreateCardCommand
-                        employee
-                        e.InitiatedBy
-                        info
-
-                  mailbox.Parent() <! (EmployeeMessage.StateChange cmd)
-               | None -> ()
-            | EmployeeEvent.PurchaseApplied e ->
-               let msg =
-                  e.Data.Info
-                  |> PurchaseSaga.PurchaseSagaStartEvent.DeductedCardFunds
-                  |> PurchaseSaga.PurchaseSagaEvent.Start
-                  |> AppSaga.Event.Purchase
-                  |> AppSaga.sagaMessage e.OrgId e.CorrelationId
-
-               getSagaRef e.CorrelationId <! msg
-            | EmployeeEvent.PurchaseRefunded e ->
-               let msg =
-                  PurchaseSaga.PurchaseSagaEvent.PurchaseRefundedToCard
-                  |> AppSaga.Event.Purchase
-                  |> AppSaga.sagaMessage e.OrgId e.CorrelationId
-
-               getSagaRef e.CorrelationId <! msg
-            | _ -> ()
+            onPersist getSagaRef mailbox employee evt
 
             return! loop <| Some state
          | :? SnapshotOffer as o -> return! loop <| Some(unbox o.Snapshot)
@@ -291,11 +312,9 @@ let initProps
    (persistenceId: string)
    (broadcaster: SignalRBroadcast)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    =
    persistenceSupervisor
       supervisorOpts
       isPersistableMessage
-      (actorProps broadcaster getOrgRef getSagaRef getEmailActor)
+      (actorProps broadcaster getSagaRef)
       persistenceId

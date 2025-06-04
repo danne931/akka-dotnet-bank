@@ -97,6 +97,7 @@ module CreateEmployeeCommand =
                OrgRequiresEmployeeInviteApproval =
                   input.OrgRequiresEmployeeInviteApproval
                CardInfo = input.CardInfo
+               InviteToken = InviteToken.generate ()
             }
       }
 
@@ -108,12 +109,13 @@ module RefreshInvitationTokenCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
       (initiatedBy: Initiator)
+      (correlationId: CorrelationId)
       (data: RefreshInvitationTokenInput)
       =
       Command.create
          (EmployeeId.toEntityId employeeId)
          orgId
-         (CorrelationId.create ())
+         correlationId
          initiatedBy
          data
 
@@ -141,6 +143,7 @@ type CreateCardInput = {
    OrgId: OrgId
    EmployeeId: EmployeeId
    CardId: CardId
+   ProviderCardId: ThirdPartyProviderCardId option
 }
 
 type CreateCardCommand = Command<CreateCardInput>
@@ -190,13 +193,55 @@ module CreateCardCommand =
                   DailyPurchaseLimit = dailyPurchaseLimit
                   MonthlyPurchaseLimit = monthlyPurchaseLimit
                   Virtual = input.Virtual
-                  Status = CardStatus.Active
+                  Status =
+                     match input.ProviderCardId with
+                     | Some id ->
+                        CardStatus.Active { ThirdPartyProviderCardId = id }
+                     | None -> CardStatus.Pending
                   CardType = input.CardType
                   Expiration = CardExpiration.create ()
                   LastPurchaseAt = None
                }
             }
       }
+
+type LinkThirdPartyProviderCardInput = {
+   CardId: CardId
+   ProviderCardId: ThirdPartyProviderCardId
+   CardNumberLast4: string
+   OrgId: OrgId
+   EmployeeId: EmployeeId
+   InitiatedBy: Initiator
+   CorrelationId: CorrelationId
+}
+
+type LinkThirdPartyProviderCardCommand =
+   Command<LinkThirdPartyProviderCardInput>
+
+module LinkThirdPartyProviderCardCommand =
+   let create (data: LinkThirdPartyProviderCardInput) =
+      Command.create
+         (EmployeeId.toEntityId data.EmployeeId)
+         data.OrgId
+         data.CorrelationId
+         data.InitiatedBy
+         data
+
+   let toEvent
+      (cmd: LinkThirdPartyProviderCardCommand)
+      : ValidationResult<BankEvent<ThirdPartyProviderCardLinked>>
+      =
+      BankEvent.create2<
+         LinkThirdPartyProviderCardInput,
+         ThirdPartyProviderCardLinked
+       >
+         cmd
+         {
+            CardId = cmd.Data.CardId
+            ProviderCardId = cmd.Data.ProviderCardId
+            CardNumberLast4 = cmd.Data.CardNumberLast4
+         }
+      |> Ok
 
 type PurchaseCommand = Command<PurchaseInfo>
 
@@ -420,12 +465,13 @@ module ConfirmInvitationCommand =
    let create
       (initiatedBy: Initiator)
       (orgId: OrgId)
+      (correlationId: CorrelationId)
       (data: InvitationConfirmed)
       =
       Command.create
          (initiatedBy.Id |> InitiatedById.toEmployeeId |> EmployeeId.toEntityId)
          orgId
-         (CorrelationId.create ())
+         correlationId
          initiatedBy
          data
 

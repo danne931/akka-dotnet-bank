@@ -185,6 +185,7 @@ let update
             RestoreAccessCommand.create employee.CompositeId session.AsInitiator {
                Name = employee.Name
                Reference = None
+               InviteToken = InviteToken.generate ()
             }
             |> EmployeeCommand.RestoreAccess
 

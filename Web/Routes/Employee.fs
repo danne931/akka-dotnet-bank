@@ -130,8 +130,8 @@ let startEmployeeRoutes (app: WebApplication) =
          Func<ActorSystem, Employee, HttpContext, Task<IResult>>
             (fun sys employee context -> task {
                match employee.Status with
-               | EmployeeStatus.PendingInviteConfirmation token ->
-                  if token.IsExpired() then
+               | EmployeeStatus.PendingInviteConfirmation invite ->
+                  if invite.Token.IsExpired() then
                      let initiator = {
                         Id =
                            context.Session.GetString("EmployeeId")
@@ -145,6 +145,7 @@ let startEmployeeRoutes (app: WebApplication) =
                         RefreshInvitationTokenCommand.create
                            employee.CompositeId
                            initiator
+                           invite.CorrelationId
                            { Reason = None }
                         |> EmployeeCommand.RefreshInvitationToken
 
@@ -155,11 +156,11 @@ let startEmployeeRoutes (app: WebApplication) =
                      let msg =
                         EmailMessage.create
                            employee.OrgId
-                           (Guid.NewGuid() |> CorrelationId)
+                           invite.CorrelationId
                            (EmailInfo.EmployeeInvite {
                               Name = employee.Name
                               Email = employee.Email
-                              Token = token
+                              Token = invite.Token
                            })
 
                      EmailConsumerActor.getProducerProxy sys <! msg

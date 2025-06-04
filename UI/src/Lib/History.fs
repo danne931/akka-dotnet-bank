@@ -142,6 +142,12 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
          Info =
             $"Created card **{e.Data.Card.CardNumberLast4} for {txn.EmployeeName}"
      }
+   | EmployeeEvent.ThirdPartyProviderCardLinked e -> {
+      props with
+         Name = "Provider Card Linked"
+         Info =
+            $"Provider card linked to **{e.Data.CardNumberLast4} for {txn.EmployeeName}"
+     }
    | EmployeeEvent.CreatedAccountOwner _ -> {
       props with
          Name = "Account Owner Created"

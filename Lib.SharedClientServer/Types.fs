@@ -323,6 +323,7 @@ type EmployeeStateTransitionError =
    | EmployeeNotActive
    | EmployeeStatusDisallowsInviteProgression of string
    | CardNotFound
+   | CardPending
    | CardLocked
    | CardExpired
    | ExceededDailyDebit of limit: decimal * accrued: decimal
@@ -409,7 +410,7 @@ type Err =
          | AccountStateTransitionError.ExceededDailyInternalTransferLimit limit ->
             $"Exceeded Daily Internal Transfer Limit ${limit}"
          | AccountStateTransitionError.ExceededDailyDomesticTransferLimit limit ->
-            $"Exceeded Daily Internal Transfer Limit ${limit}"
+            $"Exceeded Daily Domestic Transfer Limit ${limit}"
          | AccountStateTransitionError.InsufficientBalance(balance, accountName) ->
             $"Insufficient Balance ${balance} for {accountName}"
          | AccountStateTransitionError.TransferExpectedToOccurWithinOrg ->
@@ -432,6 +433,7 @@ type Err =
             "Employee Not Active"
          | EmployeeStateTransitionError.EmployeeNotReadyToActivate ->
             "Employee Not Ready to Activate"
+         | EmployeeStateTransitionError.CardPending -> "Card Pending"
          | EmployeeStateTransitionError.CardExpired -> "Card Expired"
          | EmployeeStateTransitionError.CardLocked -> "Card Locked"
          | EmployeeStateTransitionError.CardNotFound -> "Card Not Found"

@@ -97,6 +97,7 @@ let private form
             PersonName = employee.Name
             CardNickname = Some nickname
             CardId = Guid.NewGuid() |> CardId
+            ProviderCardId = None
             DailyPurchaseLimit = Some dailyPurchaseLimit
             MonthlyPurchaseLimit = Some monthlyPurchaseLimit
             Virtual = true //isVirtual

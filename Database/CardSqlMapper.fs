@@ -21,11 +21,13 @@ module CardFields =
    let isVirtual = "virtual"
    let cardType = "card_type"
    let status = "card_status"
+   let statusDetail = "card_status_detail"
    let cardNickname = "card_nickname"
    let lastPurchaseAt = "last_purchase_at"
    let expMonth = "exp_month"
    let expYear = "exp_year"
    let cardId = "card_id"
+   let thirdPartyProviderCardId = "third_party_provider_card_id"
    let employeeId = EmployeeFields.employeeId
    let accountId = AccountFields.accountId
    let orgId = OrgFields.orgId
@@ -45,8 +47,9 @@ module CardSqlReader =
    let cardType (read: RowReader) =
       read.string CardFields.cardType |> CardType.fromStringUnsafe
 
-   let status (read: RowReader) =
-      read.string CardFields.status |> CardStatus.fromStringUnsafe
+   let statusDetail (read: RowReader) =
+      read.text CardFields.statusDetail
+      |> Serialization.deserializeUnsafe<CardStatus>
 
    let isVirtual (read: RowReader) = read.bool CardFields.isVirtual
 
@@ -76,7 +79,7 @@ module CardSqlReader =
       AccountId = accountId read
       CardType = cardType read
       Virtual = isVirtual read
-      Status = status read
+      Status = statusDetail read
       Expiration = {
          Month = expMonth read
          Year = expYear read
@@ -85,9 +88,16 @@ module CardSqlReader =
    }
 
 module CardSqlWriter =
-   let cardId (cardId: CardId) =
-      let (CardId id) = cardId
-      Sql.uuid id
+   let cardId (CardId id) = Sql.uuid id
+
+   let thirdPartyProviderCardId (status: CardStatus) =
+      let cardIdOpt =
+         match status with
+         | CardStatus.Active detail -> Some detail.ThirdPartyProviderCardId
+         | CardStatus.Frozen detail -> Some detail.ThirdPartyProviderCardId
+         | _ -> None
+
+      cardIdOpt |> Option.map ThirdPartyProviderCardId.get |> Sql.uuidOrNone
 
    let orgId = OrgSqlWriter.orgId
    let employeeId = EmployeeSqlWriter.employeeId
@@ -99,6 +109,10 @@ module CardSqlWriter =
    let cardNumberLast4 = Sql.string
 
    let status (status: CardStatus) = Sql.string (string status)
+
+   let statusDetail (status: CardStatus) =
+      status |> Serialization.serialize |> Sql.jsonb
+
    let cardType (cardType: CardType) = Sql.string (string cardType)
 
    let isVirtual = Sql.bool

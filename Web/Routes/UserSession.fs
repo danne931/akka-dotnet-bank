@@ -22,19 +22,19 @@ let private getValidInviteFromQuery (token: string) = taskResultOption {
 
 let private authorizeInvite
    (system: ActorSystem)
-   (employee: Employee)
-   (authProviderEmail: Email)
+   (invite: EmployeePendingInviteConfirmation)
    (authProviderUserId: Guid)
    =
    let cmd =
       ConfirmInvitationCommand.create
          {
-            Name = employee.Name
-            Id = InitiatedById employee.EmployeeId
+            Name = invite.Name
+            Id = InitiatedById invite.EmployeeId
          }
-         employee.OrgId
+         invite.OrgId
+         invite.InviteConfirmation.CorrelationId
          {
-            Email = authProviderEmail
+            Email = invite.Email
             AuthProviderUserId = authProviderUserId
             Reference = None
          }
@@ -106,20 +106,14 @@ let startUserSessionRoutes (app: WebApplication) =
             let! opt = getValidInviteFromQuery token
 
             match opt with
-            | Ok(Some(employee, token)) ->
+            | Ok(Some invite) ->
                // TODO: Redirect to auth provider sign in URL which upon
                // successful login will return to the AuthorizationCallback route.
-               // Remove this authorizeInvite call to the AuthorizationCallback
+               // Move this authorizeInvite call to the AuthorizationCallback
                // route handler.
                let authProviderUserId = Guid.NewGuid()
 
-               match!
-                  authorizeInvite
-                     system
-                     employee
-                     employee.Email
-                     authProviderUserId
-               with
+               match! authorizeInvite system invite authProviderUserId with
                | Ok _ -> return Results.Ok()
                | Error err ->
                   let msg = $"Error authorizing invite: {err}"
@@ -147,14 +141,8 @@ let startUserSessionRoutes (app: WebApplication) =
          let authProviderUserId = Guid.NewGuid()
 
          match! getEmployeeInviteByEmail authProviderEmail with
-         | Ok(Some(employee, _)) ->
-            match!
-               authorizeInvite
-                  system
-                  employee
-                  authProviderEmail
-                  authProviderUserId
-            with
+         | Ok(Some invite) ->
+            match! authorizeInvite system invite authProviderUserId with
             | Ok _ -> return Results.Ok()
             | _ ->
                // TODO: replace notfound with forbid once auth configured

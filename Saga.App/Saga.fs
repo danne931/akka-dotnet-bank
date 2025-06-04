@@ -20,11 +20,15 @@ open DomesticTransferSaga
 open PlatformTransferSaga
 open PlatformPaymentSaga
 open OrgOnboardingSaga
+open EmployeeOnboardingSaga
+open CardSetupSaga
 open Bank.Scheduler
 
 [<RequireQualifiedAccess>]
 type Event =
    | OrgOnboarding of OrgOnboardingSagaEvent
+   | EmployeeOnboarding of EmployeeOnboardingSagaEvent
+   | CardSetup of CardSetupSagaEvent
    | Purchase of PurchaseSagaEvent
    | DomesticTransfer of DomesticTransferSagaEvent
    | PlatformTransfer of PlatformTransferSagaEvent
@@ -61,6 +65,50 @@ type Event =
          | OrgOnboardingSagaEvent.ResetInProgressActivityAttempts ->
             "OrgOnboardingResetInProgressActivityAttempts"
          | OrgOnboardingSagaEvent.OrgActivated -> "OrgOnboardingOrgActivated"
+      | Event.EmployeeOnboarding e ->
+         match e with
+         | EmployeeOnboardingSagaEvent.Start e ->
+            match e with
+            | EmployeeOnboardingSagaStartEvent.AccountOwnerCreated _ ->
+               "EmployeeOnboardingAccountOwnerCreated"
+            | EmployeeOnboardingSagaStartEvent.EmployeeCreated _ ->
+               "EmployeeOnboardingEmployeeCreated"
+            | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored _ ->
+               "EmployeeOnboardingEmployeeAccessRestored"
+         | EmployeeOnboardingSagaEvent.AccessRequestPending ->
+            "EmployeeOnboardingAccessRequestPending"
+         | EmployeeOnboardingSagaEvent.InviteNotificationSent ->
+            "EmployeeOnboardingInviteNotificationSent"
+         | EmployeeOnboardingSagaEvent.AccessApproved ->
+            "EmployeeOnboardingAccessApproved"
+         | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee ->
+            "EmployeeOnboardingCardAssociatedWithEmployee"
+         | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent ->
+            "EmployeeOnboardingFailNotificationSent"
+         | EmployeeOnboardingSagaEvent.CardCreateResponse _ ->
+            "EmployeeOnboardingCardCreateResponse"
+         | EmployeeOnboardingSagaEvent.InviteConfirmed ->
+            "EmployeeOnboardingInviteConfirmed"
+         | EmployeeOnboardingSagaEvent.InviteTokenRefreshed _ ->
+            "EmployeeOnboardingInviteTokenRefreshed"
+         | EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts ->
+            "EmployeeOnboardingResetInProgressActivityAttempts"
+         | EmployeeOnboardingSagaEvent.EvaluateRemainingWork ->
+            "EmployeeOnboardingEvaluateRemainingWork"
+      | Event.CardSetup e ->
+         match e with
+         | CardSetupSagaEvent.Start _ -> "CardSetupStart"
+         | CardSetupSagaEvent.CardCreateResponse _ -> "CardSetupCreateResponse"
+         | CardSetupSagaEvent.CardSetupSuccessNotificationSent ->
+            "CardSetupSuccessNotificationSent"
+         | CardSetupSagaEvent.CardSetupFailNotificationSent ->
+            "CardSetupFailNotificationSent"
+         | CardSetupSagaEvent.ProviderCardIdLinked ->
+            "CardSetupProviderCardIdLinked"
+         | CardSetupSagaEvent.ResetInProgressActivityAttempts ->
+            "CardSetupResetInProgressActivityAttempts"
+         | CardSetupSagaEvent.EvaluateRemainingWork ->
+            "CardSetupEvaluateRemainingWork"
       | Event.Purchase e ->
          match e with
          | PurchaseSagaEvent.Start e ->
@@ -196,6 +244,8 @@ type Event =
 [<RequireQualifiedAccess>]
 type Saga =
    | OrgOnboarding of OrgOnboardingSaga
+   | EmployeeOnboarding of EmployeeOnboardingSaga
+   | CardSetup of CardSetupSaga
    | Purchase of PurchaseSaga
    | DomesticTransfer of DomesticTransferSaga
    | PlatformTransfer of PlatformTransferSaga
@@ -205,6 +255,8 @@ type Saga =
       member x.SagaId =
          match x with
          | Saga.OrgOnboarding s -> s.CorrelationId
+         | Saga.EmployeeOnboarding s -> s.CorrelationId
+         | Saga.CardSetup s -> s.CorrelationId
          | Saga.Purchase s -> s.PurchaseInfo.CorrelationId
          | Saga.DomesticTransfer s ->
             TransferId.toCorrelationId s.TransferInfo.TransferId
@@ -215,6 +267,8 @@ type Saga =
       member x.OrgId =
          match x with
          | Saga.OrgOnboarding s -> s.OrgId
+         | Saga.EmployeeOnboarding s -> s.OrgId
+         | Saga.CardSetup s -> s.OrgId
          | Saga.Purchase s -> s.PurchaseInfo.OrgId
          | Saga.DomesticTransfer s -> s.TransferInfo.Sender.OrgId
          | Saga.PlatformTransfer s -> s.TransferInfo.Sender.OrgId
@@ -223,6 +277,8 @@ type Saga =
       member x.ActivityInProgressCount =
          match x with
          | Saga.OrgOnboarding s -> s.LifeCycle.InProgress.Length
+         | Saga.EmployeeOnboarding s -> s.LifeCycle.InProgress.Length
+         | Saga.CardSetup s -> s.LifeCycle.InProgress.Length
          | Saga.Purchase s -> s.LifeCycle.InProgress.Length
          | Saga.DomesticTransfer s -> s.LifeCycle.InProgress.Length
          | Saga.PlatformTransfer s -> s.LifeCycle.InProgress.Length
@@ -231,6 +287,10 @@ type Saga =
       member x.ActivityAttemptsExhaustedCount =
          match x with
          | Saga.OrgOnboarding s ->
+            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
+         | Saga.EmployeeOnboarding s ->
+            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
+         | Saga.CardSetup s ->
             s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
          | Saga.Purchase s -> s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
          | Saga.DomesticTransfer s ->
@@ -244,6 +304,10 @@ type Saga =
          match x with
          | Saga.OrgOnboarding s ->
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
+         | Saga.EmployeeOnboarding s ->
+            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
+         | Saga.CardSetup s ->
+            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
          | Saga.Purchase s ->
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
          | Saga.DomesticTransfer s ->
@@ -256,6 +320,8 @@ type Saga =
       member x.ExhaustedAllAttempts =
          match x with
          | Saga.OrgOnboarding s -> s.LifeCycle.SagaExhaustedAttempts
+         | Saga.EmployeeOnboarding s -> s.LifeCycle.SagaExhaustedAttempts
+         | Saga.CardSetup s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.Purchase s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.DomesticTransfer s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.PlatformTransfer s -> s.LifeCycle.SagaExhaustedAttempts
@@ -264,6 +330,8 @@ type Saga =
       member x.InactivityTimeout =
          match x with
          | Saga.OrgOnboarding s -> s.LifeCycle.InactivityTimeout
+         | Saga.EmployeeOnboarding s -> s.LifeCycle.InactivityTimeout
+         | Saga.CardSetup s -> s.LifeCycle.InactivityTimeout
          | Saga.Purchase s -> s.LifeCycle.InactivityTimeout
          | Saga.DomesticTransfer s -> s.LifeCycle.InactivityTimeout
          | Saga.PlatformTransfer s -> s.LifeCycle.InactivityTimeout
@@ -290,6 +358,11 @@ let sagaHandler
             | Saga.OrgOnboarding _ ->
                OrgOnboardingSagaEvent.EvaluateRemainingWork
                |> Event.OrgOnboarding
+            | Saga.EmployeeOnboarding _ ->
+               EmployeeOnboardingSagaEvent.EvaluateRemainingWork
+               |> Event.EmployeeOnboarding
+            | Saga.CardSetup _ ->
+               CardSetupSagaEvent.EvaluateRemainingWork |> Event.CardSetup
             | Saga.Purchase _ ->
                PurchaseSagaEvent.EvaluateRemainingWork |> Event.Purchase
             | Saga.DomesticTransfer _ ->
@@ -307,6 +380,12 @@ let sagaHandler
             | Saga.OrgOnboarding _ ->
                OrgOnboardingSagaEvent.ResetInProgressActivityAttempts
                |> Event.OrgOnboarding
+            | Saga.EmployeeOnboarding _ ->
+               EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts
+               |> Event.EmployeeOnboarding
+            | Saga.CardSetup _ ->
+               CardSetupSagaEvent.ResetInProgressActivityAttempts
+               |> Event.CardSetup
             | Saga.Purchase _ ->
                PurchaseSagaEvent.ResetInProgressActivityAttempts
                |> Event.Purchase
@@ -328,6 +407,18 @@ let sagaHandler
             | Event.OrgOnboarding e, Some(Saga.OrgOnboarding state) ->
                OrgOnboardingSaga.applyEvent (Some state) e timestamp
                |> Option.map Saga.OrgOnboarding
+            | Event.EmployeeOnboarding e, None ->
+               EmployeeOnboardingSaga.applyEvent None e timestamp
+               |> Option.map Saga.EmployeeOnboarding
+            | Event.EmployeeOnboarding e, Some(Saga.EmployeeOnboarding state) ->
+               EmployeeOnboardingSaga.applyEvent (Some state) e timestamp
+               |> Option.map Saga.EmployeeOnboarding
+            | Event.CardSetup e, None ->
+               CardSetupSaga.applyEvent None e timestamp
+               |> Option.map Saga.CardSetup
+            | Event.CardSetup e, Some(Saga.CardSetup state) ->
+               CardSetupSaga.applyEvent (Some state) e timestamp
+               |> Option.map Saga.CardSetup
             | Event.Purchase e, None ->
                PurchaseSaga.applyEvent None e timestamp
                |> Option.map Saga.Purchase
@@ -356,15 +447,27 @@ let sagaHandler
       stateTransition =
          fun (state: Saga option) (evt: Event) (timestamp: DateTime) ->
             match evt, state with
-            | Event.Purchase e, None ->
-               PurchaseSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.Purchase)
             | Event.OrgOnboarding e, Some(Saga.OrgOnboarding state) ->
                OrgOnboardingSaga.stateTransition (Some state) e timestamp
                |> Result.map (Option.map Saga.OrgOnboarding)
             | Event.OrgOnboarding e, None ->
                OrgOnboardingSaga.stateTransition None e timestamp
                |> Result.map (Option.map Saga.OrgOnboarding)
+            | Event.EmployeeOnboarding e, Some(Saga.EmployeeOnboarding state) ->
+               EmployeeOnboardingSaga.stateTransition (Some state) e timestamp
+               |> Result.map (Option.map Saga.EmployeeOnboarding)
+            | Event.EmployeeOnboarding e, None ->
+               EmployeeOnboardingSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.EmployeeOnboarding)
+            | Event.CardSetup e, Some(Saga.CardSetup state) ->
+               CardSetupSaga.stateTransition (Some state) e timestamp
+               |> Result.map (Option.map Saga.CardSetup)
+            | Event.CardSetup e, None ->
+               CardSetupSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.CardSetup)
+            | Event.Purchase e, None ->
+               PurchaseSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.Purchase)
             | Event.Purchase e, Some(Saga.Purchase state) ->
                PurchaseSaga.stateTransition (Some state) e timestamp
                |> Result.map (Option.map Saga.Purchase)
@@ -427,6 +530,62 @@ let sagaHandler
                | Some(Saga.OrgOnboarding priorState),
                  Saga.OrgOnboarding state,
                  _ -> OrgOnboardingSaga.onEventPersisted deps priorState state e
+               | _ -> notHandled ()
+            | Event.EmployeeOnboarding e ->
+               let deps: EmployeeOnboardingSaga.PersistenceHandlerDependencies = {
+                  getOrgRef = getOrgRef
+                  getEmployeeRef = getEmployeeRef
+                  getEmailRef = getEmailRef
+                  createCardViaThirdPartyProvider =
+                     EmployeeOnboardingSaga.createCardViaThirdPartyProvider
+                  sendMessageToSelf =
+                     fun orgId corrId asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (
+                              Event.EmployeeOnboarding
+                              >> sagaMessage orgId corrId
+                           )
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match priorState, state, e with
+               | None,
+                 Saga.EmployeeOnboarding _,
+                 EmployeeOnboardingSagaEvent.Start evt ->
+                  EmployeeOnboardingSaga.onStartEventPersisted deps evt
+               | Some(Saga.EmployeeOnboarding priorState),
+                 Saga.EmployeeOnboarding state,
+                 _ ->
+                  EmployeeOnboardingSaga.onEventPersisted
+                     deps
+                     priorState
+                     state
+                     e
+               | _ -> notHandled ()
+            | Event.CardSetup e ->
+               let deps: CardSetupSaga.PersistenceHandlerDependencies = {
+                  getEmployeeRef = getEmployeeRef
+                  getEmailRef = getEmailRef
+                  createCardViaThirdPartyProvider =
+                     CardSetupSaga.createCardViaThirdPartyProvider
+                  sendMessageToSelf =
+                     fun orgId corrId asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (
+                              Event.CardSetup >> sagaMessage orgId corrId
+                           )
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match priorState, state, e with
+               | None, Saga.CardSetup _, CardSetupSagaEvent.Start evt ->
+                  CardSetupSaga.onStartEventPersisted deps evt
+               | Some(Saga.CardSetup priorState), Saga.CardSetup state, _ ->
+                  CardSetupSaga.onEventPersisted deps priorState state e
                | _ -> notHandled ()
             | Event.Purchase e ->
                let purchaseDeps: PurchaseSaga.PersistenceHandlerDependencies = {

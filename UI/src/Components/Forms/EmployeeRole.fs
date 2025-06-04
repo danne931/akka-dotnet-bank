@@ -79,6 +79,7 @@ let private form
                      LinkedAccountId = accountId
                      DailyPurchaseLimit = dailyPurchaseLimit
                      MonthlyPurchaseLimit = monthlyPurchaseLimit
+                     CardType = CardType.Debit
                   }
 
                onSubmit role cardInfo)
@@ -159,7 +160,7 @@ let EmployeeRoleFormComponent
 
       FormContainer {|
          InitialValues = formProps
-         Form = form session employee org.Accounts onSelect
+         Form = form session employee org.CheckingAccounts onSelect
          Action = Some customAction
          Session = session
          ComponentName = "EmployeeRoleForm"

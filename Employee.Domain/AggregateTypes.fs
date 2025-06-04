@@ -9,6 +9,7 @@ type EmployeeCommand =
    | CreateAccountOwner of CreateAccountOwnerCommand
    | CreateEmployee of CreateEmployeeCommand
    | CreateCard of CreateCardCommand
+   | LinkThirdPartyProviderCard of LinkThirdPartyProviderCardCommand
    | Purchase of PurchaseCommand
    | RefundPurchase of RefundPurchaseCommand
    | LimitDailyDebits of LimitDailyDebitsCommand
@@ -28,6 +29,7 @@ type EmployeeCommand =
       | CreateAccountOwner cmd -> Command.envelope cmd
       | CreateEmployee cmd -> Command.envelope cmd
       | CreateCard cmd -> Command.envelope cmd
+      | LinkThirdPartyProviderCard cmd -> Command.envelope cmd
       | Purchase cmd -> Command.envelope cmd
       | RefundPurchase cmd -> Command.envelope cmd
       | LimitDailyDebits cmd -> Command.envelope cmd
@@ -46,6 +48,7 @@ type EmployeeEvent =
    | CreatedAccountOwner of BankEvent<CreatedAccountOwner>
    | CreatedEmployee of BankEvent<CreatedEmployee>
    | CreatedCard of BankEvent<CreatedCard>
+   | ThirdPartyProviderCardLinked of BankEvent<ThirdPartyProviderCardLinked>
    | PurchaseApplied of BankEvent<PurchaseApplied>
    | PurchaseRefunded of BankEvent<PurchaseRefunded>
    | DailyDebitLimitUpdated of BankEvent<DailyDebitLimitUpdated>
@@ -79,6 +82,8 @@ module EmployeeEnvelope =
       | :? BankEvent<CreatedAccountOwner> as evt -> CreatedAccountOwner evt
       | :? BankEvent<CreatedEmployee> as evt -> CreatedEmployee evt
       | :? BankEvent<CreatedCard> as evt -> CreatedCard evt
+      | :? BankEvent<ThirdPartyProviderCardLinked> as evt ->
+         ThirdPartyProviderCardLinked evt
       | :? BankEvent<PurchaseApplied> as evt -> PurchaseApplied evt
       | :? BankEvent<PurchaseRefunded> as evt -> PurchaseRefunded evt
       | :? BankEvent<DailyDebitLimitUpdated> as evt ->
@@ -102,6 +107,7 @@ module EmployeeEnvelope =
       | CreatedAccountOwner evt -> wrap evt, get evt
       | CreatedEmployee evt -> wrap evt, get evt
       | CreatedCard evt -> wrap evt, get evt
+      | ThirdPartyProviderCardLinked evt -> wrap evt, get evt
       | PurchaseApplied evt -> wrap evt, get evt
       | PurchaseRefunded evt -> wrap evt, get evt
       | DailyDebitLimitUpdated evt -> wrap evt, get evt
@@ -132,7 +138,6 @@ type Employee = {
    LastName: string
    Cards: Map<CardId, Card>
    Status: EmployeeStatus
-   OnboardingTasks: EmployeeOnboardingTask list
    AuthProviderUserId: Guid option
 } with
 

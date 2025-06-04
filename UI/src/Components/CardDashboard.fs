@@ -154,8 +154,9 @@ let renderTableRow
    Html.tr [
       attr.key (string card.Card.CardId)
 
-      if card.Card.Status = CardStatus.Frozen then
-         attr.classes [ "error" ]
+      match card.Card.Status with
+      | CardStatus.Frozen _ -> attr.classes [ "error" ]
+      | _ -> ()
 
       match selectedCardId with
       | Some id when id = card.Card.CardId -> attr.classes [ "selected" ]

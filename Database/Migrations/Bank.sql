@@ -363,7 +363,6 @@ CREATE TABLE employee (
    role employee_role NOT NULL,
    status employee_status NOT NULL,
    status_detail JSONB NOT NULL,
-   onboarding_tasks JSONB NOT NULL,
    cards JSONB NOT NULL,
    invite_token UUID,
    invite_expiration TIMESTAMPTZ,
@@ -397,17 +396,6 @@ COMMENT ON COLUMN employee.search_query IS
 (see update_search_query_trigger above).  Being able to search by employee name/email
 comes in handy in dashboard forms and filtering transaction, history, or
 employees in the UI.';
-
-COMMENT ON COLUMN employee.onboarding_tasks IS
-'An employee may optionally be configured with onboarding tasks when they are
-created by a team member of an organization on the platform.
-However, we do not want these onboarding tasks to execute until the employee
-confirms their invite via email.
-Currently, only one onboarding task type is available and that is to create a virtual
-debit card for the employee.  So the onboarding task "CreateCard" is essentially a bit of
-config info provided at employee creation time such as the AccountId to link the card to,
-purchase limits, and name which will be enough to initiate the card creation if the employee
-confirms the email invitation.';
 
 
 --- ORG EVENTS ---
@@ -468,7 +456,7 @@ COMMENT ON COLUMN employee_event.event IS
 
 
 --- CARDS ---
-CREATE TYPE card_status AS ENUM ('Active', 'Frozen', 'Closed');
+CREATE TYPE card_status AS ENUM ('Pending', 'Active', 'Frozen', 'Closed');
 CREATE TYPE card_type AS ENUM ('Debit', 'Credit');
 
 CREATE TABLE card (
@@ -477,12 +465,14 @@ CREATE TABLE card (
    monthly_purchase_limit MONEY NOT NULL,
    virtual BOOLEAN NOT NULL,
    card_status card_status NOT NULL,
+   card_status_detail JSONB NOT NULL,
    card_type card_type NOT NULL,
    card_nickname VARCHAR(50),
    last_purchase_at TIMESTAMPTZ,
    exp_month INT NOT NULL,
    exp_year INT NOT NULL,
    card_id UUID PRIMARY KEY,
+   third_party_provider_card_id UUID,
    employee_id UUID NOT NULL REFERENCES employee,
    account_id UUID NOT NULL REFERENCES account,
    org_id UUID NOT NULL REFERENCES organization
@@ -915,6 +905,8 @@ SELECT add_updated_at_column_and_trigger('command_approval_progress');
 --- TRANSACTION SAGA ---
 CREATE TYPE saga_type AS ENUM (
    'OrgOnboarding',
+   'EmployeeOnboarding',
+   'CardSetup',
    'Purchase',
    'DomesticTransfer',
    'PlatformTransfer',
@@ -1446,7 +1438,6 @@ INSERT INTO employee (
    role,
    status,
    status_detail,
-   onboarding_tasks,
    cards,
    org_id
 )
@@ -1462,7 +1453,6 @@ VALUES (
    'Admin',
    'Active',
    '"Active"'::jsonb,
-   '{}'::jsonb,
    '{}'::jsonb,
    (SELECT org_id FROM organization WHERE org_name = 'system')
 );

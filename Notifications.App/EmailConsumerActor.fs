@@ -19,6 +19,8 @@ open SignalRBroadcast
 open Email
 open Lib.Saga
 open OrgOnboardingSaga
+open EmployeeOnboardingSaga
+open CardSetupSaga
 open PlatformTransferSaga
 open PlatformPaymentSaga
 open PurchaseSaga
@@ -205,6 +207,27 @@ let private emailPropsFromMessage
             $"localhost:8080{RoutePaths.UserSessionPath.AuthorizeInvite}?token={info.Token.Token}"
       |}
      }
+   | EmailInfo.EmployeeOnboardingFail info -> {
+      OrgId = msg.OrgId
+      Event = "employee-onboarding-fail"
+      Email = None
+      Data = {|
+         name = info.Name
+         reason = info.Reason
+      |}
+     }
+   | EmailInfo.CardSetupSuccess info -> {
+      OrgId = msg.OrgId
+      Event = "card-setup-success"
+      Email = Some(string info.EmployeeEmail)
+      Data = {| name = info.EmployeeName |}
+     }
+   | EmailInfo.CardSetupFail info -> {
+      OrgId = msg.OrgId
+      Event = "card-setup-fail"
+      Email = None
+      Data = {| name = info.EmployeeName |}
+     }
 
 let private sendEmail
    (client: HttpClient)
@@ -312,6 +335,22 @@ let onSuccessfulServiceResponse
       | EmailInfo.OrgOnboardingApplicationRequiresRevision _ ->
          OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent
          |> AppSaga.Event.OrgOnboarding
+         |> Some
+      | EmailInfo.EmployeeInvite _ ->
+         EmployeeOnboardingSagaEvent.InviteNotificationSent
+         |> AppSaga.Event.EmployeeOnboarding
+         |> Some
+      | EmailInfo.EmployeeOnboardingFail _ ->
+         EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent
+         |> AppSaga.Event.EmployeeOnboarding
+         |> Some
+      | EmailInfo.CardSetupSuccess _ ->
+         CardSetupSagaEvent.CardSetupSuccessNotificationSent
+         |> AppSaga.Event.CardSetup
+         |> Some
+      | EmailInfo.CardSetupFail _ ->
+         CardSetupSagaEvent.CardSetupFailNotificationSent
+         |> AppSaga.Event.CardSetup
          |> Some
       | EmailInfo.Purchase _ ->
          PurchaseSagaEvent.PurchaseNotificationSent

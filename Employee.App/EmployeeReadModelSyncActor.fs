@@ -36,6 +36,8 @@ let private cardReducer
          |> Map.tryFind cardId
          |> Option.map (fun card -> [
             "cardId", CardSqlWriter.cardId card.CardId
+            "thirdPartyProviderCardId",
+            CardSqlWriter.thirdPartyProviderCardId card.Status
             "accountId", CardSqlWriter.accountId card.AccountId
             "orgId", CardSqlWriter.orgId employee.OrgId
             "employeeId", CardSqlWriter.employeeId employee.EmployeeId
@@ -45,6 +47,7 @@ let private cardReducer
 
             "cardType", CardSqlWriter.cardType card.CardType
             "status", CardSqlWriter.status card.Status
+            "statusDetail", CardSqlWriter.statusDetail card.Status
             "virtual", CardSqlWriter.isVirtual card.Virtual
 
             "dailyPurchaseLimit",
@@ -108,6 +111,8 @@ let sqlParamReducer
 
    match evt with
    | EmployeeEvent.CreatedCard e -> cardReducer e.EntityId e.Data.Card.CardId
+   | EmployeeEvent.ThirdPartyProviderCardLinked e ->
+      cardReducer e.EntityId e.Data.CardId
    | EmployeeEvent.PurchaseApplied e ->
       cardReducer e.EntityId e.Data.Info.CardId
    | EmployeeEvent.LockedCard e -> cardReducer e.EntityId e.Data.CardId
@@ -129,7 +134,6 @@ let sqlParamsFromEmployee (employee: Employee) : (string * SqlValue) list = [
    "statusDetail", EmployeeSqlWriter.statusDetail employee.Status
    "role", EmployeeSqlWriter.role employee.Role
    "cards", EmployeeSqlWriter.cards employee.Cards
-   "onboardingTasks", EmployeeSqlWriter.onboardingTasks employee.OnboardingTasks
    "inviteToken", EmployeeSqlWriter.inviteTokenFromStatus employee.Status
    "inviteExpiration",
    EmployeeSqlWriter.inviteExpirationFromStatus employee.Status
@@ -163,7 +167,6 @@ let upsertReadModels
           {EmployeeFields.cards},
           {EmployeeFields.status},
           {EmployeeFields.statusDetail},
-          {EmployeeFields.onboardingTasks},
           {EmployeeFields.inviteToken},
           {EmployeeFields.inviteExpiration},
           {EmployeeFields.authProviderUserId})
@@ -177,7 +180,6 @@ let upsertReadModels
           @cards,
           @status::{EmployeeTypeCast.status},
           @statusDetail,
-          @onboardingTasks,
           @inviteToken,
           @inviteExpiration,
           @authProviderUserId)
@@ -186,7 +188,6 @@ let upsertReadModels
          {EmployeeFields.status} = @status::{EmployeeTypeCast.status},
          {EmployeeFields.statusDetail} = @statusDetail,
          {EmployeeFields.cards} = @cards,
-         {EmployeeFields.onboardingTasks} = @onboardingTasks,
          {EmployeeFields.role} = @role::{EmployeeTypeCast.role},
          {EmployeeFields.inviteToken} = @inviteToken,
          {EmployeeFields.inviteExpiration} = @inviteExpiration,
@@ -221,12 +222,14 @@ let upsertReadModels
       $"""
       INSERT into {CardSqlMapper.table}
          ({CardFields.cardId},
+          {CardFields.thirdPartyProviderCardId},
           {CardFields.accountId},
           {CardFields.orgId},
           {CardFields.employeeId},
           {CardFields.cardNumberLast4},
           {CardFields.cardType},
           {CardFields.status},
+          {CardFields.statusDetail},
           {CardFields.isVirtual},
           {CardFields.dailyPurchaseLimit},
           {CardFields.monthlyPurchaseLimit},
@@ -236,12 +239,14 @@ let upsertReadModels
           {CardFields.expYear})
       VALUES
          (@cardId,
+          @thirdPartyProviderCardId,
           @accountId,
           @orgId,
           @employeeId,
           @cardNumberLast4,
           @cardType::{CardTypeCast.cardType},
           @status::{CardTypeCast.status},
+          @statusDetail,
           @virtual,
           @dailyPurchaseLimit,
           @monthlyPurchaseLimit,

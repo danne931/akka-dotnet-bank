@@ -607,6 +607,7 @@ let mockAccountOwnerCards =
          OrgId = myOrg.OrgId
          AccountId = myOrg.OpsAccountId
          PersonName = $"{cmd.Data.FirstName} {cmd.Data.LastName}"
+         ProviderCardId = None
          CardNickname = Some "Travel"
          CardType = CardType.Debit
          Virtual = true
@@ -618,10 +619,20 @@ let mockAccountOwnerCards =
    }
 
    let cardCmd2 = {
-      cardCmd1 with
-         Data.CardId = Guid.NewGuid() |> CardId
-         Data.CardNickname = Some "Office Supplies"
-         Data.DailyPurchaseLimit = None
+      CreateCardCommand.create {
+         CardId = Guid.NewGuid() |> CardId
+         EmployeeId = emId
+         OrgId = myOrg.OrgId
+         AccountId = myOrg.OpsAccountId
+         PersonName = $"{cmd.Data.FirstName} {cmd.Data.LastName}"
+         ProviderCardId = None
+         CardNickname = Some "Office Supplies"
+         CardType = CardType.Debit
+         Virtual = true
+         DailyPurchaseLimit = None
+         MonthlyPurchaseLimit = None
+         InitiatedBy = mockAccountOwner
+      } with
          Timestamp = cmd.Timestamp.AddHours 1.1
    }
 
@@ -688,6 +699,7 @@ let mockEmployees =
    let createCard (cmd: CreateEmployeeCommand) = {
       CreateCardCommand.create {
          CardId = Guid.NewGuid() |> CardId
+         ProviderCardId = None
          EmployeeId = EmployeeId.fromEntityId cmd.EntityId
          OrgId = myOrg.OrgId
          AccountId = myOrg.OpsAccountId
@@ -1374,8 +1386,9 @@ let createAccountOwners getEmployeeRef =
       }
 
    let otherAccountOwners = otherOrgs |> List.map createAccountOwnerCmd
+   let accountOwnerCmds = mockAccountOwnerCmd :: otherAccountOwners
 
-   for cmd in mockAccountOwnerCmd :: otherAccountOwners do
+   for cmd in accountOwnerCmds do
       let employeeId = cmd.Data.EmployeeId
 
       let createMsg =
@@ -1383,47 +1396,60 @@ let createAccountOwners getEmployeeRef =
          |> EmployeeCommand.CreateAccountOwner
          |> EmployeeMessage.StateChange
 
+      getEmployeeRef employeeId <! createMsg
+
+   accountOwnerCmds
+
+let confirmAccountOwnerInvites
+   getEmployeeRef
+   (accountOwnerCmds: Command<CreateAccountOwnerInput> list)
+   =
+   for cmd in accountOwnerCmds do
+      let employeeId = cmd.Data.EmployeeId
+
       let confirmInviteCmd =
-         ConfirmInvitationCommand.create cmd.InitiatedBy cmd.OrgId {
-            Email = Email.deserialize cmd.Data.Email
-            Reference = None
-            AuthProviderUserId = Guid.NewGuid()
-         }
+         ConfirmInvitationCommand.create
+            cmd.InitiatedBy
+            cmd.OrgId
+            cmd.CorrelationId
+            {
+               Email = Email.deserialize cmd.Data.Email
+               Reference = None
+               AuthProviderUserId = Guid.NewGuid()
+            }
          |> EmployeeCommand.ConfirmInvitation
          |> EmployeeMessage.StateChange
 
-      let employeeRef = getEmployeeRef employeeId
-      employeeRef <! createMsg
-      employeeRef <! confirmInviteCmd
+      getEmployeeRef employeeId <! confirmInviteCmd
 
 let createEmployees
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    =
    for employeeCreateCmd in mockEmployeesPendingInviteConfirmation do
-      let employeeRef =
-         getEmployeeRef (EmployeeId.fromEntityId employeeCreateCmd.EntityId)
-
       let msg =
          employeeCreateCmd
          |> EmployeeCommand.CreateEmployee
          |> EmployeeMessage.StateChange
 
-      employeeRef <! msg
+      getEmployeeRef (EmployeeId.fromEntityId employeeCreateCmd.EntityId) <! msg
 
    for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
-      let employeeRef = getEmployeeRef employeeId
-
       let msg =
          employeeCreateCmd
          |> EmployeeCommand.CreateEmployee
          |> EmployeeMessage.StateChange
 
-      employeeRef <! msg
+      getEmployeeRef employeeId <! msg
 
+let confirmEmployeeInvites
+   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   =
+   for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
       let confirmInviteCmd = {
          ConfirmInvitationCommand.create
             employeeCreateCmd.InitiatedBy
-            myOrg.OrgId
+            employeeCreateCmd.OrgId
+            employeeCreateCmd.CorrelationId
             {
                Email = Email.deserialize employeeCreateCmd.Data.Email
                AuthProviderUserId = Guid.NewGuid()
@@ -1437,7 +1463,7 @@ let createEmployees
          |> EmployeeCommand.ConfirmInvitation
          |> EmployeeMessage.StateChange
 
-      employeeRef <! msg
+      getEmployeeRef employeeId <! msg
 
 let createEmployeeCards
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
@@ -1453,11 +1479,9 @@ let createEmployeeCards
       @ employeeCardCreateCmds
 
    for cmd in cardCreateCmds do
-      let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
-
       let msg = cmd |> EmployeeCommand.CreateCard |> EmployeeMessage.StateChange
 
-      employeeRef <! msg
+      getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId) <! msg
 
    {|
       AccountOwnerTravelCard = accountOwnerTravelCardCreateCmd
@@ -1512,6 +1536,8 @@ let seedAccountTransactions
 
       if accountId = myOrg.OpsAccountId then
          createEmployees getEmployeeRef
+         do! Task.Delay 5000
+         confirmEmployeeInvites getEmployeeRef
          do! Task.Delay 10_000
          let cardCreateCmds = createEmployeeCards getEmployeeRef
          do! Task.Delay 10_000
@@ -1637,9 +1663,13 @@ let actorProps
 
                   do! Task.Delay 10_000
 
-                  createAccountOwners getEmployeeRef
+                  let accountOwnerCmds = createAccountOwners getEmployeeRef
 
-                  do! Task.Delay 10_000
+                  do! Task.Delay 5_000
+
+                  confirmAccountOwnerInvites getEmployeeRef accountOwnerCmds
+
+                  do! Task.Delay 5_000
 
                   let remaining =
                      getRemainingAccountsToCreate

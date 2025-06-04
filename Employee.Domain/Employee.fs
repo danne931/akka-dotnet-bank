@@ -55,8 +55,11 @@ let applyEvent
          FirstName = e.Data.FirstName
          LastName = e.Data.LastName
          Cards = Map.empty
-         Status = EmployeeStatus.PendingInviteConfirmation e.Data.InviteToken
-         OnboardingTasks = []
+         Status =
+            EmployeeStatus.PendingInviteConfirmation {
+               Token = e.Data.InviteToken
+               CorrelationId = e.CorrelationId
+            }
          AuthProviderUserId = None
         }
       | CreatedEmployee e -> {
@@ -77,11 +80,10 @@ let applyEvent
                   }
                )
             | None ->
-               EmployeeStatus.PendingInviteConfirmation(InviteToken.generate ())
-         OnboardingTasks =
-            match e.Data.CardInfo with
-            | Some cardInfo -> [ EmployeeOnboardingTask.CreateCard cardInfo ]
-            | None -> []
+               EmployeeStatus.PendingInviteConfirmation {
+                  Token = e.Data.InviteToken
+                  CorrelationId = e.CorrelationId
+               }
          AuthProviderUserId = None
         }
       | CreatedCard e ->
@@ -90,11 +92,22 @@ let applyEvent
          {
             em with
                Cards = em.Cards |> Map.add info.CardId info
-               OnboardingTasks =
-                  em.OnboardingTasks
-                  |> List.filter (function
-                     | EmployeeOnboardingTask.CreateCard _ -> false)
          }
+      | ThirdPartyProviderCardLinked e -> {
+         em with
+            Cards =
+               Map.change
+                  e.Data.CardId
+                  (Option.map (fun card -> {
+                     card with
+                        Status =
+                           CardStatus.Active {
+                              ThirdPartyProviderCardId = e.Data.ProviderCardId
+                           }
+                  }))
+                  em.Cards
+
+        }
       | PurchaseApplied e -> {
          em with
             Cards =
@@ -135,10 +148,18 @@ let applyEvent
             Cards =
                Map.change
                   e.Data.CardId
-                  (Option.map (fun card -> {
-                     card with
-                        Status = CardStatus.Frozen
-                  }))
+                  (Option.map (fun card ->
+                     match card.Status with
+                     | CardStatus.Active detail -> {
+                        card with
+                           Status =
+                              CardStatus.Frozen {
+                                 Reason = CardFrozenReason.UserRequested
+                                 ThirdPartyProviderCardId =
+                                    detail.ThirdPartyProviderCardId
+                              }
+                       }
+                     | _ -> card))
                   em.Cards
         }
       | UnlockedCard e -> {
@@ -146,10 +167,17 @@ let applyEvent
             Cards =
                Map.change
                   e.Data.CardId
-                  (Option.map (fun card -> {
-                     card with
-                        Status = CardStatus.Active
-                  }))
+                  (Option.map (fun card ->
+                     match card.Status with
+                     | CardStatus.Frozen detail -> {
+                        card with
+                           Status =
+                              CardStatus.Active {
+                                 ThirdPartyProviderCardId =
+                                    detail.ThirdPartyProviderCardId
+                              }
+                       }
+                     | _ -> card))
                   em.Cards
         }
       | UpdatedRole e -> { em with Role = e.Data.Role }
@@ -170,7 +198,11 @@ let applyEvent
         }
       | InvitationTokenRefreshed e -> {
          em with
-            Status = EmployeeStatus.PendingInviteConfirmation e.Data.InviteToken
+            Status =
+               EmployeeStatus.PendingInviteConfirmation {
+                  Token = e.Data.InviteToken
+                  CorrelationId = e.CorrelationId
+               }
         }
       | InvitationConfirmed e -> {
          em with
@@ -180,16 +212,22 @@ let applyEvent
         }
       | AccessApproved e -> {
          em with
-            Status = EmployeeStatus.PendingInviteConfirmation e.Data.InviteToken
+            Status =
+               EmployeeStatus.PendingInviteConfirmation {
+                  Token = e.Data.InviteToken
+                  CorrelationId = e.CorrelationId
+               }
         }
-      | AccessRestored _ -> {
+      | AccessRestored e -> {
          em with
             Status =
                match em.AuthProviderUserId with
                | Some _ -> EmployeeStatus.Active
                | None ->
-                  InviteToken.generate ()
-                  |> EmployeeStatus.PendingInviteConfirmation
+                  EmployeeStatus.PendingInviteConfirmation {
+                     Token = e.Data.InviteToken
+                     CorrelationId = e.CorrelationId
+                  }
         }
 
    {
@@ -232,6 +270,18 @@ module private StateTransition =
          transitionErr EmployeeNotActive
       else
          map CreatedCard state (CreateCardCommand.toEvent cmd)
+
+   let linkThirdPartyProviderCard
+      (state: EmployeeSnapshot)
+      (cmd: LinkThirdPartyProviderCardCommand)
+      =
+      if state.Info.Status <> EmployeeStatus.Active then
+         transitionErr EmployeeNotReadyToActivate
+      else
+         map
+            ThirdPartyProviderCardLinked
+            state
+            (LinkThirdPartyProviderCardCommand.toEvent cmd)
 
    let limitDailyDebits
       (state: EmployeeSnapshot)
@@ -279,7 +329,9 @@ module private StateTransition =
             let dpa = dailyPurchaseAccrued state.Events card.CardId
             let mpa = monthlyPurchaseAccrued state.Events card.CardId
 
-            if card.Status = CardStatus.Frozen then
+            if card.IsPending then
+               transitionErr CardPending
+            elif card.IsFrozen.IsSome then
                transitionErr CardLocked
             elif card.IsExpired() then
                transitionErr CardExpired
@@ -384,6 +436,8 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
       StateTransition.createAccountOwner state cmd
    | EmployeeCommand.CreateEmployee cmd -> StateTransition.create state cmd
    | EmployeeCommand.CreateCard cmd -> StateTransition.createCard state cmd
+   | EmployeeCommand.LinkThirdPartyProviderCard cmd ->
+      StateTransition.linkThirdPartyProviderCard state cmd
    | EmployeeCommand.Purchase cmd -> StateTransition.purchase state cmd
    | EmployeeCommand.RefundPurchase cmd ->
       StateTransition.refundPurchase state cmd
@@ -416,6 +470,5 @@ let empty: Employee = {
    LastName = ""
    Status = EmployeeStatus.InitialEmptyState
    Cards = Map.empty
-   OnboardingTasks = []
    AuthProviderUserId = None
 }
