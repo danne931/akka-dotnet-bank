@@ -81,6 +81,7 @@ module Writer =
             | EmployeeOnboardingSagaStatus.InProgress -> "InProgress"
             | EmployeeOnboardingSagaStatus.Failed _ -> "Failed"
             | EmployeeOnboardingSagaStatus.Completed -> "Completed"
+            | EmployeeOnboardingSagaStatus.Aborted _ -> "Aborted"
          | AppSaga.Saga.CardSetup s ->
             match s.Status with
             | CardSetupSagaStatus.InProgress -> "InProgress"

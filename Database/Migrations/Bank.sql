@@ -916,7 +916,8 @@ CREATE TYPE saga_status AS ENUM (
    'Scheduled',
    'InProgress',
    'Completed',
-   'Failed'
+   'Failed',
+   'Aborted'
 );
 
 CREATE TABLE saga(

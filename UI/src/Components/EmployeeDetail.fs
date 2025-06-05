@@ -28,10 +28,14 @@ type Msg =
    | ResendInviteNotification of
       Employee *
       AsyncOperationStatus<Result<unit, Err>>
-   | ShowInviteCancellationConfirmation of UserSession * Employee
+   | ShowInviteCancellationConfirmation of
+      UserSession *
+      Employee *
+      PendingInviteConfirmation
    | ConfirmInviteCancellation of
       UserSession *
       Employee *
+      PendingInviteConfirmation *
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
    | RestoreAccess of
       UserSession *
@@ -91,13 +95,13 @@ let update
       state,
       Alerts.toastCommand
       <| Err.NetworkError(exn $"Issue resending invite to {employee.Email}")
-   | ShowInviteCancellationConfirmation(session, employee) ->
+   | ShowInviteCancellationConfirmation(session, employee, invite) ->
       let confirm =
          ConfirmAlert(
             "",
             function
             | ConfirmAlertResult.Confirmed ->
-               Msg.ConfirmInviteCancellation(session, employee, Started)
+               Msg.ConfirmInviteCancellation(session, employee, invite, Started)
             | ConfirmAlertResult.Dismissed _ -> Msg.DismissInviteCancellation
          )
             .Title("Are you sure you want to cancel this invitation?")
@@ -105,24 +109,27 @@ let update
             .ShowCloseButton(true)
 
       state, SweetAlert.Run confirm
-   | ConfirmInviteCancellation(session, employee, Started) ->
+   | ConfirmInviteCancellation(session, employee, invite, Started) ->
       let cancel = async {
          let cmd =
             CancelInvitationCommand.create
                employee.CompositeId
                session.AsInitiator
+               invite.CorrelationId
                { Reason = None }
             |> EmployeeCommand.CancelInvitation
 
          let! res = EmployeeService.submitCommand employee cmd
-         return ConfirmInviteCancellation(session, employee, Finished res)
+
+         return
+            ConfirmInviteCancellation(session, employee, invite, Finished res)
       }
 
       state, Cmd.fromAsync cancel
-   | ConfirmInviteCancellation(_, employee, Finished(Ok receipt)) ->
+   | ConfirmInviteCancellation(_, employee, _, Finished(Ok receipt)) ->
       onEmployeeUpdate receipt
       state, Alerts.toastSuccessCommand $"Cancelling invite for {employee.Name}"
-   | ConfirmInviteCancellation(_, employee, Finished(Error err)) ->
+   | ConfirmInviteCancellation(_, employee, _, Finished(Error err)) ->
       Log.error (string err)
 
       state,
@@ -269,7 +276,7 @@ let EmployeeDetailComponent
                IsSelected = false
             }
          ])
-      | EmployeeStatus.PendingInviteConfirmation _ ->
+      | EmployeeStatus.PendingInviteConfirmation invite ->
          Some [
             {
                Text = "Cancel Invite"
@@ -278,7 +285,8 @@ let EmployeeDetailComponent
                      dispatch
                      <| Msg.ShowInviteCancellationConfirmation(
                         session,
-                        employee
+                        employee,
+                        invite
                      )
                IsSelected = false
             }

@@ -121,6 +121,13 @@ let private onPersist
          |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
+   | EmployeeEvent.InvitationCancelled e ->
+      let msg =
+         EmployeeOnboardingSagaEvent.InviteCancelled e.Data.Reason
+         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
    | EmployeeEvent.InvitationConfirmed e ->
       let msg =
          EmployeeOnboardingSagaEvent.InviteConfirmed

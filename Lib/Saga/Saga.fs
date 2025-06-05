@@ -53,6 +53,7 @@ type SagaLifeCycle<'Activity when 'Activity :> IActivity and 'Activity: equality
    InProgress: ActivityLifeCycle<'Activity> list
    Completed: ActivityLifeCycle<'Activity> list
    Failed: ActivityLifeCycle<'Activity> list
+   Aborted: ActivityLifeCycle<'Activity> list
 } with
 
    member x.ActivitiesWithAttemptsExhausted =
@@ -93,6 +94,7 @@ type SagaLifeCycle<'Activity when 'Activity :> IActivity and 'Activity: equality
       InProgress = []
       Completed = []
       Failed = []
+      Aborted = []
    }
 
    static member addActivity
@@ -144,6 +146,16 @@ type SagaLifeCycle<'Activity when 'Activity :> IActivity and 'Activity: equality
          state with
             InProgress = wip
             Failed = failed
+      }
+
+   static member abortActivities
+      (timestamp: DateTime)
+      (state: SagaLifeCycle<'Activity>)
+      =
+      {
+         state with
+            InProgress = []
+            Aborted = state.InProgress |> List.map (fun w -> w.finish timestamp)
       }
 
    static member retryActivity

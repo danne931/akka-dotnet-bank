@@ -444,12 +444,13 @@ module CancelInvitationCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
       (initiatedBy: Initiator)
+      (corrId: CorrelationId)
       (data: InvitationCancelled)
       =
       Command.create
          (EmployeeId.toEntityId employeeId)
          orgId
-         (CorrelationId.create ())
+         corrId
          initiatedBy
          data
 

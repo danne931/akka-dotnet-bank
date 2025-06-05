@@ -19,6 +19,7 @@ type EmployeeOnboardingSagaStatus =
    | InProgress
    | Completed
    | Failed of OnboardingFailureReason
+   | Aborted of reason: string option
 
 [<RequireQualifiedAccess>]
 type EmployeeOnboardingSagaStartEvent =
@@ -41,6 +42,7 @@ type EmployeeOnboardingSagaEvent =
    | InviteTokenRefreshed of InviteToken
    | OnboardingFailNotificationSent
    | InviteConfirmed
+   | InviteCancelled of reason: string option
    | CardCreateResponse of Result<ThirdPartyProviderCardId, string>
    | CardAssociatedWithEmployee
    | EvaluateRemainingWork
@@ -106,7 +108,6 @@ let applyEvent
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
-   let failActivity = SagaLifeCycle.failActivity timestamp
 
    match state with
    | None ->
@@ -274,6 +275,12 @@ let applyEvent
                   |> addActivity Activity.SendEmployeeInviteNotification
                   |> addActivity Activity.WaitForInviteConfirmation
            }
+         | EmployeeOnboardingSagaEvent.InviteCancelled reason -> {
+            state with
+               Status = EmployeeOnboardingSagaStatus.Aborted reason
+               LifeCycle =
+                  SagaLifeCycle.abortActivities timestamp state.LifeCycle
+           }
          | EmployeeOnboardingSagaEvent.InviteConfirmed ->
             let state = {
                state with
@@ -312,7 +319,7 @@ let applyEvent
                      |> EmployeeOnboardingSagaStatus.Failed
                   LifeCycle =
                      state.LifeCycle
-                     |> failActivity activity
+                     |> SagaLifeCycle.failActivity timestamp activity
                      |> addActivity
                            Activity.SendEmployeeOnboardingFailNotification
               }
@@ -381,6 +388,8 @@ let stateTransition
          | EmployeeOnboardingSagaEvent.AccessApproved ->
             activityIsDone Activity.WaitForAccessApproval
          | EmployeeOnboardingSagaEvent.InviteConfirmed ->
+            activityIsDone Activity.WaitForInviteConfirmation
+         | EmployeeOnboardingSagaEvent.InviteCancelled _ ->
             activityIsDone Activity.WaitForInviteConfirmation
 
       if saga.Status = EmployeeOnboardingSagaStatus.Completed then
@@ -565,6 +574,7 @@ let onEventPersisted
             OnboardingFailureReason.CardProviderCardCreateFail
    | EmployeeOnboardingSagaEvent.AccessApproved -> sendEmployeeInviteEmail ()
    | EmployeeOnboardingSagaEvent.Start _
+   | EmployeeOnboardingSagaEvent.InviteCancelled _
    | EmployeeOnboardingSagaEvent.InviteNotificationSent
    | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent
    | EmployeeOnboardingSagaEvent.AccessRequestPending

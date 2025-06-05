@@ -243,11 +243,15 @@ let onPersisted
          let employeeId = EmployeeId.fromEntityId cmd.EntityId
 
          let msg =
-            CancelInvitationCommand.create (employeeId, e.OrgId) e.InitiatedBy {
-               Reason =
-                  Some
-                     $"Employee invite declined by {e.Data.DeclinedBy.EmployeeName}"
-            }
+            CancelInvitationCommand.create
+               (employeeId, e.OrgId)
+               e.InitiatedBy
+               e.CorrelationId
+               {
+                  Reason =
+                     Some
+                        $"Employee invite declined by {e.Data.DeclinedBy.EmployeeName}"
+               }
             |> EmployeeCommand.CancelInvitation
             |> EmployeeMessage.StateChange
 

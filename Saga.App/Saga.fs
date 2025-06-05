@@ -87,6 +87,8 @@ type Event =
             "EmployeeOnboardingFailNotificationSent"
          | EmployeeOnboardingSagaEvent.CardCreateResponse _ ->
             "EmployeeOnboardingCardCreateResponse"
+         | EmployeeOnboardingSagaEvent.InviteCancelled _ ->
+            "EmployeeOnboardingInviteCancelled"
          | EmployeeOnboardingSagaEvent.InviteConfirmed ->
             "EmployeeOnboardingInviteConfirmed"
          | EmployeeOnboardingSagaEvent.InviteTokenRefreshed _ ->
