@@ -20,6 +20,7 @@ open Bank.Employee.Domain
 open CommandApproval
 open SignalRBroadcast
 open OrgOnboardingSaga
+open EmployeeOnboardingSaga
 
 // Sends the ApprovableCommand to the appropriate Account or Employee actor
 // when the approval process is complete or no approval required.
@@ -235,6 +236,16 @@ let onPersisted
          (mailbox.Parent())
          progressPertainingToRule
          CommandApprovalProgress.CommandApprovalTerminationReason.AssociatedRuleDeleted
+   | CommandApprovalRequested e ->
+      match e.Data.Command with
+      | ApprovableCommand.PerCommand(ApprovableCommandPerCommand.InviteEmployee _) ->
+         let msg =
+            EmployeeOnboardingSagaEvent.AccessRequestPending
+            |> AppSaga.Event.EmployeeOnboarding
+            |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+
+         getSagaRef e.CorrelationId <! msg
+      | _ -> ()
    | CommandApprovalProcessCompleted e -> sendApprovedCommand e.Data.Command
    | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
    | CommandApprovalDeclined e ->
