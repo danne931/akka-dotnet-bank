@@ -10,6 +10,16 @@ open Lib.SharedTypes
 open Lib.Time
 open AutomaticTransfer
 
+module AutoTransfer =
+   let hasCycle
+      (accounts: Map<AccountId, Account>)
+      (newRule: AutomaticTransferConfig)
+      =
+      accounts.Values
+      |> Seq.toList
+      |> List.choose _.AutoTransferRule
+      |> CycleDetection.cycleDetected newRule
+
 module TransferLimits =
    /// Transfers & payments between orgs on the platform
    let DailyPlatformLimit = 999_999_999m
@@ -495,6 +505,19 @@ let stateTransition
       |> Result.bind (
          validateDomesticTransferLimit cmd.Data.Amount cmd.Timestamp
       )
+   | AccountCommand.ConfigureAutoTransferRule cmd, Some account ->
+      let newRule = {
+         Id = cmd.Data.RuleIdToUpdate |> Option.defaultValue (Guid.NewGuid())
+         Info = cmd.Data.Rule
+      }
+
+      validateParentAccountActive state
+      |> Result.bind (virtualAccountTransition account command)
+      |> Result.bind (fun res ->
+         if AutoTransfer.hasCycle state.VirtualAccounts newRule then
+            Account.transitionErr AutoTransferCycleDetected
+         else
+            Ok res)
    | _, None -> Account.transitionErr (AccountNotFound accountId)
    | _, Some account ->
       validateParentAccountActive state

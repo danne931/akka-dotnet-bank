@@ -453,7 +453,7 @@ module private StateTransition =
          accountNotActiveError account
       else
          match account.AutoTransferRule, cmd.Data.RuleIdToUpdate with
-         | Some _, None -> transitionErr OnlyOneAutoTransferRuleMayExistAtATime
+         | Some _, None -> transitionErr AutoTransferOnlyOneRuleMayExistAtATime
          | Some r, Some existingId when r.Id <> existingId ->
             transitionErr AutoTransferRuleDoesNotExist
          | None, Some _ -> transitionErr AutoTransferRuleDoesNotExist

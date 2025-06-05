@@ -311,8 +311,9 @@ type AccountStateTransitionError =
    | ExceededDailyInternalTransferLimit of decimal
    | ExceededDailyDomesticTransferLimit of decimal
    | TransferExpectedToOccurWithinOrg
-   | OnlyOneAutoTransferRuleMayExistAtATime
+   | AutoTransferOnlyOneRuleMayExistAtATime
    | AutoTransferRuleDoesNotExist
+   | AutoTransferCycleDetected
    | RecipientRegistered
    | RecipientDeactivated
    | RecipientNotFound
@@ -415,10 +416,12 @@ type Err =
             $"Insufficient Balance ${balance} for {accountName}"
          | AccountStateTransitionError.TransferExpectedToOccurWithinOrg ->
             "Expected to transfer funds within organization."
-         | AccountStateTransitionError.OnlyOneAutoTransferRuleMayExistAtATime ->
+         | AccountStateTransitionError.AutoTransferOnlyOneRuleMayExistAtATime ->
             "Only one auto transfer rule may exist at time."
          | AccountStateTransitionError.AutoTransferRuleDoesNotExist ->
             "Attempted to update an auto transfer rule which does not exist."
+         | AccountStateTransitionError.AutoTransferCycleDetected ->
+            "Attempted to add a rule which would create cyclic transfers."
          | AccountStateTransitionError.RecipientRegistered ->
             "Recipient Registered"
          | AccountStateTransitionError.RecipientDeactivated ->

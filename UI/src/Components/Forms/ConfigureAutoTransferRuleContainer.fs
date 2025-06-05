@@ -122,15 +122,6 @@ let renderError (msg: string) =
 let private cyclicTransferErrorMsg =
    "You may not add a rule which would create cyclic transfers."
 
-let private hasCycle
-   (accounts: Map<AccountId, Account>)
-   (newRule: AutomaticTransferConfig)
-   =
-   accounts.Values
-   |> Seq.toList
-   |> List.choose _.AutoTransferRule
-   |> CycleDetection.cycleDetected newRule
-
 let private modelWithExternalErrorMaybe
    (accounts: Map<AccountId, Account>)
    (form: Form.Form<'Values, Result<FormResult, Err>, IReactProperty>)
@@ -148,7 +139,7 @@ let private modelWithExternalErrorMaybe
             Info = parsedResult.Rule
          }
 
-         if hasCycle accounts ruleConfig then
+         if ParentAccount.AutoTransfer.hasCycle accounts ruleConfig then
             {
                model with
                   State = Form.View.State.Error cyclicTransferErrorMsg
@@ -204,7 +195,7 @@ let ConfigureAutoTransferRuleFormContainer
                Info = formResult.Rule
             }
 
-            if hasCycle accounts ruleConfig then
+            if ParentAccount.AutoTransfer.hasCycle accounts ruleConfig then
                Msg.ExternalError cyclicTransferErrorMsg
             else
                Msg.DisplayCalculation formResult
