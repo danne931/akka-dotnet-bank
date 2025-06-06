@@ -23,7 +23,7 @@ module BillingTransaction =
          None
       else
          match evt with
-         | CreatedAccount _
+         | CreatedVirtualAccount _
          | DepositedCash _
          | DebitedAccount _
          | MaintenanceFeeDebited _

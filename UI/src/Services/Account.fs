@@ -20,7 +20,7 @@ let private notImplemented (cmd: AccountCommand) =
 let postJson (command: AccountCommand) =
    let serialized, url =
       match command with
-      | AccountCommand.CreateAccount cmd ->
+      | AccountCommand.CreateVirtualAccount cmd ->
          Serialization.serialize cmd, AccountPath.Base
       | AccountCommand.DepositCash cmd ->
          Serialization.serialize cmd, AccountPath.Deposit

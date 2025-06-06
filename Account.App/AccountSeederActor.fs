@@ -37,7 +37,7 @@ type Status =
    | AwaitingVerification
    | FinishedSeeding
 
-type CreateAccountsMap = Map<AccountId, CreateAccountCommand>
+type CreateAccountsMap = Map<AccountId, CreateVirtualAccountCommand>
 
 type State = {
    Status: Status
@@ -462,13 +462,13 @@ let mockAccounts =
    let orgId = myOrg.OrgId
    let parentAccountId = myOrg.ParentAccountId
 
-   let withModifiedTimestamp (command: CreateAccountCommand) = {
+   let withModifiedTimestamp (command: CreateVirtualAccountCommand) = {
       command with
          Timestamp = mockAccountOwnerCmd.Timestamp
    }
 
    let cmd1 =
-      CreateAccountCommand.create {
+      CreateVirtualAccountCommand.create {
          Name = "AP"
          Currency = Currency.USD
          Depository = AccountDepository.Checking
@@ -481,7 +481,7 @@ let mockAccounts =
       |> withModifiedTimestamp
 
    let cmd2 =
-      CreateAccountCommand.create {
+      CreateVirtualAccountCommand.create {
          Name = "AR"
          Currency = Currency.USD
          Depository = AccountDepository.Checking
@@ -494,7 +494,7 @@ let mockAccounts =
       |> withModifiedTimestamp
 
    let cmd3 =
-      CreateAccountCommand.create {
+      CreateVirtualAccountCommand.create {
          Name = "Operations"
          Currency = Currency.USD
          Depository = AccountDepository.Checking
@@ -507,7 +507,7 @@ let mockAccounts =
       |> withModifiedTimestamp
 
    let cmd4 =
-      CreateAccountCommand.create {
+      CreateVirtualAccountCommand.create {
          Name = "Savings"
          Currency = Currency.USD
          Depository = AccountDepository.Savings
@@ -526,7 +526,7 @@ let mockAccounts =
             acc
             |> List.append [
                o.PrimaryAccountId,
-               CreateAccountCommand.create {
+               CreateVirtualAccountCommand.create {
                   Name = "AR"
                   Currency = Currency.USD
                   Depository = AccountDepository.Checking
@@ -539,7 +539,7 @@ let mockAccounts =
                |> withModifiedTimestamp
 
                o.OpsAccountId,
-               CreateAccountCommand.create {
+               CreateVirtualAccountCommand.create {
                   Name = "Operations"
                   Currency = Currency.USD
                   Depository = AccountDepository.Checking
@@ -556,7 +556,7 @@ let mockAccounts =
                |> withModifiedTimestamp
 
                o.SavingsAccountId,
-               CreateAccountCommand.create {
+               CreateVirtualAccountCommand.create {
                   Name = "Savings"
                   Currency = Currency.USD
                   Depository = AccountDepository.Savings
@@ -1508,7 +1508,7 @@ let seedAccountTransactions
    (mailbox: Actor<AccountSeederMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (command: CreateAccountCommand)
+   (command: CreateVirtualAccountCommand)
    =
    task {
       let accountId = command.Data.AccountId
@@ -1681,7 +1681,7 @@ let actorProps
 
                      let msg =
                         command
-                        |> AccountCommand.CreateAccount
+                        |> AccountCommand.CreateVirtualAccount
                         |> AccountMessage.StateChange
 
                      accountRef <! msg

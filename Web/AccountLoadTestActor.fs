@@ -70,8 +70,8 @@ module private Stub =
    }
 
    let createAccountMessage accountId =
-      AccountMessage.StateChange << AccountCommand.CreateAccount
-      <| CreateAccountCommand.create {
+      AccountMessage.StateChange << AccountCommand.CreateVirtualAccount
+      <| CreateVirtualAccountCommand.create {
          Name = "Operations"
          Currency = Currency.EUR
          Depository = AccountDepository.Checking
@@ -209,7 +209,7 @@ let actorProps (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>) =
                | Some test ->
                   let test =
                      match msg.Event with
-                     | CreatedAccount _ -> test
+                     | CreatedVirtualAccount _ -> test
                      | DepositedCash _ -> {
                         test with
                            DepositsRemaining = test.DepositsRemaining - 1

@@ -254,7 +254,7 @@ let accountHistoryUIFriendly
       props with
          Info = "Initialized Primary Checking Account"
      }
-   | CreatedAccount _ -> { props with Info = "Created Account" }
+   | CreatedVirtualAccount _ -> { props with Info = "Created Account" }
    | DepositedCash evt -> {
       props with
          Name = "Deposit Received"

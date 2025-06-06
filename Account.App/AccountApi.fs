@@ -35,8 +35,9 @@ let getAccountsByIds (accountIds: AccountId list) =
 let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult {
    let validation =
       match command with
-      | AccountCommand.CreateAccount cmd ->
-         CreateAccountCommand.toEvent cmd |> Result.map AccountEnvelope.get
+      | AccountCommand.CreateVirtualAccount cmd ->
+         CreateVirtualAccountCommand.toEvent cmd
+         |> Result.map AccountEnvelope.get
       | AccountCommand.DepositCash cmd ->
          DepositCashCommand.toEvent cmd |> Result.map AccountEnvelope.get
       | AccountCommand.InternalTransfer cmd ->

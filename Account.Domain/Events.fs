@@ -20,7 +20,7 @@ type InitializedPrimaryCheckingAccount = {
    PrimaryChecking: PrimaryCheckingAccountInfo
 }
 
-type CreatedAccount = {
+type CreatedVirtualAccount = {
    AccountId: AccountId
    Name: string
    Depository: AccountDepository

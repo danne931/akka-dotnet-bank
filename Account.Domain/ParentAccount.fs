@@ -479,10 +479,10 @@ let stateTransition
          AccountStateTransitionError.ParentAccountAlreadyInitialized
    | AccountCommand.InitializePrimaryCheckingAccount _, None ->
       virtualAccountTransition Account.empty command state
-   | AccountCommand.CreateAccount _, Some _ ->
+   | AccountCommand.CreateVirtualAccount _, Some _ ->
       Account.transitionErr
          AccountStateTransitionError.AccountNotReadyToActivate
-   | AccountCommand.CreateAccount _, None ->
+   | AccountCommand.CreateVirtualAccount _, None ->
       validateParentAccountActive state
       |> Result.bind (virtualAccountTransition Account.empty command)
    | AccountCommand.InternalTransferBetweenOrgs cmd, Some account ->

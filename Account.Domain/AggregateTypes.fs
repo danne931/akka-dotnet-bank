@@ -24,7 +24,7 @@ type ParentAccountCommand =
 [<RequireQualifiedAccess>]
 type AccountCommand =
    | InitializePrimaryCheckingAccount of InitializePrimaryCheckingAccountCommand
-   | CreateAccount of CreateAccountCommand
+   | CreateVirtualAccount of CreateVirtualAccountCommand
    | DepositCash of DepositCashCommand
    | Debit of DebitCommand
    | RefundDebit of RefundDebitCommand
@@ -60,7 +60,7 @@ type AccountCommand =
    member x.Envelope: Envelope =
       match x with
       | InitializePrimaryCheckingAccount cmd -> Command.envelope cmd
-      | CreateAccount cmd -> Command.envelope cmd
+      | CreateVirtualAccount cmd -> Command.envelope cmd
       | DepositCash cmd -> Command.envelope cmd
       | Debit cmd -> Command.envelope cmd
       | RefundDebit cmd -> Command.envelope cmd
@@ -107,7 +107,7 @@ type AccountCommand =
    member x.AccountId =
       match x with
       | InitializePrimaryCheckingAccount _ -> AccountId Guid.Empty
-      | CreateAccount cmd -> cmd.Data.AccountId
+      | CreateVirtualAccount cmd -> cmd.Data.AccountId
       | DepositCash cmd -> cmd.Data.AccountId
       | Debit cmd -> cmd.Data.AccountId
       | RefundDebit cmd -> cmd.Data.AccountId
@@ -168,7 +168,7 @@ type ParentAccountEvent =
 type AccountEvent =
    | InitializedPrimaryCheckingAccount of
       BankEvent<InitializedPrimaryCheckingAccount>
-   | CreatedAccount of BankEvent<CreatedAccount>
+   | CreatedVirtualAccount of BankEvent<CreatedVirtualAccount>
    | DepositedCash of BankEvent<DepositedCash>
    | DebitedAccount of BankEvent<DebitedAccount>
    | RefundedDebit of BankEvent<RefundedDebit>
@@ -214,7 +214,7 @@ type AccountEvent =
       match x with
       | InitializedPrimaryCheckingAccount evt ->
          evt.Data.PrimaryChecking.AccountId
-      | CreatedAccount evt -> evt.Data.AccountId
+      | CreatedVirtualAccount evt -> evt.Data.AccountId
       | DepositedCash evt -> evt.Data.AccountId
       | DebitedAccount evt -> evt.Data.AccountId
       | RefundedDebit evt -> evt.Data.AccountId
@@ -354,7 +354,7 @@ module AccountEnvelope =
       match box o with
       | :? BankEvent<InitializedPrimaryCheckingAccount> as evt ->
          InitializedPrimaryCheckingAccount evt
-      | :? BankEvent<CreatedAccount> as evt -> CreatedAccount evt
+      | :? BankEvent<CreatedVirtualAccount> as evt -> CreatedVirtualAccount evt
       | :? BankEvent<DepositedCash> as evt -> DepositedCash evt
       | :? BankEvent<DebitedAccount> as evt -> DebitedAccount evt
       | :? BankEvent<RefundedDebit> as evt -> RefundedDebit evt
@@ -435,7 +435,7 @@ module AccountEnvelope =
    let unwrap (o: AccountEvent) : OpenEventEnvelope =
       match o with
       | InitializedPrimaryCheckingAccount evt -> wrap evt, get evt
-      | CreatedAccount evt -> wrap evt, get evt
+      | CreatedVirtualAccount evt -> wrap evt, get evt
       | DepositedCash evt -> wrap evt, get evt
       | DebitedAccount evt -> wrap evt, get evt
       | RefundedDebit evt -> wrap evt, get evt

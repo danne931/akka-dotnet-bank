@@ -64,7 +64,7 @@ let private form
 
    let onSubmit depository name =
       let cmd =
-         CreateAccountCommand.create {
+         CreateVirtualAccountCommand.create {
             Name = name
             Depository = depository
             AccountNumber = AccountNumber.generate ()
@@ -74,7 +74,7 @@ let private form
             Currency = Currency.USD
             InitiatedBy = session.AsInitiator
          }
-         |> AccountCommand.CreateAccount
+         |> AccountCommand.CreateVirtualAccount
          |> FormCommand.Account
 
       Msg.Submit(FormEntity.Account Account.empty, cmd, Started)

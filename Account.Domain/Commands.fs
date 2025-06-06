@@ -57,7 +57,7 @@ module InitializePrimaryCheckingAccountCommand =
                }
       }
 
-type CreateAccountInput = {
+type CreateVirtualAccountInput = {
    Name: string
    AccountNumber: string
    Depository: AccountDepository
@@ -68,10 +68,10 @@ type CreateAccountInput = {
    InitiatedBy: Initiator
 }
 
-type CreateAccountCommand = Command<CreateAccountInput>
+type CreateVirtualAccountCommand = Command<CreateVirtualAccountInput>
 
-module CreateAccountCommand =
-   let create (data: CreateAccountInput) =
+module CreateVirtualAccountCommand =
+   let create (data: CreateVirtualAccountInput) =
       Command.create
          (ParentAccountId.toEntityId data.ParentAccountId)
          data.OrgId
@@ -80,8 +80,8 @@ module CreateAccountCommand =
          data
 
    let toEvent
-      (cmd: CreateAccountCommand)
-      : ValidationResult<BankEvent<CreatedAccount>>
+      (cmd: CreateVirtualAccountCommand)
+      : ValidationResult<BankEvent<CreatedVirtualAccount>>
       =
       validate {
          let input = cmd.Data
@@ -95,15 +95,17 @@ module CreateAccountCommand =
             RoutingNumber.fromString "Routing Number" "123456789"
 
          return
-            BankEvent.create2<CreateAccountInput, CreatedAccount> cmd {
-               Name = accountName
-               Depository = input.Depository
-               Balance = 0m
-               Currency = input.Currency
-               RoutingNumber = routingNumber
-               AccountNumber = accountNumber
-               AccountId = input.AccountId
-            }
+            BankEvent.create2<CreateVirtualAccountInput, CreatedVirtualAccount>
+               cmd
+               {
+                  Name = accountName
+                  Depository = input.Depository
+                  Balance = 0m
+                  Currency = input.Currency
+                  RoutingNumber = routingNumber
+                  AccountNumber = accountNumber
+                  AccountId = input.AccountId
+               }
       }
 
 type DepositCashInput = {

@@ -20,17 +20,18 @@ let startAccountRoutes (app: WebApplication) =
          Func<Guid, Task<IResult>>(fun id ->
             getAccount (AccountId id) |> RouteUtil.unwrapTaskResultOption)
       )
-      .RBAC(Permissions.GetAccount)
+      .RBAC(Permissions.GetVirtualAccount)
    |> ignore
 
    app
       .MapPost(
          AccountPath.Base,
-         Func<ActorSystem, CreateAccountCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (AccountCommand.CreateAccount cmd)
-            |> RouteUtil.unwrapTaskResult)
+         Func<ActorSystem, CreateVirtualAccountCommand, Task<IResult>>
+            (fun sys cmd ->
+               processCommand sys (AccountCommand.CreateVirtualAccount cmd)
+               |> RouteUtil.unwrapTaskResult)
       )
-      .RBAC(Permissions.CreateAccount)
+      .RBAC(Permissions.CreateVirtualAccount)
    |> ignore
 
    app

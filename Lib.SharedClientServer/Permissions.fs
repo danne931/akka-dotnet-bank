@@ -51,8 +51,8 @@ let ManageAutoTransferRules = Access [ admin ]
 
 // Account
 let GetOrgAndAccountProfiles = Access [ admin; scholar ]
-let GetAccount = Access [ admin; scholar ]
-let CreateAccount = Access [ admin ]
+let GetVirtualAccount = Access [ admin; scholar ]
+let CreateVirtualAccount = Access [ admin ]
 let Deposit = Access [ admin ]
 let CloseAccount = Access [ admin ]
 let BillingStatement = Access [ admin; scholar ]

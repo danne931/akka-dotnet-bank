@@ -308,7 +308,7 @@ let onPersisted
          |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.CreatedAccount e ->
+   | AccountEvent.CreatedVirtualAccount e ->
       let msg =
          EmailMessage.create
             state.OrgId

@@ -23,7 +23,7 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       Status = AccountStatus.Active
       AutoTransferRule = None
      }
-   | CreatedAccount e -> {
+   | CreatedVirtualAccount e -> {
       AccountId = e.Data.AccountId
       AccountNumber = e.Data.AccountNumber
       RoutingNumber = e.Data.RoutingNumber
@@ -162,11 +162,14 @@ module private StateTransition =
             account
             (InitializePrimaryCheckingAccountCommand.toEvent cmd)
 
-   let create (account: Account) (cmd: CreateAccountCommand) =
+   let create (account: Account) (cmd: CreateVirtualAccountCommand) =
       if account.Status <> AccountStatus.InitialEmptyState then
          transitionErr AccountNotReadyToActivate
       else
-         map CreatedAccount account (CreateAccountCommand.toEvent cmd)
+         map
+            CreatedVirtualAccount
+            account
+            (CreateVirtualAccountCommand.toEvent cmd)
 
    let deposit (account: Account) (cmd: DepositCashCommand) =
       if account.Status <> AccountStatus.Active then
@@ -520,7 +523,8 @@ let stateTransition (account: Account) (command: AccountCommand) =
    match command with
    | AccountCommand.InitializePrimaryCheckingAccount cmd ->
       StateTransition.initializePrimaryCheckingAccount account cmd
-   | AccountCommand.CreateAccount cmd -> StateTransition.create account cmd
+   | AccountCommand.CreateVirtualAccount cmd ->
+      StateTransition.create account cmd
    | AccountCommand.DepositCash cmd -> StateTransition.deposit account cmd
    | AccountCommand.Debit cmd -> StateTransition.debit account cmd
    | AccountCommand.RefundDebit cmd -> StateTransition.refundDebit account cmd
