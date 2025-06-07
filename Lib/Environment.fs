@@ -299,10 +299,10 @@ let config =
          BillingStatementPersistenceChunking = {
             Size =
                input.BillingStatementPersistenceChunking.Size
-               |> Option.defaultValue 5000
+               |> Option.defaultValue 100
             Duration =
                input.BillingStatementPersistenceChunking.Seconds
-               |> Option.defaultValue 1
+               |> Option.defaultValue 5
                |> TimeSpan.FromSeconds
          }
          BillingStatementPersistenceBackoffRestart =

@@ -281,21 +281,6 @@ let sqlParamReducer
          acc with
             PartnerBankInitialized = qParams :: acc.PartnerBankInitialized
       }
-   | AccountEvent.ParentAccount(ParentAccountEvent.BillingCycleStarted e) ->
-      let qParams = [
-         "parentAccountId",
-         PartnerBankSqlMapper.SqlWriter.parentAccountId (
-            ParentAccountId.fromEntityId e.EntityId
-         )
-
-         "lastBillingCycleDate",
-         PartnerBankSqlMapper.SqlWriter.lastBillingCycleDate (Some e.Timestamp)
-      ]
-
-      {
-         acc with
-            BillingCycle = qParams :: acc.BillingCycle
-      }
    | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient e) ->
       domesticRecipientReducer acc e.Data.Recipient
    | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient e) ->
@@ -643,6 +628,36 @@ let sqlParamReducer
       {
          acc with
             PlatformPayment = pParams :: acc.PlatformPayment
+      }
+   | AccountEvent.MaintenanceFeeDebited e ->
+      let qParams = [
+         "parentAccountId",
+         ParentAccountId.fromEntityId e.EntityId
+         |> PartnerBankSqlMapper.SqlWriter.parentAccountId
+
+         "lastBillingCycleDate",
+         Some e.Data.BillingDate
+         |> PartnerBankSqlMapper.SqlWriter.lastBillingCycleDate
+      ]
+
+      {
+         acc with
+            BillingCycle = qParams :: acc.BillingCycle
+      }
+   | AccountEvent.MaintenanceFeeSkipped e ->
+      let qParams = [
+         "parentAccountId",
+         ParentAccountId.fromEntityId e.EntityId
+         |> PartnerBankSqlMapper.SqlWriter.parentAccountId
+
+         "lastBillingCycleDate",
+         Some e.Data.BillingDate
+         |> PartnerBankSqlMapper.SqlWriter.lastBillingCycleDate
+      ]
+
+      {
+         acc with
+            BillingCycle = qParams :: acc.BillingCycle
       }
    | _ -> acc
 

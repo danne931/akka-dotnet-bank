@@ -7,8 +7,6 @@ open Bank.Account.Domain
 
 type BillingTransaction = private BillingTransaction of AccountEvent
 
-type BillingPeriod = { Month: int; Year: int }
-
 module BillingTransaction =
    let create
       (period: BillingPeriod)
@@ -23,9 +21,9 @@ module BillingTransaction =
          None
       else
          match evt with
-         | CreatedVirtualAccount _
          | DepositedCash _
          | DebitedAccount _
+         | RefundedDebit _
          | MaintenanceFeeDebited _
          | InternalTransferWithinOrgPending _
          | InternalTransferWithinOrgFailed _
@@ -33,12 +31,23 @@ module BillingTransaction =
          | InternalTransferBetweenOrgsPending _
          | InternalTransferBetweenOrgsFailed _
          | InternalTransferBetweenOrgsDeposited _
+         | InternalAutomatedTransferPending _
+         | InternalAutomatedTransferFailed _
+         | InternalAutomatedTransferDeposited _
+         | PlatformPaymentPaid _
+         | PlatformPaymentDeposited _
+         | PlatformPaymentRefunded _
          | DomesticTransferPending _
          | DomesticTransferFailed _ -> Some(BillingTransaction evt)
          | _ -> None
 
    let value (BillingTransaction evt) = evt
 
+let billingTransactions (period: BillingPeriod) (evts: AccountEvent list) =
+   List.choose (BillingTransaction.create period) evts
+
+/// Contains all money in/out pertaining to a virtual account.
+/// Corresponds directly to what is stored in the billing_statement table.
 type BillingStatement = {
    Transactions: BillingTransaction list
    Month: int
@@ -50,25 +59,8 @@ type BillingStatement = {
    OrgId: OrgId
 }
 
-type BillingPersistable = {
-   ParentAccountId: ParentAccountId
-   ParentAccountSnapshot: byte[]
-   LastPersistedEventSequenceNumber: Int64
-   Statements: BillingStatement list
-}
-
-type BillingCycleMessage =
-   | BillingCycleFanout
-   | BillingCycleFinished
-
-type BillingStatementMessage =
-   | RegisterBillingStatement of BillingPersistable
-   | GetFailedWrites
-
-let billingTransactions (period: BillingPeriod) (evts: AccountEvent list) =
-   List.choose (BillingTransaction.create period) evts
-
-let billingStatement
+/// Compute a BillingStatement for a given billing period for a virtual account
+let virtualAccountBillingStatement
    (account: Account)
    (events: AccountEvent list)
    (period: BillingPeriod)
@@ -84,3 +76,42 @@ let billingStatement
       ParentAccountId = account.ParentAccountId
       OrgId = account.OrgId
    }
+
+/// Compute BillingStatements for a given billing period for each
+/// of a parent account's subaccounts.
+let parentAccountBillingStatements
+   (state: ParentAccountSnapshot)
+   (period: BillingPeriod)
+   =
+   state.VirtualAccounts.Values
+   |> Seq.filter (fun a -> a.Status = AccountStatus.Active)
+   |> Seq.map (fun account ->
+      virtualAccountBillingStatement
+         account
+         (state.eventsForAccount account.AccountId)
+         period)
+   |> Seq.toList
+
+/// Contains BillingStatements for all virtual accounts of a parent account.
+/// Also contains the ParentAccountSnapshot corresponding to the actor snapshot.
+///
+/// Sent to the BillingStatementActor once a month to persist billing statements
+/// and parent account snapshots for all organizations.
+type BillingPersistable = {
+   CorrelationId: CorrelationId
+   OrgId: OrgId
+   ParentAccountId: ParentAccountId
+   ParentAccountSnapshot: byte[]
+   LastPersistedEventSequenceNumber: Int64
+   Statements: BillingStatement list
+}
+
+[<RequireQualifiedAccess>]
+type BillingCycleMessage =
+   | BillingCycleFanout
+   | BillingCycleFinished
+
+[<RequireQualifiedAccess>]
+type BillingStatementMessage =
+   | BulkPersist of BillingPersistable
+   | GetFailedWrites

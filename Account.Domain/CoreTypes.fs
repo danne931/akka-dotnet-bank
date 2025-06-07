@@ -181,3 +181,5 @@ type PurchaseRefundReason =
    | DuplicateCharge
    | AccountStateInvalid of PurchaseAccountFailReason
    | CardNetworkError of string
+
+type BillingPeriod = { Month: int; Year: int }

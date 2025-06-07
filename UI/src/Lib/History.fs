@@ -555,10 +555,6 @@ let accountHistoryUIFriendly
       }
    | ParentAccount evt ->
       match evt with
-      | ParentAccountEvent.BillingCycleStarted _ -> {
-         props with
-            Info = "New billing cycle.."
-        }
       | ParentAccountEvent.RegisteredDomesticTransferRecipient evt ->
          let name = domesticRecipientName evt.Data.Recipient
 
@@ -652,7 +648,6 @@ let private matchesParentAccountEventFilter
       | ParentAccountEvent.NicknamedDomesticTransferRecipient _
       | ParentAccountEvent.DomesticTransferRetryConfirmsRecipient _
       | ParentAccountEvent.DomesticTransferRecipientFailed _ -> true
-      | _ -> false
 
 let private matchesAccountEventFilter
    (event: AccountEvent)

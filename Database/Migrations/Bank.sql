@@ -910,7 +910,8 @@ CREATE TYPE saga_type AS ENUM (
    'Purchase',
    'DomesticTransfer',
    'PlatformTransfer',
-   'PlatformPayment'
+   'PlatformPayment',
+   'BillingStatement'
 );
 CREATE TYPE saga_status AS ENUM (
    'Scheduled',

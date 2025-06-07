@@ -26,6 +26,7 @@ open PurchaseSaga
 open DomesticTransferSaga
 open PlatformTransferSaga
 open PlatformPaymentSaga
+open BillingSaga
 
 // Child actor handles retrying domestic transfers which failed
 // due to the mock third party transfer service regarding the
@@ -78,66 +79,6 @@ module private RetryDomesticTransfers =
       getChildActorRef<_, AccountId> mailbox name
       |> Option.defaultWith (fun _ ->
          spawn mailbox name <| actorProps getRetryableTransfers)
-
-// Pass monthly billing statement to BillingStatementActor.
-// Conditionally apply monthly maintenance fee.
-// Email account owner to notify of billing statement availability.
-
-let private billingCycle
-   (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
-   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
-   (mailbox: Eventsourced<obj>)
-   (state: ParentAccountSnapshot)
-   (evt: BankEvent<BillingCycleStarted>)
-   =
-   let billingPeriod = {
-      Month = evt.Data.Month
-      Year = evt.Data.Year
-   }
-
-   let billing: BillingPersistable = {
-      ParentAccountId = state.ParentAccountId
-      ParentAccountSnapshot =
-         JsonSerializer.SerializeToUtf8Bytes(state, Serialization.jsonOptions)
-      LastPersistedEventSequenceNumber = mailbox.LastSequenceNr()
-      Statements =
-         state.VirtualAccounts.Values
-         |> Seq.filter (fun a -> a.Status = AccountStatus.Active)
-         |> Seq.map (fun account ->
-            BillingStatement.billingStatement
-               account
-               (state.eventsForAccount account.AccountId)
-               billingPeriod)
-         |> Seq.toList
-   }
-
-   getBillingStatementActor mailbox.System <! RegisterBillingStatement billing
-
-   let criteria = state.MaintenanceFeeCriteria
-   let compositeId = state.PrimaryVirtualAccountCompositeId
-
-   if criteria.CanSkipFee then
-      let msg =
-         SkipMaintenanceFeeCommand.create compositeId criteria
-         |> AccountCommand.SkipMaintenanceFee
-         |> AccountMessage.StateChange
-
-      mailbox.Parent() <! msg
-   else
-      let msg =
-         MaintenanceFeeCommand.create compositeId
-         |> AccountCommand.MaintenanceFee
-         |> AccountMessage.StateChange
-
-      mailbox.Parent() <! msg
-
-   let msg =
-      EmailMessage.create
-         state.OrgId
-         evt.CorrelationId
-         EmailInfo.BillingStatement
-
-   getEmailActor mailbox.System <! msg
 
 // Account events with an in/out money flow can produce an
 // automatic transfer.  Automated transfer account events have
@@ -274,7 +215,6 @@ let private onValidationError
 let onPersisted
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
-   (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (getRetryableTransfers:
       AccountId -> Task<Result<DomesticTransfer list option, Err>>)
@@ -297,6 +237,14 @@ let onPersisted
    let onDomesticTransferEvent evt corrId orgId =
       let msg =
          AppSaga.Event.DomesticTransfer evt |> AppSaga.sagaMessage orgId corrId
+
+      getSagaRef corrId <! msg
+
+   let onMaintenanceFeeProcessed corrId =
+      let msg =
+         BillingSagaEvent.MaintenanceFeeProcessed
+         |> AppSaga.Event.Billing
+         |> AppSaga.sagaMessage state.OrgId corrId
 
       getSagaRef corrId <! msg
 
@@ -336,8 +284,10 @@ let onPersisted
          |> AppSaga.sagaMessage e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.ParentAccount(ParentAccountEvent.BillingCycleStarted e) ->
-      billingCycle getBillingStatementRef getEmailRef mailbox state e
+   | AccountEvent.MaintenanceFeeDebited e ->
+      onMaintenanceFeeProcessed e.CorrelationId
+   | AccountEvent.MaintenanceFeeSkipped e ->
+      onMaintenanceFeeProcessed e.CorrelationId
    | AccountEvent.PlatformPaymentRequested e ->
       onPlatformPaymentEvent
          (PlatformPaymentSagaStartEvent.PaymentRequested e
@@ -523,8 +473,8 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
-   (getBillingStatementRef: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
       AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    =
@@ -555,7 +505,6 @@ let actorProps
             onPersisted
                getEmailRef
                getAccountClosureRef
-               getBillingStatementRef
                getSagaRef
                getDomesticTransfersRetryableUponRecipientEdit
                mailbox
@@ -598,6 +547,39 @@ let actorProps
                   stateOpt |> Option.bind (_.VirtualAccounts.TryFind(accountId))
 
                mailbox.Sender() <! account
+
+            | AccountMessage.ProcessBillingStatement(corrId, billingPeriod) ->
+               if state.Status <> ParentAccountStatus.Active then
+                  logError
+                     $"Attempt to process billing statement for inactive account
+                     {state.Status} {mailbox.Pid}"
+               else
+                  let msg =
+                     BillingSagaEvent.BillingStatementProcessing {
+                        MaintenanceFeeCriteria = state.MaintenanceFeeCriteria
+                        PrimaryCheckingAccountId = state.PrimaryVirtualAccountId
+                     }
+                     |> AppSaga.Event.Billing
+                     |> AppSaga.sagaMessage state.OrgId corrId
+
+                  getSagaRef corrId <! msg
+
+                  let billing = {
+                     OrgId = state.OrgId
+                     ParentAccountId = state.ParentAccountId
+                     CorrelationId = corrId
+                     ParentAccountSnapshot =
+                        JsonSerializer.SerializeToUtf8Bytes(
+                           state,
+                           Serialization.jsonOptions
+                        )
+                     LastPersistedEventSequenceNumber = mailbox.LastSequenceNr()
+                     Statements =
+                        parentAccountBillingStatements state billingPeriod
+                  }
+
+                  getBillingStatementActor mailbox.System
+                  <! BillingStatementMessage.BulkPersist billing
             | AccountMessage.AutoTransferCompute(frequency, accountId) ->
                let autoTransfers =
                   ParentAccount.computeAutoTransferStateTransitions
@@ -693,8 +675,8 @@ let initProps
          broadcaster
          getEmailActor
          getAccountClosureActor
-         getBillingStatementActor
          getSagaRef
+         getBillingStatementActor
          getDomesticTransfersRetryableUponRecipientEdit
 
    persistenceSupervisor

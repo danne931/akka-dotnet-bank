@@ -11,7 +11,6 @@ open AutomaticTransfer
 /// than one of the subacounts.
 [<RequireQualifiedAccess>]
 type ParentAccountCommand =
-   | StartBillingCycle of StartBillingCycleCommand
    | RegisterDomesticTransferRecipient of
       RegisterDomesticTransferRecipientCommand
    | EditDomesticTransferRecipient of EditDomesticTransferRecipientCommand
@@ -92,7 +91,6 @@ type AccountCommand =
       | DepositInternalAutoTransfer cmd -> Command.envelope cmd
       | ParentAccount cmd ->
          match cmd with
-         | ParentAccountCommand.StartBillingCycle cmd -> Command.envelope cmd
          | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
             Command.envelope cmd
          | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
@@ -153,7 +151,6 @@ type AccountCommand =
 
 [<RequireQualifiedAccess>]
 type ParentAccountEvent =
-   | BillingCycleStarted of BankEvent<BillingCycleStarted>
    | RegisteredDomesticTransferRecipient of
       BankEvent<RegisteredDomesticTransferRecipient>
    | EditedDomesticTransferRecipient of
@@ -406,10 +403,6 @@ module AccountEnvelope =
          InternalAutomatedTransferFailed evt
       | :? BankEvent<InternalAutomatedTransferDeposited> as evt ->
          InternalAutomatedTransferDeposited evt
-      | :? BankEvent<BillingCycleStarted> as evt ->
-         evt
-         |> ParentAccountEvent.BillingCycleStarted
-         |> AccountEvent.ParentAccount
       | :? BankEvent<RegisteredDomesticTransferRecipient> as evt ->
          evt
          |> ParentAccountEvent.RegisteredDomesticTransferRecipient
@@ -467,7 +460,6 @@ module AccountEnvelope =
       | InternalAutomatedTransferDeposited evt -> wrap evt, get evt
       | ParentAccount evt ->
          match evt with
-         | ParentAccountEvent.BillingCycleStarted evt -> wrap evt, get evt
          | ParentAccountEvent.RegisteredDomesticTransferRecipient evt ->
             wrap evt, get evt
          | ParentAccountEvent.EditedDomesticTransferRecipient evt ->
@@ -609,6 +601,7 @@ type AccountMessage =
    | StateChange of AccountCommand
    | Event of AccountEvent
    | AutoTransferCompute of AutomaticTransfer.Frequency * AccountId
+   | ProcessBillingStatement of CorrelationId * BillingPeriod
    | Delete
 
 [<RequireQualifiedAccess>]

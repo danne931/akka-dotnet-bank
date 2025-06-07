@@ -23,6 +23,7 @@ open OrgOnboardingSaga
 open EmployeeOnboardingSaga
 open CardSetupSaga
 open Bank.Scheduler
+open BillingSaga
 
 [<RequireQualifiedAccess>]
 type Event =
@@ -33,6 +34,7 @@ type Event =
    | DomesticTransfer of DomesticTransferSagaEvent
    | PlatformTransfer of PlatformTransferSagaEvent
    | PlatformPayment of PlatformPaymentSagaEvent
+   | Billing of BillingSagaEvent
 
    member x.Name =
       match x with
@@ -242,6 +244,20 @@ type Event =
             "PlatformPaymentEvaluateRemainingWork"
          | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts ->
             "PlatformPaymentResetInProgressActivityAttempts"
+      | Event.Billing e ->
+         match e with
+         | BillingSagaEvent.Start _ -> "BillingStatementStart"
+         | BillingSagaEvent.BillingStatementProcessing _ ->
+            "BillingStatementProcessing"
+         | BillingSagaEvent.BillingStatementPersisted ->
+            "BillingStatementPersisted"
+         | BillingSagaEvent.MaintenanceFeeProcessed ->
+            "BillingStatementMaintenanceFeeProcessed"
+         | BillingSagaEvent.BillingEmailSent -> "BillingStatementEmailSent"
+         | BillingSagaEvent.EvaluateRemainingWork ->
+            "BillingStatementEvaluateRemainingWork"
+         | BillingSagaEvent.ResetInProgressActivityAttempts ->
+            "BillingStatementResetInProgressActivityAttempts"
 
 [<RequireQualifiedAccess>]
 type Saga =
@@ -252,6 +268,7 @@ type Saga =
    | DomesticTransfer of DomesticTransferSaga
    | PlatformTransfer of PlatformTransferSaga
    | PlatformPayment of PlatformPaymentSaga
+   | Billing of BillingSaga
 
    interface ISaga with
       member x.SagaId =
@@ -265,6 +282,7 @@ type Saga =
          | Saga.PlatformTransfer s ->
             TransferId.toCorrelationId s.TransferInfo.TransferId
          | Saga.PlatformPayment s -> PaymentId.toCorrelationId s.PaymentInfo.Id
+         | Saga.Billing s -> s.CorrelationId
 
       member x.OrgId =
          match x with
@@ -275,6 +293,7 @@ type Saga =
          | Saga.DomesticTransfer s -> s.TransferInfo.Sender.OrgId
          | Saga.PlatformTransfer s -> s.TransferInfo.Sender.OrgId
          | Saga.PlatformPayment s -> s.PaymentInfo.Payee.OrgId
+         | Saga.Billing s -> s.OrgId
 
       member x.ActivityInProgressCount =
          match x with
@@ -285,6 +304,7 @@ type Saga =
          | Saga.DomesticTransfer s -> s.LifeCycle.InProgress.Length
          | Saga.PlatformTransfer s -> s.LifeCycle.InProgress.Length
          | Saga.PlatformPayment s -> s.LifeCycle.InProgress.Length
+         | Saga.Billing s -> s.LifeCycle.InProgress.Length
 
       member x.ActivityAttemptsExhaustedCount =
          match x with
@@ -301,6 +321,7 @@ type Saga =
             s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
          | Saga.PlatformPayment s ->
             s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
+         | Saga.Billing s -> s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
 
       member x.ActivityRetryableAfterInactivityCount =
          match x with
@@ -318,6 +339,8 @@ type Saga =
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
          | Saga.PlatformPayment s ->
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
+         | Saga.Billing s ->
+            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
 
       member x.ExhaustedAllAttempts =
          match x with
@@ -328,6 +351,7 @@ type Saga =
          | Saga.DomesticTransfer s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.PlatformTransfer s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.PlatformPayment s -> s.LifeCycle.SagaExhaustedAttempts
+         | Saga.Billing s -> s.LifeCycle.SagaExhaustedAttempts
 
       member x.InactivityTimeout =
          match x with
@@ -338,6 +362,7 @@ type Saga =
          | Saga.DomesticTransfer s -> s.LifeCycle.InactivityTimeout
          | Saga.PlatformTransfer s -> s.LifeCycle.InactivityTimeout
          | Saga.PlatformPayment s -> s.LifeCycle.InactivityTimeout
+         | Saga.Billing s -> s.LifeCycle.InactivityTimeout
 
 
 /// Wrap an AppSaga event in a saga message.
@@ -376,6 +401,8 @@ let sagaHandler
             | Saga.PlatformPayment _ ->
                PlatformPaymentSagaEvent.EvaluateRemainingWork
                |> Event.PlatformPayment
+            | Saga.Billing _ ->
+               BillingSagaEvent.EvaluateRemainingWork |> Event.Billing
       getResetInProgressActivitiesEvent =
          fun saga ->
             match saga with
@@ -400,6 +427,8 @@ let sagaHandler
             | Saga.PlatformPayment _ ->
                PlatformPaymentSagaEvent.ResetInProgressActivityAttempts
                |> Event.PlatformPayment
+            | Saga.Billing _ ->
+               BillingSagaEvent.ResetInProgressActivityAttempts |> Event.Billing
       applyEvent =
          fun (state: Saga option) (evt: Event) (timestamp: DateTime) ->
             match evt, state with
@@ -445,6 +474,12 @@ let sagaHandler
             | Event.PlatformPayment e, Some(Saga.PlatformPayment state) ->
                PlatformPaymentSaga.applyEvent (Some state) e timestamp
                |> Option.map Saga.PlatformPayment
+            | Event.Billing e, None ->
+               BillingSaga.applyEvent None e timestamp
+               |> Option.map Saga.Billing
+            | Event.Billing e, Some(Saga.Billing state) ->
+               BillingSaga.applyEvent (Some state) e timestamp
+               |> Option.map Saga.Billing
             | _ -> state
       stateTransition =
          fun (state: Saga option) (evt: Event) (timestamp: DateTime) ->
@@ -491,6 +526,12 @@ let sagaHandler
             | Event.PlatformPayment e, Some(Saga.PlatformPayment state) ->
                PlatformPaymentSaga.stateTransition (Some state) e timestamp
                |> Result.map (Option.map Saga.PlatformPayment)
+            | Event.Billing e, None ->
+               BillingSaga.stateTransition None e timestamp
+               |> Result.map (Option.map Saga.Billing)
+            | Event.Billing e, Some(Saga.Billing state) ->
+               BillingSaga.stateTransition (Some state) e timestamp
+               |> Result.map (Option.map Saga.Billing)
             | _ ->
                Error
                   Lib.Saga.SagaStateTransitionError.ReceivedEventOfDifferentSagaType
@@ -711,6 +752,18 @@ let sagaHandler
                  Saga.PlatformPayment state,
                  _ ->
                   PlatformPaymentSaga.onEventPersisted deps priorState state evt
+               | _ -> notHandled ()
+            | Event.Billing evt ->
+               let deps: BillingSaga.PersistenceHandlerDependencies = {
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+               }
+
+               match priorState, state, evt with
+               | None, Saga.Billing _, BillingSagaEvent.Start evt ->
+                  BillingSaga.onStartEventPersisted deps evt
+               | Some(Saga.Billing priorState), Saga.Billing state, _ ->
+                  BillingSaga.onEventPersisted deps priorState state evt
                | _ -> notHandled ()
    }
 

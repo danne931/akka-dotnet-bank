@@ -16,6 +16,7 @@ open ActorUtil
 open Lib.Types
 open Lib.Postgres
 open Lib.SharedTypes
+open Lib.Saga
 
 let getBillingCycleReadyAccounts () =
    let prevCycle = Fields.lastBillingCycleDate
@@ -43,7 +44,7 @@ let getBillingCycleReadyAccounts () =
 let private fanOutBillingCycleMessage
    (ctx: Actor<_>)
    (throttle: StreamThrottle)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    =
    task {
       let mat = ctx.System.Materializer()
@@ -73,31 +74,37 @@ let private fanOutBillingCycleMessage
             // every month.  The billing period refers to the previous month.
             let billingPeriod = DateTime.UtcNow.AddMonths -1
 
-            let msg =
-               StartBillingCycleCommand.create (parentAccountId, orgId) {
-                  Month = billingPeriod.Month
-                  Year = billingPeriod.Year
-                  Reference = None
-               }
-               |> ParentAccountCommand.StartBillingCycle
-               |> AccountCommand.ParentAccount
-               |> AccountMessage.StateChange
+            let corrId = CorrelationId.create ()
 
-            getAccountRef parentAccountId <! msg)
+            let msg =
+               BillingSaga.BillingSagaEvent.Start {
+                  BillingCycleDate = DateTime.UtcNow
+                  BillingPeriod = {
+                     Month = billingPeriod.Month
+                     Year = billingPeriod.Year
+                  }
+                  ParentAccountId = parentAccountId
+                  OrgId = orgId
+                  CorrelationId = corrId
+               }
+               |> AppSaga.Event.Billing
+               |> AppSaga.sagaMessage orgId corrId
+
+            getSagaRef corrId <! msg)
 
       return BillingCycleMessage.BillingCycleFinished
    }
 
 let actorProps
    (throttle: StreamThrottle)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    =
    let handler (ctx: Actor<BillingCycleMessage>) =
       function
       | BillingCycleMessage.BillingCycleFanout ->
          logInfo ctx "Start billing cycle"
 
-         fanOutBillingCycleMessage ctx throttle getAccountRef |> Async.AwaitTask
+         fanOutBillingCycleMessage ctx throttle getSagaRef |> Async.AwaitTask
          |!> retype ctx.Self
          |> ignored
       | BillingCycleMessage.BillingCycleFinished ->

@@ -85,10 +85,6 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       match evt with
       | AccountEvent.ParentAccount evt ->
          match evt with
-         | ParentAccountEvent.BillingCycleStarted e -> {
-            state with
-               LastBillingCycleDate = Some e.Timestamp
-           }
          | ParentAccountEvent.RegisteredDomesticTransferRecipient e ->
             let recipient = e.Data.Recipient
 
@@ -172,10 +168,15 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
             PrimaryVirtualAccountId = e.Data.PrimaryChecking.AccountId
             Status = ParentAccountStatus.Active
         }
-      | AccountEvent.MaintenanceFeeSkipped _
-      | AccountEvent.MaintenanceFeeDebited _ -> {
+      | AccountEvent.MaintenanceFeeSkipped e -> {
          updated with
             MaintenanceFeeCriteria = MaintenanceFee.reset updated.Balance
+            LastBillingCycleDate = Some e.Data.BillingDate
+        }
+      | AccountEvent.MaintenanceFeeDebited e -> {
+         updated with
+            MaintenanceFeeCriteria = MaintenanceFee.reset updated.Balance
+            LastBillingCycleDate = Some e.Data.BillingDate
         }
       | AccountEvent.DebitedAccount _
       | AccountEvent.DomesticTransferPending _
@@ -248,15 +249,16 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       | _ -> updated
 
    let updatedEvents = evt :: state.Events
+   let previousBillingDate = state.LastBillingCycleDate
 
    let updatedEvents =
-      match evt, state.LastBillingCycleDate with
+      match evt, previousBillingDate with
       | MaintenanceFeeDebited _, Some date
       | MaintenanceFeeSkipped _, Some date ->
          // Keep events that occurred after the previous billing statement period.
          let cutoff = DateTime(date.Year, date.Month, 1).ToUniversalTime()
 
-         state.Events
+         updatedEvents
          |> List.filter (fun evt ->
             let _, env = AccountEnvelope.unwrap evt
             env.Timestamp >= cutoff)
@@ -315,19 +317,6 @@ module private StateTransition =
       |> Result.map (fun evt ->
          let evt = AccountEvent.ParentAccount(eventTransform evt)
          (evt, applyEvent state evt))
-
-   let startBillingCycle
-      (state: ParentAccountSnapshot)
-      (cmd: StartBillingCycleCommand)
-      =
-      if state.Status <> ParentAccountStatus.Active then
-         Account.transitionErr
-            AccountStateTransitionError.ParentAccountNotActive
-      else
-         mapParent
-            ParentAccountEvent.BillingCycleStarted
-            state
-            (StartBillingCycleCommand.toEvent cmd)
 
    let registerDomesticTransferRecipient
       (state: ParentAccountSnapshot)
@@ -460,8 +449,6 @@ let stateTransition
    match command, virtualAccount with
    | AccountCommand.ParentAccount cmd, _ ->
       match cmd with
-      | ParentAccountCommand.StartBillingCycle cmd ->
-         StateTransition.startBillingCycle state cmd
       | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
          StateTransition.registerDomesticTransferRecipient state cmd
       | ParentAccountCommand.EditDomesticTransferRecipient cmd ->

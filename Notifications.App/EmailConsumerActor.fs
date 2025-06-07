@@ -25,6 +25,7 @@ open PlatformTransferSaga
 open PlatformPaymentSaga
 open PurchaseSaga
 open DomesticTransferSaga
+open BillingSaga
 
 module EmailRequest =
    type PreliminaryT = {
@@ -383,6 +384,10 @@ let onSuccessfulServiceResponse
       | EmailInfo.PlatformPaymentDeclined _ ->
          PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee
          |> AppSaga.Event.PlatformPayment
+         |> Some
+      | EmailInfo.BillingStatement ->
+         BillingSaga.BillingSagaEvent.BillingEmailSent
+         |> AppSaga.Event.Billing
          |> Some
       | _ -> None
 

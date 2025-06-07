@@ -63,20 +63,16 @@ type RefundedDebit = {
 type MaintenanceFeeDebited = {
    AccountId: AccountId
    Amount: decimal
+   BillingDate: DateTime
 }
 
 type MaintenanceFeeSkipped = {
    AccountId: AccountId
    Reason: MaintenanceFeeCriteria
+   BillingDate: DateTime
 }
 
 type AccountClosed = {
    AccountId: AccountId
-   Reference: string option
-}
-
-type BillingCycleStarted = {
-   Month: int
-   Year: int
    Reference: string option
 }

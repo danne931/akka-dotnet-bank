@@ -241,15 +241,18 @@ type MaintenanceFeeCommand = Command<MaintenanceFeeDebited>
 module MaintenanceFeeCommand =
    let create
       (accountId: AccountId, parentAccountId: ParentAccountId, orgId: OrgId)
+      (corrId: CorrelationId)
+      (billingDate: DateTime)
       =
       Command.create
          (ParentAccountId.toEntityId parentAccountId)
          orgId
-         (CorrelationId.create ())
+         corrId
          Initiator.System
          {
             AccountId = accountId
             Amount = MaintenanceFee.RecurringDebitAmount
+            BillingDate = billingDate
          }
 
    let toEvent
@@ -263,16 +266,19 @@ type SkipMaintenanceFeeCommand = Command<MaintenanceFeeSkipped>
 module SkipMaintenanceFeeCommand =
    let create
       (accountId: AccountId, parentAccountId: ParentAccountId, orgId: OrgId)
+      (corrId: CorrelationId)
       (criteria: MaintenanceFee.MaintenanceFeeCriteria)
+      (billingDate: DateTime)
       =
       Command.create
          (ParentAccountId.toEntityId parentAccountId)
          orgId
-         (CorrelationId.create ())
+         corrId
          Initiator.System
          {
             AccountId = accountId
             Reason = criteria
+            BillingDate = billingDate
          }
 
    let toEvent
@@ -301,23 +307,3 @@ module CloseAccountCommand =
       : ValidationResult<BankEvent<AccountClosed>>
       =
       Ok <| BankEvent.create<AccountClosed> cmd
-
-type StartBillingCycleCommand = Command<BillingCycleStarted>
-
-module StartBillingCycleCommand =
-   let create
-      (parentAccountId: ParentAccountId, orgId: OrgId)
-      (data: BillingCycleStarted)
-      =
-      Command.create
-         (ParentAccountId.toEntityId parentAccountId)
-         orgId
-         (CorrelationId.create ())
-         Initiator.System
-         data
-
-   let toEvent
-      (cmd: StartBillingCycleCommand)
-      : ValidationResult<BankEvent<BillingCycleStarted>>
-      =
-      Ok <| BankEvent.create<BillingCycleStarted> cmd

@@ -8,14 +8,17 @@ open Akka.Hosting
 open Akkling
 open Akka.Streams
 open Akkling.Streams
+open Akkling.Cluster.Sharding
 
 open BillingStatement
 open BillingSqlMapper
+open BillingSaga
 open ActorUtil
 open Lib.Postgres
 open Lib.SharedTypes
 open Lib.Types
 open Lib.BulkWriteStreamFlow
+open Lib.Saga
 
 type BillingPersistence = {
    saveBillingStatements: BillingPersistable list -> Task<Result<int list, Err>>
@@ -23,10 +26,12 @@ type BillingPersistence = {
 
 // NOTE:
 // --BillingStatementActor--
-// Collects billing statement records to insert in batches.
-// Billing statements are persisted in a single transaction
-// once the batch size limit is reached or after some duration
-// in seconds from the initial BillingStatement message.
+// Facilitates performant billing statement & parent account actor snapshot
+// persistence during monthly billing cycle processing for each organization.
+//
+// Collects billing statements & parent account snapshots to insert in batches.
+// Persisted in a single transaction once the batch size limit is reached or
+// after some duration in seconds from the initial BillingStatement message.
 
 let get (system: ActorSystem) : IActorRef<BillingStatementMessage> =
    typed
@@ -38,6 +43,7 @@ let initQueueSource
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryAfter: TimeSpan)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    (billingStatementActorRef: IActorRef<obj>)
    =
    let flow, bulkWriteRef =
@@ -50,10 +56,19 @@ let initQueueSource
          onRetry =
             fun (statements: BillingPersistable seq) ->
                for bill in statements do
-                  billingStatementActorRef <! RegisterBillingStatement bill
+                  billingStatementActorRef
+                  <! BillingStatementMessage.BulkPersist bill
          onPersistOk =
-            fun _ response ->
+            fun statements response ->
                SystemLog.info system $"Saved billing statements {response}"
+
+               for s in statements do
+                  let msg =
+                     BillingSagaEvent.BillingStatementPersisted
+                     |> AppSaga.Event.Billing
+                     |> AppSaga.sagaMessage s.OrgId s.CorrelationId
+
+                  getSagaRef s.CorrelationId <! msg
       }
 
    let source =
@@ -69,6 +84,7 @@ let actorProps
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    =
    let rec init (ctx: Actor<obj>) = actor {
       let! msg = ctx.Receive()
@@ -86,6 +102,7 @@ let actorProps
                   chunking
                   restartSettings
                   retryFailedPersistenceAfter
+                  getSagaRef
                   ctx.Self
 
             let queue =
@@ -111,7 +128,7 @@ let actorProps
          match msg with
          | :? BillingStatementMessage as msg ->
             match msg with
-            | RegisterBillingStatement persistable ->
+            | BillingStatementMessage.BulkPersist persistable ->
                let! result = queueOffer<BillingPersistable> queue persistable
 
                return
@@ -222,6 +239,7 @@ let start
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
+   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
    : IActorRef<BillingStatementMessage>
    =
    spawn system ActorMetadata.billingStatement.Name
@@ -233,4 +251,5 @@ let start
          chunking
          restartSettings
          retryFailedPersistenceAfter
+         getSagaRef
    |> retype

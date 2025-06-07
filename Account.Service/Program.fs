@@ -191,8 +191,8 @@ builder.Services.AddAkka(
             (fun system _ resolver ->
                let typedProps =
                   BillingCycleActor.actorProps
-                  <| Env.config.BillingCycleFanoutThrottle
-                  <| AccountActor.get system
+                     Env.config.BillingCycleFanoutThrottle
+                     (AppSaga.getEntityRef system)
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -372,6 +372,7 @@ builder.Services.AddAkka(
                   Env.config.BillingStatementPersistenceChunking
                   Env.config.BillingStatementPersistenceBackoffRestart
                   Env.config.BillingStatementRetryPersistenceAfter
+                  (AppSaga.getEntityRef system)
                |> untyped
             )
 

@@ -9,6 +9,7 @@ open PlatformTransferSaga
 open OrgOnboardingSaga
 open EmployeeOnboardingSaga
 open CardSetupSaga
+open BillingSaga
 open Bank.Transfer.Domain
 
 let table = "saga"
@@ -65,6 +66,7 @@ module Writer =
          | AppSaga.Saga.DomesticTransfer _ -> "DomesticTransfer"
          | AppSaga.Saga.PlatformTransfer _ -> "PlatformTransfer"
          | AppSaga.Saga.PlatformPayment _ -> "PlatformPayment"
+         | AppSaga.Saga.Billing _ -> "BillingStatement"
 
       Sql.string name
 
@@ -111,6 +113,11 @@ module Writer =
             | PlatformPaymentSagaStatus.InProgress _ -> "InProgress"
             | PlatformPaymentSagaStatus.Completed -> "Completed"
             | PlatformPaymentSagaStatus.Failed _ -> "Failed"
+         | AppSaga.Saga.Billing s ->
+            match s.Status with
+            | BillingSagaStatus.InProgress -> "InProgress"
+            | BillingSagaStatus.Completed -> "Completed"
+            | BillingSagaStatus.Failed -> "Failed"
 
       Sql.string status
 
