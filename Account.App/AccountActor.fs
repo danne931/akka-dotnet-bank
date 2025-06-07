@@ -28,58 +28,6 @@ open PlatformTransferSaga
 open PlatformPaymentSaga
 open BillingSaga
 
-// Child actor handles retrying domestic transfers which failed
-// due to the mock third party transfer service regarding the
-// Recipient of the Transfer as having invalid account info.
-module private RetryDomesticTransfers =
-   let private actorProps
-      (getRetryableTransfers:
-         AccountId -> Task<Result<DomesticTransfer list option, Err>>)
-      : Props<AccountId>
-      =
-      let handler (ctx: Actor<_>) (recipientId: AccountId) = actor {
-         let! res = getRetryableTransfers recipientId
-
-         match res with
-         | Error err ->
-            logError ctx $"Error getting retryable transfers {err}"
-            return unhandled ()
-         | Ok None -> return ignored ()
-         | Ok(Some transfers) ->
-            for (transfer: DomesticTransfer) in transfers do
-               let msg =
-                  DomesticTransferCommand.create
-                     (transfer.TransferId |> TransferId.get |> CorrelationId)
-                     transfer.InitiatedBy
-                     {
-                        Amount = transfer.Amount
-                        Sender = transfer.Sender
-                        Recipient = transfer.Recipient
-                        Memo = transfer.Memo
-                        ScheduledDateSeedOverride = None
-                        OriginatedFromSchedule = false
-                     }
-                  |> AccountCommand.DomesticTransfer
-                  |> AccountMessage.StateChange
-
-               ctx.Parent() <! msg
-
-            return ignored ()
-      }
-
-      props (actorOf2 handler)
-
-   let getOrStart
-      (getRetryableTransfers:
-         AccountId -> Task<Result<DomesticTransfer list option, Err>>)
-      (mailbox: Actor<_>)
-      =
-      let name = "retry-domestic-transfers"
-
-      getChildActorRef<_, AccountId> mailbox name
-      |> Option.defaultWith (fun _ ->
-         spawn mailbox name <| actorProps getRetryableTransfers)
-
 // Account events with an in/out money flow can produce an
 // automatic transfer.  Automated transfer account events have
 // money flow but they can not generate an auto transfer.
@@ -376,9 +324,15 @@ let onPersisted
          e.CorrelationId
          e.OrgId
    | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient e) ->
-      let aref = RetryDomesticTransfers.getOrStart getRetryableTransfers mailbox
+      // Retries domestic transfers which failed due to the mock third party
+      // transfer service regarding the Recipient of the Transfer as having
+      // invalid account info.
+      let retryable =
+         getRetryableTransfers e.Data.Recipient.RecipientAccountId
+         |> Async.AwaitTask
+         |> Async.map AccountMessage.DomesticTransfersRetryableUponRecipientEdit
 
-      aref <! e.Data.Recipient.RecipientAccountId
+      retype mailbox.Self <!| retryable
    | _ -> ()
 
 let persistInternalTransferWithinOrgEvent
@@ -547,7 +501,6 @@ let actorProps
                   stateOpt |> Option.bind (_.VirtualAccounts.TryFind(accountId))
 
                mailbox.Sender() <! account
-
             | AccountMessage.ProcessBillingStatement(corrId, billingPeriod) ->
                if state.Status <> ParentAccountStatus.Active then
                   logError
@@ -600,6 +553,29 @@ let actorProps
                      List.map (AccountMessage.Event >> box) autoTransferEvts
 
                   return! PersistAll evts
+            | AccountMessage.DomesticTransfersRetryableUponRecipientEdit res ->
+               match res with
+               | Error err ->
+                  logError $"Error getting retryable transfers {err}"
+               | Ok None ->
+                  logDebug mailbox "No retryable transfers upon recipient edit."
+               | Ok(Some transfers) ->
+                  logInfo
+                     mailbox
+                     $"Retrying {transfers.Length} transfers upon recipient edit"
+
+                  for (transfer: DomesticTransfer) in transfers do
+                     let corrId = TransferId.toCorrelationId transfer.TransferId
+
+                     let msg =
+                        Some transfer.Recipient
+                        |> DomesticTransferSagaEvent.RetryTransferServiceRequest
+                        |> AppSaga.Event.DomesticTransfer
+                        |> AppSaga.sagaMessage transfer.Sender.OrgId corrId
+
+                     getSagaRef corrId <! msg
+
+               return ignored ()
             | _ -> unhandled ()
          (*
             | AccountMessage.Delete ->

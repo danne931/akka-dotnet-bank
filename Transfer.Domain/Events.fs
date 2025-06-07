@@ -63,19 +63,6 @@ type RegisteredDomesticTransferRecipient = {
 
 type EditedDomesticTransferRecipient = { Recipient: DomesticTransferRecipient }
 
-type DomesticTransferRecipientFailed = {
-   RecipientId: AccountId
-   TransferId: TransferId
-   Reason: DomesticTransferRecipientFailReason
-}
-
-/// Successful retry of a previously failed domestic transfer infers that
-/// the recipient info has been corrected.
-type DomesticTransferRetryConfirmsRecipient = {
-   RecipientId: AccountId
-   TransferId: TransferId
-}
-
 type NicknamedDomesticTransferRecipient = {
    RecipientId: AccountId
    RecipientAccountEnvironment: RecipientAccountEnvironment

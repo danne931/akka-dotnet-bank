@@ -53,8 +53,6 @@ let parentAccountEventFilterNames
               typeof<RegisteredDomesticTransferRecipient>.Name
               typeof<EditedDomesticTransferRecipient>.Name
               typeof<NicknamedDomesticTransferRecipient>.Name
-              typeof<DomesticTransferRetryConfirmsRecipientCommand>.Name
-              typeof<DomesticTransferRecipientFailed>.Name
              ])
       []
    |> List.toArray

@@ -562,20 +562,6 @@ let accountHistoryUIFriendly
             props with
                Info = $"Created domestic recipient: {name}"
          }
-      | ParentAccountEvent.DomesticTransferRetryConfirmsRecipient evt ->
-         let name = domesticRecipientNameFromId evt.Data.RecipientId
-
-         {
-            props with
-               Info = $"Recipient confirmed upon transfer retry: {name}"
-         }
-      | ParentAccountEvent.DomesticTransferRecipientFailed evt ->
-         let name = domesticRecipientNameFromId evt.Data.RecipientId
-
-         {
-            props with
-               Info = $"Recipient {name} invalid due to {evt.Data.Reason}"
-         }
       | ParentAccountEvent.EditedDomesticTransferRecipient evt ->
          let name = domesticRecipientName evt.Data.Recipient
 
@@ -645,9 +631,7 @@ let private matchesParentAccountEventFilter
       match event with
       | ParentAccountEvent.RegisteredDomesticTransferRecipient _
       | ParentAccountEvent.EditedDomesticTransferRecipient _
-      | ParentAccountEvent.NicknamedDomesticTransferRecipient _
-      | ParentAccountEvent.DomesticTransferRetryConfirmsRecipient _
-      | ParentAccountEvent.DomesticTransferRecipientFailed _ -> true
+      | ParentAccountEvent.NicknamedDomesticTransferRecipient _ -> true
 
 let private matchesAccountEventFilter
    (event: AccountEvent)

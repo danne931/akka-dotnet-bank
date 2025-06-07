@@ -158,7 +158,7 @@ type Event =
             "DomesticTransferSenderAccountUnableToDeductFunds"
          | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
             "DomesticTransferTransferProcessorProgressUpdate"
-         | DomesticTransferSagaEvent.RetryTransferServiceRequest ->
+         | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
             "DomesticTransferRetryTransferServiceRequest"
          | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
             "DomesticTransferMarkedAsSettled"

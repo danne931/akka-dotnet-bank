@@ -299,43 +299,6 @@ let sqlParamReducer
             UpdatedDomesticTransferRecipientNickname =
                qParams :: acc.UpdatedDomesticTransferRecipientNickname
       }
-   | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRecipientFailed e) ->
-      let updatedStatus =
-         match e.Data.Reason with
-         | DomesticTransferRecipientFailReason.ClosedAccount ->
-            RecipientRegistrationStatus.Closed
-         | DomesticTransferRecipientFailReason.InvalidAccountInfo ->
-            RecipientRegistrationStatus.InvalidAccount
-
-      let qParams = [
-         "recipientAccountId",
-         TransferSqlWriter.DomesticRecipient.recipientAccountId
-            e.Data.RecipientId
-
-         "status", TransferSqlWriter.DomesticRecipient.status updatedStatus
-      ]
-
-      {
-         acc with
-            UpdatedDomesticTransferRecipientStatus =
-               qParams :: acc.UpdatedDomesticTransferRecipientStatus
-      }
-   | AccountEvent.ParentAccount(ParentAccountEvent.DomesticTransferRetryConfirmsRecipient e) ->
-      let qParams = [
-         "recipientAccountId",
-         TransferSqlWriter.DomesticRecipient.recipientAccountId
-            e.Data.RecipientId
-
-         "status",
-         TransferSqlWriter.DomesticRecipient.status
-            RecipientRegistrationStatus.Confirmed
-      ]
-
-      {
-         acc with
-            UpdatedDomesticTransferRecipientStatus =
-               qParams :: acc.UpdatedDomesticTransferRecipientStatus
-      }
    | AccountEvent.InternalTransferWithinOrgPending e ->
       let info = e.Data.BaseInfo
 
@@ -524,15 +487,61 @@ let sqlParamReducer
          (DomesticTransferProgress.InProgress e.Data.InProgressInfo)
          e.Data.BaseInfo
    | AccountEvent.DomesticTransferFailed e ->
-      domesticTransferStatusReducer
-         acc
-         (DomesticTransferProgress.Failed e.Data.Reason)
-         e.Data.BaseInfo
+      let acc =
+         domesticTransferStatusReducer
+            acc
+            (DomesticTransferProgress.Failed e.Data.Reason)
+            e.Data.BaseInfo
+
+      let updatedRecipientStatus =
+         match e.Data.Reason with
+         | DomesticTransferFailReason.AccountClosed ->
+            Some RecipientRegistrationStatus.Closed
+         | DomesticTransferFailReason.InvalidAccountInfo ->
+            Some RecipientRegistrationStatus.InvalidAccount
+         | _ -> None
+
+      match updatedRecipientStatus with
+      | Some status ->
+         let qParams = [
+            "recipientAccountId",
+            TransferSqlWriter.DomesticRecipient.recipientAccountId
+               e.Data.BaseInfo.Recipient.RecipientAccountId
+
+            "status", TransferSqlWriter.DomesticRecipient.status status
+         ]
+
+         {
+            acc with
+               UpdatedDomesticTransferRecipientStatus =
+                  qParams :: acc.UpdatedDomesticTransferRecipientStatus
+         }
+      | None -> acc
    | AccountEvent.DomesticTransferCompleted e ->
-      domesticTransferStatusReducer
-         acc
-         DomesticTransferProgress.Completed
-         e.Data.BaseInfo
+      let acc =
+         domesticTransferStatusReducer
+            acc
+            DomesticTransferProgress.Completed
+            e.Data.BaseInfo
+
+      match e.Data.FromRetry with
+      | Some DomesticTransferFailReason.InvalidAccountInfo ->
+         let qParams = [
+            "recipientAccountId",
+            TransferSqlWriter.DomesticRecipient.recipientAccountId
+               e.Data.BaseInfo.Recipient.RecipientAccountId
+
+            "status",
+            TransferSqlWriter.DomesticRecipient.status
+               RecipientRegistrationStatus.Confirmed
+         ]
+
+         {
+            acc with
+               UpdatedDomesticTransferRecipientStatus =
+                  qParams :: acc.UpdatedDomesticTransferRecipientStatus
+         }
+      | _ -> acc
    | AccountEvent.PlatformPaymentRequested e ->
       let pInfo = e.Data.BaseInfo
 

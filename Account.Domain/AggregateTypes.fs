@@ -16,9 +16,6 @@ type ParentAccountCommand =
    | EditDomesticTransferRecipient of EditDomesticTransferRecipientCommand
    | NicknameDomesticTransferRecipient of
       NicknameDomesticTransferRecipientCommand
-   | FailDomesticTransferRecipient of FailDomesticTransferRecipientCommand
-   | DomesticTransferRetryConfirmsRecipient of
-      DomesticTransferRetryConfirmsRecipientCommand
 
 [<RequireQualifiedAccess>]
 type AccountCommand =
@@ -97,10 +94,6 @@ type AccountCommand =
             Command.envelope cmd
          | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
             Command.envelope cmd
-         | ParentAccountCommand.FailDomesticTransferRecipient cmd ->
-            Command.envelope cmd
-         | ParentAccountCommand.DomesticTransferRetryConfirmsRecipient cmd ->
-            Command.envelope cmd
 
    member x.AccountId =
       match x with
@@ -157,10 +150,6 @@ type ParentAccountEvent =
       BankEvent<EditedDomesticTransferRecipient>
    | NicknamedDomesticTransferRecipient of
       BankEvent<NicknamedDomesticTransferRecipient>
-   | DomesticTransferRecipientFailed of
-      BankEvent<DomesticTransferRecipientFailed>
-   | DomesticTransferRetryConfirmsRecipient of
-      BankEvent<DomesticTransferRetryConfirmsRecipient>
 
 type AccountEvent =
    | InitializedPrimaryCheckingAccount of
@@ -415,14 +404,6 @@ module AccountEnvelope =
          evt
          |> ParentAccountEvent.NicknamedDomesticTransferRecipient
          |> AccountEvent.ParentAccount
-      | :? BankEvent<DomesticTransferRecipientFailed> as evt ->
-         evt
-         |> ParentAccountEvent.DomesticTransferRecipientFailed
-         |> AccountEvent.ParentAccount
-      | :? BankEvent<DomesticTransferRetryConfirmsRecipient> as evt ->
-         evt
-         |> ParentAccountEvent.DomesticTransferRetryConfirmsRecipient
-         |> AccountEvent.ParentAccount
       | _ -> failwith "Missing definition for AccountEvent message"
 
    let unwrap (o: AccountEvent) : OpenEventEnvelope =
@@ -465,10 +446,6 @@ module AccountEnvelope =
          | ParentAccountEvent.EditedDomesticTransferRecipient evt ->
             wrap evt, get evt
          | ParentAccountEvent.NicknamedDomesticTransferRecipient evt ->
-            wrap evt, get evt
-         | ParentAccountEvent.DomesticTransferRetryConfirmsRecipient evt ->
-            wrap evt, get evt
-         | ParentAccountEvent.DomesticTransferRecipientFailed evt ->
             wrap evt, get evt
 
 type Account = {
@@ -602,6 +579,8 @@ type AccountMessage =
    | Event of AccountEvent
    | AutoTransferCompute of AutomaticTransfer.Frequency * AccountId
    | ProcessBillingStatement of CorrelationId * BillingPeriod
+   | DomesticTransfersRetryableUponRecipientEdit of
+      Result<DomesticTransfer list option, Err>
    | Delete
 
 [<RequireQualifiedAccess>]

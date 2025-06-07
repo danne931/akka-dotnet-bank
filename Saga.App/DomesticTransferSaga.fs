@@ -25,7 +25,8 @@ type DomesticTransferSagaEvent =
    | TransferProcessorProgressUpdate of DomesticTransferServiceProgress
    | TransferMarkedAsSettled
    | TransferInitiatedNotificationSent
-   | RetryTransferServiceRequest
+   | RetryTransferServiceRequest of
+      updatedRecipient: DomesticTransferRecipient option
    | SenderAccountUnableToDeductFunds of DomesticTransferFailReason
    | SenderAccountRefunded
    | EvaluateRemainingWork
@@ -75,6 +76,7 @@ type DomesticTransferSaga = {
    Status: DomesticTransferProgress
    TransferInfo: BaseDomesticTransferInfo
    LifeCycle: SagaLifeCycle<Activity>
+   ReasonForRetryServiceAck: DomesticTransferFailReason option
 } with
 
    member x.OriginatedFromSchedule =
@@ -119,6 +121,7 @@ let applyEvent
                Status = DomesticTransferProgress.WaitingForTransferServiceAck
                Events = [ e ]
                TransferInfo = evt.Data.BaseInfo
+               ReasonForRetryServiceAck = None
                LifeCycle = {
                   SagaLifeCycle.empty with
                      InProgress = [
@@ -144,6 +147,7 @@ let applyEvent
                Status = DomesticTransferProgress.Scheduled
                Events = [ e ]
                TransferInfo = evt.Data.BaseInfo
+               ReasonForRetryServiceAck = None
                LifeCycle =
                   SagaLifeCycle.empty |> addActivity Activity.ScheduleTransfer
             }
@@ -223,17 +227,32 @@ let applyEvent
                | DomesticTransferFailReason.InvalidAmount
                | DomesticTransferFailReason.InvalidAccountInfo
                | DomesticTransferFailReason.AccountClosed
-               | DomesticTransferFailReason.Unknown _ -> {
-                  state with
-                     LifeCycle =
-                        state.LifeCycle
-                        |> failActivity Activity.TransferServiceAck
-                        |> failActivity Activity.WaitForTransferServiceComplete
-                        |> addActivity Activity.RefundSenderAccount
-                 }
-         | DomesticTransferSagaEvent.RetryTransferServiceRequest -> {
+               | DomesticTransferFailReason.Unknown _ ->
+                  let refundIfNotRetrying =
+                     if state.ReasonForRetryServiceAck.IsSome then
+                        id
+                     else
+                        addActivity Activity.RefundSenderAccount
+
+                  {
+                     state with
+                        LifeCycle =
+                           state.LifeCycle
+                           |> failActivity Activity.TransferServiceAck
+                           |> failActivity
+                                 Activity.WaitForTransferServiceComplete
+                           |> refundIfNotRetrying
+                  }
+         | DomesticTransferSagaEvent.RetryTransferServiceRequest updatedRecipient -> {
             state with
+               ReasonForRetryServiceAck =
+                  match state.Status with
+                  | DomesticTransferProgress.Failed reason -> Some reason
+                  | _ -> None
                Status = DomesticTransferProgress.WaitingForTransferServiceAck
+               TransferInfo.Recipient =
+                  updatedRecipient
+                  |> Option.defaultValue state.TransferInfo.Recipient
                LifeCycle =
                   state.LifeCycle |> addActivity Activity.TransferServiceAck
            }
@@ -324,7 +343,7 @@ let stateTransition
          | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
             activityIsDone Activity.TransferServiceAck
             && activityIsDone Activity.WaitForTransferServiceComplete
-         | DomesticTransferSagaEvent.RetryTransferServiceRequest ->
+         | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
             saga.LifeCycle.ActivityHasFailed(Activity.TransferServiceAck) |> not
          | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
             activityIsDone Activity.MarkTransferAsSettled
@@ -444,9 +463,7 @@ let onEventPersisted
       let cmd =
          CompleteDomesticTransferCommand.create correlationId info.InitiatedBy {
             BaseInfo = info
-            // Will be overwritten during the account actor state transition
-            // upon detecting a previously failed transfer by TransferId.
-            FromRetry = None
+            FromRetry = currentState.ReasonForRetryServiceAck
          }
 
       let msg =
@@ -491,7 +508,9 @@ let onEventPersisted
    | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
       match progress with
       | DomesticTransferServiceProgress.InitialHandshakeAck ->
-         updateTransferProgress progress
+         if currentState.ReasonForRetryServiceAck.IsNone then
+            updateTransferProgress progress
+
          sendTransferInitiatedEmail ()
       | DomesticTransferServiceProgress.InProgress _ -> ()
       | DomesticTransferServiceProgress.Settled -> updateTransferAsComplete ()
@@ -508,55 +527,11 @@ let onEventPersisted
             dep.getEmailRef () <! msg
          elif currentState.RequiresAccountRefund then
             refundSenderAccount reason
-   | DomesticTransferSagaEvent.SenderAccountRefunded ->
-      (*
-      let info = e.Data.BaseInfo
-
-      let failDueToRecipient =
-         match e.Data.Reason with
-         | DomesticTransferFailReason.InvalidAccountInfo ->
-            Some DomesticTransferRecipientFailReason.InvalidAccountInfo
-         | DomesticTransferFailReason.AccountClosed ->
-            Some DomesticTransferRecipientFailReason.ClosedAccount
-         | _ -> None
-
-      match failDueToRecipient with
-      | Some failReason ->
-         let cmd =
-            FailDomesticTransferRecipientCommand.create e.OrgId e.InitiatedBy {
-               RecipientId = info.Recipient.RecipientAccountId
-               TransferId = info.TransferId
-               Reason = failReason
-            }
-            |> OrgCommand.FailDomesticTransferRecipient
-
-         getOrgRef e.OrgId <! OrgMessage.StateChange cmd
-      | None -> ()
-      *)
-      ()
-   | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
-      (*
-      match e.Data.FromRetry with
-      | Some DomesticTransferFailReason.InvalidAccountInfo ->
-         let info = e.Data.BaseInfo
-
-         let cmd =
-            DomesticTransferRetryConfirmsRecipientCommand.create
-               e.OrgId
-               e.InitiatedBy
-               {
-                  RecipientId = info.Recipient.RecipientAccountId
-                  TransferId = info.TransferId
-               }
-            |> OrgCommand.DomesticTransferRetryConfirmsRecipient
-
-         getOrgRef e.OrgId <! OrgMessage.StateChange cmd
-      | _ -> ()
-      *)
-      ()
+   | DomesticTransferSagaEvent.SenderAccountRefunded -> ()
+   | DomesticTransferSagaEvent.TransferMarkedAsSettled -> ()
    | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> ()
    | DomesticTransferSagaEvent.TransferInitiatedNotificationSent -> ()
-   | DomesticTransferSagaEvent.RetryTransferServiceRequest ->
+   | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
       // Development team provided fix for data incompatibility issue when
       // issuing a transfer request to the third party transfer processor.
       sendTransferToProcessorService ()

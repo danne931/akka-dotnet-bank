@@ -372,29 +372,6 @@ module EditDomesticTransferRecipientCommand =
                { Recipient = recipient }
       }
 
-type FailDomesticTransferRecipientCommand =
-   Command<DomesticTransferRecipientFailed>
-
-module FailDomesticTransferRecipientCommand =
-   let create
-      (parentAccountId: ParentAccountId)
-      (orgId: OrgId)
-      (initiatedBy: Initiator)
-      (data: DomesticTransferRecipientFailed)
-      =
-      Command.create
-         (ParentAccountId.toEntityId parentAccountId)
-         orgId
-         (CorrelationId.create ())
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: FailDomesticTransferRecipientCommand)
-      : ValidationResult<BankEvent<DomesticTransferRecipientFailed>>
-      =
-      BankEvent.create<DomesticTransferRecipientFailed> cmd |> Ok
-
 type NicknameDomesticTransferRecipientCommand =
    Command<NicknamedDomesticTransferRecipient>
 
@@ -417,28 +394,6 @@ module NicknameDomesticTransferRecipientCommand =
       : ValidationResult<BankEvent<NicknamedDomesticTransferRecipient>>
       =
       BankEvent.create<NicknamedDomesticTransferRecipient> cmd |> Ok
-
-type DomesticTransferRetryConfirmsRecipientCommand =
-   Command<DomesticTransferRetryConfirmsRecipient>
-
-module DomesticTransferRetryConfirmsRecipientCommand =
-   let create
-      (orgId: OrgId)
-      (initiatedBy: Initiator)
-      (data: DomesticTransferRetryConfirmsRecipient)
-      =
-      Command.create
-         (OrgId.toEntityId orgId)
-         orgId
-         (CorrelationId.create ())
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: DomesticTransferRetryConfirmsRecipientCommand)
-      : ValidationResult<BankEvent<DomesticTransferRetryConfirmsRecipient>>
-      =
-      BankEvent.create<DomesticTransferRetryConfirmsRecipient> cmd |> Ok
 
 type DomesticTransferInput = {
    Amount: decimal
