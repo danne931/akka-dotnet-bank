@@ -212,6 +212,20 @@ type SagaEvent<'E> = {
       Data = data
    }
 
+type IPersistableSagaEvent = interface end
+
+[<RequireQualifiedAccess>]
+type SagaPersistableEvent<'SagaStartEvent, 'SagaEvent> =
+   | StartEvent of SagaEvent<'SagaStartEvent>
+   | Event of SagaEvent<'SagaEvent>
+
+   interface IPersistableSagaEvent
+
+   member x.CorrelationId =
+      match x with
+      | StartEvent e -> e.CorrelationId
+      | Event e -> e.CorrelationId
+
 type ISaga =
    abstract member SagaId: CorrelationId
    abstract member OrgId: OrgId
@@ -225,7 +239,8 @@ type ISaga =
 type SagaAlarmClockMessage = | WakeUpIfUnfinishedBusiness
 
 [<RequireQualifiedAccess>]
-type SagaMessage<'SagaEvent> =
+type SagaMessage<'SagaStartEvent, 'SagaEvent> =
+   | Start of SagaEvent<'SagaStartEvent>
    | Event of SagaEvent<'SagaEvent>
    | CheckForRemainingWork
    | ResetInProgressActivities

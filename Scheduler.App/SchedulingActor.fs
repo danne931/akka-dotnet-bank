@@ -20,7 +20,7 @@ open Bank.Scheduler
 
 let actorProps
    (quartzPersistentActorRef: IActorRef)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
    let handler (ctx: Actor<SchedulerMessage>) = actor {
       let logInfo = logInfo ctx

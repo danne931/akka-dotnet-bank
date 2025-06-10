@@ -20,7 +20,7 @@ open Bank.Scheduler
 type private QuartzSagaMessageEnvelope = {
    Manifest: string
    Message: {|
-      SagaMessage: Lib.Saga.SagaMessage<AppSaga.Event>
+      SagaMessage: AppSaga.AppSagaMessage
       CorrelationId: CorrelationId
    |}
 }

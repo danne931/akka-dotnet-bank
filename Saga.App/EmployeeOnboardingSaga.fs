@@ -35,7 +35,6 @@ type EmployeeOnboardingSagaStartEvent =
 
 [<RequireQualifiedAccess>]
 type EmployeeOnboardingSagaEvent =
-   | Start of EmployeeOnboardingSagaStartEvent
    | AccessRequestPending
    | AccessApproved
    | InviteNotificationSent
@@ -90,6 +89,7 @@ type EmployeeOnboardingSaga = {
    EmployeeEmail: Email
    CardInfo: EmployeeInviteSupplementaryCardInfo option
    InviteToken: InviteToken
+   StartEvent: EmployeeOnboardingSagaStartEvent
    Events: EmployeeOnboardingSagaEvent list
    Status: EmployeeOnboardingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
@@ -100,306 +100,289 @@ type EmployeeOnboardingSaga = {
       x.LifeCycle.InProgress
       |> List.exists (fun a -> a.Activity = Activity.WaitForInviteConfirmation)
 
-let applyEvent
-   (state: EmployeeOnboardingSaga option)
-   (e: EmployeeOnboardingSagaEvent)
+
+let applyStartEvent
+   (start: EmployeeOnboardingSagaStartEvent)
    (timestamp: DateTime)
-   : EmployeeOnboardingSaga option
+   : EmployeeOnboardingSaga
+   =
+   match start with
+   | EmployeeOnboardingSagaStartEvent.EmployeeCreated evt -> {
+      Status = EmployeeOnboardingSagaStatus.InProgress
+      StartEvent = start
+      Events = []
+      OrgId = evt.OrgId
+      CorrelationId = evt.CorrelationId
+      InitiatedBy = evt.InitiatedBy
+      EmployeeId = EmployeeId.fromEntityId evt.EntityId
+      EmployeeName = $"{evt.Data.FirstName} {evt.Data.LastName}"
+      EmployeeEmail = evt.Data.Email
+      CardInfo = evt.Data.CardInfo
+      InviteToken = evt.Data.InviteToken
+      ProviderCardId = None
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               if evt.Data.OrgRequiresEmployeeInviteApproval.IsSome then
+                  ActivityLifeCycle.init
+                     timestamp
+                     Activity.RequestAccessApproval
+               else
+                  ActivityLifeCycle.init
+                     timestamp
+                     Activity.SendEmployeeInviteNotification
+
+                  ActivityLifeCycle.init
+                     timestamp
+                     Activity.WaitForInviteConfirmation
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.CreateEmployee
+                  MaxAttempts =
+                     (Activity.CreateEmployee :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+     }
+   | EmployeeOnboardingSagaStartEvent.AccountOwnerCreated evt -> {
+      Status = EmployeeOnboardingSagaStatus.InProgress
+      StartEvent = start
+      Events = []
+      OrgId = evt.OrgId
+      CorrelationId = evt.CorrelationId
+      InitiatedBy = evt.InitiatedBy
+      EmployeeId = EmployeeId.fromEntityId evt.EntityId
+      EmployeeName = $"{evt.Data.FirstName} {evt.Data.LastName}"
+      EmployeeEmail = evt.Data.Email
+      CardInfo = None
+      InviteToken = evt.Data.InviteToken
+      ProviderCardId = None
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.SendEmployeeInviteNotification
+
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.WaitForInviteConfirmation
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.CreateEmployee
+                  MaxAttempts =
+                     (Activity.CreateEmployee :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+     }
+   | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored o -> {
+      Status = EmployeeOnboardingSagaStatus.InProgress
+      StartEvent = start
+      Events = []
+      OrgId = o.Event.OrgId
+      CorrelationId = o.Event.CorrelationId
+      InitiatedBy = o.Event.InitiatedBy
+      EmployeeId = EmployeeId.fromEntityId o.Event.EntityId
+      EmployeeName = o.EmployeeName
+      EmployeeEmail = o.EmployeeEmail
+      CardInfo = None
+      InviteToken = o.Event.Data.InviteToken
+      ProviderCardId = None
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.SendEmployeeInviteNotification
+
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.WaitForInviteConfirmation
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.RestoreEmployeeAccess
+                  MaxAttempts =
+                     (Activity.RestoreEmployeeAccess :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+     }
+
+let applyEvent
+   (saga: EmployeeOnboardingSaga)
+   (evt: EmployeeOnboardingSagaEvent)
+   (timestamp: DateTime)
+   : EmployeeOnboardingSaga
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
 
-   match state with
-   | None ->
-      match e with
-      | EmployeeOnboardingSagaEvent.Start startEvt ->
-         match startEvt with
-         | EmployeeOnboardingSagaStartEvent.EmployeeCreated evt ->
-            Some {
-               Status = EmployeeOnboardingSagaStatus.InProgress
-               Events = [ e ]
-               OrgId = evt.OrgId
-               CorrelationId = evt.CorrelationId
-               InitiatedBy = evt.InitiatedBy
-               EmployeeId = EmployeeId.fromEntityId evt.EntityId
-               EmployeeName = $"{evt.Data.FirstName} {evt.Data.LastName}"
-               EmployeeEmail = evt.Data.Email
-               CardInfo = evt.Data.CardInfo
-               InviteToken = evt.Data.InviteToken
-               ProviderCardId = None
-               LifeCycle = {
-                  SagaLifeCycle.empty with
-                     InProgress = [
-                        if
-                           evt.Data.OrgRequiresEmployeeInviteApproval.IsSome
-                        then
-                           ActivityLifeCycle.init
-                              timestamp
-                              Activity.RequestAccessApproval
-                        else
-                           ActivityLifeCycle.init
-                              timestamp
-                              Activity.SendEmployeeInviteNotification
+   let saga = {
+      saga with
+         Events = evt :: saga.Events
+   }
 
-                           ActivityLifeCycle.init
-                              timestamp
-                              Activity.WaitForInviteConfirmation
-                     ]
-                     Completed = [
-                        {
-                           Start = timestamp
-                           End = Some timestamp
-                           Activity = Activity.CreateEmployee
-                           MaxAttempts =
-                              (Activity.CreateEmployee :> IActivity).MaxAttempts
-                           Attempts = 1
-                        }
-                     ]
-               }
-            }
-         | EmployeeOnboardingSagaStartEvent.AccountOwnerCreated evt ->
-            Some {
-               Status = EmployeeOnboardingSagaStatus.InProgress
-               Events = [ e ]
-               OrgId = evt.OrgId
-               CorrelationId = evt.CorrelationId
-               InitiatedBy = evt.InitiatedBy
-               EmployeeId = EmployeeId.fromEntityId evt.EntityId
-               EmployeeName = $"{evt.Data.FirstName} {evt.Data.LastName}"
-               EmployeeEmail = evt.Data.Email
-               CardInfo = None
-               InviteToken = evt.Data.InviteToken
-               ProviderCardId = None
-               LifeCycle = {
-                  SagaLifeCycle.empty with
-                     InProgress = [
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.SendEmployeeInviteNotification
-
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.WaitForInviteConfirmation
-                     ]
-                     Completed = [
-                        {
-                           Start = timestamp
-                           End = Some timestamp
-                           Activity = Activity.CreateEmployee
-                           MaxAttempts =
-                              (Activity.CreateEmployee :> IActivity).MaxAttempts
-                           Attempts = 1
-                        }
-                     ]
-               }
-            }
-         | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored o ->
-            Some {
-               Status = EmployeeOnboardingSagaStatus.InProgress
-               Events = [ e ]
-               OrgId = o.Event.OrgId
-               CorrelationId = o.Event.CorrelationId
-               InitiatedBy = o.Event.InitiatedBy
-               EmployeeId = EmployeeId.fromEntityId o.Event.EntityId
-               EmployeeName = o.EmployeeName
-               EmployeeEmail = o.EmployeeEmail
-               CardInfo = None
-               InviteToken = o.Event.Data.InviteToken
-               ProviderCardId = None
-               LifeCycle = {
-                  SagaLifeCycle.empty with
-                     InProgress = [
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.SendEmployeeInviteNotification
-
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.WaitForInviteConfirmation
-                     ]
-                     Completed = [
-                        {
-                           Start = timestamp
-                           End = Some timestamp
-                           Activity = Activity.RestoreEmployeeAccess
-                           MaxAttempts =
-                              (Activity.RestoreEmployeeAccess :> IActivity)
-                                 .MaxAttempts
-                           Attempts = 1
-                        }
-                     ]
-               }
-            }
-      | _ -> state
-   | Some state ->
-      let state =
-         match e with
-         | EmployeeOnboardingSagaEvent.Start _ -> state
-         | EmployeeOnboardingSagaEvent.InviteTokenRefreshed token ->
-            if state.IsWaitingForInviteConfirmation then
-               {
-                  state with
-                     InviteToken = token
-                     LifeCycle =
-                        state.LifeCycle
-                        |> finishActivity Activity.WaitForInviteConfirmation
-                        |> addActivity Activity.SendEmployeeInviteNotification
-               }
-            else
-               state
-         | EmployeeOnboardingSagaEvent.InviteNotificationSent -> {
-            state with
+   match evt with
+   | EmployeeOnboardingSagaEvent.InviteTokenRefreshed token ->
+      if saga.IsWaitingForInviteConfirmation then
+         {
+            saga with
+               InviteToken = token
                LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.SendEmployeeInviteNotification
-           }
-         | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity
-                        Activity.SendEmployeeOnboardingFailNotification
-           }
-         | EmployeeOnboardingSagaEvent.AccessRequestPending -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.RequestAccessApproval
-                  |> addActivity Activity.WaitForAccessApproval
-           }
-         | EmployeeOnboardingSagaEvent.AccessApproved -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.WaitForAccessApproval
+                  saga.LifeCycle
+                  |> finishActivity Activity.WaitForInviteConfirmation
                   |> addActivity Activity.SendEmployeeInviteNotification
-                  |> addActivity Activity.WaitForInviteConfirmation
-           }
-         | EmployeeOnboardingSagaEvent.InviteCancelled reason -> {
-            state with
-               Status = EmployeeOnboardingSagaStatus.Aborted reason
-               LifeCycle =
-                  SagaLifeCycle.abortActivities timestamp state.LifeCycle
-           }
-         | EmployeeOnboardingSagaEvent.InviteConfirmed ->
-            let state = {
-               state with
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity Activity.WaitForInviteConfirmation
-            }
-
-            match state.CardInfo with
-            | Some _ -> {
-               state with
-                  LifeCycle =
-                     state.LifeCycle
-                     |> addActivity Activity.CreateCardViaThirdPartyProvider
-              }
-            | None -> {
-               state with
-                  Status = EmployeeOnboardingSagaStatus.Completed
-              }
-         | EmployeeOnboardingSagaEvent.CardCreateResponse res ->
-            let activity = Activity.CreateCardViaThirdPartyProvider
-
-            match res with
-            | Ok providerCardId -> {
-               state with
-                  ProviderCardId = Some providerCardId
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity activity
-                     |> addActivity Activity.AssociateCardWithEmployee
-              }
-            | Error _ -> {
-               state with
-                  Status =
-                     OnboardingFailureReason.CardProviderCardCreateFail
-                     |> EmployeeOnboardingSagaStatus.Failed
-                  LifeCycle =
-                     state.LifeCycle
-                     |> SagaLifeCycle.failActivity timestamp activity
-                     |> addActivity
-                           Activity.SendEmployeeOnboardingFailNotification
-              }
-         | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee -> {
-            state with
-               Status = EmployeeOnboardingSagaStatus.Completed
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.AssociateCardWithEmployee
-           }
-         | EmployeeOnboardingSagaEvent.EvaluateRemainingWork -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.retryActivitiesAfterInactivity
-                     timestamp
-                     state.LifeCycle
-           }
-         | EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.resetInProgressActivities state.LifeCycle
-           }
-
-      Some {
-         state with
-            Events = e :: state.Events
+         }
+      else
+         saga
+   | EmployeeOnboardingSagaEvent.InviteNotificationSent -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.SendEmployeeInviteNotification
+     }
+   | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.SendEmployeeOnboardingFailNotification
+     }
+   | EmployeeOnboardingSagaEvent.AccessRequestPending -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.RequestAccessApproval
+            |> addActivity Activity.WaitForAccessApproval
+     }
+   | EmployeeOnboardingSagaEvent.AccessApproved -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.WaitForAccessApproval
+            |> addActivity Activity.SendEmployeeInviteNotification
+            |> addActivity Activity.WaitForInviteConfirmation
+     }
+   | EmployeeOnboardingSagaEvent.InviteCancelled reason -> {
+      saga with
+         Status = EmployeeOnboardingSagaStatus.Aborted reason
+         LifeCycle = SagaLifeCycle.abortActivities timestamp saga.LifeCycle
+     }
+   | EmployeeOnboardingSagaEvent.InviteConfirmed ->
+      let saga = {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.WaitForInviteConfirmation
       }
 
+      match saga.CardInfo with
+      | Some _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> addActivity Activity.CreateCardViaThirdPartyProvider
+        }
+      | None -> {
+         saga with
+            Status = EmployeeOnboardingSagaStatus.Completed
+        }
+   | EmployeeOnboardingSagaEvent.CardCreateResponse res ->
+      let activity = Activity.CreateCardViaThirdPartyProvider
+
+      match res with
+      | Ok providerCardId -> {
+         saga with
+            ProviderCardId = Some providerCardId
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity activity
+               |> addActivity Activity.AssociateCardWithEmployee
+        }
+      | Error _ -> {
+         saga with
+            Status =
+               OnboardingFailureReason.CardProviderCardCreateFail
+               |> EmployeeOnboardingSagaStatus.Failed
+            LifeCycle =
+               saga.LifeCycle
+               |> SagaLifeCycle.failActivity timestamp activity
+               |> addActivity Activity.SendEmployeeOnboardingFailNotification
+        }
+   | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee -> {
+      saga with
+         Status = EmployeeOnboardingSagaStatus.Completed
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.AssociateCardWithEmployee
+     }
+   | EmployeeOnboardingSagaEvent.EvaluateRemainingWork -> {
+      saga with
+         LifeCycle =
+            SagaLifeCycle.retryActivitiesAfterInactivity
+               timestamp
+               saga.LifeCycle
+     }
+   | EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts -> {
+      saga with
+         LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
+
+let stateTransitionStart
+   (evt: EmployeeOnboardingSagaStartEvent)
+   (timestamp: DateTime)
+   : Result<EmployeeOnboardingSaga, SagaStateTransitionError>
+   =
+   Ok(applyStartEvent evt timestamp)
+
 let stateTransition
-   (state: EmployeeOnboardingSaga option)
+   (saga: EmployeeOnboardingSaga)
    (evt: EmployeeOnboardingSagaEvent)
    (timestamp: DateTime)
-   : Result<EmployeeOnboardingSaga option, SagaStateTransitionError>
+   : Result<EmployeeOnboardingSaga, SagaStateTransitionError>
    =
-   match state with
-   | None ->
+   let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
+
+   let invalidStepProgression =
       match evt with
-      | EmployeeOnboardingSagaEvent.Start _ ->
-         Ok(applyEvent state evt timestamp)
-      | _ -> Error SagaStateTransitionError.HasNotStarted
-   | Some saga ->
-      let eventIsStartEvent =
-         match evt with
-         | EmployeeOnboardingSagaEvent.Start _ -> true
-         | _ -> false
+      | EmployeeOnboardingSagaEvent.EvaluateRemainingWork
+      | EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts -> false
+      | EmployeeOnboardingSagaEvent.InviteTokenRefreshed _ ->
+         activityIsDone Activity.WaitForInviteConfirmation
+      | EmployeeOnboardingSagaEvent.InviteNotificationSent ->
+         activityIsDone Activity.SendEmployeeInviteNotification
+      | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent ->
+         activityIsDone Activity.SendEmployeeOnboardingFailNotification
+      | EmployeeOnboardingSagaEvent.CardCreateResponse _ ->
+         activityIsDone Activity.CreateCardViaThirdPartyProvider
+      | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee ->
+         activityIsDone Activity.AssociateCardWithEmployee
+      | EmployeeOnboardingSagaEvent.AccessRequestPending ->
+         activityIsDone Activity.RequestAccessApproval
+      | EmployeeOnboardingSagaEvent.AccessApproved ->
+         activityIsDone Activity.WaitForAccessApproval
+      | EmployeeOnboardingSagaEvent.InviteConfirmed ->
+         activityIsDone Activity.WaitForInviteConfirmation
+      | EmployeeOnboardingSagaEvent.InviteCancelled _ ->
+         activityIsDone Activity.WaitForInviteConfirmation
 
-      let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
-
-      let invalidStepProgression =
-         match evt with
-         | EmployeeOnboardingSagaEvent.Start _
-         | EmployeeOnboardingSagaEvent.EvaluateRemainingWork
-         | EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts -> false
-         | EmployeeOnboardingSagaEvent.InviteTokenRefreshed _ ->
-            activityIsDone Activity.WaitForInviteConfirmation
-         | EmployeeOnboardingSagaEvent.InviteNotificationSent ->
-            activityIsDone Activity.SendEmployeeInviteNotification
-         | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent ->
-            activityIsDone Activity.SendEmployeeOnboardingFailNotification
-         | EmployeeOnboardingSagaEvent.CardCreateResponse _ ->
-            activityIsDone Activity.CreateCardViaThirdPartyProvider
-         | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee ->
-            activityIsDone Activity.AssociateCardWithEmployee
-         | EmployeeOnboardingSagaEvent.AccessRequestPending ->
-            activityIsDone Activity.RequestAccessApproval
-         | EmployeeOnboardingSagaEvent.AccessApproved ->
-            activityIsDone Activity.WaitForAccessApproval
-         | EmployeeOnboardingSagaEvent.InviteConfirmed ->
-            activityIsDone Activity.WaitForInviteConfirmation
-         | EmployeeOnboardingSagaEvent.InviteCancelled _ ->
-            activityIsDone Activity.WaitForInviteConfirmation
-
-      if saga.Status = EmployeeOnboardingSagaStatus.Completed then
-         Error SagaStateTransitionError.HasAlreadyCompleted
-      elif eventIsStartEvent then
-         Error SagaStateTransitionError.HasAlreadyStarted
-      elif invalidStepProgression then
-         Error SagaStateTransitionError.InvalidStepProgression
-      else
-         Ok(applyEvent state evt timestamp)
+   if saga.Status = EmployeeOnboardingSagaStatus.Completed then
+      Error SagaStateTransitionError.HasAlreadyCompleted
+   elif invalidStepProgression then
+      Error SagaStateTransitionError.InvalidStepProgression
+   else
+      Ok(applyEvent saga evt timestamp)
 
 type CardProviderRequest = {
    CardHolderName: string
@@ -573,7 +556,6 @@ let onEventPersisted
          sendEmployeeOnboardingFailEmail
             OnboardingFailureReason.CardProviderCardCreateFail
    | EmployeeOnboardingSagaEvent.AccessApproved -> sendEmployeeInviteEmail ()
-   | EmployeeOnboardingSagaEvent.Start _
    | EmployeeOnboardingSagaEvent.InviteCancelled _
    | EmployeeOnboardingSagaEvent.InviteNotificationSent
    | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent

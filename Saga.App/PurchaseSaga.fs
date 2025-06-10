@@ -23,7 +23,6 @@ type PurchaseSagaStartEvent =
 
 [<RequireQualifiedAccess>]
 type PurchaseSagaEvent =
-   | Start of PurchaseSagaStartEvent
    | PurchaseRefundedToCard
    | PurchaseConfirmedByAccount
    | PurchaseRejectedByAccount of PurchaseAccountFailReason
@@ -72,6 +71,7 @@ type Activity =
 
 type PurchaseSaga = {
    PurchaseInfo: PurchaseInfo
+   StartEvent: PurchaseSagaStartEvent
    Events: PurchaseSagaEvent list
    Status: PurchaseSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
@@ -99,261 +99,246 @@ type PurchaseSaga = {
       |> List.exists (fun w ->
          w.Activity = Activity.WaitForSupportTeamToResolvePartnerBankSync)
 
-let applyEvent
-   (state: PurchaseSaga option)
-   (e: PurchaseSagaEvent)
+let applyStartEvent
+   (start: PurchaseSagaStartEvent)
    (timestamp: DateTime)
-   : PurchaseSaga option
+   : PurchaseSaga
+   =
+   match start with
+   | PurchaseSagaStartEvent.DeductedCardFunds info -> {
+      PurchaseInfo = info
+      StartEvent = start
+      Events = []
+      Status = PurchaseSagaStatus.InProgress
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init timestamp Activity.DeductFromAccount
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.DeductFromEmployeeCard
+                  MaxAttempts =
+                     (Activity.DeductFromEmployeeCard :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+      RefundReason = None
+     }
+   | PurchaseSagaStartEvent.PurchaseRejectedByCard(info, reason) -> {
+      PurchaseInfo = info
+      StartEvent = start
+      Events = []
+      Status = PurchaseSagaStatus.Failed(PurchaseFailReason.Card reason)
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.NotifyCardNetworkOfRejectedPurchase
+            ]
+      }
+      RefundReason = None
+     }
+
+let applyEvent
+   (saga: PurchaseSaga)
+   (evt: PurchaseSagaEvent)
+   (timestamp: DateTime)
+   : PurchaseSaga
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
    let retryActivity = SagaLifeCycle.retryActivity timestamp
 
-   match state with
-   | None ->
-      match e with
-      | PurchaseSagaEvent.Start startEvt ->
-         match startEvt with
-         | PurchaseSagaStartEvent.PurchaseRejectedByCard(info, reason) ->
-            Some {
-               Status =
-                  reason |> PurchaseFailReason.Card |> PurchaseSagaStatus.Failed
-               Events = [ e ]
-               PurchaseInfo = info
-               LifeCycle = SagaLifeCycle.empty
-               RefundReason = None
+   let saga = {
+      saga with
+         Events = evt :: saga.Events
+   }
+
+   match evt with
+   | PurchaseSagaEvent.PurchaseConfirmedByAccount -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.DeductFromAccount
+            |> addActivity Activity.NotifyCardNetworkOfConfirmedPurchase
+     }
+   | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse(_,
+                                                           cardNetworkResponse) ->
+      match cardNetworkResponse with
+      | Error _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> failActivity Activity.NotifyCardNetworkOfRejectedPurchase
+        }
+      | Ok _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.NotifyCardNetworkOfRejectedPurchase
+        }
+   | PurchaseSagaEvent.CardNetworkResponse res ->
+      match res with
+      | Error err ->
+         let activity = Activity.NotifyCardNetworkOfConfirmedPurchase
+
+         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
+            {
+               saga with
+                  LifeCycle = retryActivity activity saga.LifeCycle
             }
-         | PurchaseSagaStartEvent.DeductedCardFunds info ->
-            Some {
-               Status = PurchaseSagaStatus.InProgress
-               Events = [ e ]
-               PurchaseInfo = info
-               LifeCycle = {
-                  SagaLifeCycle.empty with
-                     InProgress = [
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.DeductFromAccount
-                     ]
-                     Completed = [
-                        {
-                           Start = info.Date
-                           End = Some timestamp
-                           Activity = Activity.DeductFromEmployeeCard
-                           MaxAttempts =
-                              (Activity.DeductFromEmployeeCard :> IActivity)
-                                 .MaxAttempts
-                           Attempts = 1
-                        }
-                     ]
-               }
-               RefundReason = None
+         else
+            let life = failActivity activity saga.LifeCycle
+
+            let life =
+               if saga.DeductedFromEmployeeCard then
+                  addActivity Activity.RefundCard life
+               else
+                  life
+
+            let life =
+               if saga.DeductedFromAccount then
+                  addActivity Activity.RefundAccount life
+               else
+                  life
+
+            {
+               saga with
+                  LifeCycle = life
+                  Status =
+                     PurchaseFailReason.CardNetwork err
+                     |> PurchaseSagaStatus.Failed
+                  RefundReason = Some(PurchaseRefundReason.CardNetworkError err)
             }
-      | _ -> state
-   | Some state ->
-      let state =
-         match e with
-         | PurchaseSagaEvent.Start _ -> state
-         | PurchaseSagaEvent.PurchaseConfirmedByAccount -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.DeductFromAccount
-                  |> addActivity Activity.NotifyCardNetworkOfConfirmedPurchase
-           }
-         | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse(_,
-                                                                 cardNetworkResponse) ->
-            match cardNetworkResponse with
-            | Error _ -> {
-               state with
+      | Ok _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.NotifyCardNetworkOfConfirmedPurchase
+               |> addActivity Activity.SyncToPartnerBank
+        }
+   | PurchaseSagaEvent.PartnerBankSyncResponse res ->
+      let activity = Activity.SyncToPartnerBank
+
+      match res with
+      | Error err ->
+         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
+            {
+               saga with
+                  LifeCycle = retryActivity activity saga.LifeCycle
+            }
+         else
+            {
+               saga with
+                  Status =
+                     PurchaseFailReason.PartnerBankSync err
+                     |> PurchaseSagaStatus.Failed
                   LifeCycle =
-                     state.LifeCycle
-                     |> failActivity
-                           Activity.NotifyCardNetworkOfRejectedPurchase
-              }
-            | Ok _ -> {
-               state with
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity
-                           Activity.NotifyCardNetworkOfRejectedPurchase
-              }
-         | PurchaseSagaEvent.CardNetworkResponse res ->
-            match res with
-            | Error err ->
-               let activity = Activity.NotifyCardNetworkOfConfirmedPurchase
+                     saga.LifeCycle
+                     |> failActivity activity
+                     |> addActivity
+                           Activity.WaitForSupportTeamToResolvePartnerBankSync
+            }
+      | Ok _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity activity
+               |> addActivity Activity.SendPurchaseNotification
+        }
+   | PurchaseSagaEvent.PurchaseNotificationSent -> {
+      saga with
+         Status = PurchaseSagaStatus.Completed
+         LifeCycle =
+            finishActivity Activity.SendPurchaseNotification saga.LifeCycle
+     }
+   | PurchaseSagaEvent.PurchaseRejectedByAccount reason -> {
+      saga with
+         Status = PurchaseFailReason.Account reason |> PurchaseSagaStatus.Failed
+         LifeCycle =
+            saga.LifeCycle
+            |> failActivity Activity.DeductFromAccount
+            |> addActivity Activity.RefundCard
+         RefundReason = Some(PurchaseRefundReason.AccountStateInvalid reason)
+     }
+   | PurchaseSagaEvent.PurchaseRefundedToCard -> {
+      saga with
+         LifeCycle = finishActivity Activity.RefundCard saga.LifeCycle
+     }
+   | PurchaseSagaEvent.PurchaseRefundedToAccount -> {
+      saga with
+         LifeCycle = finishActivity Activity.RefundAccount saga.LifeCycle
+     }
+   | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync -> {
+      saga with
+         Status = PurchaseSagaStatus.InProgress
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity
+                  Activity.WaitForSupportTeamToResolvePartnerBankSync
+            |> addActivity Activity.SyncToPartnerBank
+     }
+   | PurchaseSagaEvent.EvaluateRemainingWork -> {
+      saga with
+         LifeCycle =
+            SagaLifeCycle.retryActivitiesAfterInactivity
+               timestamp
+               saga.LifeCycle
+     }
+   | PurchaseSagaEvent.ResetInProgressActivityAttempts -> {
+      saga with
+         LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
 
-               if state.LifeCycle.ActivityHasRemainingAttempts activity then
-                  {
-                     state with
-                        LifeCycle = retryActivity activity state.LifeCycle
-                  }
-               else
-                  let life = failActivity activity state.LifeCycle
-
-                  let life =
-                     if state.DeductedFromEmployeeCard then
-                        addActivity Activity.RefundCard life
-                     else
-                        life
-
-                  let life =
-                     if state.DeductedFromAccount then
-                        addActivity Activity.RefundAccount life
-                     else
-                        life
-
-                  {
-                     state with
-                        LifeCycle = life
-                        Status =
-                           PurchaseFailReason.CardNetwork err
-                           |> PurchaseSagaStatus.Failed
-                        RefundReason =
-                           Some(PurchaseRefundReason.CardNetworkError err)
-                  }
-            | Ok _ -> {
-               state with
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity
-                           Activity.NotifyCardNetworkOfConfirmedPurchase
-                     |> addActivity Activity.SyncToPartnerBank
-              }
-         | PurchaseSagaEvent.PartnerBankSyncResponse res ->
-            let activity = Activity.SyncToPartnerBank
-
-            match res with
-            | Error err ->
-               if state.LifeCycle.ActivityHasRemainingAttempts activity then
-                  {
-                     state with
-                        LifeCycle = retryActivity activity state.LifeCycle
-                  }
-               else
-                  {
-                     state with
-                        Status =
-                           PurchaseFailReason.PartnerBankSync err
-                           |> PurchaseSagaStatus.Failed
-                        LifeCycle =
-                           state.LifeCycle
-                           |> failActivity activity
-                           |> addActivity
-                                 Activity.WaitForSupportTeamToResolvePartnerBankSync
-                  }
-            | Ok _ -> {
-               state with
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity activity
-                     |> addActivity Activity.SendPurchaseNotification
-              }
-         | PurchaseSagaEvent.PurchaseNotificationSent -> {
-            state with
-               Status = PurchaseSagaStatus.Completed
-               LifeCycle =
-                  finishActivity
-                     Activity.SendPurchaseNotification
-                     state.LifeCycle
-           }
-         | PurchaseSagaEvent.PurchaseRejectedByAccount reason -> {
-            state with
-               Status =
-                  PurchaseFailReason.Account reason |> PurchaseSagaStatus.Failed
-               LifeCycle =
-                  state.LifeCycle
-                  |> failActivity Activity.DeductFromAccount
-                  |> addActivity Activity.RefundCard
-               RefundReason =
-                  Some(PurchaseRefundReason.AccountStateInvalid reason)
-           }
-         | PurchaseSagaEvent.PurchaseRefundedToCard -> {
-            state with
-               LifeCycle = finishActivity Activity.RefundCard state.LifeCycle
-           }
-         | PurchaseSagaEvent.PurchaseRefundedToAccount -> {
-            state with
-               LifeCycle = finishActivity Activity.RefundAccount state.LifeCycle
-           }
-         | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync -> {
-            state with
-               Status = PurchaseSagaStatus.InProgress
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity
-                        Activity.WaitForSupportTeamToResolvePartnerBankSync
-                  |> addActivity Activity.SyncToPartnerBank
-           }
-         | PurchaseSagaEvent.EvaluateRemainingWork -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.retryActivitiesAfterInactivity
-                     timestamp
-                     state.LifeCycle
-           }
-         | PurchaseSagaEvent.ResetInProgressActivityAttempts -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.resetInProgressActivities state.LifeCycle
-           }
-
-      Some {
-         state with
-            Events = e :: state.Events
-      }
+let stateTransitionStart
+   (start: PurchaseSagaStartEvent)
+   (timestamp: DateTime)
+   : Result<PurchaseSaga, SagaStateTransitionError>
+   =
+   Ok(applyStartEvent start timestamp)
 
 let stateTransition
-   (state: PurchaseSaga option)
+   (saga: PurchaseSaga)
    (evt: PurchaseSagaEvent)
    (timestamp: DateTime)
-   : Result<PurchaseSaga option, SagaStateTransitionError>
+   : Result<PurchaseSaga, SagaStateTransitionError>
    =
-   match state with
-   | None ->
+   let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
+
+   let invalidStepProgression =
       match evt with
-      | PurchaseSagaEvent.Start _ -> Ok(applyEvent state evt timestamp)
-      | _ -> Error SagaStateTransitionError.HasNotStarted
-   | Some saga ->
-      let eventIsStartEvent =
-         match evt with
-         | PurchaseSagaEvent.Start _ -> true
-         | _ -> false
+      | PurchaseSagaEvent.EvaluateRemainingWork
+      | PurchaseSagaEvent.ResetInProgressActivityAttempts -> false
+      | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync ->
+         activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankSync
+      | PurchaseSagaEvent.PurchaseNotificationSent ->
+         activityIsDone Activity.SendPurchaseNotification
+      | PurchaseSagaEvent.PurchaseRefundedToCard ->
+         activityIsDone Activity.RefundCard
+      | PurchaseSagaEvent.PurchaseRefundedToAccount ->
+         activityIsDone Activity.RefundAccount
+      | PurchaseSagaEvent.PurchaseRejectedByAccount _
+      | PurchaseSagaEvent.PurchaseConfirmedByAccount ->
+         activityIsDone Activity.DeductFromAccount
+      | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
+         activityIsDone Activity.NotifyCardNetworkOfRejectedPurchase
+      | PurchaseSagaEvent.CardNetworkResponse _ ->
+         activityIsDone Activity.NotifyCardNetworkOfConfirmedPurchase
+      | PurchaseSagaEvent.PartnerBankSyncResponse _ ->
+         activityIsDone Activity.SyncToPartnerBank
 
-      let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
-
-      let invalidStepProgression =
-         match evt with
-         | PurchaseSagaEvent.Start _
-         | PurchaseSagaEvent.EvaluateRemainingWork
-         | PurchaseSagaEvent.ResetInProgressActivityAttempts -> false
-         | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync ->
-            activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankSync
-         | PurchaseSagaEvent.PurchaseNotificationSent ->
-            activityIsDone Activity.SendPurchaseNotification
-         | PurchaseSagaEvent.PurchaseRefundedToCard ->
-            activityIsDone Activity.RefundCard
-         | PurchaseSagaEvent.PurchaseRefundedToAccount ->
-            activityIsDone Activity.RefundAccount
-         | PurchaseSagaEvent.PurchaseRejectedByAccount _
-         | PurchaseSagaEvent.PurchaseConfirmedByAccount ->
-            activityIsDone Activity.DeductFromAccount
-         | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
-            activityIsDone Activity.NotifyCardNetworkOfRejectedPurchase
-         | PurchaseSagaEvent.CardNetworkResponse _ ->
-            activityIsDone Activity.NotifyCardNetworkOfConfirmedPurchase
-         | PurchaseSagaEvent.PartnerBankSyncResponse _ ->
-            activityIsDone Activity.SyncToPartnerBank
-
-      if saga.Status = PurchaseSagaStatus.Completed then
-         Error SagaStateTransitionError.HasAlreadyCompleted
-      elif eventIsStartEvent then
-         Error SagaStateTransitionError.HasAlreadyStarted
-      elif invalidStepProgression then
-         Error SagaStateTransitionError.InvalidStepProgression
-      else
-         Ok(applyEvent state evt timestamp)
+   if saga.Status = PurchaseSagaStatus.Completed then
+      Error SagaStateTransitionError.HasAlreadyCompleted
+   elif invalidStepProgression then
+      Error SagaStateTransitionError.InvalidStepProgression
+   else
+      Ok(applyEvent saga evt timestamp)
 
 type PersistenceHandlerDependencies = {
    getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
@@ -519,7 +504,6 @@ let onEventPersisted
       // Support team resolved dispute with partner bank so
       // reattempt syncing transaction to partner bank.
       syncToPartnerBank ()
-   | PurchaseSagaEvent.Start _
    | PurchaseSagaEvent.PurchaseNotificationSent
    | PurchaseSagaEvent.ResetInProgressActivityAttempts
    | PurchaseSagaEvent.PurchaseRefundedToAccount

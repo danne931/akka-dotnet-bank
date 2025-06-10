@@ -18,7 +18,7 @@ open AppSagaSqlMapper
 
 let actorProps
    (system: ActorSystem)
-   (getSagaActor: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (getTimedOutSagas: unit -> Async<Result<Option<CorrelationId list>, Err>>)
    (throttle: StreamThrottle)
    =
@@ -88,7 +88,7 @@ let getSleepingSagas () = asyncResultOption {
 
 let initProps
    (system: ActorSystem)
-   (getSagaActor: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
    actorProps
       system

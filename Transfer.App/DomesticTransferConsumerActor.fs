@@ -16,7 +16,6 @@ open Lib.SharedTypes
 open Bank.Transfer.Domain
 open SignalRBroadcast
 open Lib.Types
-open Lib.Saga
 open DomesticTransferSaga
 
 type private FailReason = DomesticTransferFailReason
@@ -64,7 +63,7 @@ let private networkRecipient
 
 // Notify account actor of DomesticTransfer Progress, Completed, or Failed.
 let onSuccessfulServiceResponse
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (txn: DomesticTransfer)
    (res: DomesticTransferServiceResponse)
    =
@@ -80,12 +79,9 @@ let onSuccessfulServiceResponse
          |> failReasonFromError
          |> DomesticTransferServiceProgress.Failed
 
-   let evt = DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress
-
    let msg =
-      AppSaga.Event.DomesticTransfer evt
-      |> SagaEvent.create orgId corrId
-      |> SagaMessage.Event
+      DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress
+      |> AppSaga.Message.domesticTransfer orgId corrId
 
    txnSagaRef <! msg
 
@@ -127,7 +123,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (networkRequest: DomesticTransferRequest)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -197,7 +193,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps

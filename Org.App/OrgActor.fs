@@ -11,7 +11,6 @@ open System
 
 open Lib.SharedTypes
 open Lib.Types
-open Lib.Saga
 open ActorUtil
 open Bank.Org.Domain
 open Bank.Account.Domain
@@ -176,7 +175,7 @@ let private terminateProgressAssociatedWithRule
       mailbox <! OrgMessage.StateChange cmd
 
 let onPersisted
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (mailbox: Eventsourced<obj>)
@@ -191,16 +190,13 @@ let onPersisted
    | OnboardingApplicationSubmitted e ->
       let msg =
          OrgOnboardingSagaStartEvent.ApplicationSubmitted e
-         |> OrgOnboardingSagaEvent.Start
-         |> AppSaga.Event.OrgOnboarding
-         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+         |> AppSaga.Message.orgOnboardStart e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
    | OnboardingFinished e ->
       let msg =
          OrgOnboardingSagaEvent.OrgActivated
-         |> AppSaga.Event.OrgOnboarding
-         |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+         |> AppSaga.Message.orgOnboard e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
    | CommandApprovalRuleConfigured e ->
@@ -241,8 +237,7 @@ let onPersisted
       | ApprovableCommand.PerCommand(ApprovableCommandPerCommand.InviteEmployee _) ->
          let msg =
             EmployeeOnboardingSagaEvent.AccessRequestPending
-            |> AppSaga.Event.EmployeeOnboarding
-            |> AppSaga.sagaMessage e.OrgId e.CorrelationId
+            |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
          getSagaRef e.CorrelationId <! msg
       | _ -> ()
@@ -287,7 +282,7 @@ let onPersisted
 
 let actorProps
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    =
@@ -455,7 +450,7 @@ let initProps
    (broadcaster: SignalRBroadcast)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    =

@@ -16,7 +16,6 @@ type PlatformPaymentSagaStartEvent =
 
 [<RequireQualifiedAccess>]
 type PlatformPaymentSagaEvent =
-   | Start of PlatformPaymentSagaStartEvent
    | PaymentRequestCancelled
    | PaymentRequestDeclined
    | PayerAccountDeductedFunds of BankEvent<PlatformPaymentPaid>
@@ -80,6 +79,7 @@ type Activity =
          | RefundPayerAccount -> Some(TimeSpan.FromSeconds 5)
 
 type PlatformPaymentSaga = {
+   StartEvent: PlatformPaymentSagaStartEvent
    Events: PlatformPaymentSagaEvent list
    Status: PlatformPaymentSagaStatus
    PaymentInfo: PlatformPaymentBaseInfo
@@ -99,9 +99,25 @@ type PlatformPaymentSaga = {
       |> List.exists (fun w ->
          w.Activity = Activity.NotifyPayeeOfPaymentDeposit)
 
+let applyStartEvent (e: PlatformPaymentSagaStartEvent) (timestamp: DateTime) =
+   match e with
+   | StartEvent.PaymentRequested evt -> {
+      StartEvent = e
+      Events = []
+      Status = PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Unpaid
+      PaymentInfo = evt.Data.BaseInfo
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init timestamp Activity.NotifyPayerOfRequest
+               ActivityLifeCycle.init timestamp Activity.WaitForPayment
+            ]
+      }
+     }
+
 let applyEvent
-   (state: PlatformPaymentSaga option)
-   (e: PlatformPaymentSagaEvent)
+   (saga: PlatformPaymentSaga)
+   (evt: PlatformPaymentSagaEvent)
    (timestamp: DateTime)
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
@@ -109,264 +125,220 @@ let applyEvent
    let failActivity = SagaLifeCycle.failActivity timestamp
    let retryActivity = SagaLifeCycle.retryActivity timestamp
 
-   match state with
-   | None ->
-      match e with
-      | Event.Start evt ->
-         match evt with
-         | StartEvent.PaymentRequested evt ->
-            Some {
-               Events = [ e ]
-               Status =
-                  PlatformPaymentSagaStatus.InProgress
-                     PlatformPaymentStatus.Unpaid
-               PaymentInfo = evt.Data.BaseInfo
-               LifeCycle = {
-                  SagaLifeCycle.empty with
-                     InProgress = [
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.NotifyPayerOfRequest
-                        ActivityLifeCycle.init timestamp Activity.WaitForPayment
-                     ]
-               }
+   let saga = {
+      saga with
+         Events = evt :: saga.Events
+   }
+
+   match evt with
+   | Event.PaymentRequestCancelled -> {
+      saga with
+         Status = PlatformPaymentSagaStatus.Completed
+         LifeCycle = saga.LifeCycle |> finishActivity Activity.WaitForPayment
+     }
+   | Event.PaymentRequestDeclined -> {
+      saga with
+         Status =
+            PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Declined
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.WaitForPayment
+            |> addActivity Activity.NotifyPayeeOfDecline
+     }
+   | Event.PayerAccountDeductedFunds _ -> {
+      saga with
+         Status =
+            PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Paid
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.WaitForPayment
+            |> addActivity Activity.DepositToPayeeAccount
+     }
+   | Event.PayerAccountUnableToDeductFunds reason -> {
+      saga with
+         LifeCycle = saga.LifeCycle |> failActivity Activity.WaitForPayment
+         Status = PlatformPaymentSagaStatus.Failed reason
+     }
+   | Event.PayeeAccountDepositedFunds -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.DepositToPayeeAccount
+            |> addActivity Activity.SyncToPartnerBank
+            |> addActivity Activity.NotifyPayerOfPaymentSent
+            |> addActivity Activity.NotifyPayeeOfPaymentDeposit
+         Status =
+            PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Deposited
+     }
+   | Event.PayeeAccountUnableToDepositFunds(reason, payMethod) -> {
+      saga with
+         Status = PlatformPaymentSagaStatus.Failed reason
+         LifeCycle =
+            saga.LifeCycle
+            |> failActivity Activity.DepositToPayeeAccount
+            |> addActivity (
+               match payMethod with
+               | PaymentMethod.Platform _ -> Activity.RefundPayerAccount
+               | PaymentMethod.ThirdParty _ ->
+                  Activity.RefundThirdPartyPaymentMethod
+            )
+     }
+   | Event.PartnerBankSyncResponse res ->
+      match res with
+      | Error err ->
+         let activity = Activity.SyncToPartnerBank
+
+         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
+            {
+               saga with
+                  LifeCycle = retryActivity activity saga.LifeCycle
             }
-      | _ -> state
-   | Some state ->
-      let state =
-         match e with
-         | Event.Start _ -> state
-         | Event.PaymentRequestCancelled -> {
-            state with
-               Status = PlatformPaymentSagaStatus.Completed
-               LifeCycle =
-                  state.LifeCycle |> finishActivity Activity.WaitForPayment
-           }
-         | Event.PaymentRequestDeclined -> {
-            state with
-               Status =
-                  PlatformPaymentSagaStatus.InProgress
-                     PlatformPaymentStatus.Declined
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.WaitForPayment
-                  |> addActivity Activity.NotifyPayeeOfDecline
-           }
-         | Event.PayerAccountDeductedFunds _ -> {
-            state with
-               Status =
-                  PlatformPaymentSagaStatus.InProgress
-                     PlatformPaymentStatus.Paid
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.WaitForPayment
-                  |> addActivity Activity.DepositToPayeeAccount
-           }
-         | Event.PayerAccountUnableToDeductFunds reason -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle |> failActivity Activity.WaitForPayment
-               Status = PlatformPaymentSagaStatus.Failed reason
-           }
-         | Event.PayeeAccountDepositedFunds -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.DepositToPayeeAccount
-                  |> addActivity Activity.SyncToPartnerBank
-                  |> addActivity Activity.NotifyPayerOfPaymentSent
-                  |> addActivity Activity.NotifyPayeeOfPaymentDeposit
-               Status =
-                  PlatformPaymentSagaStatus.InProgress
-                     PlatformPaymentStatus.Deposited
-           }
-         | Event.PayeeAccountUnableToDepositFunds(reason, payMethod) -> {
-            state with
-               Status = PlatformPaymentSagaStatus.Failed reason
-               LifeCycle =
-                  state.LifeCycle
-                  |> failActivity Activity.DepositToPayeeAccount
-                  |> addActivity (
-                     match payMethod with
-                     | PaymentMethod.Platform _ -> Activity.RefundPayerAccount
-                     | PaymentMethod.ThirdParty _ ->
-                        Activity.RefundThirdPartyPaymentMethod
-                  )
-           }
-         | Event.PartnerBankSyncResponse res ->
-            match res with
-            | Error err ->
-               let activity = Activity.SyncToPartnerBank
-
-               if state.LifeCycle.ActivityHasRemainingAttempts activity then
-                  {
-                     state with
-                        LifeCycle = retryActivity activity state.LifeCycle
-                  }
-               else
-                  {
-                     state with
-                        Status =
-                           PlatformPaymentFailReason.PartnerBankSync err
-                           |> PlatformPaymentSagaStatus.Failed
-                        LifeCycle =
-                           state.LifeCycle
-                           |> failActivity Activity.SyncToPartnerBank
-                           |> addActivity
-                                 Activity.WaitForSupportTeamToResolvePartnerBankSync
-                  }
-            | Ok _ -> {
-               state with
+         else
+            {
+               saga with
                   Status =
-                     if
-                        state.PaymentPaidNotificationSentToPayer
-                        && state.PaymentDepositedNotificationSentToPayee
-                     then
-                        PlatformPaymentSagaStatus.Completed
-                     else
-                        state.Status
+                     PlatformPaymentFailReason.PartnerBankSync err
+                     |> PlatformPaymentSagaStatus.Failed
                   LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity Activity.SyncToPartnerBank
-              }
-         | Event.SupportTeamResolvedPartnerBankSync -> {
-            state with
-               Status =
-                  PlatformPaymentSagaStatus.InProgress
-                     PlatformPaymentStatus.Deposited
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity
-                        Activity.WaitForSupportTeamToResolvePartnerBankSync
-                  |> addActivity Activity.SyncToPartnerBank
-           }
-         | Event.PaymentRequestNotificationSentToPayer -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.NotifyPayerOfRequest
-           }
-         | Event.PaymentPaidNotificationSentToPayer -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.NotifyPayerOfPaymentSent
-               Status =
-                  if
-                     state.PaymentDepositedNotificationSentToPayee
-                     && state.PaymentSyncedToPartnerBank
-                  then
-                     PlatformPaymentSagaStatus.Completed
-                  else
-                     state.Status
-           }
-         | Event.PaymentDepositedNotificationSentToPayee -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.NotifyPayeeOfPaymentDeposit
-               Status =
-                  if
-                     state.PaymentPaidNotificationSentToPayer
-                     && state.PaymentSyncedToPartnerBank
-                  then
-                     PlatformPaymentSagaStatus.Completed
-                  else
-                     state.Status
-           }
-         | Event.PaymentDeclinedNotificationSentToPayee -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.NotifyPayeeOfDecline
-               Status = PlatformPaymentSagaStatus.Completed
-           }
-         | Event.ThirdPartyPaymentMethodRefunded -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.RefundThirdPartyPaymentMethod
-           }
-         | Event.PayerAccountRefunded -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle |> finishActivity Activity.RefundPayerAccount
-           }
-         | Event.EvaluateRemainingWork -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.retryActivitiesAfterInactivity
-                     timestamp
-                     state.LifeCycle
-           }
-         | Event.ResetInProgressActivityAttempts -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.resetInProgressActivities state.LifeCycle
-           }
+                     saga.LifeCycle
+                     |> failActivity Activity.SyncToPartnerBank
+                     |> addActivity
+                           Activity.WaitForSupportTeamToResolvePartnerBankSync
+            }
+      | Ok _ -> {
+         saga with
+            Status =
+               if
+                  saga.PaymentPaidNotificationSentToPayer
+                  && saga.PaymentDepositedNotificationSentToPayee
+               then
+                  PlatformPaymentSagaStatus.Completed
+               else
+                  saga.Status
+            LifeCycle =
+               saga.LifeCycle |> finishActivity Activity.SyncToPartnerBank
+        }
+   | Event.SupportTeamResolvedPartnerBankSync -> {
+      saga with
+         Status =
+            PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Deposited
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity
+                  Activity.WaitForSupportTeamToResolvePartnerBankSync
+            |> addActivity Activity.SyncToPartnerBank
+     }
+   | Event.PaymentRequestNotificationSentToPayer -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.NotifyPayerOfRequest
+     }
+   | Event.PaymentPaidNotificationSentToPayer -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.NotifyPayerOfPaymentSent
+         Status =
+            if
+               saga.PaymentDepositedNotificationSentToPayee
+               && saga.PaymentSyncedToPartnerBank
+            then
+               PlatformPaymentSagaStatus.Completed
+            else
+               saga.Status
+     }
+   | Event.PaymentDepositedNotificationSentToPayee -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.NotifyPayeeOfPaymentDeposit
+         Status =
+            if
+               saga.PaymentPaidNotificationSentToPayer
+               && saga.PaymentSyncedToPartnerBank
+            then
+               PlatformPaymentSagaStatus.Completed
+            else
+               saga.Status
+     }
+   | Event.PaymentDeclinedNotificationSentToPayee -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.NotifyPayeeOfDecline
+         Status = PlatformPaymentSagaStatus.Completed
+     }
+   | Event.ThirdPartyPaymentMethodRefunded -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.RefundThirdPartyPaymentMethod
+     }
+   | Event.PayerAccountRefunded -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.RefundPayerAccount
+     }
+   | Event.EvaluateRemainingWork -> {
+      saga with
+         LifeCycle =
+            SagaLifeCycle.retryActivitiesAfterInactivity
+               timestamp
+               saga.LifeCycle
+     }
+   | Event.ResetInProgressActivityAttempts -> {
+      saga with
+         LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
 
-      Some {
-         state with
-            Events = e :: state.Events
-      }
+let stateTransitionStart
+   (evt: PlatformPaymentSagaStartEvent)
+   (timestamp: DateTime)
+   : Result<PlatformPaymentSaga, SagaStateTransitionError>
+   =
+   Ok(applyStartEvent evt timestamp)
 
 let stateTransition
-   (state: PlatformPaymentSaga option)
+   (saga: PlatformPaymentSaga)
    (evt: PlatformPaymentSagaEvent)
    (timestamp: DateTime)
-   : Result<PlatformPaymentSaga option, SagaStateTransitionError>
+   : Result<PlatformPaymentSaga, SagaStateTransitionError>
    =
-   match state with
-   | None ->
+   let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
+
+   let invalidStepProgression =
       match evt with
-      | PlatformPaymentSagaEvent.Start _ -> Ok(applyEvent state evt timestamp)
-      | _ -> Error SagaStateTransitionError.HasNotStarted
-   | Some saga ->
-      let eventIsStartEvent =
-         match evt with
-         | PlatformPaymentSagaEvent.Start _ -> true
-         | _ -> false
+      | PlatformPaymentSagaEvent.EvaluateRemainingWork
+      | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts -> false
+      | PlatformPaymentSagaEvent.PayerAccountDeductedFunds _
+      | PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds _
+      | PlatformPaymentSagaEvent.PaymentRequestDeclined
+      | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
+         activityIsDone Activity.WaitForPayment
+      | PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds _
+      | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds ->
+         activityIsDone Activity.DepositToPayeeAccount
+      | PlatformPaymentSagaEvent.PartnerBankSyncResponse _ ->
+         activityIsDone Activity.SyncToPartnerBank
+      | PlatformPaymentSagaEvent.SupportTeamResolvedPartnerBankSync ->
+         activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankSync
+      | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->
+         activityIsDone Activity.NotifyPayerOfRequest
+      | PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer ->
+         activityIsDone Activity.NotifyPayerOfPaymentSent
+      | PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee ->
+         activityIsDone Activity.NotifyPayeeOfPaymentDeposit
+      | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
+         activityIsDone Activity.NotifyPayeeOfDecline
+      | PlatformPaymentSagaEvent.PayerAccountRefunded ->
+         activityIsDone Activity.RefundPayerAccount
+      | PlatformPaymentSagaEvent.ThirdPartyPaymentMethodRefunded ->
+         activityIsDone Activity.RefundThirdPartyPaymentMethod
 
-      let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
-
-      let invalidStepProgression =
-         match evt with
-         | PlatformPaymentSagaEvent.Start _
-         | PlatformPaymentSagaEvent.EvaluateRemainingWork
-         | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts -> false
-         | PlatformPaymentSagaEvent.PayerAccountDeductedFunds _
-         | PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds _
-         | PlatformPaymentSagaEvent.PaymentRequestDeclined
-         | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
-            activityIsDone Activity.WaitForPayment
-         | PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds _
-         | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds ->
-            activityIsDone Activity.DepositToPayeeAccount
-         | PlatformPaymentSagaEvent.PartnerBankSyncResponse _ ->
-            activityIsDone Activity.SyncToPartnerBank
-         | PlatformPaymentSagaEvent.SupportTeamResolvedPartnerBankSync ->
-            activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankSync
-         | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->
-            activityIsDone Activity.NotifyPayerOfRequest
-         | PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer ->
-            activityIsDone Activity.NotifyPayerOfPaymentSent
-         | PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee ->
-            activityIsDone Activity.NotifyPayeeOfPaymentDeposit
-         | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
-            activityIsDone Activity.NotifyPayeeOfDecline
-         | PlatformPaymentSagaEvent.PayerAccountRefunded ->
-            activityIsDone Activity.RefundPayerAccount
-         | PlatformPaymentSagaEvent.ThirdPartyPaymentMethodRefunded ->
-            activityIsDone Activity.RefundThirdPartyPaymentMethod
-
-      if saga.Status = PlatformPaymentSagaStatus.Completed then
-         Error SagaStateTransitionError.HasAlreadyCompleted
-      elif eventIsStartEvent then
-         Error SagaStateTransitionError.HasAlreadyStarted
-      elif invalidStepProgression then
-         Error SagaStateTransitionError.InvalidStepProgression
-      else
-         Ok(applyEvent state evt timestamp)
+   if saga.Status = PlatformPaymentSagaStatus.Completed then
+      Error SagaStateTransitionError.HasAlreadyCompleted
+   elif invalidStepProgression then
+      Error SagaStateTransitionError.InvalidStepProgression
+   else
+      Ok(applyEvent saga evt timestamp)
 
 type PersistenceHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
@@ -480,7 +452,6 @@ let onEventPersisted
       dep.sendMessageToSelf payment (dep.syncToPartnerBank payment)
 
    match evt with
-   | Event.Start _ -> ()
    | Event.PaymentRequestCancelled -> ()
    | Event.PaymentRequestDeclined -> notifyPayeeOfPaymentDecline ()
    | Event.PayerAccountDeductedFunds e -> depositToPayeeAccount e

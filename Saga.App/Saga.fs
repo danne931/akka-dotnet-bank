@@ -26,6 +26,56 @@ open Bank.Scheduler
 open BillingSaga
 
 [<RequireQualifiedAccess>]
+type StartEvent =
+   | OrgOnboarding of OrgOnboardingSagaStartEvent
+   | EmployeeOnboarding of EmployeeOnboardingSagaStartEvent
+   | CardSetup of CardSetupSagaStartEvent
+   | Purchase of PurchaseSagaStartEvent
+   | DomesticTransfer of DomesticTransferSagaStartEvent
+   | PlatformTransfer of PlatformTransferSagaStartEvent
+   | PlatformPayment of PlatformPaymentSagaStartEvent
+   | Billing of BillingSagaStartEvent
+
+   member x.Name =
+      match x with
+      | OrgOnboarding e ->
+         match e with
+         | OrgOnboardingSagaStartEvent.ApplicationSubmitted _ ->
+            "OrgOnboardingApplicationSubmitted"
+      | EmployeeOnboarding e ->
+         match e with
+         | EmployeeOnboardingSagaStartEvent.AccountOwnerCreated _ ->
+            "EmployeeOnboardingAccountOwnerCreated"
+         | EmployeeOnboardingSagaStartEvent.EmployeeCreated _ ->
+            "EmployeeOnboardingEmployeeCreated"
+         | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored _ ->
+            "EmployeeOnboardingEmployeeAccessRestored"
+      | CardSetup _ -> "CardSetupStart"
+      | Purchase e ->
+         match e with
+         | PurchaseSagaStartEvent.DeductedCardFunds _ ->
+            "PurchaseDeductedCardFunds"
+         | PurchaseSagaStartEvent.PurchaseRejectedByCard _ ->
+            "PurchaseRejectedByCard"
+      | DomesticTransfer e ->
+         match e with
+         | DomesticTransferSagaStartEvent.SenderAccountDeductedFunds _ ->
+            "DomesticTransferSenderAccountDeductedFunds"
+         | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ ->
+            "DomesticTransferScheduleTransferRequest"
+      | PlatformTransfer e ->
+         match e with
+         | PlatformTransferSagaStartEvent.SenderAccountDeductedFunds _ ->
+            "PlatformTransferSenderAccountDeductedFunds"
+         | PlatformTransferSagaStartEvent.ScheduleTransferRequest _ ->
+            "PlatformTransferScheduleTransferRequest"
+      | PlatformPayment e ->
+         match e with
+         | PlatformPaymentSagaStartEvent.PaymentRequested _ ->
+            "PlatformPaymentPaymentRequested"
+      | Billing _ -> "BillingSagaStart"
+
+[<RequireQualifiedAccess>]
 type Event =
    | OrgOnboarding of OrgOnboardingSagaEvent
    | EmployeeOnboarding of EmployeeOnboardingSagaEvent
@@ -40,10 +90,6 @@ type Event =
       match x with
       | Event.OrgOnboarding e ->
          match e with
-         | OrgOnboardingSagaEvent.Start e ->
-            match e with
-            | OrgOnboardingSagaStartEvent.ApplicationSubmitted _ ->
-               "OrgOnboardingApplicationSubmitted"
          | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent ->
             "OrgOnboardingApplicationProcessingNotificationSent"
          | OrgOnboardingSagaEvent.KYCResponse _ ->
@@ -69,14 +115,6 @@ type Event =
          | OrgOnboardingSagaEvent.OrgActivated -> "OrgOnboardingOrgActivated"
       | Event.EmployeeOnboarding e ->
          match e with
-         | EmployeeOnboardingSagaEvent.Start e ->
-            match e with
-            | EmployeeOnboardingSagaStartEvent.AccountOwnerCreated _ ->
-               "EmployeeOnboardingAccountOwnerCreated"
-            | EmployeeOnboardingSagaStartEvent.EmployeeCreated _ ->
-               "EmployeeOnboardingEmployeeCreated"
-            | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored _ ->
-               "EmployeeOnboardingEmployeeAccessRestored"
          | EmployeeOnboardingSagaEvent.AccessRequestPending ->
             "EmployeeOnboardingAccessRequestPending"
          | EmployeeOnboardingSagaEvent.InviteNotificationSent ->
@@ -101,7 +139,6 @@ type Event =
             "EmployeeOnboardingEvaluateRemainingWork"
       | Event.CardSetup e ->
          match e with
-         | CardSetupSagaEvent.Start _ -> "CardSetupStart"
          | CardSetupSagaEvent.CardCreateResponse _ -> "CardSetupCreateResponse"
          | CardSetupSagaEvent.CardSetupSuccessNotificationSent ->
             "CardSetupSuccessNotificationSent"
@@ -115,11 +152,6 @@ type Event =
             "CardSetupEvaluateRemainingWork"
       | Event.Purchase e ->
          match e with
-         | PurchaseSagaEvent.Start e ->
-            match e with
-            | PurchaseSagaStartEvent.DeductedCardFunds _ -> "DeductedCardFunds"
-            | PurchaseSagaStartEvent.PurchaseRejectedByCard _ ->
-               "PurchaseRejectedByCard"
          | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
             "PurchaseRejectedCardNetworkResponse"
          | PurchaseSagaEvent.CardNetworkResponse _ -> "CardNetworkResponse"
@@ -142,12 +174,6 @@ type Event =
             "PurchaseResetInProgressActivityAttempts"
       | Event.DomesticTransfer e ->
          match e with
-         | DomesticTransferSagaEvent.Start e ->
-            match e with
-            | DomesticTransferSagaStartEvent.SenderAccountDeductedFunds _ ->
-               "DomesticTransferSenderAccountDeductedFunds"
-            | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ ->
-               "DomesticTransferScheduleTransferRequest"
          | DomesticTransferSagaEvent.ScheduledJobCreated ->
             "DomesticTransferScheduledJobCreated"
          | DomesticTransferSagaEvent.ScheduledJobExecuted ->
@@ -172,12 +198,6 @@ type Event =
             "DomesticTransferResetInProgressActivityAttempts"
       | Event.PlatformTransfer e ->
          match e with
-         | PlatformTransferSagaEvent.Start e ->
-            match e with
-            | PlatformTransferSagaStartEvent.SenderAccountDeductedFunds _ ->
-               "PlatformTransferSenderAccountDeductedFunds"
-            | PlatformTransferSagaStartEvent.ScheduleTransferRequest _ ->
-               "PlatformTransferScheduleTransferRequest"
          | PlatformTransferSagaEvent.ScheduledJobCreated ->
             "PlatformTransferScheduledJobCreated"
          | PlatformTransferSagaEvent.ScheduledJobExecuted ->
@@ -208,10 +228,6 @@ type Event =
             "PlatformTransferResetInProgressActivityAttempts"
       | Event.PlatformPayment e ->
          match e with
-         | PlatformPaymentSagaEvent.Start e ->
-            match e with
-            | PlatformPaymentSagaStartEvent.PaymentRequested _ ->
-               "PlatformPaymentPaymentRequested"
          | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
             "PlatformPaymentRequestCancelled"
          | PlatformPaymentSagaEvent.PaymentRequestDeclined ->
@@ -246,7 +262,6 @@ type Event =
             "PlatformPaymentResetInProgressActivityAttempts"
       | Event.Billing e ->
          match e with
-         | BillingSagaEvent.Start _ -> "BillingStatementStart"
          | BillingSagaEvent.BillingStatementProcessing _ ->
             "BillingStatementProcessing"
          | BillingSagaEvent.BillingStatementPersisted ->
@@ -364,10 +379,86 @@ type Saga =
          | Saga.PlatformPayment s -> s.LifeCycle.InactivityTimeout
          | Saga.Billing s -> s.LifeCycle.InactivityTimeout
 
+type AppSagaPersistableEvent = SagaPersistableEvent<StartEvent, Event>
 
-/// Wrap an AppSaga event in a saga message.
-let sagaMessage orgId correlationId (evt: Event) =
-   SagaEvent.create orgId correlationId evt |> SagaMessage.Event
+type AppSagaMessage = SagaMessage<StartEvent, Event>
+
+module Message =
+   let private startMessage
+      orgId
+      corrId
+      (startEvent: StartEvent)
+      : SagaMessage<StartEvent, Event>
+      =
+      SagaEvent.create orgId corrId startEvent |> SagaMessage.Start
+
+   let private message
+      orgId
+      corrId
+      (evt: Event)
+      : SagaMessage<StartEvent, Event>
+      =
+      SagaEvent.create orgId corrId evt |> SagaMessage.Event
+
+   let orgOnboardStart orgId corrId (evt: OrgOnboardingSagaStartEvent) =
+      startMessage orgId corrId (StartEvent.OrgOnboarding evt)
+
+   let orgOnboard orgId corrId (evt: OrgOnboardingSagaEvent) =
+      message orgId corrId (Event.OrgOnboarding evt)
+
+   let employeeOnboardStart
+      orgId
+      corrId
+      (evt: EmployeeOnboardingSagaStartEvent)
+      =
+      startMessage orgId corrId (StartEvent.EmployeeOnboarding evt)
+
+   let employeeOnboard orgId corrId (evt: EmployeeOnboardingSagaEvent) =
+      message orgId corrId (Event.EmployeeOnboarding evt)
+
+   let purchaseStart orgId corrId (evt: PurchaseSagaStartEvent) =
+      startMessage orgId corrId (StartEvent.Purchase evt)
+
+   let purchase orgId corrId (evt: PurchaseSagaEvent) =
+      message orgId corrId (Event.Purchase evt)
+
+   let cardSetupStart orgId corrId (evt: CardSetupSagaStartEvent) =
+      startMessage orgId corrId (StartEvent.CardSetup evt)
+
+   let cardSetup orgId corrId (evt: CardSetupSagaEvent) =
+      message orgId corrId (Event.CardSetup evt)
+
+   let domesticTransferStart
+      orgId
+      corrId
+      (evt: DomesticTransferSagaStartEvent)
+      =
+      startMessage orgId corrId (StartEvent.DomesticTransfer evt)
+
+   let domesticTransfer orgId corrId (evt: DomesticTransferSagaEvent) =
+      message orgId corrId (Event.DomesticTransfer evt)
+
+   let platformTransferStart
+      orgId
+      corrId
+      (evt: PlatformTransferSagaStartEvent)
+      =
+      startMessage orgId corrId (StartEvent.PlatformTransfer evt)
+
+   let platformTransfer orgId corrId (evt: PlatformTransferSagaEvent) =
+      message orgId corrId (Event.PlatformTransfer evt)
+
+   let platformPaymentStart orgId corrId (evt: PlatformPaymentSagaStartEvent) =
+      startMessage orgId corrId (StartEvent.PlatformPayment evt)
+
+   let platformPayment orgId corrId (evt: PlatformPaymentSagaEvent) =
+      message orgId corrId (Event.PlatformPayment evt)
+
+   let billingStart orgId corrId (evt: BillingSagaStartEvent) =
+      startMessage orgId corrId (StartEvent.Billing evt)
+
+   let billing orgId corrId (evt: BillingSagaEvent) =
+      message orgId corrId (Event.Billing evt)
 
 let sagaHandler
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
@@ -376,165 +467,332 @@ let sagaHandler
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
-   : SagaActor.SagaHandler<Saga, Event>
+   : SagaActor.SagaHandler<Saga, StartEvent, Event>
    =
    {
       getEvaluateRemainingWorkEvent =
-         fun saga ->
-            match saga with
-            | Saga.OrgOnboarding _ ->
-               OrgOnboardingSagaEvent.EvaluateRemainingWork
-               |> Event.OrgOnboarding
-            | Saga.EmployeeOnboarding _ ->
-               EmployeeOnboardingSagaEvent.EvaluateRemainingWork
-               |> Event.EmployeeOnboarding
-            | Saga.CardSetup _ ->
-               CardSetupSagaEvent.EvaluateRemainingWork |> Event.CardSetup
-            | Saga.Purchase _ ->
-               PurchaseSagaEvent.EvaluateRemainingWork |> Event.Purchase
-            | Saga.DomesticTransfer _ ->
-               DomesticTransferSagaEvent.EvaluateRemainingWork
-               |> Event.DomesticTransfer
-            | Saga.PlatformTransfer _ ->
-               PlatformTransferSagaEvent.EvaluateRemainingWork
-               |> Event.PlatformTransfer
-            | Saga.PlatformPayment _ ->
-               PlatformPaymentSagaEvent.EvaluateRemainingWork
-               |> Event.PlatformPayment
-            | Saga.Billing _ ->
-               BillingSagaEvent.EvaluateRemainingWork |> Event.Billing
+         function
+         | Saga.OrgOnboarding _ ->
+            OrgOnboardingSagaEvent.EvaluateRemainingWork |> Event.OrgOnboarding
+         | Saga.EmployeeOnboarding _ ->
+            EmployeeOnboardingSagaEvent.EvaluateRemainingWork
+            |> Event.EmployeeOnboarding
+         | Saga.CardSetup _ ->
+            CardSetupSagaEvent.EvaluateRemainingWork |> Event.CardSetup
+         | Saga.Purchase _ ->
+            PurchaseSagaEvent.EvaluateRemainingWork |> Event.Purchase
+         | Saga.DomesticTransfer _ ->
+            DomesticTransferSagaEvent.EvaluateRemainingWork
+            |> Event.DomesticTransfer
+         | Saga.PlatformTransfer _ ->
+            PlatformTransferSagaEvent.EvaluateRemainingWork
+            |> Event.PlatformTransfer
+         | Saga.PlatformPayment _ ->
+            PlatformPaymentSagaEvent.EvaluateRemainingWork
+            |> Event.PlatformPayment
+         | Saga.Billing _ ->
+            BillingSagaEvent.EvaluateRemainingWork |> Event.Billing
       getResetInProgressActivitiesEvent =
-         fun saga ->
-            match saga with
-            | Saga.OrgOnboarding _ ->
-               OrgOnboardingSagaEvent.ResetInProgressActivityAttempts
-               |> Event.OrgOnboarding
-            | Saga.EmployeeOnboarding _ ->
-               EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts
-               |> Event.EmployeeOnboarding
-            | Saga.CardSetup _ ->
-               CardSetupSagaEvent.ResetInProgressActivityAttempts
-               |> Event.CardSetup
-            | Saga.Purchase _ ->
-               PurchaseSagaEvent.ResetInProgressActivityAttempts
-               |> Event.Purchase
-            | Saga.DomesticTransfer _ ->
-               DomesticTransferSagaEvent.ResetInProgressActivityAttempts
-               |> Event.DomesticTransfer
-            | Saga.PlatformTransfer _ ->
-               PlatformTransferSagaEvent.ResetInProgressActivityAttempts
-               |> Event.PlatformTransfer
-            | Saga.PlatformPayment _ ->
-               PlatformPaymentSagaEvent.ResetInProgressActivityAttempts
-               |> Event.PlatformPayment
-            | Saga.Billing _ ->
-               BillingSagaEvent.ResetInProgressActivityAttempts |> Event.Billing
-      applyEvent =
-         fun (state: Saga option) (evt: Event) (timestamp: DateTime) ->
-            match evt, state with
-            | Event.OrgOnboarding e, None ->
-               OrgOnboardingSaga.applyEvent None e timestamp
-               |> Option.map Saga.OrgOnboarding
-            | Event.OrgOnboarding e, Some(Saga.OrgOnboarding state) ->
-               OrgOnboardingSaga.applyEvent (Some state) e timestamp
-               |> Option.map Saga.OrgOnboarding
-            | Event.EmployeeOnboarding e, None ->
-               EmployeeOnboardingSaga.applyEvent None e timestamp
-               |> Option.map Saga.EmployeeOnboarding
-            | Event.EmployeeOnboarding e, Some(Saga.EmployeeOnboarding state) ->
-               EmployeeOnboardingSaga.applyEvent (Some state) e timestamp
-               |> Option.map Saga.EmployeeOnboarding
-            | Event.CardSetup e, None ->
-               CardSetupSaga.applyEvent None e timestamp
-               |> Option.map Saga.CardSetup
-            | Event.CardSetup e, Some(Saga.CardSetup state) ->
-               CardSetupSaga.applyEvent (Some state) e timestamp
-               |> Option.map Saga.CardSetup
-            | Event.Purchase e, None ->
-               PurchaseSaga.applyEvent None e timestamp
-               |> Option.map Saga.Purchase
-            | Event.Purchase e, Some(Saga.Purchase state) ->
-               PurchaseSaga.applyEvent (Some state) e timestamp
-               |> Option.map Saga.Purchase
-            | Event.DomesticTransfer e, None ->
-               DomesticTransferSaga.applyEvent None e timestamp
-               |> Option.map Saga.DomesticTransfer
-            | Event.DomesticTransfer e, Some(Saga.DomesticTransfer state) ->
-               DomesticTransferSaga.applyEvent (Some state) e timestamp
-               |> Option.map Saga.DomesticTransfer
-            | Event.PlatformTransfer e, None ->
-               PlatformTransferSaga.applyEvent None e timestamp
-               |> Option.map Saga.PlatformTransfer
-            | Event.PlatformTransfer e, Some(Saga.PlatformTransfer state) ->
-               PlatformTransferSaga.applyEvent (Some state) e timestamp
-               |> Option.map Saga.PlatformTransfer
-            | Event.PlatformPayment e, None ->
-               PlatformPaymentSaga.applyEvent None e timestamp
-               |> Option.map Saga.PlatformPayment
-            | Event.PlatformPayment e, Some(Saga.PlatformPayment state) ->
-               PlatformPaymentSaga.applyEvent (Some state) e timestamp
-               |> Option.map Saga.PlatformPayment
-            | Event.Billing e, None ->
-               BillingSaga.applyEvent None e timestamp
-               |> Option.map Saga.Billing
-            | Event.Billing e, Some(Saga.Billing state) ->
-               BillingSaga.applyEvent (Some state) e timestamp
-               |> Option.map Saga.Billing
-            | _ -> state
+         function
+         | Saga.OrgOnboarding _ ->
+            OrgOnboardingSagaEvent.ResetInProgressActivityAttempts
+            |> Event.OrgOnboarding
+         | Saga.EmployeeOnboarding _ ->
+            EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts
+            |> Event.EmployeeOnboarding
+         | Saga.CardSetup _ ->
+            CardSetupSagaEvent.ResetInProgressActivityAttempts
+            |> Event.CardSetup
+         | Saga.Purchase _ ->
+            PurchaseSagaEvent.ResetInProgressActivityAttempts |> Event.Purchase
+         | Saga.DomesticTransfer _ ->
+            DomesticTransferSagaEvent.ResetInProgressActivityAttempts
+            |> Event.DomesticTransfer
+         | Saga.PlatformTransfer _ ->
+            PlatformTransferSagaEvent.ResetInProgressActivityAttempts
+            |> Event.PlatformTransfer
+         | Saga.PlatformPayment _ ->
+            PlatformPaymentSagaEvent.ResetInProgressActivityAttempts
+            |> Event.PlatformPayment
+         | Saga.Billing _ ->
+            BillingSagaEvent.ResetInProgressActivityAttempts |> Event.Billing
+      stateTransitionStart =
+         fun (evt: StartEvent) (timestamp: DateTime) ->
+            match evt with
+            | StartEvent.OrgOnboarding e ->
+               OrgOnboardingSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.OrgOnboarding
+            | StartEvent.EmployeeOnboarding e ->
+               EmployeeOnboardingSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.EmployeeOnboarding
+            | StartEvent.CardSetup e ->
+               CardSetupSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.CardSetup
+            | StartEvent.Purchase e ->
+               PurchaseSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.Purchase
+            | StartEvent.DomesticTransfer e ->
+               DomesticTransferSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.DomesticTransfer
+            | StartEvent.PlatformTransfer e ->
+               PlatformTransferSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.PlatformTransfer
+            | StartEvent.PlatformPayment e ->
+               PlatformPaymentSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.PlatformPayment
+            | StartEvent.Billing e ->
+               BillingSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.Billing
+      applyStartEvent =
+         fun (evt: StartEvent) (timestamp: DateTime) ->
+            match evt with
+            | StartEvent.OrgOnboarding e ->
+               OrgOnboardingSaga.applyStartEvent e timestamp
+               |> Saga.OrgOnboarding
+            | StartEvent.EmployeeOnboarding e ->
+               EmployeeOnboardingSaga.applyStartEvent e timestamp
+               |> Saga.EmployeeOnboarding
+            | StartEvent.CardSetup e ->
+               CardSetupSaga.applyStartEvent e timestamp |> Saga.CardSetup
+            | StartEvent.Purchase e ->
+               PurchaseSaga.applyStartEvent e timestamp |> Saga.Purchase
+            | StartEvent.DomesticTransfer e ->
+               DomesticTransferSaga.applyStartEvent e timestamp
+               |> Saga.DomesticTransfer
+            | StartEvent.PlatformTransfer e ->
+               PlatformTransferSaga.applyStartEvent e timestamp
+               |> Saga.PlatformTransfer
+            | StartEvent.PlatformPayment e ->
+               PlatformPaymentSaga.applyStartEvent e timestamp
+               |> Saga.PlatformPayment
+            | StartEvent.Billing e ->
+               BillingSaga.applyStartEvent e timestamp |> Saga.Billing
       stateTransition =
-         fun (state: Saga option) (evt: Event) (timestamp: DateTime) ->
-            match evt, state with
-            | Event.OrgOnboarding e, Some(Saga.OrgOnboarding state) ->
-               OrgOnboardingSaga.stateTransition (Some state) e timestamp
-               |> Result.map (Option.map Saga.OrgOnboarding)
-            | Event.OrgOnboarding e, None ->
-               OrgOnboardingSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.OrgOnboarding)
-            | Event.EmployeeOnboarding e, Some(Saga.EmployeeOnboarding state) ->
-               EmployeeOnboardingSaga.stateTransition (Some state) e timestamp
-               |> Result.map (Option.map Saga.EmployeeOnboarding)
-            | Event.EmployeeOnboarding e, None ->
-               EmployeeOnboardingSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.EmployeeOnboarding)
-            | Event.CardSetup e, Some(Saga.CardSetup state) ->
-               CardSetupSaga.stateTransition (Some state) e timestamp
-               |> Result.map (Option.map Saga.CardSetup)
-            | Event.CardSetup e, None ->
-               CardSetupSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.CardSetup)
-            | Event.Purchase e, None ->
-               PurchaseSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.Purchase)
-            | Event.Purchase e, Some(Saga.Purchase state) ->
-               PurchaseSaga.stateTransition (Some state) e timestamp
-               |> Result.map (Option.map Saga.Purchase)
-            | Event.DomesticTransfer e, None ->
-               DomesticTransferSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.DomesticTransfer)
-            | Event.DomesticTransfer e, Some(Saga.DomesticTransfer state) ->
-               DomesticTransferSaga.stateTransition (Some state) e timestamp
-               |> Result.map (Option.map Saga.DomesticTransfer)
-            | Event.PlatformTransfer e, None ->
-               PlatformTransferSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.PlatformTransfer)
-            | Event.PlatformTransfer e, Some(Saga.PlatformTransfer state) ->
-               PlatformTransferSaga.stateTransition (Some state) e timestamp
-               |> Result.map (Option.map Saga.PlatformTransfer)
-            | Event.PlatformPayment e, None ->
-               PlatformPaymentSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.PlatformPayment)
-            | Event.PlatformPayment e, Some(Saga.PlatformPayment state) ->
-               PlatformPaymentSaga.stateTransition (Some state) e timestamp
-               |> Result.map (Option.map Saga.PlatformPayment)
-            | Event.Billing e, None ->
-               BillingSaga.stateTransition None e timestamp
-               |> Result.map (Option.map Saga.Billing)
-            | Event.Billing e, Some(Saga.Billing state) ->
-               BillingSaga.stateTransition (Some state) e timestamp
-               |> Result.map (Option.map Saga.Billing)
+         fun (state: Saga) (evt: Event) (timestamp: DateTime) ->
+            match state, evt with
+            | Saga.OrgOnboarding state, Event.OrgOnboarding e ->
+               OrgOnboardingSaga.stateTransition state e timestamp
+               |> Result.map Saga.OrgOnboarding
+            | Saga.EmployeeOnboarding state, Event.EmployeeOnboarding e ->
+               EmployeeOnboardingSaga.stateTransition state e timestamp
+               |> Result.map Saga.EmployeeOnboarding
+            | Saga.CardSetup state, Event.CardSetup e ->
+               CardSetupSaga.stateTransition state e timestamp
+               |> Result.map Saga.CardSetup
+            | Saga.Purchase state, Event.Purchase e ->
+               PurchaseSaga.stateTransition state e timestamp
+               |> Result.map Saga.Purchase
+            | Saga.DomesticTransfer state, Event.DomesticTransfer e ->
+               DomesticTransferSaga.stateTransition state e timestamp
+               |> Result.map Saga.DomesticTransfer
+            | Saga.PlatformTransfer state, Event.PlatformTransfer e ->
+               PlatformTransferSaga.stateTransition state e timestamp
+               |> Result.map Saga.PlatformTransfer
+            | Saga.PlatformPayment state, Event.PlatformPayment e ->
+               PlatformPaymentSaga.stateTransition state e timestamp
+               |> Result.map Saga.PlatformPayment
+            | Saga.Billing state, Event.Billing e ->
+               BillingSaga.stateTransition state e timestamp
+               |> Result.map Saga.Billing
             | _ ->
-               Error
-                  Lib.Saga.SagaStateTransitionError.ReceivedEventOfDifferentSagaType
+               Error(SagaStateTransitionError.ReceivedEventOfDifferentSagaType)
+      applyEvent =
+         fun (state: Saga) (evt: Event) (timestamp: DateTime) ->
+            match state, evt with
+            | Saga.OrgOnboarding state, Event.OrgOnboarding e ->
+               OrgOnboardingSaga.applyEvent state e timestamp
+               |> Saga.OrgOnboarding
+            | Saga.EmployeeOnboarding state, Event.EmployeeOnboarding e ->
+               EmployeeOnboardingSaga.applyEvent state e timestamp
+               |> Saga.EmployeeOnboarding
+            | Saga.CardSetup state, Event.CardSetup e ->
+               CardSetupSaga.applyEvent state e timestamp |> Saga.CardSetup
+            | Saga.Purchase state, Event.Purchase e ->
+               PurchaseSaga.applyEvent state e timestamp |> Saga.Purchase
+            | Saga.DomesticTransfer state, Event.DomesticTransfer e ->
+               DomesticTransferSaga.applyEvent state e timestamp
+               |> Saga.DomesticTransfer
+            | Saga.PlatformTransfer state, Event.PlatformTransfer e ->
+               PlatformTransferSaga.applyEvent state e timestamp
+               |> Saga.PlatformTransfer
+            | Saga.PlatformPayment state, Event.PlatformPayment e ->
+               PlatformPaymentSaga.applyEvent state e timestamp
+               |> Saga.PlatformPayment
+            | Saga.Billing state, Event.Billing e ->
+               BillingSaga.applyEvent state e timestamp |> Saga.Billing
+            | _ -> state
+      onStartEventPersisted =
+         fun mailbox evt state ->
+            let getEmailRef () = getEmailRef mailbox.System
+            let getSchedulingRef () = getSchedulingRef mailbox.System
+
+            let notHandled () =
+               logError
+                  mailbox
+                  $"Can not handle saga start event persisted - {evt}"
+
+            match evt with
+            | StartEvent.OrgOnboarding e ->
+               let deps: OrgOnboardingSaga.PersistenceHandlerDependencies = {
+                  getOrgRef = getOrgRef
+                  getEmployeeRef = getEmployeeRef
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  linkAccountToPartnerBank =
+                     OrgOnboardingSaga.linkAccountToPartnerBank
+                  kycVerification =
+                     OrgOnboardingSaga.KnowYourCustomerService.verifyOrg
+                  sendMessageToSelf =
+                     fun orgId corrId asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (Message.orgOnboard orgId corrId)
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match state with
+               | Saga.OrgOnboarding _ ->
+                  OrgOnboardingSaga.onStartEventPersisted deps e
+               | _ -> notHandled ()
+            | StartEvent.EmployeeOnboarding e ->
+               let deps: EmployeeOnboardingSaga.PersistenceHandlerDependencies = {
+                  getOrgRef = getOrgRef
+                  getEmployeeRef = getEmployeeRef
+                  getEmailRef = getEmailRef
+                  createCardViaThirdPartyProvider =
+                     EmployeeOnboardingSaga.createCardViaThirdPartyProvider
+                  sendMessageToSelf =
+                     fun orgId corrId asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (Message.employeeOnboard orgId corrId)
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match state with
+               | Saga.EmployeeOnboarding _ ->
+                  EmployeeOnboardingSaga.onStartEventPersisted deps e
+               | _ -> notHandled ()
+            | StartEvent.CardSetup e ->
+               let deps: CardSetupSaga.PersistenceHandlerDependencies = {
+                  getEmployeeRef = getEmployeeRef
+                  getEmailRef = getEmailRef
+                  createCardViaThirdPartyProvider =
+                     CardSetupSaga.createCardViaThirdPartyProvider
+                  sendMessageToSelf =
+                     fun orgId corrId asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (Message.cardSetup orgId corrId)
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match state with
+               | Saga.CardSetup _ -> CardSetupSaga.onStartEventPersisted deps e
+               | _ -> notHandled ()
+            | StartEvent.DomesticTransfer evt ->
+               let deps: DomesticTransferSaga.PersistenceHandlerDependencies = {
+                  getSchedulingRef = getSchedulingRef
+                  getDomesticTransferRef =
+                     fun () -> getDomesticTransferRef mailbox.System
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  logError = logError mailbox
+               }
+
+               match state with
+               | Saga.DomesticTransfer _ ->
+                  DomesticTransferSaga.onStartEventPersisted deps evt
+               | _ -> notHandled ()
+            | StartEvent.PlatformTransfer evt ->
+               let deps: PlatformTransferSaga.PersistenceHandlerDependencies = {
+                  getSchedulingRef = getSchedulingRef
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  syncToPartnerBank =
+                     PlatformTransferSaga.syncTransferToPartnerBank
+                  sendMessageToSelf =
+                     fun transfer asyncEvt ->
+                        let orgId = transfer.Sender.OrgId
+
+                        let corrId =
+                           TransferId.toCorrelationId transfer.TransferId
+
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (Message.platformTransfer orgId corrId)
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match state with
+               | Saga.PlatformTransfer _ ->
+                  PlatformTransferSaga.onStartEventPersisted deps evt
+               | _ -> notHandled ()
+            | StartEvent.PlatformPayment evt ->
+               let deps: PlatformPaymentSaga.PersistenceHandlerDependencies = {
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  syncToPartnerBank =
+                     PlatformPaymentSaga.syncPaymentToPartnerBank
+                  refundPaymentToThirdParty =
+                     PlatformPaymentSaga.refundPaymentToThirdParty
+                  sendMessageToSelf =
+                     fun payment asyncEvt ->
+                        let orgId = payment.Payee.OrgId
+                        let corrId = PaymentId.toCorrelationId payment.Id
+
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (Message.platformPayment orgId corrId)
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match state with
+               | Saga.PlatformPayment _ ->
+                  PlatformPaymentSaga.onStartEventPersisted deps evt
+               | _ -> notHandled ()
+            | StartEvent.Billing e ->
+               let deps: BillingSaga.PersistenceHandlerDependencies = {
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+               }
+
+               match state with
+               | Saga.Billing _ -> BillingSaga.onStartEventPersisted deps e
+               | _ -> notHandled ()
+            | StartEvent.Purchase e ->
+               let purchaseDeps: PurchaseSaga.PersistenceHandlerDependencies = {
+                  getEmployeeRef = getEmployeeRef
+                  getAccountRef = getAccountRef
+                  getEmailRef = getEmailRef
+                  cardNetworkConfirmPurchase =
+                     PurchaseSaga.cardNetworkConfirmPurchase
+                  cardNetworkRejectPurchase =
+                     PurchaseSaga.cardNetworkRejectPurchase
+                  syncPurchaseToPartnerBank =
+                     PurchaseSaga.syncPurchaseToPartnerBank
+                  sendMessageToSelf =
+                     fun purchase asyncEvt ->
+                        let asyncMsg =
+                           asyncEvt
+                           |> Async.map (
+                              Message.purchase
+                                 purchase.OrgId
+                                 purchase.CorrelationId
+                           )
+
+                        mailbox.Parent() <!| asyncMsg
+               }
+
+               match state with
+               | Saga.Purchase _ ->
+                  PurchaseSaga.onStartEventPersisted purchaseDeps e
+               | _ -> notHandled ()
       onEventPersisted =
          fun mailbox evt priorState state ->
             let getEmailRef () = getEmailRef mailbox.System
@@ -560,19 +818,14 @@ let sagaHandler
                      fun orgId corrId asyncEvt ->
                         let asyncMsg =
                            asyncEvt
-                           |> Async.map (
-                              Event.OrgOnboarding >> sagaMessage orgId corrId
-                           )
+                           |> Async.map (Message.orgOnboard orgId corrId)
 
                         mailbox.Parent() <!| asyncMsg
                }
 
-               match priorState, state, e with
-               | None, Saga.OrgOnboarding _, OrgOnboardingSagaEvent.Start evt ->
-                  OrgOnboardingSaga.onStartEventPersisted deps evt
-               | Some(Saga.OrgOnboarding priorState),
-                 Saga.OrgOnboarding state,
-                 _ -> OrgOnboardingSaga.onEventPersisted deps priorState state e
+               match priorState, state with
+               | Saga.OrgOnboarding priorState, Saga.OrgOnboarding state ->
+                  OrgOnboardingSaga.onEventPersisted deps priorState state e
                | _ -> notHandled ()
             | Event.EmployeeOnboarding e ->
                let deps: EmployeeOnboardingSaga.PersistenceHandlerDependencies = {
@@ -585,22 +838,14 @@ let sagaHandler
                      fun orgId corrId asyncEvt ->
                         let asyncMsg =
                            asyncEvt
-                           |> Async.map (
-                              Event.EmployeeOnboarding
-                              >> sagaMessage orgId corrId
-                           )
+                           |> Async.map (Message.employeeOnboard orgId corrId)
 
                         mailbox.Parent() <!| asyncMsg
                }
 
-               match priorState, state, e with
-               | None,
-                 Saga.EmployeeOnboarding _,
-                 EmployeeOnboardingSagaEvent.Start evt ->
-                  EmployeeOnboardingSaga.onStartEventPersisted deps evt
-               | Some(Saga.EmployeeOnboarding priorState),
-                 Saga.EmployeeOnboarding state,
-                 _ ->
+               match priorState, state with
+               | Saga.EmployeeOnboarding priorState,
+                 Saga.EmployeeOnboarding state ->
                   EmployeeOnboardingSaga.onEventPersisted
                      deps
                      priorState
@@ -617,17 +862,13 @@ let sagaHandler
                      fun orgId corrId asyncEvt ->
                         let asyncMsg =
                            asyncEvt
-                           |> Async.map (
-                              Event.CardSetup >> sagaMessage orgId corrId
-                           )
+                           |> Async.map (Message.cardSetup orgId corrId)
 
                         mailbox.Parent() <!| asyncMsg
                }
 
-               match priorState, state, e with
-               | None, Saga.CardSetup _, CardSetupSagaEvent.Start evt ->
-                  CardSetupSaga.onStartEventPersisted deps evt
-               | Some(Saga.CardSetup priorState), Saga.CardSetup state, _ ->
+               match priorState, state with
+               | Saga.CardSetup priorState, Saga.CardSetup state ->
                   CardSetupSaga.onEventPersisted deps priorState state e
                | _ -> notHandled ()
             | Event.Purchase e ->
@@ -646,19 +887,16 @@ let sagaHandler
                         let asyncMsg =
                            asyncEvt
                            |> Async.map (
-                              Event.Purchase
-                              >> sagaMessage
-                                    purchase.OrgId
-                                    purchase.CorrelationId
+                              Message.purchase
+                                 purchase.OrgId
+                                 purchase.CorrelationId
                            )
 
                         mailbox.Parent() <!| asyncMsg
                }
 
-               match priorState, state, e with
-               | None, Saga.Purchase _, PurchaseSagaEvent.Start evt ->
-                  PurchaseSaga.onStartEventPersisted purchaseDeps evt
-               | Some(Saga.Purchase priorState), Saga.Purchase state, _ ->
+               match priorState, state with
+               | Saga.Purchase priorState, Saga.Purchase state ->
                   PurchaseSaga.onEventPersisted purchaseDeps priorState state e
                | _ -> notHandled ()
             | Event.DomesticTransfer evt ->
@@ -671,14 +909,8 @@ let sagaHandler
                   logError = logError mailbox
                }
 
-               match priorState, state, evt with
-               | None,
-                 Saga.DomesticTransfer _,
-                 DomesticTransferSagaEvent.Start evt ->
-                  DomesticTransferSaga.onStartEventPersisted deps evt
-               | Some(Saga.DomesticTransfer priorState),
-                 Saga.DomesticTransfer state,
-                 _ ->
+               match priorState, state with
+               | Saga.DomesticTransfer priorState, Saga.DomesticTransfer state ->
                   DomesticTransferSaga.onEventPersisted
                      deps
                      priorState
@@ -694,27 +926,20 @@ let sagaHandler
                      PlatformTransferSaga.syncTransferToPartnerBank
                   sendMessageToSelf =
                      fun transfer asyncEvt ->
+                        let orgId = transfer.Sender.OrgId
+
+                        let corrId =
+                           TransferId.toCorrelationId transfer.TransferId
+
                         let asyncMsg =
                            asyncEvt
-                           |> Async.map (
-                              Event.PlatformTransfer
-                              >> sagaMessage
-                                    transfer.Sender.OrgId
-                                    (TransferId.toCorrelationId
-                                       transfer.TransferId)
-                           )
+                           |> Async.map (Message.platformTransfer orgId corrId)
 
                         mailbox.Parent() <!| asyncMsg
                }
 
-               match priorState, state, evt with
-               | None,
-                 Saga.PlatformTransfer _,
-                 PlatformTransferSagaEvent.Start evt ->
-                  PlatformTransferSaga.onStartEventPersisted deps evt
-               | Some(Saga.PlatformTransfer priorState),
-                 Saga.PlatformTransfer state,
-                 _ ->
+               match priorState, state with
+               | Saga.PlatformTransfer priorState, Saga.PlatformTransfer state ->
                   PlatformTransferSaga.onEventPersisted
                      deps
                      priorState
@@ -731,26 +956,18 @@ let sagaHandler
                      PlatformPaymentSaga.refundPaymentToThirdParty
                   sendMessageToSelf =
                      fun payment asyncEvt ->
+                        let orgId = payment.Payee.OrgId
+                        let corrId = PaymentId.toCorrelationId payment.Id
+
                         let asyncMsg =
                            asyncEvt
-                           |> Async.map (
-                              Event.PlatformPayment
-                              >> sagaMessage
-                                    payment.Payee.OrgId
-                                    (PaymentId.toCorrelationId payment.Id)
-                           )
+                           |> Async.map (Message.platformPayment orgId corrId)
 
                         mailbox.Parent() <!| asyncMsg
                }
 
-               match priorState, state, evt with
-               | None,
-                 Saga.PlatformPayment _,
-                 PlatformPaymentSagaEvent.Start evt ->
-                  PlatformPaymentSaga.onStartEventPersisted deps evt
-               | Some(Saga.PlatformPayment priorState),
-                 Saga.PlatformPayment state,
-                 _ ->
+               match priorState, state with
+               | Saga.PlatformPayment priorState, Saga.PlatformPayment state ->
                   PlatformPaymentSaga.onEventPersisted deps priorState state evt
                | _ -> notHandled ()
             | Event.Billing evt ->
@@ -759,15 +976,13 @@ let sagaHandler
                   getEmailRef = getEmailRef
                }
 
-               match priorState, state, evt with
-               | None, Saga.Billing _, BillingSagaEvent.Start evt ->
-                  BillingSaga.onStartEventPersisted deps evt
-               | Some(Saga.Billing priorState), Saga.Billing state, _ ->
+               match priorState, state with
+               | Saga.Billing priorState, Saga.Billing state ->
                   BillingSaga.onEventPersisted deps priorState state evt
                | _ -> notHandled ()
    }
 
-let getEntityRef = SagaActor.get<Event>
+let getEntityRef = SagaActor.get<StartEvent, Event>
 
 let initProps
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
@@ -780,7 +995,7 @@ let initProps
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
    =
-   SagaActor.initProps<Saga, Event>
+   SagaActor.initProps<Saga, StartEvent, Event>
       supervisorOpts
       sagaPassivateIdleEntityAfter
       persistenceId

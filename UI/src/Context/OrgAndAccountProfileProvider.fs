@@ -101,7 +101,6 @@ let update msg state =
                                  Nickname = e.Data.Nickname
                            }))
             })
-         | _ -> state
 
       state, Cmd.none
    | AccountUpdated conf ->

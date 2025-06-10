@@ -17,7 +17,6 @@ open Lib.Postgres
 open Lib.SharedTypes
 open SignalRBroadcast
 open Email
-open Lib.Saga
 open OrgOnboardingSaga
 open EmployeeOnboardingSaga
 open CardSetupSaga
@@ -25,7 +24,6 @@ open PlatformTransferSaga
 open PlatformPaymentSaga
 open PurchaseSaga
 open DomesticTransferSaga
-open BillingSaga
 
 module EmailRequest =
    type PreliminaryT = {
@@ -315,89 +313,86 @@ let private queueMessageToActionRequest
    }
 
 let onSuccessfulServiceResponse
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (mailbox: Actor<_>)
    (msg: EmailMessage)
    =
-   let txnSagaEvt =
+   let orgId = msg.OrgId
+   let corrId = msg.CorrelationId
+
+   let txnSagaMessage =
       match msg.Info with
       | EmailInfo.OrgOnboardingApplicationSubmitted _ ->
          OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent
-         |> AppSaga.Event.OrgOnboarding
+         |> AppSaga.Message.orgOnboard orgId corrId
          |> Some
       | EmailInfo.OrgOnboardingApplicationAccepted _ ->
          OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent
-         |> AppSaga.Event.OrgOnboarding
+         |> AppSaga.Message.orgOnboard orgId corrId
          |> Some
       | EmailInfo.OrgOnboardingApplicationRejected _ ->
          OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent
-         |> AppSaga.Event.OrgOnboarding
+         |> AppSaga.Message.orgOnboard orgId corrId
          |> Some
       | EmailInfo.OrgOnboardingApplicationRequiresRevision _ ->
          OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent
-         |> AppSaga.Event.OrgOnboarding
+         |> AppSaga.Message.orgOnboard orgId corrId
          |> Some
       | EmailInfo.EmployeeInvite _ ->
          EmployeeOnboardingSagaEvent.InviteNotificationSent
-         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.Message.employeeOnboard orgId corrId
          |> Some
       | EmailInfo.EmployeeOnboardingFail _ ->
          EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent
-         |> AppSaga.Event.EmployeeOnboarding
+         |> AppSaga.Message.employeeOnboard orgId corrId
          |> Some
       | EmailInfo.CardSetupSuccess _ ->
          CardSetupSagaEvent.CardSetupSuccessNotificationSent
-         |> AppSaga.Event.CardSetup
+         |> AppSaga.Message.cardSetup orgId corrId
          |> Some
       | EmailInfo.CardSetupFail _ ->
          CardSetupSagaEvent.CardSetupFailNotificationSent
-         |> AppSaga.Event.CardSetup
+         |> AppSaga.Message.cardSetup orgId corrId
          |> Some
       | EmailInfo.Purchase _ ->
          PurchaseSagaEvent.PurchaseNotificationSent
-         |> AppSaga.Event.Purchase
+         |> AppSaga.Message.purchase orgId corrId
          |> Some
       | EmailInfo.DomesticTransfer _ ->
          DomesticTransferSagaEvent.TransferInitiatedNotificationSent
-         |> AppSaga.Event.DomesticTransfer
+         |> AppSaga.Message.domesticTransfer orgId corrId
          |> Some
       | EmailInfo.InternalTransferBetweenOrgs _ ->
          PlatformTransferSagaEvent.TransferNotificationSent
-         |> AppSaga.Event.PlatformTransfer
+         |> AppSaga.Message.platformTransfer orgId corrId
          |> Some
       | EmailInfo.InternalTransferBetweenOrgsDeposited _ ->
          PlatformTransferSagaEvent.TransferDepositNotificationSent
-         |> AppSaga.Event.PlatformTransfer
+         |> AppSaga.Message.platformTransfer orgId corrId
          |> Some
       | EmailInfo.PlatformPaymentRequested _ ->
          PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer
-         |> AppSaga.Event.PlatformPayment
+         |> AppSaga.Message.platformPayment orgId corrId
          |> Some
       | EmailInfo.PlatformPaymentPaid _ ->
          PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer
-         |> AppSaga.Event.PlatformPayment
+         |> AppSaga.Message.platformPayment orgId corrId
          |> Some
       | EmailInfo.PlatformPaymentDeposited _ ->
          PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee
-         |> AppSaga.Event.PlatformPayment
+         |> AppSaga.Message.platformPayment orgId corrId
          |> Some
       | EmailInfo.PlatformPaymentDeclined _ ->
          PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee
-         |> AppSaga.Event.PlatformPayment
+         |> AppSaga.Message.platformPayment orgId corrId
          |> Some
       | EmailInfo.BillingStatement ->
          BillingSaga.BillingSagaEvent.BillingEmailSent
-         |> AppSaga.Event.Billing
+         |> AppSaga.Message.billing orgId corrId
          |> Some
       | _ -> None
 
-   match txnSagaEvt with
-   | Some evt ->
-      let sagaMsg =
-         SagaEvent.create msg.OrgId msg.CorrelationId evt |> SagaMessage.Event
-
-      getSagaRef msg.CorrelationId <! sagaMsg
-   | None -> ()
+   txnSagaMessage |> Option.iter (fun msg -> getSagaRef corrId <! msg)
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
@@ -406,7 +401,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (getTeamEmailForOrg: OrgId -> Task<Result<Email option, Err>>)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (sendEmail: EmailRequest.T -> TaskResult<HttpResponseMessage, Err>)
    : Props<obj>
    =
@@ -458,7 +453,7 @@ let initProps
    (queueSettings: QueueSettings)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (bearerToken: string option)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
    let client = bearerToken |> Option.map createClient
 

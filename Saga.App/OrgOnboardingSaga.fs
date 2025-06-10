@@ -59,7 +59,6 @@ type OrgOnboardingSagaStartEvent =
 
 [<RequireQualifiedAccess>]
 type OrgOnboardingSagaEvent =
-   | Start of OrgOnboardingSagaStartEvent
    | ApplicationProcessingNotificationSent
    | KYCResponse of Result<unit, OrgOnboardingVerificationError>
    | ReceivedInfoFixDemandedByKYCService of OrgOnboardingApplicationSubmitted
@@ -115,6 +114,7 @@ type OrgOnboardingSaga = {
    OrgId: OrgId
    CorrelationId: CorrelationId
    Application: OrgOnboardingApplicationSubmitted
+   StartEvent: OrgOnboardingSagaStartEvent
    Events: OrgOnboardingSagaEvent list
    Status: OrgOnboardingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
@@ -129,257 +129,240 @@ type OrgOnboardingSaga = {
             Result.toOption res
          | _ -> None)
 
+let applyStartEvent
+   (start: OrgOnboardingSagaStartEvent)
+   (timestamp: DateTime)
+   : OrgOnboardingSaga
+   =
+   match start with
+   | OrgOnboardingSagaStartEvent.ApplicationSubmitted evt -> {
+      OrgId = evt.OrgId
+      CorrelationId = evt.CorrelationId
+      Status = OrgOnboardingSagaStatus.InProgress
+      StartEvent = start
+      Events = []
+      Application = evt.Data
+      ApplicationRequiresRevision = None
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.SendApplicationProcessingNotification
+               ActivityLifeCycle.init timestamp Activity.KYCVerification
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.SubmitApplication
+                  MaxAttempts =
+                     (Activity.SubmitApplication :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+     }
 
 let applyEvent
-   (state: OrgOnboardingSaga option)
-   (e: OrgOnboardingSagaEvent)
+   (saga: OrgOnboardingSaga)
+   (evt: OrgOnboardingSagaEvent)
    (timestamp: DateTime)
-   : OrgOnboardingSaga option
+   : OrgOnboardingSaga
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
    let retryActivity = SagaLifeCycle.retryActivity timestamp
 
-   match state with
-   | None ->
-      match e with
-      | OrgOnboardingSagaEvent.Start startEvt ->
-         match startEvt with
-         | OrgOnboardingSagaStartEvent.ApplicationSubmitted evt ->
-            Some {
-               OrgId = evt.OrgId
-               CorrelationId = evt.CorrelationId
-               Status = OrgOnboardingSagaStatus.InProgress
-               Events = [ e ]
-               Application = evt.Data
-               ApplicationRequiresRevision = None
-               LifeCycle = {
-                  SagaLifeCycle.empty with
-                     InProgress = [
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.SendApplicationProcessingNotification
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.KYCVerification
-                     ]
-                     Completed = [
-                        {
-                           Start = timestamp
-                           End = Some timestamp
-                           Activity = Activity.SubmitApplication
-                           MaxAttempts =
-                              (Activity.SubmitApplication :> IActivity)
-                                 .MaxAttempts
-                           Attempts = 1
-                        }
-                     ]
-               }
-            }
-      | _ -> state
-   | Some state ->
-      let state =
-         match e with
-         | OrgOnboardingSagaEvent.Start _ -> state
-         | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity
-                        Activity.SendApplicationProcessingNotification
-           }
-         | OrgOnboardingSagaEvent.KYCResponse response ->
-            let activity = Activity.KYCVerification
+   let saga = {
+      saga with
+         Events = evt :: saga.Events
+   }
 
-            match response with
-            | Ok _ -> {
-               state with
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity activity
-                     |> addActivity Activity.LinkAccountToPartnerBank
-              }
-            | Error err ->
-               match err with
-               | OrgOnboardingVerificationError.RequiresUpdatedInfo info -> {
-                  state with
-                     ApplicationRequiresRevision = Some info
-                     LifeCycle =
-                        state.LifeCycle
-                        |> failActivity activity
-                        |> addActivity
-                              Activity.WaitForInfoFixDemandedByKYCService
-                        |> addActivity
-                              Activity.SendApplicationRequiresRevisionForKYCServiceNotification
-                 }
-               | OrgOnboardingVerificationError.Rejected reason -> {
-                  state with
-                     Status =
-                        OrgOnboardingFailureReason.KYCRejectedReason reason
-                        |> OrgOnboardingSagaStatus.Failed
-                     LifeCycle =
-                        state.LifeCycle
-                        |> failActivity activity
-                        |> addActivity
-                              Activity.SendApplicationRejectedNotification
-                 }
-         | OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent -> {
-            state with
+   match evt with
+   | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.SendApplicationProcessingNotification
+     }
+   | OrgOnboardingSagaEvent.KYCResponse response ->
+      let activity = Activity.KYCVerification
+
+      match response with
+      | Ok _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity activity
+               |> addActivity Activity.LinkAccountToPartnerBank
+        }
+      | Error err ->
+         match err with
+         | OrgOnboardingVerificationError.RequiresUpdatedInfo info -> {
+            saga with
+               ApplicationRequiresRevision = Some info
                LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity
+                  saga.LifeCycle
+                  |> failActivity activity
+                  |> addActivity Activity.WaitForInfoFixDemandedByKYCService
+                  |> addActivity
                         Activity.SendApplicationRequiresRevisionForKYCServiceNotification
            }
-         | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService updatedInfo -> {
-            state with
-               Application = updatedInfo
-               ApplicationRequiresRevision = None
-               Status = OrgOnboardingSagaStatus.InProgress
+         | OrgOnboardingVerificationError.Rejected reason -> {
+            saga with
+               Status =
+                  OrgOnboardingFailureReason.KYCRejectedReason reason
+                  |> OrgOnboardingSagaStatus.Failed
                LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.WaitForInfoFixDemandedByKYCService
-                  |> addActivity Activity.KYCVerification
+                  saga.LifeCycle
+                  |> failActivity activity
+                  |> addActivity Activity.SendApplicationRejectedNotification
            }
-         | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse res ->
-            let activity = Activity.LinkAccountToPartnerBank
+   | OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity
+                  Activity.SendApplicationRequiresRevisionForKYCServiceNotification
+     }
+   | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService updatedInfo -> {
+      saga with
+         Application = updatedInfo
+         ApplicationRequiresRevision = None
+         Status = OrgOnboardingSagaStatus.InProgress
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.WaitForInfoFixDemandedByKYCService
+            |> addActivity Activity.KYCVerification
+     }
+   | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse res ->
+      let activity = Activity.LinkAccountToPartnerBank
 
-            match res with
-            | Error err ->
-               if state.LifeCycle.ActivityHasRemainingAttempts activity then
-                  {
-                     state with
-                        LifeCycle = retryActivity activity state.LifeCycle
-                  }
-               else
-                  {
-                     state with
-                        Status =
-                           OrgOnboardingFailureReason.PartnerBankLinkError err
-                           |> OrgOnboardingSagaStatus.Failed
-                        LifeCycle =
-                           state.LifeCycle
-                           |> failActivity activity
-                           |> addActivity
-                                 Activity.WaitForSupportTeamToResolvePartnerBankLink
-                  }
-            | Ok _ -> {
-               state with
+      match res with
+      | Error err ->
+         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
+            {
+               saga with
+                  LifeCycle = retryActivity activity saga.LifeCycle
+            }
+         else
+            {
+               saga with
+                  Status =
+                     OrgOnboardingFailureReason.PartnerBankLinkError err
+                     |> OrgOnboardingSagaStatus.Failed
                   LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity activity
-                     |> addActivity Activity.InitializePrimaryVirtualAccount
-              }
-         | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.InitializePrimaryVirtualAccount
-                  |> addActivity Activity.ActivateOrg
-           }
-         | OrgOnboardingSagaEvent.OrgActivated -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.ActivateOrg
-                  |> addActivity Activity.SendApplicationAcceptedNotification
-           }
-         | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent -> {
-            state with
-               Status = OrgOnboardingSagaStatus.Completed
-               LifeCycle =
-                  finishActivity
-                     Activity.SendApplicationAcceptedNotification
-                     state.LifeCycle
-           }
-         | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent -> {
-            state with
-               LifeCycle =
-                  finishActivity
-                     Activity.SendApplicationRejectedNotification
-                     state.LifeCycle
-           }
-         | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink -> {
-            state with
-               Status = OrgOnboardingSagaStatus.InProgress
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity
-                        Activity.WaitForSupportTeamToResolvePartnerBankLink
-                  |> addActivity Activity.LinkAccountToPartnerBank
-           }
-         | OrgOnboardingSagaEvent.EvaluateRemainingWork -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.retryActivitiesAfterInactivity
-                     timestamp
-                     state.LifeCycle
-           }
-         | OrgOnboardingSagaEvent.ResetInProgressActivityAttempts -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.resetInProgressActivities state.LifeCycle
-           }
+                     saga.LifeCycle
+                     |> failActivity activity
+                     |> addActivity
+                           Activity.WaitForSupportTeamToResolvePartnerBankLink
+            }
+      | Ok _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity activity
+               |> addActivity Activity.InitializePrimaryVirtualAccount
+        }
+   | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.InitializePrimaryVirtualAccount
+            |> addActivity Activity.ActivateOrg
+     }
+   | OrgOnboardingSagaEvent.OrgActivated -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.ActivateOrg
+            |> addActivity Activity.SendApplicationAcceptedNotification
+     }
+   | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent -> {
+      saga with
+         Status = OrgOnboardingSagaStatus.Completed
+         LifeCycle =
+            finishActivity
+               Activity.SendApplicationAcceptedNotification
+               saga.LifeCycle
+     }
+   | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent -> {
+      saga with
+         LifeCycle =
+            finishActivity
+               Activity.SendApplicationRejectedNotification
+               saga.LifeCycle
+     }
+   | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink -> {
+      saga with
+         Status = OrgOnboardingSagaStatus.InProgress
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity
+                  Activity.WaitForSupportTeamToResolvePartnerBankLink
+            |> addActivity Activity.LinkAccountToPartnerBank
+     }
+   | OrgOnboardingSagaEvent.EvaluateRemainingWork -> {
+      saga with
+         LifeCycle =
+            SagaLifeCycle.retryActivitiesAfterInactivity
+               timestamp
+               saga.LifeCycle
+     }
+   | OrgOnboardingSagaEvent.ResetInProgressActivityAttempts -> {
+      saga with
+         LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
 
-      Some {
-         state with
-            Events = e :: state.Events
-      }
+let stateTransitionStart
+   (evt: OrgOnboardingSagaStartEvent)
+   (timestamp: DateTime)
+   : Result<OrgOnboardingSaga, SagaStateTransitionError>
+   =
+   Ok(applyStartEvent evt timestamp)
 
 let stateTransition
-   (state: OrgOnboardingSaga option)
+   (saga: OrgOnboardingSaga)
    (evt: OrgOnboardingSagaEvent)
    (timestamp: DateTime)
-   : Result<OrgOnboardingSaga option, SagaStateTransitionError>
+   : Result<OrgOnboardingSaga, SagaStateTransitionError>
    =
-   match state with
-   | None ->
+   let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
+
+   let invalidStepProgression =
       match evt with
-      | OrgOnboardingSagaEvent.Start _ -> Ok(applyEvent state evt timestamp)
-      | _ -> Error SagaStateTransitionError.HasNotStarted
-   | Some saga ->
-      let eventIsStartEvent =
-         match evt with
-         | OrgOnboardingSagaEvent.Start _ -> true
-         | _ -> false
+      | OrgOnboardingSagaEvent.EvaluateRemainingWork
+      | OrgOnboardingSagaEvent.ResetInProgressActivityAttempts -> false
+      | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink ->
+         activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankLink
+      | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent ->
+         activityIsDone Activity.SendApplicationProcessingNotification
+      | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent ->
+         activityIsDone Activity.SendApplicationRejectedNotification
+      | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent ->
+         activityIsDone Activity.SendApplicationAcceptedNotification
+      | OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent ->
+         activityIsDone
+            Activity.SendApplicationRequiresRevisionForKYCServiceNotification
+      | OrgOnboardingSagaEvent.KYCResponse _ ->
+         activityIsDone Activity.KYCVerification
+      | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService _ ->
+         activityIsDone Activity.WaitForInfoFixDemandedByKYCService
+      | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse _ ->
+         activityIsDone Activity.LinkAccountToPartnerBank
+      | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
+         activityIsDone Activity.InitializePrimaryVirtualAccount
+      | OrgOnboardingSagaEvent.OrgActivated ->
+         activityIsDone Activity.ActivateOrg
 
-      let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
-
-      let invalidStepProgression =
-         match evt with
-         | OrgOnboardingSagaEvent.Start _
-         | OrgOnboardingSagaEvent.EvaluateRemainingWork
-         | OrgOnboardingSagaEvent.ResetInProgressActivityAttempts -> false
-         | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink ->
-            activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankLink
-         | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent ->
-            activityIsDone Activity.SendApplicationProcessingNotification
-         | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent ->
-            activityIsDone Activity.SendApplicationRejectedNotification
-         | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent ->
-            activityIsDone Activity.SendApplicationAcceptedNotification
-         | OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent ->
-            activityIsDone
-               Activity.SendApplicationRequiresRevisionForKYCServiceNotification
-         | OrgOnboardingSagaEvent.KYCResponse _ ->
-            activityIsDone Activity.KYCVerification
-         | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService _ ->
-            activityIsDone Activity.WaitForInfoFixDemandedByKYCService
-         | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse _ ->
-            activityIsDone Activity.LinkAccountToPartnerBank
-         | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
-            activityIsDone Activity.InitializePrimaryVirtualAccount
-         | OrgOnboardingSagaEvent.OrgActivated ->
-            activityIsDone Activity.ActivateOrg
-
-      if saga.Status = OrgOnboardingSagaStatus.Completed then
-         Error SagaStateTransitionError.HasAlreadyCompleted
-      elif eventIsStartEvent then
-         Error SagaStateTransitionError.HasAlreadyStarted
-      elif invalidStepProgression then
-         Error SagaStateTransitionError.InvalidStepProgression
-      else
-         Ok(applyEvent state evt timestamp)
+   if saga.Status = OrgOnboardingSagaStatus.Completed then
+      Error SagaStateTransitionError.HasAlreadyCompleted
+   elif invalidStepProgression then
+      Error SagaStateTransitionError.InvalidStepProgression
+   else
+      Ok(applyEvent saga evt timestamp)
 
 type PersistenceHandlerDependencies = {
    getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
@@ -555,7 +538,6 @@ let onEventPersisted
       linkAccountToPartnerBank ()
    | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount -> activateOrg ()
    | OrgOnboardingSagaEvent.OrgActivated -> sendApplicationAcceptedEmail ()
-   | OrgOnboardingSagaEvent.Start _
    | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent
    | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent
    | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent

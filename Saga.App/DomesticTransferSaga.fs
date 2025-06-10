@@ -18,7 +18,6 @@ type DomesticTransferSagaStartEvent =
 
 [<RequireQualifiedAccess>]
 type DomesticTransferSagaEvent =
-   | Start of DomesticTransferSagaStartEvent
    | ScheduledJobCreated
    | ScheduledJobExecuted
    | SenderAccountDeductedFunds
@@ -72,6 +71,7 @@ type Activity =
          | RefundSenderAccount -> Some(TimeSpan.FromSeconds 5)
 
 type DomesticTransferSaga = {
+   StartEvent: DomesticTransferSagaStartEvent
    Events: DomesticTransferSagaEvent list
    Status: DomesticTransferProgress
    TransferInfo: BaseDomesticTransferInfo
@@ -102,264 +102,245 @@ type DomesticTransferSaga = {
       x.LifeCycle.InProgress
       |> List.exists (fun w -> w.Activity = Activity.WaitForDevelopmentTeamFix)
 
-let applyEvent
-   (state: DomesticTransferSaga option)
-   (e: DomesticTransferSagaEvent)
+let applyStartEvent
+   (start: DomesticTransferSagaStartEvent)
    (timestamp: DateTime)
+   : DomesticTransferSaga
+   =
+   match start with
+   | DomesticTransferSagaStartEvent.SenderAccountDeductedFunds evt -> {
+      Status = DomesticTransferProgress.WaitingForTransferServiceAck
+      StartEvent = start
+      Events = []
+      TransferInfo = evt.Data.BaseInfo
+      ReasonForRetryServiceAck = None
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init timestamp Activity.TransferServiceAck
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.DeductFromSenderAccount
+                  MaxAttempts =
+                     (Activity.DeductFromSenderAccount :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+     }
+   | DomesticTransferSagaStartEvent.ScheduleTransferRequest evt -> {
+      Status = DomesticTransferProgress.Scheduled
+      StartEvent = start
+      Events = []
+      TransferInfo = evt.Data.BaseInfo
+      ReasonForRetryServiceAck = None
+      LifeCycle =
+         SagaLifeCycle.empty
+         |> SagaLifeCycle.addActivity timestamp Activity.ScheduleTransfer
+     }
+
+let applyEvent
+   (saga: DomesticTransferSaga)
+   (evt: DomesticTransferSagaEvent)
+   (timestamp: DateTime)
+   : DomesticTransferSaga
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
 
-   match state with
-   | None ->
-      match e with
-      | DomesticTransferSagaEvent.Start evt ->
-         match evt with
-         | DomesticTransferSagaStartEvent.SenderAccountDeductedFunds evt ->
-            Some {
-               Status = DomesticTransferProgress.WaitingForTransferServiceAck
-               Events = [ e ]
-               TransferInfo = evt.Data.BaseInfo
-               ReasonForRetryServiceAck = None
-               LifeCycle = {
-                  SagaLifeCycle.empty with
-                     InProgress = [
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.TransferServiceAck
-                     ]
-                     Completed = [
-                        {
-                           Start = timestamp
-                           End = Some timestamp
-                           Activity = Activity.DeductFromSenderAccount
-                           MaxAttempts =
-                              (Activity.DeductFromSenderAccount :> IActivity)
-                                 .MaxAttempts
-                           Attempts = 1
-                        }
-                     ]
-               }
-            }
-         | DomesticTransferSagaStartEvent.ScheduleTransferRequest evt ->
-            Some {
-               Status = DomesticTransferProgress.Scheduled
-               Events = [ e ]
-               TransferInfo = evt.Data.BaseInfo
-               ReasonForRetryServiceAck = None
-               LifeCycle =
-                  SagaLifeCycle.empty |> addActivity Activity.ScheduleTransfer
-            }
-      | _ -> state
-   | Some state ->
-      let state =
-         match e with
-         | DomesticTransferSagaEvent.Start _ -> state
-         | DomesticTransferSagaEvent.ScheduledJobCreated -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.ScheduleTransfer
-                  |> addActivity Activity.WaitForScheduledTransferExecution
-           }
-         | DomesticTransferSagaEvent.ScheduledJobExecuted -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.WaitForScheduledTransferExecution
-                  |> addActivity Activity.DeductFromSenderAccount
-               Status =
-                  DomesticTransferProgress.ProcessingSenderAccountDeduction
-           }
-         | DomesticTransferSagaEvent.SenderAccountDeductedFunds -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.DeductFromSenderAccount
-                  |> addActivity Activity.TransferServiceAck
-               Status = DomesticTransferProgress.WaitingForTransferServiceAck
-           }
-         | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
-            match progress with
-            | DomesticTransferServiceProgress.InitialHandshakeAck -> {
-               state with
-                  Status = DomesticTransferProgress.InProgress progress
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity Activity.TransferServiceAck
-                     |> addActivity Activity.SendTransferInitiatedNotification
-                     |> addActivity Activity.WaitForTransferServiceComplete
-              }
-            | DomesticTransferServiceProgress.InProgress _ -> {
-               state with
-                  Status = DomesticTransferProgress.InProgress progress
-              }
-            | DomesticTransferServiceProgress.Settled -> {
-               state with
-                  Status = DomesticTransferProgress.InProgress progress
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity Activity.WaitForTransferServiceComplete
-                     |> addActivity Activity.MarkTransferAsSettled
-              }
-            | DomesticTransferServiceProgress.Failed reason ->
-               let state = {
-                  state with
-                     Status = DomesticTransferProgress.Failed reason
-               }
+   let saga = {
+      saga with
+         Events = evt :: saga.Events
+   }
 
-               match reason with
-               | DomesticTransferFailReason.SenderAccountNotActive
-               | DomesticTransferFailReason.SenderAccountInsufficientFunds ->
-                  state
-               | DomesticTransferFailReason.CorruptData
-               | DomesticTransferFailReason.InvalidPaymentNetwork
-               | DomesticTransferFailReason.InvalidDepository
-               | DomesticTransferFailReason.InvalidAction -> {
-                  state with
-                     LifeCycle =
-                        state.LifeCycle
-                        |> failActivity Activity.TransferServiceAck
-                        |> failActivity Activity.WaitForTransferServiceComplete
-                        |> addActivity Activity.WaitForDevelopmentTeamFix
-                 }
-               | DomesticTransferFailReason.InvalidAmount
-               | DomesticTransferFailReason.InvalidAccountInfo
-               | DomesticTransferFailReason.AccountClosed
-               | DomesticTransferFailReason.Unknown _ ->
-                  let refundIfNotRetrying =
-                     if state.ReasonForRetryServiceAck.IsSome then
-                        id
-                     else
-                        addActivity Activity.RefundSenderAccount
-
-                  {
-                     state with
-                        LifeCycle =
-                           state.LifeCycle
-                           |> failActivity Activity.TransferServiceAck
-                           |> failActivity
-                                 Activity.WaitForTransferServiceComplete
-                           |> refundIfNotRetrying
-                  }
-         | DomesticTransferSagaEvent.RetryTransferServiceRequest updatedRecipient -> {
-            state with
-               ReasonForRetryServiceAck =
-                  match state.Status with
-                  | DomesticTransferProgress.Failed reason -> Some reason
-                  | _ -> None
-               Status = DomesticTransferProgress.WaitingForTransferServiceAck
-               TransferInfo.Recipient =
-                  updatedRecipient
-                  |> Option.defaultValue state.TransferInfo.Recipient
-               LifeCycle =
-                  state.LifeCycle |> addActivity Activity.TransferServiceAck
-           }
-         | DomesticTransferSagaEvent.TransferMarkedAsSettled -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.MarkTransferAsSettled
-               Status =
-                  if state.TransferInitiatedNotificationSent then
-                     DomesticTransferProgress.Completed
-                  else
-                     state.Status
-           }
-         | DomesticTransferSagaEvent.TransferInitiatedNotificationSent -> {
-            state with
-               Status =
-                  if state.TransferMarkedAsSettled then
-                     DomesticTransferProgress.Completed
-                  else
-                     state.Status
-               LifeCycle =
-                  finishActivity
-                     Activity.SendTransferInitiatedNotification
-                     state.LifeCycle
-           }
-         | DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds reason -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> failActivity Activity.DeductFromSenderAccount
+   match evt with
+   | DomesticTransferSagaEvent.ScheduledJobCreated -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.ScheduleTransfer
+            |> addActivity Activity.WaitForScheduledTransferExecution
+     }
+   | DomesticTransferSagaEvent.ScheduledJobExecuted -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.WaitForScheduledTransferExecution
+            |> addActivity Activity.DeductFromSenderAccount
+         Status = DomesticTransferProgress.ProcessingSenderAccountDeduction
+     }
+   | DomesticTransferSagaEvent.SenderAccountDeductedFunds -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.DeductFromSenderAccount
+            |> addActivity Activity.TransferServiceAck
+         Status = DomesticTransferProgress.WaitingForTransferServiceAck
+     }
+   | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
+      match progress with
+      | DomesticTransferServiceProgress.InitialHandshakeAck -> {
+         saga with
+            Status = DomesticTransferProgress.InProgress progress
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.TransferServiceAck
+               |> addActivity Activity.SendTransferInitiatedNotification
+               |> addActivity Activity.WaitForTransferServiceComplete
+        }
+      | DomesticTransferServiceProgress.InProgress _ -> {
+         saga with
+            Status = DomesticTransferProgress.InProgress progress
+        }
+      | DomesticTransferServiceProgress.Settled -> {
+         saga with
+            Status = DomesticTransferProgress.InProgress progress
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.WaitForTransferServiceComplete
+               |> addActivity Activity.MarkTransferAsSettled
+        }
+      | DomesticTransferServiceProgress.Failed reason ->
+         let saga = {
+            saga with
                Status = DomesticTransferProgress.Failed reason
-           }
-         | DomesticTransferSagaEvent.SenderAccountRefunded -> {
-            state with
-               LifeCycle =
-                  finishActivity Activity.RefundSenderAccount state.LifeCycle
-           }
-         | DomesticTransferSagaEvent.EvaluateRemainingWork -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.retryActivitiesAfterInactivity
-                     timestamp
-                     state.LifeCycle
-           }
-         | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.resetInProgressActivities state.LifeCycle
-           }
+         }
 
-      Some {
-         state with
-            Events = e :: state.Events
-      }
+         match reason with
+         | DomesticTransferFailReason.SenderAccountNotActive
+         | DomesticTransferFailReason.SenderAccountInsufficientFunds -> saga
+         | DomesticTransferFailReason.CorruptData
+         | DomesticTransferFailReason.InvalidPaymentNetwork
+         | DomesticTransferFailReason.InvalidDepository
+         | DomesticTransferFailReason.InvalidAction -> {
+            saga with
+               LifeCycle =
+                  saga.LifeCycle
+                  |> failActivity Activity.TransferServiceAck
+                  |> failActivity Activity.WaitForTransferServiceComplete
+                  |> addActivity Activity.WaitForDevelopmentTeamFix
+           }
+         | DomesticTransferFailReason.InvalidAmount
+         | DomesticTransferFailReason.InvalidAccountInfo
+         | DomesticTransferFailReason.AccountClosed
+         | DomesticTransferFailReason.Unknown _ ->
+            let refundIfNotRetrying =
+               if saga.ReasonForRetryServiceAck.IsSome then
+                  id
+               else
+                  addActivity Activity.RefundSenderAccount
+
+            {
+               saga with
+                  LifeCycle =
+                     saga.LifeCycle
+                     |> failActivity Activity.TransferServiceAck
+                     |> failActivity Activity.WaitForTransferServiceComplete
+                     |> refundIfNotRetrying
+            }
+   | DomesticTransferSagaEvent.RetryTransferServiceRequest updatedRecipient -> {
+      saga with
+         ReasonForRetryServiceAck =
+            match saga.Status with
+            | DomesticTransferProgress.Failed reason -> Some reason
+            | _ -> None
+         Status = DomesticTransferProgress.WaitingForTransferServiceAck
+         TransferInfo.Recipient =
+            updatedRecipient |> Option.defaultValue saga.TransferInfo.Recipient
+         LifeCycle = saga.LifeCycle |> addActivity Activity.TransferServiceAck
+     }
+   | DomesticTransferSagaEvent.TransferMarkedAsSettled -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.MarkTransferAsSettled
+         Status =
+            if saga.TransferInitiatedNotificationSent then
+               DomesticTransferProgress.Completed
+            else
+               saga.Status
+     }
+   | DomesticTransferSagaEvent.TransferInitiatedNotificationSent -> {
+      saga with
+         Status =
+            if saga.TransferMarkedAsSettled then
+               DomesticTransferProgress.Completed
+            else
+               saga.Status
+         LifeCycle =
+            finishActivity
+               Activity.SendTransferInitiatedNotification
+               saga.LifeCycle
+     }
+   | DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds reason -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> failActivity Activity.DeductFromSenderAccount
+         Status = DomesticTransferProgress.Failed reason
+     }
+   | DomesticTransferSagaEvent.SenderAccountRefunded -> {
+      saga with
+         LifeCycle = finishActivity Activity.RefundSenderAccount saga.LifeCycle
+     }
+   | DomesticTransferSagaEvent.EvaluateRemainingWork -> {
+      saga with
+         LifeCycle =
+            SagaLifeCycle.retryActivitiesAfterInactivity
+               timestamp
+               saga.LifeCycle
+     }
+   | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> {
+      saga with
+         LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
+
+let stateTransitionStart
+   (evt: DomesticTransferSagaStartEvent)
+   (timestamp: DateTime)
+   : Result<DomesticTransferSaga, SagaStateTransitionError>
+   =
+   Ok(applyStartEvent evt timestamp)
 
 let stateTransition
-   (state: DomesticTransferSaga option)
+   (saga: DomesticTransferSaga)
    (evt: DomesticTransferSagaEvent)
    (timestamp: DateTime)
-   : Result<DomesticTransferSaga option, SagaStateTransitionError>
+   : Result<DomesticTransferSaga, SagaStateTransitionError>
    =
-   match state with
-   | None ->
+   let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
+
+   let invalidStepProgression =
       match evt with
-      | DomesticTransferSagaEvent.Start _ -> Ok(applyEvent state evt timestamp)
-      | _ -> Error SagaStateTransitionError.HasNotStarted
-   | Some saga ->
-      let eventIsStartEvent =
-         match evt with
-         | DomesticTransferSagaEvent.Start _ -> true
-         | _ -> false
+      | DomesticTransferSagaEvent.EvaluateRemainingWork
+      | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> false
+      | DomesticTransferSagaEvent.ScheduledJobCreated ->
+         activityIsDone Activity.ScheduleTransfer
+      | DomesticTransferSagaEvent.ScheduledJobExecuted ->
+         activityIsDone Activity.WaitForScheduledTransferExecution
+      | DomesticTransferSagaEvent.SenderAccountDeductedFunds ->
+         activityIsDone Activity.DeductFromSenderAccount
+      | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
+         activityIsDone Activity.TransferServiceAck
+         && activityIsDone Activity.WaitForTransferServiceComplete
+      | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
+         saga.LifeCycle.ActivityHasFailed(Activity.TransferServiceAck) |> not
+      | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
+         activityIsDone Activity.MarkTransferAsSettled
+      | DomesticTransferSagaEvent.TransferInitiatedNotificationSent ->
+         activityIsDone Activity.SendTransferInitiatedNotification
+      | DomesticTransferSagaEvent.SenderAccountRefunded ->
+         activityIsDone Activity.RefundSenderAccount
+      | _ -> false
 
-      let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
-
-      let invalidStepProgression =
-         match evt with
-         | DomesticTransferSagaEvent.Start _
-         | DomesticTransferSagaEvent.EvaluateRemainingWork
-         | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> false
-         | DomesticTransferSagaEvent.ScheduledJobCreated ->
-            activityIsDone Activity.ScheduleTransfer
-         | DomesticTransferSagaEvent.ScheduledJobExecuted ->
-            activityIsDone Activity.WaitForScheduledTransferExecution
-         | DomesticTransferSagaEvent.SenderAccountDeductedFunds
-         | DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
-            activityIsDone Activity.DeductFromSenderAccount
-         | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
-            activityIsDone Activity.TransferServiceAck
-            && activityIsDone Activity.WaitForTransferServiceComplete
-         | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
-            saga.LifeCycle.ActivityHasFailed(Activity.TransferServiceAck) |> not
-         | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
-            activityIsDone Activity.MarkTransferAsSettled
-         | DomesticTransferSagaEvent.TransferInitiatedNotificationSent ->
-            activityIsDone Activity.SendTransferInitiatedNotification
-         | DomesticTransferSagaEvent.SenderAccountRefunded ->
-            activityIsDone Activity.RefundSenderAccount
-
-      if saga.Status = DomesticTransferProgress.Completed then
-         Error SagaStateTransitionError.HasAlreadyCompleted
-      elif eventIsStartEvent then
-         Error SagaStateTransitionError.HasAlreadyStarted
-      elif invalidStepProgression then
-         Error SagaStateTransitionError.InvalidStepProgression
-      else
-         Ok(applyEvent state evt timestamp)
+   if saga.Status = DomesticTransferProgress.Completed then
+      Error SagaStateTransitionError.HasAlreadyCompleted
+   elif invalidStepProgression then
+      Error SagaStateTransitionError.InvalidStepProgression
+   else
+      Ok(applyEvent saga evt timestamp)
 
 type PersistenceHandlerDependencies = {
    getSchedulingRef: unit -> IActorRef<SchedulerMessage>
@@ -498,7 +479,6 @@ let onEventPersisted
       dep.getAccountRef info.Sender.ParentAccountId <! msg
 
    match evt with
-   | DomesticTransferSagaEvent.Start _ -> ()
    | DomesticTransferSagaEvent.ScheduledJobCreated -> ()
    | DomesticTransferSagaEvent.ScheduledJobExecuted ->
       deductFromSenderAccount ()

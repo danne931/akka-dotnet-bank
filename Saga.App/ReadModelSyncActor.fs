@@ -24,7 +24,7 @@ let sqlParamsFromSaga (saga: AppSaga.Saga) : (string * SqlValue) list = [
 ]
 
 let upsertReadModels
-   (sagas: AppSaga.Saga list, _: SagaEvent<AppSaga.Event> list)
+   (sagas: AppSaga.Saga list, _: AppSaga.AppSagaPersistableEvent list)
    =
    let sagaSqlParams = sagas |> List.map sqlParamsFromSaga
 
@@ -62,12 +62,12 @@ let upsertReadModels
    pgTransaction query
 
 let initProps
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
-   actorProps<AppSaga.Saga, SagaEvent<AppSaga.Event>> (
+   actorProps<AppSaga.Saga, AppSaga.AppSagaPersistableEvent> (
       {
          GetAggregateIdFromEvent = _.CorrelationId >> CorrelationId.get
          GetAggregate =

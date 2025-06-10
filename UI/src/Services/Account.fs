@@ -55,7 +55,6 @@ let postJson (command: AccountCommand) =
             TransferPath.DomesticTransferRecipientEdit
          | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
             Serialization.serialize cmd, TransferPath.NicknameRecipient
-         | other -> notImplemented (AccountCommand.ParentAccount other)
       | other -> notImplemented other
 
    Http.postJson url serialized
@@ -137,7 +136,6 @@ let submitParentAccountCommand
          | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
             NicknameDomesticTransferRecipientCommand.toEvent cmd
             |> Result.map ParentAccountEvent.NicknamedDomesticTransferRecipient
-         | _ -> notImplemented (AccountCommand.ParentAccount command)
 
       let! evt = evtResult |> Result.mapError ValidationError
 
@@ -155,8 +153,6 @@ let submitParentAccountCommand
             PendingCommand = command
          }
    }
-
-open Bank.Transfer.Domain
 
 let getPayments (orgId: OrgId) : Async<Result<PaymentSummary option, Err>> = async {
    let path = PaymentPath.payments orgId

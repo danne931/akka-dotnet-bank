@@ -27,7 +27,6 @@ type CardSetupSagaStartEvent = {
 
 [<RequireQualifiedAccess>]
 type CardSetupSagaEvent =
-   | Start of CardSetupSagaStartEvent
    | CardSetupSuccessNotificationSent
    | CardSetupFailNotificationSent
    | CardCreateResponse of Result<ThirdPartyProviderCardId, string>
@@ -67,166 +66,158 @@ type CardSetupSaga = {
    EmployeeName: string
    EmployeeEmail: Email
    CardType: CardType
+   StartEvent: CardSetupSagaStartEvent
    Events: CardSetupSagaEvent list
    Status: CardSetupSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
    ProviderCardId: ThirdPartyProviderCardId option
 }
 
-let applyEvent
-   (state: CardSetupSaga option)
-   (e: CardSetupSagaEvent)
+let applyStartEvent
+   (start: CardSetupSagaStartEvent)
    (timestamp: DateTime)
-   : CardSetupSaga option
+   : CardSetupSaga
+   =
+   let evt = start.Event
+
+   {
+      Status = CardSetupSagaStatus.InProgress
+      StartEvent = start
+      Events = []
+      OrgId = evt.OrgId
+      CardId = evt.Data.Card.CardId
+      CardNumberLast4 = evt.Data.Card.CardNumberLast4
+      CorrelationId = evt.CorrelationId
+      InitiatedBy = evt.InitiatedBy
+      EmployeeId = EmployeeId.fromEntityId evt.EntityId
+      EmployeeName = start.EmployeeName
+      EmployeeEmail = start.EmployeeEmail
+      CardType = evt.Data.Card.CardType
+      ProviderCardId = None
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.CreateCardViaThirdPartyProvider
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.InitializeCard
+                  MaxAttempts =
+                     (Activity.InitializeCard :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+   }
+
+let applyEvent
+   (saga: CardSetupSaga)
+   (evt: CardSetupSagaEvent)
+   (timestamp: DateTime)
+   : CardSetupSaga
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
 
-   match state with
-   | None ->
-      match e with
-      | CardSetupSagaEvent.Start start ->
-         let evt = start.Event
+   let saga = {
+      saga with
+         Events = evt :: saga.Events
+   }
 
-         Some {
-            Status = CardSetupSagaStatus.InProgress
-            Events = [ e ]
-            OrgId = evt.OrgId
-            CardId = evt.Data.Card.CardId
-            CardNumberLast4 = evt.Data.Card.CardNumberLast4
-            CorrelationId = evt.CorrelationId
-            InitiatedBy = evt.InitiatedBy
-            EmployeeId = EmployeeId.fromEntityId evt.EntityId
-            EmployeeName = start.EmployeeName
-            EmployeeEmail = start.EmployeeEmail
-            CardType = evt.Data.Card.CardType
-            ProviderCardId = None
-            LifeCycle = {
-               SagaLifeCycle.empty with
-                  InProgress = [
-                     ActivityLifeCycle.init
-                        timestamp
-                        Activity.CreateCardViaThirdPartyProvider
-                  ]
-                  Completed = [
-                     {
-                        Start = timestamp
-                        End = Some timestamp
-                        Activity = Activity.InitializeCard
-                        MaxAttempts =
-                           (Activity.InitializeCard :> IActivity).MaxAttempts
-                        Attempts = 1
-                     }
-                  ]
-            }
-         }
-      | _ -> state
-   | Some state ->
-      let state =
-         match e with
-         | CardSetupSagaEvent.Start _ -> state
-         | CardSetupSagaEvent.CardSetupSuccessNotificationSent -> {
-            state with
-               Status = CardSetupSagaStatus.Completed
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.SendCardSetupSuccessNotification
-           }
-         | CardSetupSagaEvent.CardSetupFailNotificationSent -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.SendCardSetupFailNotification
-           }
-         | CardSetupSagaEvent.CardCreateResponse res ->
-            let activity = Activity.CreateCardViaThirdPartyProvider
+   match evt with
+   | CardSetupSagaEvent.CardSetupSuccessNotificationSent -> {
+      saga with
+         Status = CardSetupSagaStatus.Completed
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.SendCardSetupSuccessNotification
+     }
+   | CardSetupSagaEvent.CardSetupFailNotificationSent -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.SendCardSetupFailNotification
+     }
+   | CardSetupSagaEvent.CardCreateResponse res ->
+      let activity = Activity.CreateCardViaThirdPartyProvider
 
-            match res with
-            | Ok providerCardId -> {
-               state with
-                  ProviderCardId = Some providerCardId
-                  LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity activity
-                     |> addActivity Activity.LinkProviderCardId
-              }
-            | Error _ -> {
-               state with
-                  Status =
-                     CardSetupFailureReason.CardProviderCardCreateFail
-                     |> CardSetupSagaStatus.Failed
-                  LifeCycle =
-                     state.LifeCycle
-                     |> failActivity activity
-                     |> addActivity Activity.SendCardSetupFailNotification
-              }
-         | CardSetupSagaEvent.ProviderCardIdLinked -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.LinkProviderCardId
-                  |> addActivity Activity.SendCardSetupSuccessNotification
-           }
-         | CardSetupSagaEvent.EvaluateRemainingWork -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.retryActivitiesAfterInactivity
-                     timestamp
-                     state.LifeCycle
-           }
-         | CardSetupSagaEvent.ResetInProgressActivityAttempts -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.resetInProgressActivities state.LifeCycle
-           }
+      match res with
+      | Ok providerCardId -> {
+         saga with
+            ProviderCardId = Some providerCardId
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity activity
+               |> addActivity Activity.LinkProviderCardId
+        }
+      | Error _ -> {
+         saga with
+            Status =
+               CardSetupFailureReason.CardProviderCardCreateFail
+               |> CardSetupSagaStatus.Failed
+            LifeCycle =
+               saga.LifeCycle
+               |> failActivity activity
+               |> addActivity Activity.SendCardSetupFailNotification
+        }
+   | CardSetupSagaEvent.ProviderCardIdLinked -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.LinkProviderCardId
+            |> addActivity Activity.SendCardSetupSuccessNotification
+     }
+   | CardSetupSagaEvent.EvaluateRemainingWork -> {
+      saga with
+         LifeCycle =
+            SagaLifeCycle.retryActivitiesAfterInactivity
+               timestamp
+               saga.LifeCycle
+     }
+   | CardSetupSagaEvent.ResetInProgressActivityAttempts -> {
+      saga with
+         LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
 
-      Some {
-         state with
-            Events = e :: state.Events
-      }
+let stateTransitionStart
+   (evt: CardSetupSagaStartEvent)
+   (timestamp: DateTime)
+   : Result<CardSetupSaga, SagaStateTransitionError>
+   =
+   Ok(applyStartEvent evt timestamp)
 
 let stateTransition
-   (state: CardSetupSaga option)
+   (saga: CardSetupSaga)
    (evt: CardSetupSagaEvent)
    (timestamp: DateTime)
-   : Result<CardSetupSaga option, SagaStateTransitionError>
+   : Result<CardSetupSaga, SagaStateTransitionError>
    =
-   match state with
-   | None ->
+   let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
+
+   let invalidStepProgression =
       match evt with
-      | CardSetupSagaEvent.Start _ -> Ok(applyEvent state evt timestamp)
-      | _ -> Error SagaStateTransitionError.HasNotStarted
-   | Some saga ->
-      let eventIsStartEvent =
-         match evt with
-         | CardSetupSagaEvent.Start _ -> true
-         | _ -> false
+      | CardSetupSagaEvent.EvaluateRemainingWork
+      | CardSetupSagaEvent.ResetInProgressActivityAttempts -> false
+      | CardSetupSagaEvent.CardSetupSuccessNotificationSent ->
+         activityIsDone Activity.SendCardSetupSuccessNotification
+      | CardSetupSagaEvent.CardSetupFailNotificationSent ->
+         activityIsDone Activity.SendCardSetupFailNotification
+      | CardSetupSagaEvent.CardCreateResponse _ ->
+         activityIsDone Activity.CreateCardViaThirdPartyProvider
+      | CardSetupSagaEvent.ProviderCardIdLinked ->
+         activityIsDone Activity.LinkProviderCardId
 
-      let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
-
-      let invalidStepProgression =
-         match evt with
-         | CardSetupSagaEvent.Start _
-         | CardSetupSagaEvent.EvaluateRemainingWork
-         | CardSetupSagaEvent.ResetInProgressActivityAttempts -> false
-         | CardSetupSagaEvent.CardSetupSuccessNotificationSent ->
-            activityIsDone Activity.SendCardSetupSuccessNotification
-         | CardSetupSagaEvent.CardSetupFailNotificationSent ->
-            activityIsDone Activity.SendCardSetupFailNotification
-         | CardSetupSagaEvent.CardCreateResponse _ ->
-            activityIsDone Activity.CreateCardViaThirdPartyProvider
-         | CardSetupSagaEvent.ProviderCardIdLinked ->
-            activityIsDone Activity.LinkProviderCardId
-
-      if saga.Status = CardSetupSagaStatus.Completed then
-         Error SagaStateTransitionError.HasAlreadyCompleted
-      elif eventIsStartEvent then
-         Error SagaStateTransitionError.HasAlreadyStarted
-      elif invalidStepProgression then
-         Error SagaStateTransitionError.InvalidStepProgression
-      else
-         Ok(applyEvent state evt timestamp)
+   if saga.Status = CardSetupSagaStatus.Completed then
+      Error SagaStateTransitionError.HasAlreadyCompleted
+   elif invalidStepProgression then
+      Error SagaStateTransitionError.InvalidStepProgression
+   else
+      Ok(applyEvent saga evt timestamp)
 
 type CardProviderRequest = {
    CardHolderName: string
@@ -309,7 +300,6 @@ let onEventPersisted
          sendCardSetupFailEmail
             CardSetupFailureReason.CardProviderCardCreateFail
    | CardSetupSagaEvent.ProviderCardIdLinked -> sendCardSetupSuccessEmail ()
-   | CardSetupSagaEvent.Start _
    | CardSetupSagaEvent.CardSetupSuccessNotificationSent
    | CardSetupSagaEvent.CardSetupFailNotificationSent
    | CardSetupSagaEvent.ResetInProgressActivityAttempts -> ()

@@ -25,7 +25,6 @@ type PlatformTransferSagaStartEvent =
 
 [<RequireQualifiedAccess>]
 type PlatformTransferSagaEvent =
-   | Start of PlatformTransferSagaStartEvent
    | ScheduledJobCreated
    | ScheduledJobExecuted
    | SenderAccountDeductedFunds
@@ -79,6 +78,7 @@ type Activity =
          | WaitForSupportTeamToResolvePartnerBankSync -> None
 
 type PlatformTransferSaga = {
+   StartEvent: PlatformTransferSagaStartEvent
    Events: PlatformTransferSagaEvent list
    Status: PlatformTransferSagaStatus
    TransferInfo: BaseInternalTransferInfo
@@ -102,259 +102,237 @@ type PlatformTransferSaga = {
       x.LifeCycle.InProgress
       |> List.exists (fun w -> w.Activity = Activity.RefundSenderAccount)
 
-let applyEvent
-   (state: PlatformTransferSaga option)
-   (e: Event)
+let applyStartEvent
+   (evt: PlatformTransferSagaStartEvent)
    (timestamp: DateTime)
    =
+   match evt with
+   | StartEvent.SenderAccountDeductedFunds e -> {
+      Status = PlatformTransferSagaStatus.InProgress
+      StartEvent = evt
+      Events = []
+      TransferInfo = e.Data.BaseInfo
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.DepositToRecipientAccount
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.DeductFromSenderAccount
+                  MaxAttempts =
+                     (Activity.DeductFromSenderAccount :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+     }
+   | StartEvent.ScheduleTransferRequest e -> {
+      Status = PlatformTransferSagaStatus.Scheduled
+      StartEvent = evt
+      Events = []
+      TransferInfo = e.Data.BaseInfo
+      LifeCycle =
+         SagaLifeCycle.empty
+         |> SagaLifeCycle.addActivity timestamp Activity.ScheduleTransfer
+     }
+
+let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
    let retryActivity = SagaLifeCycle.retryActivity timestamp
 
-   match state with
-   | None ->
-      match e with
-      | Event.Start evt ->
-         match evt with
-         | StartEvent.SenderAccountDeductedFunds evt ->
-            Some {
-               Status = PlatformTransferSagaStatus.InProgress
-               Events = [ e ]
-               TransferInfo = evt.Data.BaseInfo
-               LifeCycle = {
-                  SagaLifeCycle.empty with
-                     InProgress = [
-                        ActivityLifeCycle.init
-                           timestamp
-                           Activity.DepositToRecipientAccount
-                     ]
-                     Completed = [
-                        {
-                           Start = timestamp
-                           End = Some timestamp
-                           Activity = Activity.DeductFromSenderAccount
-                           MaxAttempts =
-                              (Activity.DeductFromSenderAccount :> IActivity)
-                                 .MaxAttempts
-                           Attempts = 1
-                        }
-                     ]
-               }
-            }
-         | StartEvent.ScheduleTransferRequest evt ->
-            Some {
-               Status = PlatformTransferSagaStatus.Scheduled
-               Events = [ e ]
-               TransferInfo = evt.Data.BaseInfo
-               LifeCycle =
-                  SagaLifeCycle.empty |> addActivity Activity.ScheduleTransfer
-            }
-      | _ -> state
-   | Some state ->
-      let state =
-         match e with
-         | Event.Start _ -> state
-         | Event.ScheduledJobCreated -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.ScheduleTransfer
-                  |> addActivity Activity.WaitForScheduledTransferExecution
-           }
-         | Event.ScheduledJobExecuted -> {
-            state with
-               Status = PlatformTransferSagaStatus.InProgress
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.WaitForScheduledTransferExecution
-                  |> addActivity Activity.DeductFromSenderAccount
-           }
-         | Event.SenderAccountDeductedFunds -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.DeductFromSenderAccount
-                  |> addActivity Activity.DepositToRecipientAccount
-           }
-         | Event.SenderAccountUnableToDeductFunds reason -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> failActivity Activity.DeductFromSenderAccount
-               Status = PlatformTransferSagaStatus.Failed reason
-           }
-         | Event.RecipientAccountDepositedFunds -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.DepositToRecipientAccount
-                  |> addActivity Activity.SyncToPartnerBank
-                  |> addActivity Activity.SendTransferNotification
-                  |> addActivity Activity.SendTransferDepositNotification
-           }
-         | Event.RecipientAccountUnableToDepositFunds _ -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> failActivity Activity.DepositToRecipientAccount
-                  |> addActivity Activity.RefundSenderAccount
-           }
-         | Event.PartnerBankSyncResponse res ->
-            match res with
-            | Error err ->
-               let activity = Activity.SyncToPartnerBank
+   let saga = {
+      saga with
+         Events = evt :: saga.Events
+   }
 
-               if state.LifeCycle.ActivityHasRemainingAttempts activity then
-                  {
-                     state with
-                        LifeCycle = retryActivity activity state.LifeCycle
-                  }
-               else
-                  {
-                     state with
-                        Status =
-                           InternalTransferFailReason.PartnerBankSync err
-                           |> PlatformTransferSagaStatus.Failed
-                        LifeCycle =
-                           state.LifeCycle
-                           |> failActivity activity
-                           |> addActivity
-                                 Activity.WaitForSupportTeamToResolvePartnerBankSync
-                  }
-            | Ok _ -> {
-               state with
+   match evt with
+   | Event.ScheduledJobCreated -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.ScheduleTransfer
+            |> addActivity Activity.WaitForScheduledTransferExecution
+     }
+   | Event.ScheduledJobExecuted -> {
+      saga with
+         Status = PlatformTransferSagaStatus.InProgress
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.WaitForScheduledTransferExecution
+            |> addActivity Activity.DeductFromSenderAccount
+     }
+   | Event.SenderAccountDeductedFunds -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.DeductFromSenderAccount
+            |> addActivity Activity.DepositToRecipientAccount
+     }
+   | Event.SenderAccountUnableToDeductFunds reason -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> failActivity Activity.DeductFromSenderAccount
+         Status = PlatformTransferSagaStatus.Failed reason
+     }
+   | Event.RecipientAccountDepositedFunds -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.DepositToRecipientAccount
+            |> addActivity Activity.SyncToPartnerBank
+            |> addActivity Activity.SendTransferNotification
+            |> addActivity Activity.SendTransferDepositNotification
+     }
+   | Event.RecipientAccountUnableToDepositFunds _ -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> failActivity Activity.DepositToRecipientAccount
+            |> addActivity Activity.RefundSenderAccount
+     }
+   | Event.PartnerBankSyncResponse res ->
+      match res with
+      | Error err ->
+         let activity = Activity.SyncToPartnerBank
+
+         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
+            {
+               saga with
+                  LifeCycle = retryActivity activity saga.LifeCycle
+            }
+         else
+            {
+               saga with
                   Status =
-                     if
-                        state.TransferNotificationSent
-                        && state.TransferDepositNotificationSent
-                     then
-                        PlatformTransferSagaStatus.Completed
-                     else
-                        state.Status
+                     InternalTransferFailReason.PartnerBankSync err
+                     |> PlatformTransferSagaStatus.Failed
                   LifeCycle =
-                     state.LifeCycle
-                     |> finishActivity Activity.SyncToPartnerBank
-              }
-         | Event.SupportTeamResolvedPartnerBankSync -> {
-            state with
-               Status = PlatformTransferSagaStatus.InProgress
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity
-                        Activity.WaitForSupportTeamToResolvePartnerBankSync
-           }
-         | Event.TransferNotificationSent -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.SendTransferNotification
-               Status =
-                  if
-                     state.TransferDepositNotificationSent
-                     && state.SyncedToPartnerBank
-                  then
-                     PlatformTransferSagaStatus.Completed
-                  else
-                     state.Status
-           }
-         | Event.TransferDepositNotificationSent -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.SendTransferDepositNotification
-               Status =
-                  if
-                     state.TransferNotificationSent && state.SyncedToPartnerBank
-                  then
-                     PlatformTransferSagaStatus.Completed
-                  else
-                     state.Status
-           }
-         | Event.SenderAccountRefunded -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle |> finishActivity Activity.RefundSenderAccount
-           }
-         | Event.RecipientAccountDepositUndo -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.UndoRecipientDeposit
-           }
-         | Event.EvaluateRemainingWork -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.retryActivitiesAfterInactivity
-                     timestamp
-                     state.LifeCycle
-           }
-         | Event.ResetInProgressActivityAttempts -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.resetInProgressActivities state.LifeCycle
-           }
+                     saga.LifeCycle
+                     |> failActivity activity
+                     |> addActivity
+                           Activity.WaitForSupportTeamToResolvePartnerBankSync
+            }
+      | Ok _ -> {
+         saga with
+            Status =
+               if
+                  saga.TransferNotificationSent
+                  && saga.TransferDepositNotificationSent
+               then
+                  PlatformTransferSagaStatus.Completed
+               else
+                  saga.Status
+            LifeCycle =
+               saga.LifeCycle |> finishActivity Activity.SyncToPartnerBank
+        }
+   | Event.SupportTeamResolvedPartnerBankSync -> {
+      saga with
+         Status = PlatformTransferSagaStatus.InProgress
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity
+                  Activity.WaitForSupportTeamToResolvePartnerBankSync
+     }
+   | Event.TransferNotificationSent -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.SendTransferNotification
+         Status =
+            if
+               saga.TransferDepositNotificationSent && saga.SyncedToPartnerBank
+            then
+               PlatformTransferSagaStatus.Completed
+            else
+               saga.Status
+     }
+   | Event.TransferDepositNotificationSent -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.SendTransferDepositNotification
+         Status =
+            if saga.TransferNotificationSent && saga.SyncedToPartnerBank then
+               PlatformTransferSagaStatus.Completed
+            else
+               saga.Status
+     }
+   | Event.SenderAccountRefunded -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.RefundSenderAccount
+     }
+   | Event.RecipientAccountDepositUndo -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.UndoRecipientDeposit
+     }
+   | Event.EvaluateRemainingWork -> {
+      saga with
+         LifeCycle =
+            SagaLifeCycle.retryActivitiesAfterInactivity
+               timestamp
+               saga.LifeCycle
+     }
+   | Event.ResetInProgressActivityAttempts -> {
+      saga with
+         LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
 
-      Some {
-         state with
-            Events = e :: state.Events
-      }
+let stateTransitionStart
+   (evt: PlatformTransferSagaStartEvent)
+   (timestamp: DateTime)
+   : Result<PlatformTransferSaga, SagaStateTransitionError>
+   =
+   Ok(applyStartEvent evt timestamp)
 
 let stateTransition
-   (state: PlatformTransferSaga option)
+   (saga: PlatformTransferSaga)
    (evt: PlatformTransferSagaEvent)
    (timestamp: DateTime)
-   : Result<PlatformTransferSaga option, SagaStateTransitionError>
+   : Result<PlatformTransferSaga, SagaStateTransitionError>
    =
-   match state with
-   | None ->
+   let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
+
+   let invalidStepProgression =
       match evt with
-      | PlatformTransferSagaEvent.Start _ -> Ok(applyEvent state evt timestamp)
-      | _ -> Error SagaStateTransitionError.HasNotStarted
-   | Some saga ->
-      let eventIsStartEvent =
-         match evt with
-         | PlatformTransferSagaEvent.Start _ -> true
-         | _ -> false
+      | PlatformTransferSagaEvent.EvaluateRemainingWork
+      | PlatformTransferSagaEvent.ResetInProgressActivityAttempts -> false
+      | PlatformTransferSagaEvent.ScheduledJobCreated ->
+         activityIsDone Activity.ScheduleTransfer
+      | PlatformTransferSagaEvent.ScheduledJobExecuted ->
+         activityIsDone Activity.WaitForScheduledTransferExecution
+      | PlatformTransferSagaEvent.SenderAccountDeductedFunds
+      | PlatformTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
+         activityIsDone Activity.DeductFromSenderAccount
+      | PlatformTransferSagaEvent.RecipientAccountDepositedFunds
+      | PlatformTransferSagaEvent.RecipientAccountUnableToDepositFunds _ ->
+         activityIsDone Activity.DepositToRecipientAccount
+      | PlatformTransferSagaEvent.RecipientAccountDepositUndo ->
+         activityIsDone Activity.UndoRecipientDeposit
+      | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
+         activityIsDone Activity.SyncToPartnerBank
+      | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
+         activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankSync
+      | PlatformTransferSagaEvent.TransferNotificationSent ->
+         activityIsDone Activity.SendTransferNotification
+      | PlatformTransferSagaEvent.TransferDepositNotificationSent ->
+         activityIsDone Activity.SendTransferDepositNotification
+      | PlatformTransferSagaEvent.SenderAccountRefunded ->
+         activityIsDone Activity.RefundSenderAccount
 
-      let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
-
-      let invalidStepProgression =
-         match evt with
-         | PlatformTransferSagaEvent.Start _
-         | PlatformTransferSagaEvent.EvaluateRemainingWork
-         | PlatformTransferSagaEvent.ResetInProgressActivityAttempts -> false
-         | PlatformTransferSagaEvent.ScheduledJobCreated ->
-            activityIsDone Activity.ScheduleTransfer
-         | PlatformTransferSagaEvent.ScheduledJobExecuted ->
-            activityIsDone Activity.WaitForScheduledTransferExecution
-         | PlatformTransferSagaEvent.SenderAccountDeductedFunds
-         | PlatformTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
-            activityIsDone Activity.DeductFromSenderAccount
-         | PlatformTransferSagaEvent.RecipientAccountDepositedFunds
-         | PlatformTransferSagaEvent.RecipientAccountUnableToDepositFunds _ ->
-            activityIsDone Activity.DepositToRecipientAccount
-         | PlatformTransferSagaEvent.RecipientAccountDepositUndo ->
-            activityIsDone Activity.UndoRecipientDeposit
-         | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
-            activityIsDone Activity.SyncToPartnerBank
-         | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
-            activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankSync
-         | PlatformTransferSagaEvent.TransferNotificationSent ->
-            activityIsDone Activity.SendTransferNotification
-         | PlatformTransferSagaEvent.TransferDepositNotificationSent ->
-            activityIsDone Activity.SendTransferDepositNotification
-         | PlatformTransferSagaEvent.SenderAccountRefunded ->
-            activityIsDone Activity.RefundSenderAccount
-
-      if saga.Status = PlatformTransferSagaStatus.Completed then
-         Error SagaStateTransitionError.HasAlreadyCompleted
-      elif eventIsStartEvent then
-         Error SagaStateTransitionError.HasAlreadyStarted
-      elif invalidStepProgression then
-         Error SagaStateTransitionError.InvalidStepProgression
-      else
-         Ok(applyEvent state evt timestamp)
+   if saga.Status = PlatformTransferSagaStatus.Completed then
+      Error SagaStateTransitionError.HasAlreadyCompleted
+   elif invalidStepProgression then
+      Error SagaStateTransitionError.InvalidStepProgression
+   else
+      Ok(applyEvent saga evt timestamp)
 
 type private TransferStartEvent = PlatformTransferSagaStartEvent
 type private TransferEvent = PlatformTransferSagaEvent
@@ -456,7 +434,6 @@ let onEventPersisted
       dep.sendMessageToSelf transfer (dep.syncToPartnerBank transfer)
 
    match evt with
-   | TransferEvent.Start _ -> ()
    | TransferEvent.ScheduledJobCreated -> ()
    | TransferEvent.ScheduledJobExecuted -> deductFromSender ()
    | TransferEvent.SenderAccountDeductedFunds ->

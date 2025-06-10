@@ -18,7 +18,6 @@ open Lib.Postgres
 open Lib.SharedTypes
 open Lib.Types
 open Lib.BulkWriteStreamFlow
-open Lib.Saga
 
 type BillingPersistence = {
    saveBillingStatements: BillingPersistable list -> Task<Result<int list, Err>>
@@ -43,7 +42,7 @@ let initQueueSource
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryAfter: TimeSpan)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (billingStatementActorRef: IActorRef<obj>)
    =
    let flow, bulkWriteRef =
@@ -65,8 +64,7 @@ let initQueueSource
                for s in statements do
                   let msg =
                      BillingSagaEvent.BillingStatementPersisted
-                     |> AppSaga.Event.Billing
-                     |> AppSaga.sagaMessage s.OrgId s.CorrelationId
+                     |> AppSaga.Message.billing s.OrgId s.CorrelationId
 
                   getSagaRef s.CorrelationId <! msg
       }
@@ -84,7 +82,7 @@ let actorProps
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
    let rec init (ctx: Actor<obj>) = actor {
       let! msg = ctx.Receive()
@@ -239,7 +237,7 @@ let start
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : IActorRef<BillingStatementMessage>
    =
    spawn system ActorMetadata.billingStatement.Name

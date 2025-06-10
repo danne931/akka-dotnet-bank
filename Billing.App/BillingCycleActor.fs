@@ -16,7 +16,6 @@ open ActorUtil
 open Lib.Types
 open Lib.Postgres
 open Lib.SharedTypes
-open Lib.Saga
 
 let getBillingCycleReadyAccounts () =
    let prevCycle = Fields.lastBillingCycleDate
@@ -44,7 +43,7 @@ let getBillingCycleReadyAccounts () =
 let private fanOutBillingCycleMessage
    (ctx: Actor<_>)
    (throttle: StreamThrottle)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
    task {
       let mat = ctx.System.Materializer()
@@ -77,7 +76,7 @@ let private fanOutBillingCycleMessage
             let corrId = CorrelationId.create ()
 
             let msg =
-               BillingSaga.BillingSagaEvent.Start {
+               AppSaga.Message.billingStart orgId corrId {
                   BillingCycleDate = DateTime.UtcNow
                   BillingPeriod = {
                      Month = billingPeriod.Month
@@ -87,8 +86,6 @@ let private fanOutBillingCycleMessage
                   OrgId = orgId
                   CorrelationId = corrId
                }
-               |> AppSaga.Event.Billing
-               |> AppSaga.sagaMessage orgId corrId
 
             getSagaRef corrId <! msg)
 
@@ -97,7 +94,7 @@ let private fanOutBillingCycleMessage
 
 let actorProps
    (throttle: StreamThrottle)
-   (getSagaRef: CorrelationId -> IEntityRef<SagaMessage<AppSaga.Event>>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
    let handler (ctx: Actor<BillingCycleMessage>) =
       function

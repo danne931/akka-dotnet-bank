@@ -47,7 +47,7 @@ journalOpts.Adapters
    )
    .AddEventAdapter<SagaEventPersistenceAdapter>(
       "saga-v1",
-      [ typeof<Lib.Saga.SagaEvent<AppSaga.Event>> ]
+      [ typeof<Lib.Saga.IPersistableSagaEvent> ]
    )
 |> ignore
 

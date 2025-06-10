@@ -31,7 +31,6 @@ type ProcessingBillingStatement = {
 
 [<RequireQualifiedAccess>]
 type BillingSagaEvent =
-   | Start of BillingSagaStartEvent
    | BillingStatementProcessing of ProcessingBillingStatement
    | BillingStatementPersisted
    | MaintenanceFeeProcessed
@@ -69,146 +68,133 @@ type BillingSaga = {
    BillingPeriod: BillingPeriod
    BillingCycleDate: DateTime
    ProcessingBillingStatement: ProcessingBillingStatement option
+   StartEvent: BillingSagaStartEvent
    Events: BillingSagaEvent list
    Status: BillingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
 }
 
-let applyEvent
-   (state: BillingSaga option)
-   (e: BillingSagaEvent)
+let applyStartEvent
+   (start: BillingSagaStartEvent)
    (timestamp: DateTime)
-   : BillingSaga option
+   : BillingSaga
+   =
+   {
+      Status = BillingSagaStatus.InProgress
+      StartEvent = start
+      Events = []
+      ProcessingBillingStatement = None
+      CorrelationId = start.CorrelationId
+      ParentAccountId = start.ParentAccountId
+      OrgId = start.OrgId
+      BillingPeriod = start.BillingPeriod
+      BillingCycleDate = start.BillingCycleDate
+      LifeCycle = {
+         SagaLifeCycle.empty with
+            InProgress = [
+               ActivityLifeCycle.init timestamp Activity.ProcessBillingStatement
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.WaitForBillingStatementPersisted
+            ]
+            Completed = [
+               {
+                  Start = timestamp
+                  End = Some timestamp
+                  Activity = Activity.StartBilling
+                  MaxAttempts = (Activity.StartBilling :> IActivity).MaxAttempts
+                  Attempts = 1
+               }
+            ]
+      }
+   }
+
+let applyEvent
+   (saga: BillingSaga)
+   (evt: BillingSagaEvent)
+   (timestamp: DateTime)
+   : BillingSaga
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
 
-   match state with
-   | None ->
-      match e with
-      | BillingSagaEvent.Start start ->
-         Some {
-            Status = BillingSagaStatus.InProgress
-            Events = [ e ]
-            ProcessingBillingStatement = None
-            CorrelationId = start.CorrelationId
-            ParentAccountId = start.ParentAccountId
-            OrgId = start.OrgId
-            BillingPeriod = start.BillingPeriod
-            BillingCycleDate = start.BillingCycleDate
-            LifeCycle = {
-               SagaLifeCycle.empty with
-                  InProgress = [
-                     ActivityLifeCycle.init
-                        timestamp
-                        Activity.ProcessBillingStatement
-                     ActivityLifeCycle.init
-                        timestamp
-                        Activity.WaitForBillingStatementPersisted
-                  ]
-                  Completed = [
-                     {
-                        Start = timestamp
-                        End = Some timestamp
-                        Activity = Activity.StartBilling
-                        MaxAttempts =
-                           (Activity.StartBilling :> IActivity).MaxAttempts
-                        Attempts = 1
-                     }
-                  ]
-            }
-         }
-      | _ -> state
-   | Some state ->
-      let state =
-         match e with
-         | BillingSagaEvent.Start _ -> state
-         | BillingSagaEvent.BillingStatementProcessing processing -> {
-            state with
-               ProcessingBillingStatement = Some processing
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.ProcessBillingStatement
-           }
-         | BillingSagaEvent.BillingStatementPersisted -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.WaitForBillingStatementPersisted
-                  |> addActivity Activity.ProcessMaintenanceFee
-           }
-         | BillingSagaEvent.MaintenanceFeeProcessed -> {
-            state with
-               LifeCycle =
-                  state.LifeCycle
-                  |> finishActivity Activity.ProcessMaintenanceFee
-                  |> addActivity Activity.SendBillingEmail
-           }
-         | BillingSagaEvent.BillingEmailSent -> {
-            state with
-               Status = BillingSagaStatus.Completed
-               LifeCycle =
-                  state.LifeCycle |> finishActivity Activity.SendBillingEmail
-           }
-         | BillingSagaEvent.EvaluateRemainingWork -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.retryActivitiesAfterInactivity
-                     timestamp
-                     state.LifeCycle
-           }
-         | BillingSagaEvent.ResetInProgressActivityAttempts -> {
-            state with
-               LifeCycle =
-                  SagaLifeCycle.resetInProgressActivities state.LifeCycle
-           }
+   let saga = {
+      saga with
+         Events = evt :: saga.Events
+   }
 
-      Some {
-         state with
-            Events = e :: state.Events
-      }
+   match evt with
+   | BillingSagaEvent.BillingStatementProcessing processing -> {
+      saga with
+         ProcessingBillingStatement = Some processing
+         LifeCycle =
+            saga.LifeCycle |> finishActivity Activity.ProcessBillingStatement
+     }
+   | BillingSagaEvent.BillingStatementPersisted -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.WaitForBillingStatementPersisted
+            |> addActivity Activity.ProcessMaintenanceFee
+     }
+   | BillingSagaEvent.MaintenanceFeeProcessed -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.ProcessMaintenanceFee
+            |> addActivity Activity.SendBillingEmail
+     }
+   | BillingSagaEvent.BillingEmailSent -> {
+      saga with
+         Status = BillingSagaStatus.Completed
+         LifeCycle = saga.LifeCycle |> finishActivity Activity.SendBillingEmail
+     }
+   | BillingSagaEvent.EvaluateRemainingWork -> {
+      saga with
+         LifeCycle =
+            SagaLifeCycle.retryActivitiesAfterInactivity
+               timestamp
+               saga.LifeCycle
+     }
+   | BillingSagaEvent.ResetInProgressActivityAttempts -> {
+      saga with
+         LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
+
+let stateTransitionStart
+   (start: BillingSagaStartEvent)
+   (timestamp: DateTime)
+   : Result<BillingSaga, SagaStateTransitionError>
+   =
+   Ok(applyStartEvent start timestamp)
 
 let stateTransition
-   (state: BillingSaga option)
+   (saga: BillingSaga)
    (evt: BillingSagaEvent)
    (timestamp: DateTime)
-   : Result<BillingSaga option, SagaStateTransitionError>
+   : Result<BillingSaga, SagaStateTransitionError>
    =
-   match state with
-   | None ->
+   let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
+
+   let invalidStepProgression =
       match evt with
-      | BillingSagaEvent.Start _ -> Ok(applyEvent state evt timestamp)
-      | _ -> Error SagaStateTransitionError.HasNotStarted
-   | Some saga ->
-      let eventIsStartEvent =
-         match evt with
-         | BillingSagaEvent.Start _ -> true
-         | _ -> false
+      | BillingSagaEvent.EvaluateRemainingWork
+      | BillingSagaEvent.ResetInProgressActivityAttempts -> false
+      | BillingSagaEvent.BillingStatementProcessing _ ->
+         activityIsDone Activity.ProcessBillingStatement
+      | BillingSagaEvent.BillingStatementPersisted ->
+         activityIsDone Activity.WaitForBillingStatementPersisted
+      | BillingSagaEvent.MaintenanceFeeProcessed ->
+         activityIsDone Activity.ProcessMaintenanceFee
+      | BillingSagaEvent.BillingEmailSent ->
+         activityIsDone Activity.SendBillingEmail
 
-      let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
-
-      let invalidStepProgression =
-         match evt with
-         | BillingSagaEvent.Start _
-         | BillingSagaEvent.EvaluateRemainingWork
-         | BillingSagaEvent.ResetInProgressActivityAttempts -> false
-         | BillingSagaEvent.BillingStatementProcessing _ ->
-            activityIsDone Activity.ProcessBillingStatement
-         | BillingSagaEvent.BillingStatementPersisted ->
-            activityIsDone Activity.WaitForBillingStatementPersisted
-         | BillingSagaEvent.MaintenanceFeeProcessed ->
-            activityIsDone Activity.ProcessMaintenanceFee
-         | BillingSagaEvent.BillingEmailSent ->
-            activityIsDone Activity.SendBillingEmail
-
-      if saga.Status = BillingSagaStatus.Completed then
-         Error SagaStateTransitionError.HasAlreadyCompleted
-      elif eventIsStartEvent then
-         Error SagaStateTransitionError.HasAlreadyStarted
-      elif invalidStepProgression then
-         Error SagaStateTransitionError.InvalidStepProgression
-      else
-         Ok(applyEvent state evt timestamp)
+   if saga.Status = BillingSagaStatus.Completed then
+      Error SagaStateTransitionError.HasAlreadyCompleted
+   elif invalidStepProgression then
+      Error SagaStateTransitionError.InvalidStepProgression
+   else
+      Ok(applyEvent saga evt timestamp)
 
 type PersistenceHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
@@ -275,7 +261,6 @@ let onEventPersisted
       updatedState.ProcessingBillingStatement
       |> Option.iter processMaintenanceFee
    | BillingSagaEvent.MaintenanceFeeProcessed -> sendBillingEmail ()
-   | BillingSagaEvent.Start _
    | BillingSagaEvent.BillingStatementProcessing _
    | BillingSagaEvent.BillingEmailSent
    | BillingSagaEvent.ResetInProgressActivityAttempts -> ()

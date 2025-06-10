@@ -93,7 +93,7 @@ builder.Services.AddAkka(
                typedefof<AccountClosureMessage>
                typedefof<AutomaticTransfer.Message>
                typedefof<AccountMessage>
-               typedefof<Lib.Saga.SagaMessage<AppSaga.Event>>
+               typedefof<AppSaga.AppSagaMessage>
                typedefof<Lib.Saga.SagaAlarmClockMessage>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka
