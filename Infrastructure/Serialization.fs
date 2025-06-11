@@ -161,7 +161,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          match msg with
          | EmployeeMessage.Event _ -> "EmployeeEvent"
          | _ -> "EmployeeMessage"
-      | :? SagaAlarmClockMessage -> "SagaAlarmClockMessage"
+      | :? SagaAlarmClockActor.Message -> "SagaAlarmClockMessage"
       | :? AppSaga.AppSagaMessage -> "AppSagaMessage"
       | :? AppSaga.AppSagaPersistableEvent -> "AppSagaEvent"
       | :? AppSaga.Saga -> "AppSagaSnapshot"
@@ -290,7 +290,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // AppSagaActor persistence snapshot.
       | :? AppSaga.Saga
       // Messages from SchedulingActor to Saga.App/SagaAlarmClockActor
-      | :? SagaAlarmClockMessage
+      | :? SagaAlarmClockActor.Message
       // OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy response
       // serialized for message sent from org cluster nodes to web node
       | :? CommandApprovalDailyAccrual
@@ -352,7 +352,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AppSagaEvent" -> typeof<AppSaga.AppSagaPersistableEvent>
          | "AppSagaShardEnvelope" -> typeof<AppSagaShardEnvelope>
          | "AppSagaSnapshot" -> typeof<AppSaga.Saga>
-         | "SagaAlarmClockMessage" -> typeof<SagaAlarmClockMessage>
+         | "SagaAlarmClockMessage" -> typeof<SagaAlarmClockActor.Message>
          | "SignalRMessage" -> typeof<SignalRActor.Msg>
          | "CircuitBreakerEvent" -> typeof<CircuitBreakerEvent>
          | "CircuitBreakerActorMessage" -> typeof<CircuitBreakerMessage>

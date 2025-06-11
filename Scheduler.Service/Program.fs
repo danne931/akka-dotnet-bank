@@ -94,7 +94,7 @@ builder.Services.AddAkka(
                typedefof<AutomaticTransfer.Message>
                typedefof<AccountMessage>
                typedefof<AppSaga.AppSagaMessage>
-               typedefof<Lib.Saga.SagaAlarmClockMessage>
+               typedefof<SagaAlarmClockActor.Message>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka
                //       ShardingEnvelope so need to explicitly add it for

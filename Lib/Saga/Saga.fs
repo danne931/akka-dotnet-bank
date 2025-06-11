@@ -5,6 +5,9 @@ open System
 open Lib.SharedTypes
 
 type IActivity =
+   /// Max attempts allowed if retrying due to inactivity or failure.
+   /// Use 0 to indicate that we should wait indefinitely for the activity
+   /// (ex: wait for some user input before the saga can proceed)
    abstract member MaxAttempts: int
    /// Assumes the activity is scheduled or "stuck" if
    /// some specified time has elapsed since it was started.
@@ -23,16 +26,11 @@ type ActivityLifeCycle<'Activity when 'Activity :> IActivity> = {
       End = None
       Activity = activity
       MaxAttempts = activity.MaxAttempts
-      Attempts = 0
+      Attempts = 1
    }
 
-   member x.finish(timestamp: DateTime) = {
-      x with
-         End = Some timestamp
-         Attempts = x.Attempts + 1
-   }
-
-   member x.HasRemainingAttempts = x.Attempts < x.MaxAttempts
+   member x.HasRemainingAttempts =
+      x.MaxAttempts = 0 || (x.Attempts < x.MaxAttempts)
 
    member x.IsRetryableAfterInactivity =
       match x.Activity.InactivityTimeout with
@@ -40,13 +38,15 @@ type ActivityLifeCycle<'Activity when 'Activity :> IActivity> = {
       | Some time ->
          x.HasRemainingAttempts && (x.Start + time) < DateTime.UtcNow
 
+   member x.finish(timestamp: DateTime) = { x with End = Some timestamp }
+
    member x.retry(timestamp: DateTime) = {
       x with
          Start = timestamp
          Attempts = x.Attempts + 1
    }
 
-   member x.resetAttempts() = { x with Attempts = 0 }
+   member x.resetAttempts() = { x with Attempts = 1 }
 
 type SagaLifeCycle<'Activity when 'Activity :> IActivity and 'Activity: equality>
    = {
@@ -234,9 +234,6 @@ type ISaga =
    abstract member ActivityRetryableAfterInactivityCount: int
    abstract member ExhaustedAllAttempts: bool
    abstract member InactivityTimeout: TimeSpan option
-
-[<RequireQualifiedAccess>]
-type SagaAlarmClockMessage = | WakeUpIfUnfinishedBusiness
 
 [<RequireQualifiedAccess>]
 type SagaMessage<'SagaStartEvent, 'SagaEvent> =

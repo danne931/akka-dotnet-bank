@@ -52,7 +52,7 @@ type Activity =
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | WaitForSupportTeamToResolvePartnerBankSync -> 1
+         | WaitForSupportTeamToResolvePartnerBankSync -> 0
          | NotifyCardNetworkOfConfirmedPurchase -> 2
          | SyncToPartnerBank -> 4
          | _ -> 3
@@ -544,19 +544,14 @@ let syncPurchaseToPartnerBank (info: PurchaseInfo) = async {
       return PurchaseSagaEvent.PartnerBankSyncResponse(Ok "some response")
 }
 
-let mutable cardFailCnt = 0
-let mutable cardSleepCnt = 0
-
 // TODO: Notify card network which issued the debit request to our bank.
 let cardNetworkConfirmPurchase (info: PurchaseInfo) = async {
-   if cardSleepCnt < 2 then
-      cardSleepCnt <- cardSleepCnt + 1
-      do! Async.Sleep(System.TimeSpan.FromMinutes(1.2))
+   if false then
+      do! Async.Sleep(System.TimeSpan.FromMinutes(12))
 
    // TODO: HTTP to card network
 
-   if false then //cardFailCnt < 6 then
-      cardFailCnt <- cardFailCnt + 1
+   if false then
       return PurchaseSagaEvent.CardNetworkResponse(Error "")
    else
       return PurchaseSagaEvent.CardNetworkResponse(Ok "some res")

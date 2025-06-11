@@ -902,7 +902,7 @@ SELECT add_created_at_column('command_approval_progress');
 SELECT add_updated_at_column_and_trigger('command_approval_progress');
 
 
---- TRANSACTION SAGA ---
+--- SAGA ---
 CREATE TYPE saga_type AS ENUM (
    'OrgOnboarding',
    'EmployeeOnboarding',
@@ -913,12 +913,25 @@ CREATE TYPE saga_type AS ENUM (
    'PlatformPayment',
    'BillingStatement'
 );
+
 CREATE TYPE saga_status AS ENUM (
    'Scheduled',
    'InProgress',
    'Completed',
+   -- Indicates compensating activities are in-progress
+   -- due to some failure.  Will transition to 'Failed'
+   -- once all compensating activities complete successfully.
+   'Compensating',
    'Failed',
-   'Aborted'
+   -- The saga was aborted, effectively cancelling all
+   -- in-progress activities.
+   'Aborted',
+   -- Indicates all in-progress Activities have run out
+   -- of attempts to complete successfully.
+   'Exhausted',
+   -- Indicates all in-progress compensating Activities
+   -- have run out of attempts to complete successfully.
+   'CompensationExhausted'
 );
 
 CREATE TABLE saga(

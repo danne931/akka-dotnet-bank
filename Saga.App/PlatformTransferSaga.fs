@@ -60,7 +60,7 @@ type Activity =
       member x.MaxAttempts =
          match x with
          | WaitForScheduledTransferExecution
-         | WaitForSupportTeamToResolvePartnerBankSync -> 1
+         | WaitForSupportTeamToResolvePartnerBankSync -> 0
          | SyncToPartnerBank -> 4
          | _ -> 3
 

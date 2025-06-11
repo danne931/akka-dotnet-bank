@@ -27,7 +27,7 @@ type private QuartzSagaMessageEnvelope = {
 
 type private QuartzSagaAlarmClockMessageEnvelope = {
    Manifest: string
-   Message: Lib.Saga.SagaAlarmClockMessage
+   Message: SagaAlarmClockActor.Message
 }
 
 type private QuartzAccountMessageEnvelope = {

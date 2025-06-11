@@ -150,7 +150,8 @@ let actorProps
                path,
                {
                   Manifest = "SagaAlarmClockActorMessage"
-                  Message = SagaAlarmClockMessage.WakeUpIfUnfinishedBusiness
+                  Message =
+                     SagaAlarmClockActor.Message.WakeUpIfUnfinishedBusiness
                },
                trigger
             )

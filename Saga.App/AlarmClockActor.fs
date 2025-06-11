@@ -16,6 +16,9 @@ open Lib.Postgres
 open Lib.Saga
 open AppSagaSqlMapper
 
+[<RequireQualifiedAccess>]
+type Message = | WakeUpIfUnfinishedBusiness
+
 let actorProps
    (system: ActorSystem)
    (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
@@ -24,7 +27,7 @@ let actorProps
    =
    let mat = system.Materializer()
 
-   let handler (ctx: Actor<SagaAlarmClockMessage>) = actor {
+   let handler (ctx: Actor<Message>) = actor {
       let! _ = ctx.Receive()
 
       logInfo
@@ -64,23 +67,27 @@ let actorProps
 
    props handler
 
-let get (system: ActorSystem) : IActorRef<SagaAlarmClockMessage> =
+let get (system: ActorSystem) : IActorRef<Message> =
    typed <| ActorRegistry.For(system).Get<ActorMetadata.SagaAlarmClockMarker>()
 
 (*
 Indicates that a saga actor will not attempt to retry any unfinished work
-and may be asleep (passivated & no longer in memory).
+and is asleep (passivated & no longer in memory).
 Get all sagas which need to be woken up to process unfinished business.
+NOTE:
 *)
 let getSleepingSagas () = asyncResultOption {
    let query =
       $"""
       SELECT {Fields.id} FROM {table}
       WHERE
-         {Fields.activityInProgressCount} > 0
+         {Fields.status} IN ('InProgress', 'Compensating')
          AND {Fields.inactivityTimeout} IS NOT NULL
+         -- Indicates some time, greater than the inactivity timeout, has
+         -- elapsed since a saga action was invoked.  Time to wake the saga
+         -- and evaluate remaining work.
          AND ({Fields.updatedAt} + {Fields.inactivityTimeout}) < current_timestamp
-   """
+      """
 
    let! sagaIds = pgQuery<CorrelationId> query None Reader.id
    return sagaIds

@@ -62,9 +62,9 @@ type Activity =
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | CreateEmployee
          | WaitForAccessApproval
-         | WaitForInviteConfirmation -> 1
+         | WaitForInviteConfirmation -> 0
+         | CreateEmployee -> 1
          | _ -> 3
 
       member x.InactivityTimeout =

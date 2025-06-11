@@ -90,9 +90,9 @@ type Activity =
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | SubmitApplication
          | WaitForInfoFixDemandedByKYCService
-         | WaitForSupportTeamToResolvePartnerBankLink -> 1
+         | WaitForSupportTeamToResolvePartnerBankLink -> 0
+         | SubmitApplication -> 1
          | LinkAccountToPartnerBank -> 4
          | _ -> 3
 

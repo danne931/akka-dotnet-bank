@@ -47,7 +47,7 @@ type Activity =
       member x.MaxAttempts =
          match x with
          | WaitForScheduledTransferExecution
-         | WaitForDevelopmentTeamFix -> 1
+         | WaitForDevelopmentTeamFix -> 0
          // Check every 4 hours, 6 times a day for 6 days.
          | WaitForTransferServiceComplete -> 36
          | _ -> 3

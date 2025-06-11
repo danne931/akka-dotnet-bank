@@ -41,13 +41,13 @@ module Reader =
       |> Serialization.deserializeUnsafe<AppSaga.Saga>
 
    let activityInProgressCount (read: RowReader) =
-      Fields.activityInProgressCount |> read.int
+      read.int Fields.activityInProgressCount
 
    let activityAttemptsExhaustedCount (read: RowReader) =
-      Fields.activityAttemptsExhaustedCount |> read.int
+      read.int Fields.activityAttemptsExhaustedCount
 
    let inactivityTimeout (read: RowReader) =
-      Fields.inactivityTimeout |> read.intervalOrNone
+      read.intervalOrNone Fields.inactivityTimeout
 
    let createdAt (read: RowReader) = read.dateTime Fields.createdAt
    let updatedAt (read: RowReader) = read.dateTime Fields.updatedAt
@@ -71,61 +71,78 @@ module Writer =
       Sql.string name
 
    let status (saga: AppSaga.Saga) =
+      let inProgressOrExhausted =
+         if (saga :> ISaga).ExhaustedAllAttempts then
+            "Exhausted"
+         else
+            "InProgress"
+
+      let compensatingOrFailed =
+         let s = saga :> ISaga
+
+         if s.ActivityInProgressCount > 0 then
+            if s.ExhaustedAllAttempts then
+               "CompensationExhausted"
+            else
+               "Compensating"
+         else
+            "Failed"
+
       let status =
          match saga with
          | AppSaga.Saga.OrgOnboarding s ->
             match s.Status with
-            | OrgOnboardingSagaStatus.InProgress -> "InProgress"
+            | OrgOnboardingSagaStatus.InProgress -> inProgressOrExhausted
             | OrgOnboardingSagaStatus.Completed -> "Completed"
-            | OrgOnboardingSagaStatus.Failed _ -> "Failed"
+            | OrgOnboardingSagaStatus.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.EmployeeOnboarding s ->
             match s.Status with
-            | EmployeeOnboardingSagaStatus.InProgress -> "InProgress"
-            | EmployeeOnboardingSagaStatus.Failed _ -> "Failed"
+            | EmployeeOnboardingSagaStatus.InProgress -> inProgressOrExhausted
+            | EmployeeOnboardingSagaStatus.Failed _ -> compensatingOrFailed
             | EmployeeOnboardingSagaStatus.Completed -> "Completed"
             | EmployeeOnboardingSagaStatus.Aborted _ -> "Aborted"
          | AppSaga.Saga.CardSetup s ->
             match s.Status with
-            | CardSetupSagaStatus.InProgress -> "InProgress"
+            | CardSetupSagaStatus.InProgress -> inProgressOrExhausted
             | CardSetupSagaStatus.Completed -> "Completed"
-            | CardSetupSagaStatus.Failed _ -> "Failed"
+            | CardSetupSagaStatus.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.Purchase s ->
             match s.Status with
-            | PurchaseSagaStatus.InProgress -> "InProgress"
+            | PurchaseSagaStatus.InProgress -> inProgressOrExhausted
             | PurchaseSagaStatus.Completed -> "Completed"
-            | PurchaseSagaStatus.Failed _ -> "Failed"
+            | PurchaseSagaStatus.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.DomesticTransfer s ->
             match s.Status with
             | DomesticTransferProgress.Scheduled -> "Scheduled"
             | DomesticTransferProgress.ProcessingSenderAccountDeduction
             | DomesticTransferProgress.WaitingForTransferServiceAck
-            | DomesticTransferProgress.InProgress _ -> "InProgress"
+            | DomesticTransferProgress.InProgress _ -> inProgressOrExhausted
             | DomesticTransferProgress.Completed -> "Completed"
-            | DomesticTransferProgress.Failed _ -> "Failed"
+            | DomesticTransferProgress.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.PlatformTransfer s ->
             match s.Status with
             | PlatformTransferSagaStatus.Scheduled -> "Scheduled"
-            | PlatformTransferSagaStatus.InProgress -> "InProgress"
+            | PlatformTransferSagaStatus.InProgress -> inProgressOrExhausted
             | PlatformTransferSagaStatus.Completed -> "Completed"
-            | PlatformTransferSagaStatus.Failed _ -> "Failed"
+            | PlatformTransferSagaStatus.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.PlatformPayment s ->
             match s.Status with
-            | PlatformPaymentSagaStatus.InProgress _ -> "InProgress"
+            | PlatformPaymentSagaStatus.InProgress _ -> inProgressOrExhausted
             | PlatformPaymentSagaStatus.Completed -> "Completed"
-            | PlatformPaymentSagaStatus.Failed _ -> "Failed"
+            | PlatformPaymentSagaStatus.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.Billing s ->
             match s.Status with
-            | BillingSagaStatus.InProgress -> "InProgress"
+            | BillingSagaStatus.InProgress -> inProgressOrExhausted
             | BillingSagaStatus.Completed -> "Completed"
-            | BillingSagaStatus.Failed -> "Failed"
+            | BillingSagaStatus.Failed -> compensatingOrFailed
 
       Sql.string status
 
    let activityInProgressCount (saga: ISaga) =
-      saga.ActivityInProgressCount |> Sql.int
+      Sql.int saga.ActivityInProgressCount
 
    let activityAttemptsExhaustedCount (saga: ISaga) =
-      saga.ActivityAttemptsExhaustedCount |> Sql.int
+      Sql.int saga.ActivityAttemptsExhaustedCount
 
    let inactivityTimeout (saga: ISaga) =
       Sql.intervalOrNone saga.InactivityTimeout
