@@ -470,6 +470,7 @@ let sagaHandler
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
+   (getOrgVerificationRef: ActorSystem -> IActorRef<KYCMessage>)
    : SagaActor.SagaHandler<Saga, StartEvent, Event>
    =
    {
@@ -641,10 +642,10 @@ let sagaHandler
                   getEmployeeRef = getEmployeeRef
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
+                  getOrgVerificationRef =
+                     fun () -> getOrgVerificationRef mailbox.System
                   linkAccountToPartnerBank =
                      OrgOnboardingSaga.linkAccountToPartnerBank
-                  kycVerification =
-                     OrgOnboardingSaga.KnowYourCustomerService.verifyOrg
                   sendMessageToSelf =
                      fun orgId corrId asyncEvt ->
                         let asyncMsg =
@@ -815,8 +816,8 @@ let sagaHandler
                   getEmailRef = getEmailRef
                   linkAccountToPartnerBank =
                      OrgOnboardingSaga.linkAccountToPartnerBank
-                  kycVerification =
-                     OrgOnboardingSaga.KnowYourCustomerService.verifyOrg
+                  getOrgVerificationRef =
+                     fun () -> getOrgVerificationRef mailbox.System
                   sendMessageToSelf =
                      fun orgId corrId asyncEvt ->
                         let asyncMsg =
@@ -994,6 +995,7 @@ let initProps
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
+   (getOrgVerificationRef: ActorSystem -> IActorRef<KYCMessage>)
    (supervisorOpts: PersistenceSupervisorOptions)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
@@ -1008,4 +1010,5 @@ let initProps
          getAccountRef
          getEmailActor
          getDomesticTransferRef
-         getSchedulingRef)
+         getSchedulingRef
+         getOrgVerificationRef)

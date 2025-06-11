@@ -24,7 +24,7 @@ open Bank.Card.Routes
 open Bank.Analytics.Routes
 open Bank.Hubs
 open ActorUtil
-open Lib.SharedTypes
+open Lib.CircuitBreaker
 
 let builder = Env.builder
 
@@ -66,7 +66,7 @@ builder.Services.AddAkka(
                typedefof<AccountMessage>
                typedefof<Account>
                typedefof<CircuitBreakerMessage>
-               typedefof<CircuitBreakerActorState>
+               typedefof<CircuitBreakerState>
                typedefof<Email.EmailMessage>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka

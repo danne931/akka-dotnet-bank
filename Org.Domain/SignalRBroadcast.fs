@@ -6,6 +6,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Org.Domain
 open Lib.SharedTypes
+open Lib.CircuitBreaker
 
 /// Persisted an event specific to the parent account, rather
 /// than one of its subaccounts.

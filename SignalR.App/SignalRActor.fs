@@ -11,6 +11,7 @@ open Bank.Employee.Domain
 open Bank.Org.Domain
 open Bank.Hubs
 open Lib.SharedTypes
+open Lib.CircuitBreaker
 open SignalRBroadcast
 
 [<RequireQualifiedAccess>]

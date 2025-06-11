@@ -8,22 +8,26 @@ open Akkling
 open Akkling.Persistence
 
 open ActorUtil
-open Lib.SharedTypes
 open Lib.Types
+open Lib.CircuitBreaker
 
 let private persistAsync (msg: CircuitBreakerEvent) = msg |> box |> PersistAsync
 
-let private apply (state: CircuitBreakerActorState) (evt: CircuitBreakerEvent) =
+let private apply (state: CircuitBreakerState) (evt: CircuitBreakerEvent) =
    match evt.Service with
    | CircuitBreakerService.DomesticTransfer -> {
       state with
          DomesticTransfer = evt.Status
      }
    | CircuitBreakerService.Email -> { state with Email = evt.Status }
+   | CircuitBreakerService.KnowYourCustomer -> {
+      state with
+         KnowYourCustomer = evt.Status
+     }
 
 let actorProps () =
    let handler (mailbox: Eventsourced<obj>) =
-      let rec loop (state: CircuitBreakerActorState) = actor {
+      let rec loop (state: CircuitBreakerState) = actor {
          let! msg = mailbox.Receive()
 
          return!
@@ -52,6 +56,15 @@ let actorProps () =
                      else
                         loop { state with Email = evt.Status }
                         <@> persistAsync evt
+                  | CircuitBreakerService.KnowYourCustomer ->
+                     if evt.Status = state.KnowYourCustomer then
+                        ignored ()
+                     else
+                        loop {
+                           state with
+                              KnowYourCustomer = evt.Status
+                        }
+                        <@> persistAsync evt
             | Persisted mailbox _ -> ignored ()
             | msg ->
                PersistentActorEventHandler.handleEvent
@@ -63,6 +76,7 @@ let actorProps () =
       loop {
          DomesticTransfer = CircuitBreakerStatus.Closed
          Email = CircuitBreakerStatus.Closed
+         KnowYourCustomer = CircuitBreakerStatus.Closed
       }
 
    propsPersist handler

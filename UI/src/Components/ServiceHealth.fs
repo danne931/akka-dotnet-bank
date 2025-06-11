@@ -6,6 +6,7 @@ open Elmish
 
 open Lib.SharedTypes
 open DiagnosticsService
+open Lib.CircuitBreaker
 
 type Msg =
    | Load of AsyncOperationStatus<Result<ServiceDiagnostics, Err>>
@@ -14,12 +15,14 @@ type Msg =
 type State = {
    DomesticTransfer: ServiceHealth
    Email: ServiceHealth
+   KnowYourCustomer: ServiceHealth
 }
 
 let init () =
    {
       DomesticTransfer = ServiceHealth.Good
       Email = ServiceHealth.Good
+      KnowYourCustomer = ServiceHealth.Good
    },
    Cmd.ofMsg <| Load Started
 
@@ -52,6 +55,10 @@ let update msg (state: State) =
                DomesticTransfer = health
            }
          | CircuitBreakerService.Email -> { state with Email = health }
+         | CircuitBreakerService.KnowYourCustomer -> {
+            state with
+               KnowYourCustomer = health
+           }
 
       state, Cmd.none
 
@@ -111,6 +118,23 @@ let ServiceHealthComponent () =
                            "alert"
                      ]
                      attr.text (string state.Email)
+                  ]
+               ]
+            ]
+
+            Html.span [
+               attr.classes [ "system-op" ]
+               attr.children [
+                  Html.text "Know Your Customer: "
+
+                  Html.span [
+                     attr.classes [
+                        if state.KnowYourCustomer = ServiceHealth.Good then
+                           "success"
+                        else
+                           "alert"
+                     ]
+                     attr.text (string state.KnowYourCustomer)
                   ]
                ]
             ]

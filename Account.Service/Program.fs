@@ -162,6 +162,7 @@ builder.Services.AddAkka(
                      EmailServiceActor.getProducer
                      DomesticTransferServiceActor.getProducer
                      SchedulingActor.get
+                     KnowYourCustomerServiceActor.getProducer
                      Env.config.AccountActorSupervisor
                      Env.config.SagaPassivateIdleEntityAfter
                      persistenceId
@@ -174,6 +175,23 @@ builder.Services.AddAkka(
                   Env.config.SagaPassivateIdleEntityAfter,
                Role = ClusterMetadata.roles.saga
             )
+         )
+         // The KnowYourCustomerService will consume know-your-customer
+         // messages from RabbitMq & interact with a third party business
+         // verification API such as middesk.com.  It will notify the
+         // OrgOnboardingSaga if the customer is in legal good standing.
+         .WithSingleton<ActorMetadata.KYCServiceMarker>(
+            ActorMetadata.knowYourCustomer.Name,
+            (fun system _ _ ->
+               KnowYourCustomerServiceActor.initProps
+                  (getQueueConnection provider)
+                  EnvOrg.config.KnowYourCustomerServiceQueue
+                  Env.config.QueueConsumerStreamBackoffRestart
+                  (EnvOrg.config.KnowYourCustomerServiceCircuitBreaker system)
+                  (provider.GetRequiredService<SignalRBroadcast>())
+                  (AppSaga.getEntityRef system)
+               |> _.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.org)
          )
          .WithSingleton<ActorMetadata.SagaAlarmClockMarker>(
             ActorMetadata.sagaAlarmClock.Name,
@@ -373,6 +391,18 @@ builder.Services.AddAkka(
                   Env.config.BillingStatementPersistenceBackoffRestart
                   Env.config.BillingStatementRetryPersistenceAfter
                   (AppSaga.getEntityRef system)
+               |> untyped
+            )
+
+            // OrgOnboarding saga will send a know-your-customer verification
+            // message to this actor which will enqueue the message into RabbitMq
+            // for the KnowYourCustomerService singleton actor to process.
+            registry.Register<ActorMetadata.KYCServiceProducerMarker>(
+               Lib.Queue.startProducer<KYCMessage>
+                  system
+                  (getQueueConnection provider)
+                  EnvOrg.config.KnowYourCustomerServiceQueue
+                  Env.config.QueueConsumerStreamBackoffRestart
                |> untyped
             )
 

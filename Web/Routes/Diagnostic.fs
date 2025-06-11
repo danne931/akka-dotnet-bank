@@ -14,6 +14,7 @@ open Bank.Account.Domain
 open AccountLoadTestTypes
 open RoutePaths
 open Bank.UserSession.Middleware
+open Lib.CircuitBreaker
 
 let startDiagnosticRoutes (app: WebApplication) =
    app
@@ -35,7 +36,7 @@ let startDiagnosticRoutes (app: WebApplication) =
          Func<ActorSystem, Task<IResult>>(fun sys ->
             let ref = CircuitBreakerActor.get sys
 
-            let (lookup: CircuitBreakerActorState Task) =
+            let (lookup: CircuitBreakerState Task) =
                ref <? CircuitBreakerMessage.Lookup |> Async.toTask
 
             lookup |> RouteUtil.unwrapTask)

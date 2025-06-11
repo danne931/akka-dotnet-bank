@@ -11,6 +11,7 @@
     <Compile Include="Routes.fs" />
     <Compile Include="ActivePatterns.fs" />
     <Compile Include="Time.fs" />
+    <Compile Include="CircuitBreaker.fs" />
     <Compile Include="Serialization.fs" />
     <Compile Include="NetworkQuery.fs" />
   </ItemGroup>

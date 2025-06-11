@@ -456,33 +456,6 @@ let validationErrorsHumanFriendly
    result |> Result.mapError (Err.ValidationError >> _.HumanFriendly)
 
 [<RequireQualifiedAccess>]
-type CircuitBreakerService =
-   | DomesticTransfer
-   | Email
-
-[<RequireQualifiedAccess>]
-type CircuitBreakerStatus =
-   | Closed
-   | HalfOpen
-   | Open
-
-type CircuitBreakerEvent = {
-   Service: CircuitBreakerService
-   Status: CircuitBreakerStatus
-   Timestamp: DateTime
-}
-
-[<RequireQualifiedAccess>]
-type CircuitBreakerMessage =
-   | Lookup
-   | CircuitBreaker of CircuitBreakerEvent
-
-type CircuitBreakerActorState = {
-   DomesticTransfer: CircuitBreakerStatus
-   Email: CircuitBreakerStatus
-}
-
-[<RequireQualifiedAccess>]
 type Role =
    | Admin
    | CardOnly

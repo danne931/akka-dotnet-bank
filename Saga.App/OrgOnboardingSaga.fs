@@ -12,42 +12,6 @@ open Email
 open Lib.Saga
 
 [<RequireQualifiedAccess>]
-type OrgOnboardingApplicationRequiresUpdateInfo =
-   | InvalidBusinessName
-   | InvalidAddress
-   | InvalidEIN
-   | Unknown of string
-
-   member x.Display =
-      match x with
-      | InvalidBusinessName ->
-         "The provided business name could not be verified."
-      | InvalidAddress -> "The provided address could not be verified."
-      | InvalidEIN -> "The provided EIN could not be validated with the IRS."
-      | Unknown reason -> reason
-
-[<RequireQualifiedAccess>]
-type OrgOnboardingApplicationRejectedReason =
-   | NotRegistered
-   | NotInGoodStanding
-
-   member x.Display =
-      match x with
-      | NotRegistered -> "The business is not legally registered."
-      | NotInGoodStanding ->
-         "The business has been determined to not be in good standing."
-
-[<RequireQualifiedAccess>]
-type OrgOnboardingVerificationError =
-   | RequiresUpdatedInfo of OrgOnboardingApplicationRequiresUpdateInfo
-   | Rejected of OrgOnboardingApplicationRejectedReason
-
-[<RequireQualifiedAccess>]
-type OrgOnboardingFailureReason =
-   | KYCRejectedReason of OrgOnboardingApplicationRejectedReason
-   | PartnerBankLinkError of string
-
-[<RequireQualifiedAccess>]
 type OrgOnboardingSagaStatus =
    | InProgress
    | Completed
@@ -369,8 +333,7 @@ type PersistenceHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getOrgRef: OrgId -> IEntityRef<OrgMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
-   kycVerification:
-      OrgOnboardingApplicationSubmitted -> Async<OrgOnboardingSagaEvent>
+   getOrgVerificationRef: unit -> IActorRef<KYCMessage>
    linkAccountToPartnerBank:
       OrgOnboardingApplicationSubmitted -> Async<OrgOnboardingSagaEvent>
    sendMessageToSelf:
@@ -399,10 +362,12 @@ let onStartEventPersisted
 
       dep.getEmailRef () <! emailMsg
 
-      dep.sendMessageToSelf
-         evt.OrgId
-         evt.CorrelationId
-         (dep.kycVerification evt.Data)
+      dep.getOrgVerificationRef ()
+      <! KYCMessage.VerifyApplication {
+         OrgId = evt.OrgId
+         CorrelationId = evt.CorrelationId
+         Application = info
+      }
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)
@@ -462,10 +427,12 @@ let onEventPersisted
       dep.getEmailRef () <! emailMsg
 
    let verifyOrg () =
-      dep.sendMessageToSelf
-         updatedState.OrgId
-         updatedState.CorrelationId
-         (dep.kycVerification application)
+      dep.getOrgVerificationRef ()
+      <! KYCMessage.VerifyApplication {
+         OrgId = updatedState.OrgId
+         CorrelationId = updatedState.CorrelationId
+         Application = application
+      }
 
    let linkAccountToPartnerBank () =
       dep.sendMessageToSelf
@@ -596,47 +563,3 @@ let linkAccountToPartnerBank (info: OrgOnboardingApplicationSubmitted) = async {
 
    return res
 }
-
-// Onboarding know-your-customer service requests & responses
-// are based loosely on middesk.com API.
-// TODO: Research & verify actual middesk API
-module KnowYourCustomerService =
-   type KYCServiceRequest = {
-      name: string
-      tax_id: string
-      address: {|
-         line1: string
-         city: string
-         state: string
-         postal_code: string
-      |}
-   }
-
-   type KYCServiceError = {
-      code: string
-      message: string
-   } with
-
-      member x.AsDomainError =
-         match x.code with
-         | "tax_id_invalid" ->
-            OrgOnboardingApplicationRequiresUpdateInfo.InvalidEIN
-         | "business_name_invalid" ->
-            OrgOnboardingApplicationRequiresUpdateInfo.InvalidBusinessName
-         | "business_address_invalid" ->
-            OrgOnboardingApplicationRequiresUpdateInfo.InvalidAddress
-         | other -> OrgOnboardingApplicationRequiresUpdateInfo.Unknown other
-
-   type KYCServiceVerificationResponse = {
-      registered: bool
-      good_standing: bool
-      errors: KYCServiceError list
-   }
-
-   let verifyOrg (info: OrgOnboardingApplicationSubmitted) = async {
-      do! Async.Sleep(3000)
-
-      // TODO: HTTP to middesk.com API
-
-      return OrgOnboardingSagaEvent.KYCResponse(Ok())
-   }

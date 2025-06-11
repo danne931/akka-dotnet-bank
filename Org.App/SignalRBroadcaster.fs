@@ -5,7 +5,7 @@ open Akkling
 open Akka.Actor
 open System
 
-open Lib.SharedTypes
+open Lib.CircuitBreaker
 open Bank.Account.Domain
 open SignalRBroadcast
 open ActorUtil

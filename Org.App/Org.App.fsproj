@@ -4,8 +4,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Environment.fs" />
     <Compile Include="CircuitBreakerActor.fs" />
     <Compile Include="OrgReadModelSyncActor.fs" />
+    <Compile Include="KnowYourCustomerServiceActor.fs" />
     <Compile Include="OrgActor.fs" />
     <Compile Include="AnalyticsApi.fs" />
     <Compile Include="CommandApprovalApi.fs" />

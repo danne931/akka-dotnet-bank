@@ -13,6 +13,7 @@ open FsToolkit.ErrorHandling
 
 open Lib.ActivePatterns
 open Lib.SharedTypes
+open Lib.CircuitBreaker
 open Bank.Transfer.Domain
 open SignalRBroadcast
 open Lib.Types

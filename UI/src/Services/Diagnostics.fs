@@ -2,6 +2,7 @@ module DiagnosticsService
 
 open Fable.SimpleHttp
 open Lib.SharedTypes
+open Lib.CircuitBreaker
 open RoutePaths
 
 [<RequireQualifiedAccess>]
@@ -28,7 +29,7 @@ let getServiceHealth () : Async<Result<ServiceDiagnostics, Err>> = async {
    else
       return
          responseText
-         |> Serialization.deserialize<CircuitBreakerActorState>
+         |> Serialization.deserialize<CircuitBreakerState>
          |> Result.map (fun circuitBreaker -> {
             DomesticTransfer = health circuitBreaker.DomesticTransfer
             Email = health circuitBreaker.Email

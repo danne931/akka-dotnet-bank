@@ -10,6 +10,7 @@ open Akkling.Streams
 
 open Lib.Types
 open Lib.SharedTypes
+open Lib.CircuitBreaker
 
 type QueueConnectionDetails = AmqpConnectionDetails
 

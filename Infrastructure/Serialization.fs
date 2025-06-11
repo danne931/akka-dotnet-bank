@@ -15,6 +15,7 @@ open Bank.Account.Domain
 open DomesticTransfer.Service.Domain
 open BillingStatement
 open Lib.SharedTypes
+open Lib.CircuitBreaker
 open CommandApproval
 open Lib.Saga
 open Bank.Scheduler
@@ -155,6 +156,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          match msg with
          | OrgMessage.Event _ -> "OrgEvent"
          | _ -> "OrgMessage"
+      | :? KYCMessage -> "KYCMessage"
       | :? EmployeeSnapshot -> "EmployeeSnapshot"
       | :? Option<Employee> -> "EmployeeOption"
       | :? EmployeeMessage as msg ->
@@ -180,7 +182,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | AccountMessage.Event _ -> "AccountEvent"
          | _ -> "AccountMessage"
       | :? SignalRActor.Msg -> "SignalRMessage"
-      | :? CircuitBreakerActorState -> "CircuitBreakerActorState"
+      | :? CircuitBreakerState -> "CircuitBreakerActorState"
       | :? CircuitBreakerEvent -> "CircuitBreakerEvent"
       | :? CircuitBreakerMessage -> "CircuitBreakerActorMessage"
       | :? BillingCycleMessage -> "BillingCycleActorMessage"
@@ -250,7 +252,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // AccountClosureActor persistence snapshot.
       | :? Map<AccountId, Account>
       | :? List<Account>
-      | :? CircuitBreakerActorState
+      | :? CircuitBreakerState
       // Messages sent over DistributedPubSub to CircuitBreakerActor.
       | :? CircuitBreakerMessage
       // CircuitBreakerActor persistence.
@@ -294,6 +296,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       // OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy response
       // serialized for message sent from org cluster nodes to web node
       | :? CommandApprovalDailyAccrual
+      // KnowYourCustomer third party api message serialized for RabbitMq
+      | :? KYCMessage
       // OrgMessage.GetOrg response serialized for message sent
       // from org cluster nodes to Web node.
       | :? Option<Org>
@@ -335,6 +339,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "OrgEvent" -> typeof<OrgEvent>
          | "OrgMessage" -> typeof<OrgMessage>
          | "OrgShardEnvelope" -> typeof<OrgShardEnvelope>
+         | "KYCMessage" -> typeof<KYCMessage>
+         | "Bank.Org.Domain.KYCMessage, Org.Domain" -> typeof<KYCMessage>
          | "EmployeeSnapshot" -> typeof<EmployeeSnapshot>
          | "EmployeeOption" -> typeof<Employee option>
          | "EmployeeEvent" -> typeof<EmployeeEvent>
@@ -356,7 +362,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "SignalRMessage" -> typeof<SignalRActor.Msg>
          | "CircuitBreakerEvent" -> typeof<CircuitBreakerEvent>
          | "CircuitBreakerActorMessage" -> typeof<CircuitBreakerMessage>
-         | "CircuitBreakerActorState" -> typeof<CircuitBreakerActorState>
+         | "CircuitBreakerActorState" -> typeof<CircuitBreakerState>
          | "BillingCycleActorMessage" -> typeof<BillingCycleMessage>
          | "AutomaticTransferActorMessage" -> typeof<AutomaticTransfer.Message>
          | "DomesticTransfer.Service.Domain+DomesticTransferServiceMessage, Transfer.Domain"

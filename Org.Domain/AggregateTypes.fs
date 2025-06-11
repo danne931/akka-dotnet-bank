@@ -194,3 +194,12 @@ type OrgMessage =
    | ApprovableRequest of ApprovableCommand
    | StateChange of OrgCommand
    | Event of OrgEvent
+
+type KYCApplication = {
+   OrgId: OrgId
+   CorrelationId: CorrelationId
+   Application: OrgOnboardingApplicationSubmitted
+}
+
+/// Know Your Customer Third Party Org Verification Message
+type KYCMessage = VerifyApplication of KYCApplication

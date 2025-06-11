@@ -15,6 +15,7 @@ open FsToolkit.ErrorHandling
 open Lib.Types
 open Lib.Postgres
 open Lib.SharedTypes
+open Lib.CircuitBreaker
 open SignalRBroadcast
 open Email
 open OrgOnboardingSaga
