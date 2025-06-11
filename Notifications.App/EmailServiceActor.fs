@@ -1,5 +1,5 @@
 [<RequireQualifiedAccess>]
-module EmailConsumerActor
+module EmailServiceActor
 
 open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq

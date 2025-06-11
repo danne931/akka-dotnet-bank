@@ -1,5 +1,5 @@
 [<RequireQualifiedAccess>]
-module DomesticTransferConsumerActor
+module DomesticTransferServiceActor
 
 open System.Text
 open System.Text.Json

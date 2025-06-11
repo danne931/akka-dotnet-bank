@@ -119,7 +119,7 @@ builder.Services.AddAkka(
                      Env.config.AccountActorSupervisor
                      persistenceId
                      (AppSaga.getEntityRef system)
-                     EmailConsumerActor.getProducer
+                     EmailServiceActor.getProducer
                      AccountClosureActor.get
                      BillingStatementActor.get
                      Bank.Transfer.Api.getDomesticTransfersRetryableUponRecipientCorrection
@@ -159,8 +159,8 @@ builder.Services.AddAkka(
                      (OrgActor.get system)
                      (EmployeeActor.get system)
                      (AccountActor.get system)
-                     EmailConsumerActor.getProducer
-                     DomesticTransferConsumerActor.getProducer
+                     EmailServiceActor.getProducer
+                     DomesticTransferServiceActor.getProducer
                      SchedulingActor.get
                      Env.config.AccountActorSupervisor
                      Env.config.SagaPassivateIdleEntityAfter
@@ -215,7 +215,7 @@ builder.Services.AddAkka(
                let typedProps =
                   AccountClosureActor.initProps
                      (AccountActor.get system)
-                     EmailConsumerActor.getProducer
+                     EmailServiceActor.getProducer
                      SchedulingActor.get
                      Env.config.AccountDeleteThrottle
 
@@ -325,10 +325,10 @@ builder.Services.AddAkka(
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          // Consume EmailMessages off of RabbitMq
-         .WithSingleton<ActorMetadata.EmailConsumerMarker>(
-            ActorMetadata.emailConsumer.Name,
+         .WithSingleton<ActorMetadata.EmailMarker>(
+            ActorMetadata.email.Name,
             (fun system _ _ ->
-               EmailConsumerActor.initProps
+               EmailServiceActor.initProps
                   (EnvNotifications.config.circuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
                   (getQueueConnection provider)
@@ -344,7 +344,7 @@ builder.Services.AddAkka(
             ActorMetadata.emailProxy.Name,
             (fun system _ _ ->
                (fun (msg: Email.EmailMessage) ->
-                  EmailConsumerActor.getProducer system <<! msg
+                  EmailServiceActor.getProducer system <<! msg
                   ignored ())
                |> actorOf
                |> props
@@ -352,10 +352,10 @@ builder.Services.AddAkka(
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          // Consume DomesticTransferMessages off of RabbitMq
-         .WithSingleton<ActorMetadata.DomesticTransferConsumerMarker>(
-            ActorMetadata.domesticTransferConsumer.Name,
+         .WithSingleton<ActorMetadata.DomesticTransferMarker>(
+            ActorMetadata.domesticTransfer.Name,
             (fun system _ _ ->
-               DomesticTransferConsumerActor.initProps
+               DomesticTransferServiceActor.initProps
                   (getQueueConnection provider)
                   EnvTransfer.config.Queue
                   Env.config.QueueConsumerStreamBackoffRestart
@@ -378,7 +378,7 @@ builder.Services.AddAkka(
 
             // Other actors in the system send EmailMessages to this actor
             // which will enqueue the message into RabbitMq for the
-            // EmailConsumer Singleton Actor to process.
+            // EmailService Singleton Actor to process.
             registry.Register<ActorMetadata.EmailProducerMarker>(
                Lib.Queue.startProducer<Email.EmailMessage>
                   system
@@ -390,7 +390,7 @@ builder.Services.AddAkka(
 
             // Other actors in the system send DomesticTransferMessages to this actor
             // which will enqueue the message into RabbitMq for the
-            // DomesticTransferConsumer Singleton Actor to process.
+            // DomesticTransferService Singleton Actor to process.
             registry.Register<ActorMetadata.DomesticTransferProducerMarker>(
                Lib.Queue.startProducer<DomesticTransferMessage>
                   system

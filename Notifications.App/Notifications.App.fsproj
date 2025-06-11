@@ -5,7 +5,7 @@
 
   <ItemGroup>
     <Compile Include="Environment.fs" />
-    <Compile Include="EmailConsumerActor.fs" />
+    <Compile Include="EmailServiceActor.fs" />
   </ItemGroup>
 
   <ItemGroup>

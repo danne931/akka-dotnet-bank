@@ -5,7 +5,7 @@
 
   <ItemGroup>
     <Compile Include="Environment.fs" />
-    <Compile Include="DomesticTransferConsumerActor.fs" />
+    <Compile Include="DomesticTransferServiceActor.fs" />
     <Compile Include="AutomaticTransferSchedulingActor.fs" />
     <Compile Include="Api.fs" />
   </ItemGroup>

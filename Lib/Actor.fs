@@ -145,7 +145,7 @@ module ActorMetadata =
    type EmailProxyMarker() = class end
 
    /// Singleton consumes email messages off RabbitMq
-   type EmailConsumerMarker() = class end
+   type EmailMarker() = class end
 
    /// Enqueues email messages into RabbitMq
    type EmailProducerMarker() = class end
@@ -153,7 +153,7 @@ module ActorMetadata =
    type AccountClosureMarker() = class end
 
    /// Singleton consumes domestic transfer messages off RabbitMq
-   type DomesticTransferConsumerMarker() = class end
+   type DomesticTransferMarker() = class end
 
    /// Enqueues domestic transfer messages into RabbitMq
    type DomesticTransferProducerMarker() = class end
@@ -245,7 +245,7 @@ module ActorMetadata =
          fun accountId -> $"account/{accountId}/internal-transfer-recipient"
    }
 
-   let domesticTransferConsumer = {
+   let domesticTransfer = {
       Name = "domestic-transfer-consumer"
       Route = "domestic-transfer-consumer"
    }
@@ -270,7 +270,7 @@ module ActorMetadata =
       Route = "billing-statement"
    }
 
-   let emailConsumer = {
+   let email = {
       Name = "email-consumer"
       Route = "email-consumer"
    }
