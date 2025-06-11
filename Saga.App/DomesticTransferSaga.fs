@@ -11,6 +11,12 @@ open Email
 open Lib.Saga
 open Bank.Scheduler
 
+type private ServiceMessage =
+   DomesticTransfer.Service.Domain.DomesticTransferServiceMessage
+
+type private ServiceAction =
+   DomesticTransfer.Service.Domain.DomesticTransferServiceAction
+
 [<RequireQualifiedAccess>]
 type DomesticTransferSagaStartEvent =
    | SenderAccountDeductedFunds of BankEvent<DomesticTransferPending>
@@ -21,7 +27,7 @@ type DomesticTransferSagaEvent =
    | ScheduledJobCreated
    | ScheduledJobExecuted
    | SenderAccountDeductedFunds
-   | TransferProcessorProgressUpdate of DomesticTransferServiceProgress
+   | TransferProcessorProgressUpdate of DomesticTransferThirdPartyUpdate
    | TransferMarkedAsSettled
    | TransferInitiatedNotificationSent
    | RetryTransferServiceRequest of
@@ -183,40 +189,38 @@ let applyEvent
      }
    | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
       match progress with
-      | DomesticTransferServiceProgress.InitialHandshakeAck -> {
+      | DomesticTransferThirdPartyUpdate.ServiceAckReceived -> {
          saga with
-            Status = DomesticTransferProgress.InProgress progress
+            Status = DomesticTransferProgress.ThirdParty progress
             LifeCycle =
                saga.LifeCycle
                |> finishActivity Activity.TransferServiceAck
                |> addActivity Activity.SendTransferInitiatedNotification
                |> addActivity Activity.WaitForTransferServiceComplete
         }
-      | DomesticTransferServiceProgress.InProgress _ -> {
+      | DomesticTransferThirdPartyUpdate.ProgressDetail _ -> {
          saga with
-            Status = DomesticTransferProgress.InProgress progress
+            Status = DomesticTransferProgress.ThirdParty progress
         }
-      | DomesticTransferServiceProgress.Settled -> {
+      | DomesticTransferThirdPartyUpdate.Settled -> {
          saga with
-            Status = DomesticTransferProgress.InProgress progress
+            Status = DomesticTransferProgress.ThirdParty progress
             LifeCycle =
                saga.LifeCycle
                |> finishActivity Activity.WaitForTransferServiceComplete
                |> addActivity Activity.MarkTransferAsSettled
         }
-      | DomesticTransferServiceProgress.Failed reason ->
+      | DomesticTransferThirdPartyUpdate.Failed reason ->
          let saga = {
             saga with
-               Status = DomesticTransferProgress.Failed reason
+               Status =
+                  reason
+                  |> DomesticTransferFailReason.ThirdParty
+                  |> DomesticTransferProgress.Failed
          }
 
          match reason with
-         | DomesticTransferFailReason.SenderAccountNotActive
-         | DomesticTransferFailReason.SenderAccountInsufficientFunds -> saga
-         | DomesticTransferFailReason.CorruptData
-         | DomesticTransferFailReason.InvalidPaymentNetwork
-         | DomesticTransferFailReason.InvalidDepository
-         | DomesticTransferFailReason.InvalidAction -> {
+         | DomesticTransferThirdPartyFailReason.Infra _ -> {
             saga with
                LifeCycle =
                   saga.LifeCycle
@@ -224,10 +228,9 @@ let applyEvent
                   |> failActivity Activity.WaitForTransferServiceComplete
                   |> addActivity Activity.WaitForDevelopmentTeamFix
            }
-         | DomesticTransferFailReason.InvalidAmount
-         | DomesticTransferFailReason.InvalidAccountInfo
-         | DomesticTransferFailReason.AccountClosed
-         | DomesticTransferFailReason.Unknown _ ->
+         | DomesticTransferThirdPartyFailReason.InvalidAmount
+         | DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo
+         | DomesticTransferThirdPartyFailReason.RecipientAccountNotActive ->
             let refundIfNotRetrying =
                if saga.ReasonForRetryServiceAck.IsSome then
                   id
@@ -344,7 +347,7 @@ let stateTransition
 
 type PersistenceHandlerDependencies = {
    getSchedulingRef: unit -> IActorRef<SchedulerMessage>
-   getDomesticTransferRef: unit -> IActorRef<DomesticTransferMessage>
+   getDomesticTransferRef: unit -> IActorRef<ServiceMessage>
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
    logError: string -> unit
@@ -359,10 +362,7 @@ let onStartEventPersisted
       let transfer = TransferEventToDomesticTransfer.fromPending e
 
       let msg =
-         DomesticTransferMessage.TransferRequest(
-            DomesticTransferServiceAction.TransferAck,
-            transfer
-         )
+         ServiceMessage.TransferRequest(ServiceAction.TransferAck, transfer)
 
       dep.getDomesticTransferRef () <! msg
    | DomesticTransferSagaStartEvent.ScheduleTransferRequest e ->
@@ -407,19 +407,13 @@ let onEventPersisted
 
    let sendTransferToProcessorService () =
       let msg =
-         DomesticTransferMessage.TransferRequest(
-            DomesticTransferServiceAction.TransferAck,
-            transfer
-         )
+         ServiceMessage.TransferRequest(ServiceAction.TransferAck, transfer)
 
       dep.getDomesticTransferRef () <! msg
 
    let checkOnTransferProgress () =
       let msg =
-         DomesticTransferMessage.TransferRequest(
-            DomesticTransferServiceAction.ProgressCheck,
-            transfer
-         )
+         ServiceMessage.TransferRequest(ServiceAction.ProgressCheck, transfer)
 
       dep.getDomesticTransferRef () <! msg
 
@@ -487,14 +481,14 @@ let onEventPersisted
    | DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds _ -> ()
    | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
       match progress with
-      | DomesticTransferServiceProgress.InitialHandshakeAck ->
+      | DomesticTransferThirdPartyUpdate.ServiceAckReceived ->
          if currentState.ReasonForRetryServiceAck.IsNone then
             updateTransferProgress progress
 
          sendTransferInitiatedEmail ()
-      | DomesticTransferServiceProgress.InProgress _ -> ()
-      | DomesticTransferServiceProgress.Settled -> updateTransferAsComplete ()
-      | DomesticTransferServiceProgress.Failed reason ->
+      | DomesticTransferThirdPartyUpdate.ProgressDetail _ -> ()
+      | DomesticTransferThirdPartyUpdate.Settled -> updateTransferAsComplete ()
+      | DomesticTransferThirdPartyUpdate.Failed reason ->
          if currentState.RequiresTransferServiceDevelopmentFix then
             dep.logError $"Transfer API requires code update: {reason}"
 
@@ -506,7 +500,7 @@ let onEventPersisted
 
             dep.getEmailRef () <! msg
          elif currentState.RequiresAccountRefund then
-            refundSenderAccount reason
+            DomesticTransferFailReason.ThirdParty reason |> refundSenderAccount
    | DomesticTransferSagaEvent.SenderAccountRefunded -> ()
    | DomesticTransferSagaEvent.TransferMarkedAsSettled -> ()
    | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> ()

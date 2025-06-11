@@ -1,7 +1,6 @@
 namespace Bank.Transfer.Domain
 
 open System
-open System.Threading.Tasks
 
 open Lib.SharedTypes
 
@@ -83,50 +82,62 @@ type DomesticTransferRecipient = {
 type TransferProgressTrackingMessage = | ProgressCheck
 
 [<RequireQualifiedAccess>]
-type DomesticTransferRecipientFailReason =
-   | InvalidAccountInfo
-   | ClosedAccount
+type DomesticTransferInfraFailReason =
+   | CorruptData
+   | InvalidAction
+   | InvalidPaymentNetwork
+   | RecipientAccountInvalidDepository
+   | Unknown of string
+
+   member x.Display =
+      match x with
+      | CorruptData -> "Corrupt Data"
+      | InvalidAction -> "Invalid Action"
+      | InvalidPaymentNetwork -> "Invalid Payment Network"
+      | RecipientAccountInvalidDepository ->
+         "Invalid Recipient Account Depository"
+      | Unknown r -> r
+
+[<RequireQualifiedAccess>]
+type DomesticTransferThirdPartyFailReason =
+   | InvalidAmount
+   | RecipientAccountInvalidInfo
+   | RecipientAccountNotActive
+   | Infra of DomesticTransferInfraFailReason
+
+   member x.Display =
+      match x with
+      | InvalidAmount -> "Invalid Amount"
+      | RecipientAccountInvalidInfo -> "Invalid Recipient Account Info Provided"
+      | RecipientAccountNotActive -> "Recipient Account Not Active"
+      | Infra infraRelated -> infraRelated.Display
+
+[<RequireQualifiedAccess>]
+type DomesticTransferThirdPartyUpdate =
+   | ServiceAckReceived
+   | ProgressDetail of string
+   | Settled
+   | Failed of DomesticTransferThirdPartyFailReason
 
 [<RequireQualifiedAccess>]
 type DomesticTransferFailReason =
    | SenderAccountNotActive
    | SenderAccountInsufficientFunds
-   | CorruptData
-   | InvalidAction
-   | InvalidPaymentNetwork
-   | InvalidDepository
-   | InvalidAmount
-   | AccountClosed
-   | InvalidAccountInfo
-   | Unknown of string
+   | ThirdParty of DomesticTransferThirdPartyFailReason
 
    member x.Display =
       match x with
       | SenderAccountNotActive -> "Sender Account Not Active"
       | SenderAccountInsufficientFunds ->
          "Sender Account Has Insufficient Funds"
-      | CorruptData -> "Corrupt Data"
-      | InvalidAction -> "Invalid Action"
-      | InvalidPaymentNetwork -> "Invalid Payment Network"
-      | InvalidDepository -> "Invalid Depository"
-      | InvalidAmount -> "Invalid Amount"
-      | AccountClosed -> "Account Closed"
-      | InvalidAccountInfo -> "Invalid Account Info"
-      | Unknown r -> r
-
-[<RequireQualifiedAccess>]
-type DomesticTransferServiceProgress =
-   | InitialHandshakeAck
-   | InProgress of string
-   | Settled
-   | Failed of DomesticTransferFailReason
+      | ThirdParty tp -> tp.Display
 
 [<RequireQualifiedAccess>]
 type DomesticTransferProgress =
    | Scheduled
    | ProcessingSenderAccountDeduction
    | WaitingForTransferServiceAck
-   | InProgress of DomesticTransferServiceProgress
+   | ThirdParty of DomesticTransferThirdPartyUpdate
    | Completed
    | Failed of DomesticTransferFailReason
 
@@ -162,39 +173,3 @@ type DomesticTransfer = {
    Status: DomesticTransferProgress
    Memo: string option
 }
-
-[<RequireQualifiedAccess>]
-type DomesticTransferServiceAction =
-   | TransferAck
-   | ProgressCheck
-
-type DomesticTransferServiceSender = {
-   Name: string
-   AccountNumber: string
-   RoutingNumber: string
-}
-
-type DomesticTransferServiceRecipient = {
-   Name: string
-   AccountNumber: string
-   RoutingNumber: string
-   Depository: string
-}
-
-type DomesticTransferServiceResponse = {
-   Sender: DomesticTransferServiceSender
-   Recipient: DomesticTransferServiceRecipient
-   Ok: bool
-   Status: string
-   Reason: string
-   TransactionId: string
-}
-
-type DomesticTransferRequest =
-   DomesticTransferServiceAction
-      -> DomesticTransfer
-      -> Task<Result<DomesticTransferServiceResponse, Err>>
-
-[<RequireQualifiedAccess>]
-type DomesticTransferMessage =
-   | TransferRequest of DomesticTransferServiceAction * DomesticTransfer

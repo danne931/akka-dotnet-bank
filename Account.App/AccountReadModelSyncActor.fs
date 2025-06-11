@@ -484,7 +484,7 @@ let sqlParamReducer
    | AccountEvent.DomesticTransferProgress e ->
       domesticTransferStatusReducer
          acc
-         (DomesticTransferProgress.InProgress e.Data.InProgressInfo)
+         (DomesticTransferProgress.ThirdParty e.Data.InProgressInfo)
          e.Data.BaseInfo
    | AccountEvent.DomesticTransferFailed e ->
       let acc =
@@ -495,9 +495,9 @@ let sqlParamReducer
 
       let updatedRecipientStatus =
          match e.Data.Reason with
-         | DomesticTransferFailReason.AccountClosed ->
+         | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountNotActive ->
             Some RecipientRegistrationStatus.Closed
-         | DomesticTransferFailReason.InvalidAccountInfo ->
+         | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo ->
             Some RecipientRegistrationStatus.InvalidAccount
          | _ -> None
 
@@ -525,7 +525,7 @@ let sqlParamReducer
             e.Data.BaseInfo
 
       match e.Data.FromRetry with
-      | Some DomesticTransferFailReason.InvalidAccountInfo ->
+      | Some(DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo) ->
          let qParams = [
             "recipientAccountId",
             TransferSqlWriter.DomesticRecipient.recipientAccountId

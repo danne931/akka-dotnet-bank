@@ -17,25 +17,36 @@ open Bank.Transfer.Domain
 open SignalRBroadcast
 open Lib.Types
 open DomesticTransferSaga
+open DomesticTransfer.Service.Domain
 
-type private FailReason = DomesticTransferFailReason
+type private Message = DomesticTransferServiceMessage
+
+type private NetworkRequest =
+   DomesticTransferServiceAction
+      -> DomesticTransfer
+      -> Task<Result<DomesticTransferServiceResponse, Err>>
+
+type private InfraFailReason = DomesticTransferInfraFailReason
+type private FailReason = DomesticTransferThirdPartyFailReason
 
 let private progressFromResponse (response: DomesticTransferServiceResponse) =
    match response.Status with
-   | "Complete" -> DomesticTransferServiceProgress.Settled
-   | "ReceivedRequest" -> DomesticTransferServiceProgress.InitialHandshakeAck
-   | status -> DomesticTransferServiceProgress.InProgress status
+   | "Complete" -> DomesticTransferThirdPartyUpdate.Settled
+   | "ReceivedRequest" -> DomesticTransferThirdPartyUpdate.ServiceAckReceived
+   | status -> DomesticTransferThirdPartyUpdate.ProgressDetail status
 
 let private failReasonFromError (err: string) : FailReason =
    match err with
-   | Contains "CorruptData" -> FailReason.CorruptData
-   | Contains "InvalidAction" -> FailReason.InvalidAction
+   | Contains "CorruptData" -> FailReason.Infra InfraFailReason.CorruptData
+   | Contains "InvalidAction" -> FailReason.Infra InfraFailReason.InvalidAction
    | Contains "InvalidAmount" -> FailReason.InvalidAmount
-   | Contains "InvalidAccountInfo" -> FailReason.InvalidAccountInfo
-   | Contains "InvalidPaymentNetwork" -> FailReason.InvalidPaymentNetwork
-   | Contains "InvalidDepository" -> FailReason.InvalidDepository
-   | Contains "InactiveAccount" -> FailReason.AccountClosed
-   | e -> FailReason.Unknown e
+   | Contains "InvalidAccountInfo" -> FailReason.RecipientAccountInvalidInfo
+   | Contains "InvalidPaymentNetwork" ->
+      FailReason.Infra InfraFailReason.InvalidPaymentNetwork
+   | Contains "InvalidDepository" ->
+      FailReason.Infra InfraFailReason.RecipientAccountInvalidDepository
+   | Contains "InactiveAccount" -> FailReason.RecipientAccountInvalidInfo
+   | e -> FailReason.Infra(InfraFailReason.Unknown e)
 
 let private networkSender
    (sender: DomesticTransferSender)
@@ -77,7 +88,7 @@ let onSuccessfulServiceResponse
       else
          res.Reason
          |> failReasonFromError
-         |> DomesticTransferServiceProgress.Failed
+         |> DomesticTransferThirdPartyUpdate.Failed
 
    let msg =
       DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress
@@ -86,14 +97,14 @@ let onSuccessfulServiceResponse
    txnSagaRef <! msg
 
 let protectedAction
-   (networkRequest: DomesticTransferRequest)
+   (networkRequest: NetworkRequest)
    (mailbox: Actor<_>)
-   (msg: DomesticTransferMessage)
+   (msg: Message)
    : TaskResult<DomesticTransferServiceResponse, Err>
    =
    task {
       match msg with
-      | DomesticTransferMessage.TransferRequest(action, txn) ->
+      | Message.TransferRequest(action, txn) ->
          let! result = networkRequest action txn
 
          return
@@ -122,14 +133,14 @@ let actorProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (networkRequest: DomesticTransferRequest)
+   (networkRequest: NetworkRequest)
    (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
       : Lib.Queue.QueueConsumerOptions<
-           DomesticTransferMessage,
-           DomesticTransferMessage,
+           DomesticTransferServiceMessage,
+           DomesticTransferServiceMessage,
            DomesticTransferServiceResponse
          > = {
       Service = CircuitBreakerService.DomesticTransfer
@@ -141,7 +152,7 @@ let actorProps
          Flow.map
             (fun (mailbox, queueMessage, transferResponse) ->
                match queueMessage with
-               | DomesticTransferMessage.TransferRequest(action, txn) ->
+               | Message.TransferRequest(action, txn) ->
                   onSuccessfulServiceResponse getSagaRef txn transferResponse
 
                   transferResponse)
@@ -205,7 +216,7 @@ let initProps
       networkRequestToTransferProcessor
       getSagaRef
 
-let getProducer (system: ActorSystem) : IActorRef<DomesticTransferMessage> =
+let getProducer (system: ActorSystem) : IActorRef<Message> =
    Akka.Hosting.ActorRegistry
       .For(system)
       .Get<ActorUtil.ActorMetadata.DomesticTransferProducerMarker>()

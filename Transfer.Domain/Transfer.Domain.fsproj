@@ -11,6 +11,7 @@
     <Compile Include="Payment.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />
+    <Compile Include="DomesticTransferService.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -11,8 +11,8 @@ open Akkling
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Bank.Transfer.Domain
 open Bank.Infrastructure
+open DomesticTransfer.Service.Domain
 open ActorUtil
 open SignalRBroadcast
 
@@ -392,7 +392,7 @@ builder.Services.AddAkka(
             // which will enqueue the message into RabbitMq for the
             // DomesticTransferService Singleton Actor to process.
             registry.Register<ActorMetadata.DomesticTransferProducerMarker>(
-               Lib.Queue.startProducer<DomesticTransferMessage>
+               Lib.Queue.startProducer<DomesticTransferServiceMessage>
                   system
                   (getQueueConnection provider)
                   EnvTransfer.config.Queue

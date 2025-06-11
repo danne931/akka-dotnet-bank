@@ -12,7 +12,7 @@ open Akkling.Cluster.Sharding
 open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Account.Domain
-open Bank.Transfer.Domain
+open DomesticTransfer.Service.Domain
 open BillingStatement
 open Lib.SharedTypes
 open CommandApproval
@@ -184,7 +184,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? CircuitBreakerEvent -> "CircuitBreakerEvent"
       | :? CircuitBreakerMessage -> "CircuitBreakerActorMessage"
       | :? BillingCycleMessage -> "BillingCycleActorMessage"
-      | :? DomesticTransferMessage -> "DomesticTransferActorMessage"
+      | :? DomesticTransferServiceMessage -> "DomesticTransferActorMessage"
       | :? AutomaticTransfer.Message -> "AutomaticTransferActorMessage"
       | :? ShardEnvelope as e ->
          match e.Message with
@@ -237,7 +237,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // Messages from SchedulingActor to AutomaticTransferSchedulingActor
       | :? AutomaticTransfer.Message
       // Ack/ProgressCheck messages from saga to to DomesticTransferActor
-      | :? DomesticTransferMessage
+      | :? DomesticTransferServiceMessage
       // Messages from sharded account nodes to AccountClosureActor cluster
       // singleton. Also for messages from SchedulingActor to Account Closure Proxy
       | :? AccountClosureMessage
@@ -359,8 +359,9 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "CircuitBreakerActorState" -> typeof<CircuitBreakerActorState>
          | "BillingCycleActorMessage" -> typeof<BillingCycleMessage>
          | "AutomaticTransferActorMessage" -> typeof<AutomaticTransfer.Message>
-         | "Bank.Transfer.Domain.DomesticTransferMessage, Transfer.Domain"
-         | "DomesticTransferActorMessage" -> typeof<DomesticTransferMessage>
+         | "DomesticTransfer.Service.Domain+DomesticTransferServiceMessage, Transfer.Domain"
+         | "DomesticTransferActorMessage" ->
+            typeof<DomesticTransferServiceMessage>
          | "AccountClosureActorMessage" -> typeof<AccountClosureMessage>
          | "SchedulerMessage" -> typeof<SchedulerMessage>
          | "AccountSeederMessage" -> typeof<AccountSeederMessage>

@@ -175,7 +175,8 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       | AccountEvent.DomesticTransferCompleted e ->
          let previouslyFailedDueToInvalidRecipient =
             match e.Data.FromRetry with
-            | Some DomesticTransferFailReason.InvalidAccountInfo -> true
+            | Some(DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo) ->
+               true
             | _ -> false
 
          {
@@ -195,9 +196,9 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       | AccountEvent.DomesticTransferFailed e ->
          let updateStatusDueToRecipientRelatedFailure =
             match e.Data.Reason with
-            | DomesticTransferFailReason.InvalidAccountInfo ->
+            | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo ->
                Some RecipientRegistrationStatus.InvalidAccount
-            | DomesticTransferFailReason.AccountClosed ->
+            | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountNotActive ->
                Some RecipientRegistrationStatus.Closed
             | _ -> None
 

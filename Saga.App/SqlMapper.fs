@@ -116,7 +116,7 @@ module Writer =
             | DomesticTransferProgress.Scheduled -> "Scheduled"
             | DomesticTransferProgress.ProcessingSenderAccountDeduction
             | DomesticTransferProgress.WaitingForTransferServiceAck
-            | DomesticTransferProgress.InProgress _ -> inProgressOrExhausted
+            | DomesticTransferProgress.ThirdParty _ -> inProgressOrExhausted
             | DomesticTransferProgress.Completed -> "Completed"
             | DomesticTransferProgress.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.PlatformTransfer s ->

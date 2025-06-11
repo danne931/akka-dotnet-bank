@@ -148,7 +148,8 @@ let getDomesticTransfersRetryableUponRecipientCorrection
       let! transfers = getFailedDomesticTransfersByRecipient recipientAccountId
 
       let retryableStatus =
-         DomesticTransferFailReason.InvalidAccountInfo
+         DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo
+         |> DomesticTransferFailReason.ThirdParty
          |> DomesticTransferProgress.Failed
 
       return transfers |> List.filter (fun t -> t.Status = retryableStatus)

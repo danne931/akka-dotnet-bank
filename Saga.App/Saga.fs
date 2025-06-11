@@ -25,6 +25,9 @@ open CardSetupSaga
 open Bank.Scheduler
 open BillingSaga
 
+type private DomesticTransferMessage =
+   DomesticTransfer.Service.Domain.DomesticTransferServiceMessage
+
 [<RequireQualifiedAccess>]
 type StartEvent =
    | OrgOnboarding of OrgOnboardingSagaStartEvent

@@ -40,9 +40,9 @@ type DomesticTransferPending = {
    BaseInfo: BaseDomesticTransferInfo
 }
 
-type DomesticTransferProgressUpdate = {
+type DomesticTransferProgressUpdated = {
    BaseInfo: BaseDomesticTransferInfo
-   InProgressInfo: DomesticTransferServiceProgress
+   InProgressInfo: DomesticTransferThirdPartyUpdate
 }
 
 type DomesticTransferCompleted = {

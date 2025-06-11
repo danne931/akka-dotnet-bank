@@ -542,13 +542,13 @@ module FailDomesticTransferCommand =
       BankEvent.create<DomesticTransferFailed> cmd |> Ok
 
 type UpdateDomesticTransferProgressCommand =
-   Command<DomesticTransferProgressUpdate>
+   Command<DomesticTransferProgressUpdated>
 
 module UpdateDomesticTransferProgressCommand =
    let create
       correlationId
       (initiatedBy: Initiator)
-      (data: DomesticTransferProgressUpdate)
+      (data: DomesticTransferProgressUpdated)
       =
       Command.create
          (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
@@ -559,9 +559,9 @@ module UpdateDomesticTransferProgressCommand =
 
    let toEvent
       (cmd: UpdateDomesticTransferProgressCommand)
-      : ValidationResult<BankEvent<DomesticTransferProgressUpdate>>
+      : ValidationResult<BankEvent<DomesticTransferProgressUpdated>>
       =
-      BankEvent.create<DomesticTransferProgressUpdate> cmd |> Ok
+      BankEvent.create<DomesticTransferProgressUpdated> cmd |> Ok
 
 type PlatformPaymentRequestInput = {
    BaseInfo: PlatformPaymentBaseInfo

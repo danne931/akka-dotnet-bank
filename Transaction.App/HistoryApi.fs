@@ -89,7 +89,7 @@ let accountEventFilterNames
               typeof<DomesticTransferPending>.Name
               typeof<DomesticTransferCompleted>.Name
               typeof<DomesticTransferFailed>.Name
-              typeof<DomesticTransferProgressUpdate>.Name
+              typeof<DomesticTransferProgressUpdated>.Name
              ]
            | AccountEventGroupFilter.PlatformPayment -> [
               typeof<PlatformPaymentRequested>.Name

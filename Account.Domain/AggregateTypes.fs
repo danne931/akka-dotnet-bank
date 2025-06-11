@@ -176,7 +176,7 @@ type AccountEvent =
       BankEvent<InternalTransferBetweenOrgsDeposited>
    | DomesticTransferScheduled of BankEvent<DomesticTransferScheduled>
    | DomesticTransferPending of BankEvent<DomesticTransferPending>
-   | DomesticTransferProgress of BankEvent<DomesticTransferProgressUpdate>
+   | DomesticTransferProgress of BankEvent<DomesticTransferProgressUpdated>
    | DomesticTransferCompleted of BankEvent<DomesticTransferCompleted>
    | DomesticTransferFailed of BankEvent<DomesticTransferFailed>
    | PlatformPaymentRequested of BankEvent<PlatformPaymentRequested>
@@ -364,7 +364,7 @@ module AccountEnvelope =
          DomesticTransferScheduled evt
       | :? BankEvent<DomesticTransferPending> as evt ->
          DomesticTransferPending evt
-      | :? BankEvent<DomesticTransferProgressUpdate> as evt ->
+      | :? BankEvent<DomesticTransferProgressUpdated> as evt ->
          DomesticTransferProgress evt
       | :? BankEvent<DomesticTransferCompleted> as evt ->
          DomesticTransferCompleted evt
