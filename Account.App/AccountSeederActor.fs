@@ -474,7 +474,7 @@ let mockAccounts =
          Depository = AccountDepository.Checking
          ParentAccountId = parentAccountId
          AccountId = apCheckingAccountId
-         AccountNumber = AccountNumber.generate ()
+         AccountNumber = AccountNumber.generate () |> string
          OrgId = orgId
          InitiatedBy = mockAccountOwner
       }
@@ -487,7 +487,7 @@ let mockAccounts =
          Depository = AccountDepository.Checking
          ParentAccountId = parentAccountId
          AccountId = arCheckingAccountId
-         AccountNumber = AccountNumber.generate ()
+         AccountNumber = AccountNumber.generate () |> string
          OrgId = orgId
          InitiatedBy = mockAccountOwner
       }
@@ -500,7 +500,7 @@ let mockAccounts =
          Depository = AccountDepository.Checking
          ParentAccountId = parentAccountId
          AccountId = myOrg.OpsAccountId
-         AccountNumber = AccountNumber.generate ()
+         AccountNumber = AccountNumber.generate () |> string
          OrgId = orgId
          InitiatedBy = mockAccountOwner
       }
@@ -513,7 +513,7 @@ let mockAccounts =
          Depository = AccountDepository.Savings
          ParentAccountId = parentAccountId
          AccountId = myOrg.SavingsAccountId
-         AccountNumber = AccountNumber.generate ()
+         AccountNumber = AccountNumber.generate () |> string
          OrgId = orgId
          InitiatedBy = mockAccountOwner
       }
@@ -532,7 +532,7 @@ let mockAccounts =
                   Depository = AccountDepository.Checking
                   ParentAccountId = o.ParentAccountId
                   AccountId = o.PrimaryAccountId
-                  AccountNumber = AccountNumber.generate ()
+                  AccountNumber = AccountNumber.generate () |> string
                   OrgId = o.OrgId
                   InitiatedBy = mockAccountOwner
                }
@@ -545,7 +545,7 @@ let mockAccounts =
                   Depository = AccountDepository.Checking
                   ParentAccountId = o.ParentAccountId
                   AccountId = o.OpsAccountId
-                  AccountNumber = AccountNumber.generate ()
+                  AccountNumber = AccountNumber.generate () |> string
                   OrgId = o.OrgId
                   InitiatedBy = {
                      Id = InitiatedById o.AccountOwnerId
@@ -562,7 +562,7 @@ let mockAccounts =
                   Depository = AccountDepository.Savings
                   ParentAccountId = o.ParentAccountId
                   AccountId = o.SavingsAccountId
-                  AccountNumber = AccountNumber.generate ()
+                  AccountNumber = AccountNumber.generate () |> string
                   OrgId = o.OrgId
                   InitiatedBy = {
                      Id = InitiatedById o.AccountOwnerId
@@ -1073,7 +1073,7 @@ let seedAccountOwnerActions
          |}
          FirstName = "Microsoft"
          LastName = "Azure"
-         AccountNumber = AccountNumber.generate ()
+         AccountNumber = AccountNumber.generate () |> string
          RoutingNumber = "123456789"
          Depository = DomesticRecipientAccountDepository.Checking
          PaymentNetwork = PaymentNetwork.ACH

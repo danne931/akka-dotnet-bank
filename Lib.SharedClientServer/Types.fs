@@ -502,10 +502,15 @@ type AccountNumber =
       >=> Check.String.betweenLen 6 15 *|* (Int64.Parse >> AccountNumber)
 
    // TODO: Remove this & provide a workflow to check account numbers against DB
-   static member generate() : string =
+   static member generate() : AccountNumber =
       let random = System.Random()
 
-      List.init 15 (fun _ -> random.Next(1, 9) |> string) |> String.concat ""
+      List.init 15 (fun _ -> random.Next(1, 9) |> string)
+      |> String.concat ""
+      |> int64
+      |> AccountNumber
+
+   static member Empty = AccountNumber 1234567
 
 type RoutingNumber =
    | RoutingNumber of int
@@ -517,6 +522,11 @@ type RoutingNumber =
    static member fromString: Validator<string, RoutingNumber> =
       Lib.Validators.parseInt *|* string
       >=> Check.String.equalsLen 9 *|* (Int32.Parse >> RoutingNumber)
+
+   static member Empty = RoutingNumber 123456789
+
+type ParentAccountNumber = ParentAccountNumber of AccountNumber
+type ParentRoutingNumber = ParentRoutingNumber of RoutingNumber
 
 type Email = private {
    Email: string

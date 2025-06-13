@@ -62,15 +62,15 @@ let actorProps
                let txnSagaRef = getSagaRef corrId
 
                match queueMessage, response with
-               | PartnerBankServiceMessage.LinkAccount request,
+               | PartnerBankServiceMessage.LinkAccount req,
                  PartnerBankResponse.LinkAccount res ->
                   let msg =
-                     Ok(res.AccountNumber, res.RoutingNumber)
+                     Ok res.PartnerBankAccountReference
                      |> OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse
                      |> AppSaga.Message.orgOnboard orgId corrId
 
                   txnSagaRef <! msg
-               | PartnerBankServiceMessage.Purchase request,
+               | PartnerBankServiceMessage.Purchase req,
                  PartnerBankResponse.Purchase res ->
                   let msg =
                      Ok ""
@@ -117,12 +117,12 @@ let private networkRequestToPartnerBankService
 
          return
             PartnerBankResponse.LinkAccount {
-               AccountNumber =
-                  AccountNumber.generate ()
-                  |> AccountNumber.fromString ""
-                  |> Result.toOption
-                  |> _.Value
-               RoutingNumber = RoutingNumber 123456789
+               Accepted = true
+               PartnerBankAccountReference = {
+                  AccountNumber =
+                     ParentAccountNumber <| AccountNumber.generate ()
+                  RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
+               }
             }
       | PartnerBankServiceMessage.TransferBetweenOrganizations req ->
          // TODO: HTTP to partner bank to sync a transfer between

@@ -10,8 +10,8 @@ type InitializePrimaryCheckingAccountInput = {
    OrgId: OrgId
    CorrelationId: CorrelationId
    ParentAccountId: ParentAccountId
-   PartnerBankAccountNumber: AccountNumber
-   PartnerBankRoutingNumber: RoutingNumber
+   PartnerBankAccountNumber: ParentAccountNumber
+   PartnerBankRoutingNumber: ParentRoutingNumber
 }
 
 type InitializePrimaryCheckingAccountCommand =
@@ -33,10 +33,6 @@ module InitializePrimaryCheckingAccountCommand =
       validate {
          let input = cmd.Data
 
-         let! checkingAccountNumber =
-            AccountNumber.generate ()
-            |> AccountNumber.fromString "Checking Account Number"
-
          return
             BankEvent.create2<
                InitializePrimaryCheckingAccountInput,
@@ -51,8 +47,8 @@ module InitializePrimaryCheckingAccountCommand =
                   PrimaryChecking = {
                      Name = "Checking"
                      AccountId = Guid.NewGuid() |> AccountId
-                     AccountNumber = checkingAccountNumber
-                     RoutingNumber = input.PartnerBankRoutingNumber
+                     AccountNumber = AccountNumber.generate ()
+                     RoutingNumber = RoutingNumber.Empty
                   }
                }
       }

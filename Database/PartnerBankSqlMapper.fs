@@ -25,10 +25,10 @@ module SqlReader =
       Fields.parentAccountId |> read.uuid |> ParentAccountId
 
    let accountNumber (read: RowReader) =
-      read.int64 Fields.accountNumber |> AccountNumber
+      read.int64 Fields.accountNumber |> AccountNumber |> ParentAccountNumber
 
    let routingNumber (read: RowReader) =
-      read.int Fields.routingNumber |> RoutingNumber
+      read.int Fields.routingNumber |> RoutingNumber |> ParentRoutingNumber
 
    let lastBillingCycleDate (read: RowReader) =
       read.dateTimeOrNone Fields.lastBillingCycleDate
@@ -41,9 +41,9 @@ module SqlWriter =
 
    let parentAccountId (ParentAccountId id) = Sql.uuid id
 
-   let accountNumber (AccountNumber num) = Sql.int64 num
+   let accountNumber (ParentAccountNumber(AccountNumber num)) = Sql.int64 num
 
-   let routingNumber (RoutingNumber num) = Sql.int num
+   let routingNumber (ParentRoutingNumber(RoutingNumber num)) = Sql.int num
 
    let lastBillingCycleDate (date: DateTime option) = Sql.timestamptzOrNone date
 

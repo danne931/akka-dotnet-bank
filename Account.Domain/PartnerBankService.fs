@@ -32,8 +32,8 @@ type PartnerBankMetadata = {
 }
 
 type PartnerBankAccountReference = {
-   AccountNumber: AccountNumber
-   RoutingNumber: RoutingNumber
+   AccountNumber: ParentAccountNumber
+   RoutingNumber: ParentRoutingNumber
 }
 
 type PartnerBankAccountLinking = {
@@ -74,8 +74,8 @@ type PartnerBankServiceMessage =
       | Purchase req -> req.Metadata
 
 type AccountLinkResponse = {
-   AccountNumber: AccountNumber
-   RoutingNumber: RoutingNumber
+   Accepted: bool
+   PartnerBankAccountReference: PartnerBankAccountReference
 }
 
 type PartnerBankSyncTransferBetweenOrgsResponse = { ConfirmationId: Guid }

@@ -460,8 +460,8 @@ let onEventPersisted
          Amount = purchaseInfo.Amount
          // TODO: get from parent account
          Account = {
-            AccountNumber = AccountNumber 3
-            RoutingNumber = RoutingNumber 1
+            AccountNumber = ParentAccountNumber AccountNumber.Empty
+            RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
          }
          Metadata = {
             OrgId = purchaseInfo.OrgId

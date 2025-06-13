@@ -67,7 +67,7 @@ let private form
          CreateVirtualAccountCommand.create {
             Name = name
             Depository = depository
-            AccountNumber = AccountNumber.generate ()
+            AccountNumber = AccountNumber.generate () |> string
             OrgId = session.OrgId
             ParentAccountId = org.ParentAccountId
             AccountId = Guid.NewGuid() |> AccountId

@@ -499,14 +499,16 @@ type Account = {
       Currency = Currency.USD
       Status = AccountStatus.InitialEmptyState
       Balance = 0m
-      AccountNumber = AccountNumber <| Int64.Parse "123456789123456"
-      RoutingNumber = RoutingNumber 123456789
+      AccountNumber = AccountNumber.Empty
+      RoutingNumber = RoutingNumber.Empty
       AutoTransferRule = None
    }
 
 type ParentAccountSnapshot = {
    OrgId: OrgId
    ParentAccountId: ParentAccountId
+   AccountNumber: ParentAccountNumber
+   RoutingNumber: ParentRoutingNumber
    PrimaryVirtualAccountId: AccountId
    VirtualAccounts: Map<AccountId, Account>
    LastBillingCycleDate: DateTime option
@@ -519,6 +521,8 @@ type ParentAccountSnapshot = {
    static member empty: ParentAccountSnapshot = {
       OrgId = OrgId Guid.Empty
       ParentAccountId = ParentAccountId Guid.Empty
+      AccountNumber = ParentAccountNumber AccountNumber.Empty
+      RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
       PrimaryVirtualAccountId = AccountId Guid.Empty
       VirtualAccounts = Map.empty
       LastBillingCycleDate = None

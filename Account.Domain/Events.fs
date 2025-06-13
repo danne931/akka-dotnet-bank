@@ -15,8 +15,8 @@ type PrimaryCheckingAccountInfo = {
 type InitializedPrimaryCheckingAccount = {
    OrgId: OrgId
    ParentAccountId: ParentAccountId
-   PartnerBankRoutingNumber: RoutingNumber
-   PartnerBankAccountNumber: AccountNumber
+   PartnerBankRoutingNumber: ParentRoutingNumber
+   PartnerBankAccountNumber: ParentAccountNumber
    PrimaryChecking: PrimaryCheckingAccountInfo
 }
 

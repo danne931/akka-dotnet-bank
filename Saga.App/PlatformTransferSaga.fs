@@ -436,12 +436,12 @@ let onEventPersisted
          Amount = transfer.Amount
          // TODO: get from parent account
          From = {
-            AccountNumber = AccountNumber 3
-            RoutingNumber = RoutingNumber 1
+            AccountNumber = ParentAccountNumber AccountNumber.Empty
+            RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
          }
          To = {
-            AccountNumber = AccountNumber 3
-            RoutingNumber = RoutingNumber 1
+            AccountNumber = ParentAccountNumber AccountNumber.Empty
+            RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
          }
          Metadata = {
             OrgId = transfer.Sender.OrgId

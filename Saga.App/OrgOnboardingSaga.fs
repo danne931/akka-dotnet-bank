@@ -28,7 +28,7 @@ type OrgOnboardingSagaEvent =
    | KYCResponse of Result<unit, OrgOnboardingVerificationError>
    | ReceivedInfoFixDemandedByKYCService of OrgOnboardingApplicationSubmitted
    | LinkAccountToPartnerBankResponse of
-      Result<AccountNumber * RoutingNumber, string>
+      Result<PartnerBankAccountReference, string>
    | InitializedPrimaryVirtualAccount
    | OrgActivated
    | ApplicationAcceptedNotificationSent
@@ -445,7 +445,7 @@ let onEventPersisted
          }
       }
 
-   let initializeVirtualAccount (accountNumber, routingNumber) =
+   let initializeVirtualAccount partnerBankAccount =
       let parentAccountId = application.ParentAccountId
 
       let msg =
@@ -453,8 +453,8 @@ let onEventPersisted
             OrgId = orgId
             CorrelationId = corrId
             ParentAccountId = parentAccountId
-            PartnerBankAccountNumber = accountNumber
-            PartnerBankRoutingNumber = routingNumber
+            PartnerBankAccountNumber = partnerBankAccount.AccountNumber
+            PartnerBankRoutingNumber = partnerBankAccount.RoutingNumber
          }
          |> AccountCommand.InitializePrimaryCheckingAccount
          |> AccountMessage.StateChange
