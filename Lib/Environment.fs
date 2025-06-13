@@ -191,6 +191,15 @@ type private BankConfigInput = {
    QueueConsumerStreamBackoffRestart: StreamBackoffRestartSettingsInput
    SleepingSagaThrottle: StreamThrottleInput
    SagaPassivateIdleEntityAfter: TimeSpan option
+   PartnerBankServiceCircuitBreaker: {|
+      MaxFailures: int option
+      CallTimeoutSeconds: int option
+      ResetTimeoutSeconds: int option
+   |}
+   PartnerBankServiceQueue: {|
+      Name: string option
+      MaxParallelism: int option
+   |}
 }
 
 type BankConfig = {
@@ -217,6 +226,9 @@ type BankConfig = {
    QueueConsumerStreamBackoffRestart: Akka.Streams.RestartSettings
    SleepingSagaThrottle: StreamThrottle
    SagaPassivateIdleEntityAfter: TimeSpan
+   PartnerBankServiceCircuitBreaker:
+      Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
+   PartnerBankServiceQueue: QueueSettings
 }
 
 let config =
@@ -327,6 +339,29 @@ let config =
          SagaPassivateIdleEntityAfter =
             input.SagaPassivateIdleEntityAfter
             |> Option.defaultValue (TimeSpan.FromMinutes 2)
+         PartnerBankServiceCircuitBreaker =
+            fun system ->
+               Akka.Pattern.CircuitBreaker(
+                  system.Scheduler,
+                  input.PartnerBankServiceCircuitBreaker.MaxFailures
+                  |> Option.defaultValue 2,
+
+                  input.PartnerBankServiceCircuitBreaker.CallTimeoutSeconds
+                  |> Option.defaultValue 7
+                  |> TimeSpan.FromSeconds,
+
+                  input.PartnerBankServiceCircuitBreaker.ResetTimeoutSeconds
+                  |> Option.defaultValue 20
+                  |> TimeSpan.FromSeconds
+               )
+         PartnerBankServiceQueue = {
+            Name =
+               input.PartnerBankServiceQueue.Name
+               |> Option.defaultValue "partner-bank"
+            MaxParallelism =
+               input.PartnerBankServiceQueue.MaxParallelism
+               |> Option.defaultValue 10
+         }
       }
    | Error err ->
       match err with

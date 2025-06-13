@@ -16,6 +16,7 @@ type State = {
    DomesticTransfer: ServiceHealth
    Email: ServiceHealth
    KnowYourCustomer: ServiceHealth
+   PartnerBank: ServiceHealth
 }
 
 let init () =
@@ -23,6 +24,7 @@ let init () =
       DomesticTransfer = ServiceHealth.Good
       Email = ServiceHealth.Good
       KnowYourCustomer = ServiceHealth.Good
+      PartnerBank = ServiceHealth.Good
    },
    Cmd.ofMsg <| Load Started
 
@@ -59,8 +61,27 @@ let update msg (state: State) =
             state with
                KnowYourCustomer = health
            }
+         | CircuitBreakerService.PartnerBank -> {
+            state with
+               PartnerBank = health
+           }
 
       state, Cmd.none
+
+let renderServiceHealth (name: string) (health: ServiceHealth) =
+   Html.span [
+      attr.classes [ "system-op" ]
+      attr.children [
+         Html.text $"{name}: "
+
+         Html.span [
+            attr.classes [
+               if health = ServiceHealth.Good then "success" else "alert"
+            ]
+            attr.text (string health)
+         ]
+      ]
+   ]
 
 [<ReactComponent>]
 let ServiceHealthComponent () =
@@ -88,56 +109,10 @@ let ServiceHealthComponent () =
                attr.text "Service Health"
             ]
 
-            Html.span [
-               attr.classes [ "system-op" ]
-               attr.children [
-                  Html.text "Domestic Transfer: "
-
-                  Html.span [
-                     attr.classes [
-                        if state.DomesticTransfer = ServiceHealth.Good then
-                           "success"
-                        else
-                           "alert"
-                     ]
-                     attr.text (string state.DomesticTransfer)
-                  ]
-               ]
-            ]
-
-            Html.span [
-               attr.classes [ "system-op" ]
-               attr.children [
-                  Html.text "Email: "
-
-                  Html.span [
-                     attr.classes [
-                        if state.Email = ServiceHealth.Good then
-                           "success"
-                        else
-                           "alert"
-                     ]
-                     attr.text (string state.Email)
-                  ]
-               ]
-            ]
-
-            Html.span [
-               attr.classes [ "system-op" ]
-               attr.children [
-                  Html.text "Know Your Customer: "
-
-                  Html.span [
-                     attr.classes [
-                        if state.KnowYourCustomer = ServiceHealth.Good then
-                           "success"
-                        else
-                           "alert"
-                     ]
-                     attr.text (string state.KnowYourCustomer)
-                  ]
-               ]
-            ]
+            renderServiceHealth "Domestic Transfer" state.DomesticTransfer
+            renderServiceHealth "Email" state.Email
+            renderServiceHealth "Know Your Customer" state.KnowYourCustomer
+            renderServiceHealth "Partner Bank" state.PartnerBank
          ]
       ]
    ]

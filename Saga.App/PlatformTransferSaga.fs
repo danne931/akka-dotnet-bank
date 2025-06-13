@@ -10,6 +10,7 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Email
 open Bank.Scheduler
+open PartnerBank.Service.Domain
 
 [<RequireQualifiedAccess>]
 type PlatformTransferSagaStatus =
@@ -344,8 +345,7 @@ type PersistenceHandlerDependencies = {
    getSchedulingRef: unit -> IActorRef<SchedulerMessage>
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
-   syncToPartnerBank: BaseInternalTransferInfo -> Async<TransferEvent>
-   sendMessageToSelf: BaseInternalTransferInfo -> Async<TransferEvent> -> unit
+   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
 }
 
 let private depositTransfer
@@ -431,7 +431,24 @@ let onEventPersisted
       dep.getEmailRef () <! msg
 
    let syncToPartnerBank () =
-      dep.sendMessageToSelf transfer (dep.syncToPartnerBank transfer)
+      dep.getPartnerBankServiceRef ()
+      <! PartnerBankServiceMessage.TransferBetweenOrganizations {
+         Amount = transfer.Amount
+         // TODO: get from parent account
+         From = {
+            AccountNumber = AccountNumber 3
+            RoutingNumber = RoutingNumber 1
+         }
+         To = {
+            AccountNumber = AccountNumber 3
+            RoutingNumber = RoutingNumber 1
+         }
+         Metadata = {
+            OrgId = transfer.Sender.OrgId
+            CorrelationId = correlationId
+         }
+         ReplyTo = TransferSagaReplyTo.PlatformTransfer
+      }
 
    match evt with
    | TransferEvent.ScheduledJobCreated -> ()
@@ -515,10 +532,3 @@ let onEventPersisted
          | Activity.UndoRecipientDeposit
          | Activity.WaitForScheduledTransferExecution
          | Activity.WaitForSupportTeamToResolvePartnerBankSync -> ()
-
-let syncTransferToPartnerBank (info: BaseInternalTransferInfo) = async {
-   // HTTP to partner bank
-   do! Async.Sleep(1000)
-
-   return Ok "transfer response" |> TransferEvent.PartnerBankSyncResponse
-}

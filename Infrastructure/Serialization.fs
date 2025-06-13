@@ -13,6 +13,7 @@ open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Account.Domain
 open DomesticTransfer.Service.Domain
+open PartnerBank.Service.Domain
 open BillingStatement
 open Lib.SharedTypes
 open Lib.CircuitBreaker
@@ -157,6 +158,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | OrgMessage.Event _ -> "OrgEvent"
          | _ -> "OrgMessage"
       | :? KYCMessage -> "KYCMessage"
+      | :? PartnerBankServiceMessage -> "PartnerBankServiceMessage"
       | :? EmployeeSnapshot -> "EmployeeSnapshot"
       | :? Option<Employee> -> "EmployeeOption"
       | :? EmployeeMessage as msg ->
@@ -298,6 +300,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? CommandApprovalDailyAccrual
       // KnowYourCustomer third party api message serialized for RabbitMq
       | :? KYCMessage
+      // Partner bank third party api message serialized for RabbitMq
+      | :? PartnerBankServiceMessage
       // OrgMessage.GetOrg response serialized for message sent
       // from org cluster nodes to Web node.
       | :? Option<Org>
@@ -339,8 +343,11 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "OrgEvent" -> typeof<OrgEvent>
          | "OrgMessage" -> typeof<OrgMessage>
          | "OrgShardEnvelope" -> typeof<OrgShardEnvelope>
-         | "KYCMessage" -> typeof<KYCMessage>
+         | "KYCMessage"
          | "Bank.Org.Domain.KYCMessage, Org.Domain" -> typeof<KYCMessage>
+         | "PartnerBankServiceMessage"
+         | "PartnerBank.Service.Domain+PartnerBankServiceMessage, Account.Domain" ->
+            typeof<PartnerBankServiceMessage>
          | "EmployeeSnapshot" -> typeof<EmployeeSnapshot>
          | "EmployeeOption" -> typeof<Employee option>
          | "EmployeeEvent" -> typeof<EmployeeEvent>

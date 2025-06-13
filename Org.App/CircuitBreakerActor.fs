@@ -24,6 +24,10 @@ let private apply (state: CircuitBreakerState) (evt: CircuitBreakerEvent) =
       state with
          KnowYourCustomer = evt.Status
      }
+   | CircuitBreakerService.PartnerBank -> {
+      state with
+         PartnerBank = evt.Status
+     }
 
 let actorProps () =
    let handler (mailbox: Eventsourced<obj>) =
@@ -65,6 +69,12 @@ let actorProps () =
                               KnowYourCustomer = evt.Status
                         }
                         <@> persistAsync evt
+                  | CircuitBreakerService.PartnerBank ->
+                     if evt.Status = state.PartnerBank then
+                        ignored ()
+                     else
+                        loop { state with PartnerBank = evt.Status }
+                        <@> persistAsync evt
             | Persisted mailbox _ -> ignored ()
             | msg ->
                PersistentActorEventHandler.handleEvent
@@ -77,6 +87,7 @@ let actorProps () =
          DomesticTransfer = CircuitBreakerStatus.Closed
          Email = CircuitBreakerStatus.Closed
          KnowYourCustomer = CircuitBreakerStatus.Closed
+         PartnerBank = CircuitBreakerStatus.Closed
       }
 
    propsPersist handler

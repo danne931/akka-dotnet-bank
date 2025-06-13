@@ -10,6 +10,7 @@ open Bank.Employee.Domain
 open Bank.Org.Domain
 open Email
 open Lib.Saga
+open PartnerBank.Service.Domain
 
 [<RequireQualifiedAccess>]
 type OrgOnboardingSagaStatus =
@@ -333,11 +334,8 @@ type PersistenceHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getOrgRef: OrgId -> IEntityRef<OrgMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
-   getOrgVerificationRef: unit -> IActorRef<KYCMessage>
-   linkAccountToPartnerBank:
-      OrgOnboardingApplicationSubmitted -> Async<OrgOnboardingSagaEvent>
-   sendMessageToSelf:
-      OrgId -> CorrelationId -> Async<OrgOnboardingSagaEvent> -> unit
+   getKYCServiceRef: unit -> IActorRef<KYCMessage>
+   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
 }
 
 // Org onboarding saga is started by a submitted application
@@ -362,7 +360,7 @@ let onStartEventPersisted
 
       dep.getEmailRef () <! emailMsg
 
-      dep.getOrgVerificationRef ()
+      dep.getKYCServiceRef ()
       <! KYCMessage.VerifyApplication {
          OrgId = evt.OrgId
          CorrelationId = evt.CorrelationId
@@ -376,11 +374,13 @@ let onEventPersisted
    (evt: OrgOnboardingSagaEvent)
    =
    let application = updatedState.Application
+   let orgId = updatedState.OrgId
+   let corrId = updatedState.CorrelationId
 
    let sendApplicationAcceptedEmail () =
       let emailMsg = {
-         OrgId = updatedState.OrgId
-         CorrelationId = updatedState.CorrelationId
+         OrgId = orgId
+         CorrelationId = corrId
          Info =
             EmailInfo.OrgOnboardingApplicationAccepted {
                Email = application.AdminTeamEmail
@@ -394,8 +394,8 @@ let onEventPersisted
       (reason: OrgOnboardingApplicationRejectedReason)
       =
       let emailMsg = {
-         OrgId = updatedState.OrgId
-         CorrelationId = updatedState.CorrelationId
+         OrgId = orgId
+         CorrelationId = corrId
          Info =
             EmailInfo.OrgOnboardingApplicationRejected {
                Info = {
@@ -412,8 +412,8 @@ let onEventPersisted
       (reason: OrgOnboardingApplicationRequiresUpdateInfo)
       =
       let emailMsg = {
-         OrgId = updatedState.OrgId
-         CorrelationId = updatedState.CorrelationId
+         OrgId = orgId
+         CorrelationId = corrId
          Info =
             EmailInfo.OrgOnboardingApplicationRequiresRevision {
                Info = {
@@ -427,26 +427,31 @@ let onEventPersisted
       dep.getEmailRef () <! emailMsg
 
    let verifyOrg () =
-      dep.getOrgVerificationRef ()
+      dep.getKYCServiceRef ()
       <! KYCMessage.VerifyApplication {
-         OrgId = updatedState.OrgId
-         CorrelationId = updatedState.CorrelationId
+         OrgId = orgId
+         CorrelationId = corrId
          Application = application
       }
 
    let linkAccountToPartnerBank () =
-      dep.sendMessageToSelf
-         updatedState.OrgId
-         updatedState.CorrelationId
-         (dep.linkAccountToPartnerBank application)
+      dep.getPartnerBankServiceRef ()
+      <! PartnerBankServiceMessage.LinkAccount {
+         LegalBusinessName = application.LegalBusinessName
+         EmployerIdentificationNumber = application.EmployerIdentificationNumber
+         Metadata = {
+            OrgId = orgId
+            CorrelationId = corrId
+         }
+      }
 
    let initializeVirtualAccount (accountNumber, routingNumber) =
       let parentAccountId = application.ParentAccountId
 
       let msg =
          InitializePrimaryCheckingAccountCommand.create {
-            OrgId = updatedState.OrgId
-            CorrelationId = updatedState.CorrelationId
+            OrgId = orgId
+            CorrelationId = corrId
             ParentAccountId = parentAccountId
             PartnerBankAccountNumber = accountNumber
             PartnerBankRoutingNumber = routingNumber
@@ -457,13 +462,11 @@ let onEventPersisted
       dep.getAccountRef parentAccountId <! msg
 
    let activateOrg () =
-      let orgId = updatedState.OrgId
-
       let msg =
          FinishOrgOnboardingCommand.create {
-            OrgId = updatedState.OrgId
-            ParentAccountId = updatedState.Application.ParentAccountId
-            CorrelationId = updatedState.CorrelationId
+            OrgId = orgId
+            ParentAccountId = application.ParentAccountId
+            CorrelationId = corrId
             InitiatedBy = Initiator.System
          }
          |> OrgCommand.FinishOrgOnboarding
@@ -495,8 +498,8 @@ let onEventPersisted
          else
             dep.getEmailRef ()
             <! {
-                  OrgId = updatedState.OrgId
-                  CorrelationId = updatedState.CorrelationId
+                  OrgId = orgId
+                  CorrelationId = corrId
                   Info = EmailInfo.ApplicationErrorRequiresSupport reason
                }
    | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink ->
@@ -518,8 +521,8 @@ let onEventPersisted
          | Activity.WaitForInfoFixDemandedByKYCService -> ()
          | Activity.SendApplicationProcessingNotification ->
             let emailMsg = {
-               OrgId = updatedState.OrgId
-               CorrelationId = updatedState.CorrelationId
+               OrgId = orgId
+               CorrelationId = corrId
                Info =
                   EmailInfo.OrgOnboardingApplicationSubmitted {
                      Email = application.AdminTeamEmail
@@ -544,22 +547,3 @@ let onEventPersisted
             updatedState.LinkedAccountToPartnerBank
             |> Option.iter initializeVirtualAccount
          | Activity.ActivateOrg -> activateOrg ()
-
-let linkAccountToPartnerBank (info: OrgOnboardingApplicationSubmitted) = async {
-   do! Async.Sleep(3000)
-
-   // TODO: network request to partner bank
-
-   let accountNum =
-      AccountNumber.generate ()
-      |> AccountNumber.fromString ""
-      |> Result.toOption
-      |> _.Value
-
-   let res =
-      (accountNum, RoutingNumber 123456789)
-      |> Ok
-      |> OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse
-
-   return res
-}

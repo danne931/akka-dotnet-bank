@@ -13,6 +13,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Infrastructure
 open DomesticTransfer.Service.Domain
+open PartnerBank.Service.Domain
 open ActorUtil
 open SignalRBroadcast
 
@@ -163,6 +164,7 @@ builder.Services.AddAkka(
                      DomesticTransferServiceActor.getProducer
                      SchedulingActor.get
                      KnowYourCustomerServiceActor.getProducer
+                     PartnerBankServiceActor.getProducer
                      Env.config.AccountActorSupervisor
                      Env.config.SagaPassivateIdleEntityAfter
                      persistenceId
@@ -192,6 +194,23 @@ builder.Services.AddAkka(
                   (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.org)
+         )
+         // The PartnerBankService will consume messages from
+         // from RabbitMq & interact with a third party partner
+         // bank API to sync transactions occuring on the platform.
+         // It will notify relevant saga actors of syncing progress.
+         .WithSingleton<ActorMetadata.PartnerBankServiceMarker>(
+            ActorMetadata.partnerBankService.Name,
+            (fun system _ _ ->
+               PartnerBankServiceActor.initProps
+                  (getQueueConnection provider)
+                  Env.config.PartnerBankServiceQueue
+                  Env.config.QueueConsumerStreamBackoffRestart
+                  (Env.config.PartnerBankServiceCircuitBreaker system)
+                  (provider.GetRequiredService<SignalRBroadcast>())
+                  (AppSaga.getEntityRef system)
+               |> _.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          .WithSingleton<ActorMetadata.SagaAlarmClockMarker>(
             ActorMetadata.sagaAlarmClock.Name,
@@ -402,6 +421,17 @@ builder.Services.AddAkka(
                   system
                   (getQueueConnection provider)
                   EnvOrg.config.KnowYourCustomerServiceQueue
+                  Env.config.QueueConsumerStreamBackoffRestart
+               |> untyped
+            )
+
+            // Enqueues messages into RabbitMq for the PartnerBankService
+            // singleton actor to process.
+            registry.Register<ActorMetadata.PartnerBankServiceProducerMarker>(
+               Lib.Queue.startProducer<PartnerBankServiceMessage>
+                  system
+                  (getQueueConnection provider)
+                  Env.config.PartnerBankServiceQueue
                   Env.config.QueueConsumerStreamBackoffRestart
                |> untyped
             )

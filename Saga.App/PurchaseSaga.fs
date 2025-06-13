@@ -9,6 +9,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open Email
 open Lib.Saga
+open PartnerBank.Service.Domain
 
 [<RequireQualifiedAccess>]
 type PurchaseSagaStatus =
@@ -344,10 +345,10 @@ type PersistenceHandlerDependencies = {
    getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
+   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
    cardNetworkConfirmPurchase: PurchaseInfo -> Async<PurchaseSagaEvent>
    cardNetworkRejectPurchase:
       PurchaseInfo -> PurchaseFailReason -> Async<PurchaseSagaEvent>
-   syncPurchaseToPartnerBank: PurchaseInfo -> Async<PurchaseSagaEvent>
    sendMessageToSelf: PurchaseInfo -> Async<PurchaseSagaEvent> -> unit
 }
 
@@ -454,9 +455,19 @@ let onEventPersisted
          (dep.cardNetworkConfirmPurchase purchaseInfo)
 
    let syncToPartnerBank () =
-      dep.sendMessageToSelf
-         purchaseInfo
-         (dep.syncPurchaseToPartnerBank purchaseInfo)
+      dep.getPartnerBankServiceRef ()
+      <! PartnerBankServiceMessage.Purchase {
+         Amount = purchaseInfo.Amount
+         // TODO: get from parent account
+         Account = {
+            AccountNumber = AccountNumber 3
+            RoutingNumber = RoutingNumber 1
+         }
+         Metadata = {
+            OrgId = purchaseInfo.OrgId
+            CorrelationId = purchaseInfo.CorrelationId
+         }
+      }
 
    match evt with
    | PurchaseSagaEvent.PurchaseConfirmedByAccount ->
@@ -529,20 +540,6 @@ let onEventPersisted
             updatedState.RefundReason |> Option.iter refundCard
          | Activity.RefundAccount ->
             updatedState.RefundReason |> Option.iter refundAccount
-
-let mutable failCnt = 6
-
-let syncPurchaseToPartnerBank (info: PurchaseInfo) = async {
-   do! Async.Sleep(3000)
-
-   // TODO: HTTP to partner bank
-
-   if failCnt < 3 then
-      failCnt <- failCnt + 1
-      return PurchaseSagaEvent.PartnerBankSyncResponse(Error "")
-   else
-      return PurchaseSagaEvent.PartnerBankSyncResponse(Ok "some response")
-}
 
 // TODO: Notify card network which issued the debit request to our bank.
 let cardNetworkConfirmPurchase (info: PurchaseInfo) = async {

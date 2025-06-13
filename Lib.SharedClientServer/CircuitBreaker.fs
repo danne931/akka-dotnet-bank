@@ -7,6 +7,7 @@ type CircuitBreakerService =
    | DomesticTransfer
    | Email
    | KnowYourCustomer
+   | PartnerBank
 
 [<RequireQualifiedAccess>]
 type CircuitBreakerStatus =
@@ -29,4 +30,5 @@ type CircuitBreakerState = {
    DomesticTransfer: CircuitBreakerStatus
    Email: CircuitBreakerStatus
    KnowYourCustomer: CircuitBreakerStatus
+   PartnerBank: CircuitBreakerStatus
 }

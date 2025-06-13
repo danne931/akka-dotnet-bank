@@ -24,6 +24,7 @@ open EmployeeOnboardingSaga
 open CardSetupSaga
 open Bank.Scheduler
 open BillingSaga
+open PartnerBank.Service.Domain
 
 type private DomesticTransferMessage =
    DomesticTransfer.Service.Domain.DomesticTransferServiceMessage
@@ -470,7 +471,9 @@ let sagaHandler
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
-   (getOrgVerificationRef: ActorSystem -> IActorRef<KYCMessage>)
+   (getKYCServiceRef: ActorSystem -> IActorRef<KYCMessage>)
+   (getPartnerBankServiceRef:
+      ActorSystem -> IActorRef<PartnerBankServiceMessage>)
    : SagaActor.SagaHandler<Saga, StartEvent, Event>
    =
    {
@@ -630,6 +633,9 @@ let sagaHandler
             let getEmailRef () = getEmailRef mailbox.System
             let getSchedulingRef () = getSchedulingRef mailbox.System
 
+            let getPartnerBankServiceRef () =
+               getPartnerBankServiceRef mailbox.System
+
             let notHandled () =
                logError
                   mailbox
@@ -642,17 +648,8 @@ let sagaHandler
                   getEmployeeRef = getEmployeeRef
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
-                  getOrgVerificationRef =
-                     fun () -> getOrgVerificationRef mailbox.System
-                  linkAccountToPartnerBank =
-                     OrgOnboardingSaga.linkAccountToPartnerBank
-                  sendMessageToSelf =
-                     fun orgId corrId asyncEvt ->
-                        let asyncMsg =
-                           asyncEvt
-                           |> Async.map (Message.orgOnboard orgId corrId)
-
-                        mailbox.Parent() <!| asyncMsg
+                  getKYCServiceRef = fun () -> getKYCServiceRef mailbox.System
+                  getPartnerBankServiceRef = getPartnerBankServiceRef
                }
 
                match state with
@@ -716,20 +713,7 @@ let sagaHandler
                   getSchedulingRef = getSchedulingRef
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
-                  syncToPartnerBank =
-                     PlatformTransferSaga.syncTransferToPartnerBank
-                  sendMessageToSelf =
-                     fun transfer asyncEvt ->
-                        let orgId = transfer.Sender.OrgId
-
-                        let corrId =
-                           TransferId.toCorrelationId transfer.TransferId
-
-                        let asyncMsg =
-                           asyncEvt
-                           |> Async.map (Message.platformTransfer orgId corrId)
-
-                        mailbox.Parent() <!| asyncMsg
+                  getPartnerBankServiceRef = getPartnerBankServiceRef
                }
 
                match state with
@@ -740,8 +724,7 @@ let sagaHandler
                let deps: PlatformPaymentSaga.PersistenceHandlerDependencies = {
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
-                  syncToPartnerBank =
-                     PlatformPaymentSaga.syncPaymentToPartnerBank
+                  getPartnerBankServiceRef = getPartnerBankServiceRef
                   refundPaymentToThirdParty =
                      PlatformPaymentSaga.refundPaymentToThirdParty
                   sendMessageToSelf =
@@ -774,12 +757,11 @@ let sagaHandler
                   getEmployeeRef = getEmployeeRef
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
+                  getPartnerBankServiceRef = getPartnerBankServiceRef
                   cardNetworkConfirmPurchase =
                      PurchaseSaga.cardNetworkConfirmPurchase
                   cardNetworkRejectPurchase =
                      PurchaseSaga.cardNetworkRejectPurchase
-                  syncPurchaseToPartnerBank =
-                     PurchaseSaga.syncPurchaseToPartnerBank
                   sendMessageToSelf =
                      fun purchase asyncEvt ->
                         let asyncMsg =
@@ -802,6 +784,9 @@ let sagaHandler
             let getEmailRef () = getEmailRef mailbox.System
             let getSchedulingRef () = getSchedulingRef mailbox.System
 
+            let getPartnerBankServiceRef () =
+               getPartnerBankServiceRef mailbox.System
+
             let notHandled () =
                logError
                   mailbox
@@ -814,17 +799,8 @@ let sagaHandler
                   getEmployeeRef = getEmployeeRef
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
-                  linkAccountToPartnerBank =
-                     OrgOnboardingSaga.linkAccountToPartnerBank
-                  getOrgVerificationRef =
-                     fun () -> getOrgVerificationRef mailbox.System
-                  sendMessageToSelf =
-                     fun orgId corrId asyncEvt ->
-                        let asyncMsg =
-                           asyncEvt
-                           |> Async.map (Message.orgOnboard orgId corrId)
-
-                        mailbox.Parent() <!| asyncMsg
+                  getKYCServiceRef = fun () -> getKYCServiceRef mailbox.System
+                  getPartnerBankServiceRef = getPartnerBankServiceRef
                }
 
                match priorState, state with
@@ -880,12 +856,11 @@ let sagaHandler
                   getEmployeeRef = getEmployeeRef
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
+                  getPartnerBankServiceRef = getPartnerBankServiceRef
                   cardNetworkConfirmPurchase =
                      PurchaseSaga.cardNetworkConfirmPurchase
                   cardNetworkRejectPurchase =
                      PurchaseSaga.cardNetworkRejectPurchase
-                  syncPurchaseToPartnerBank =
-                     PurchaseSaga.syncPurchaseToPartnerBank
                   sendMessageToSelf =
                      fun purchase asyncEvt ->
                         let asyncMsg =
@@ -926,20 +901,7 @@ let sagaHandler
                   getSchedulingRef = getSchedulingRef
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
-                  syncToPartnerBank =
-                     PlatformTransferSaga.syncTransferToPartnerBank
-                  sendMessageToSelf =
-                     fun transfer asyncEvt ->
-                        let orgId = transfer.Sender.OrgId
-
-                        let corrId =
-                           TransferId.toCorrelationId transfer.TransferId
-
-                        let asyncMsg =
-                           asyncEvt
-                           |> Async.map (Message.platformTransfer orgId corrId)
-
-                        mailbox.Parent() <!| asyncMsg
+                  getPartnerBankServiceRef = getPartnerBankServiceRef
                }
 
                match priorState, state with
@@ -954,8 +916,7 @@ let sagaHandler
                let deps: PlatformPaymentSaga.PersistenceHandlerDependencies = {
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
-                  syncToPartnerBank =
-                     PlatformPaymentSaga.syncPaymentToPartnerBank
+                  getPartnerBankServiceRef = getPartnerBankServiceRef
                   refundPaymentToThirdParty =
                      PlatformPaymentSaga.refundPaymentToThirdParty
                   sendMessageToSelf =
@@ -995,7 +956,9 @@ let initProps
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
    (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
-   (getOrgVerificationRef: ActorSystem -> IActorRef<KYCMessage>)
+   (getKYCServiceRef: ActorSystem -> IActorRef<KYCMessage>)
+   (getPartnerBankServiceRef:
+      ActorSystem -> IActorRef<PartnerBankServiceMessage>)
    (supervisorOpts: PersistenceSupervisorOptions)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
@@ -1011,4 +974,5 @@ let initProps
          getEmailActor
          getDomesticTransferRef
          getSchedulingRef
-         getOrgVerificationRef)
+         getKYCServiceRef
+         getPartnerBankServiceRef)

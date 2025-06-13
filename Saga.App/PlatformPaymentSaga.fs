@@ -9,6 +9,7 @@ open Lib.Saga
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Email
+open PartnerBank.Service.Domain
 
 [<RequireQualifiedAccess>]
 type PlatformPaymentSagaStartEvent =
@@ -343,9 +344,9 @@ let stateTransition
 type PersistenceHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
+   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
    refundPaymentToThirdParty:
       PlatformPaymentBaseInfo -> ThirdPartyPaymentMethod -> Async<Event>
-   syncToPartnerBank: PlatformPaymentBaseInfo -> Async<Event>
    sendMessageToSelf: PlatformPaymentBaseInfo -> Async<Event> -> unit
 }
 
@@ -449,7 +450,24 @@ let onEventPersisted
             (dep.refundPaymentToThirdParty payment payMethod)
 
    let syncToPartnerBank () =
-      dep.sendMessageToSelf payment (dep.syncToPartnerBank payment)
+      dep.getPartnerBankServiceRef ()
+      <! PartnerBankServiceMessage.TransferBetweenOrganizations {
+         Amount = payment.Amount
+         // TODO: get from parent account
+         From = {
+            AccountNumber = AccountNumber 3
+            RoutingNumber = RoutingNumber 1
+         }
+         To = {
+            AccountNumber = AccountNumber 3
+            RoutingNumber = RoutingNumber 1
+         }
+         Metadata = {
+            OrgId = payment.Payee.OrgId
+            CorrelationId = correlationId
+         }
+         ReplyTo = TransferSagaReplyTo.PlatformPayment
+      }
 
    match evt with
    | Event.PaymentRequestCancelled -> ()
@@ -516,13 +534,6 @@ let onEventPersisted
             |> Option.iter refundPayment
          | Activity.WaitForPayment
          | Activity.WaitForSupportTeamToResolvePartnerBankSync -> ()
-
-let syncPaymentToPartnerBank (info: PlatformPaymentBaseInfo) = async {
-   // HTTP to partner bank
-   do! Async.Sleep(1000)
-
-   return Ok "some res" |> Event.PartnerBankSyncResponse
-}
 
 let refundPaymentToThirdParty
    (info: PlatformPaymentBaseInfo)

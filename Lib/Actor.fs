@@ -133,6 +133,12 @@ module ActorMetadata =
 
    type OrgReadModelSyncMarker() = class end
 
+   /// Singleton consumes partner bank messages off RabbitMq
+   type PartnerBankServiceMarker() = class end
+
+   /// Enqueues partner bank messages into RabbitMq
+   type PartnerBankServiceProducerMarker() = class end
+
    /// Singleton consumes know-your-customer messages off RabbitMq
    type KYCServiceMarker() = class end
 
@@ -211,6 +217,16 @@ module ActorMetadata =
    let orgReadModelSync = {
       Name = "org-read-model-sync"
       Route = "org-read-model-sync"
+   }
+
+   let partnerBankService = {
+      Name = "partner-bank-service-consumer"
+      Route = "partner-bank-service-consumer"
+   }
+
+   let partnerBankServiceProducer = {
+      Name = "partner-bank-service-producer"
+      Route = "partner-bank-service-producer"
    }
 
    let knowYourCustomer = {
