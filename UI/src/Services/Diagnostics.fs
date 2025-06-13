@@ -21,6 +21,7 @@ type ServiceDiagnostics = {
    Email: ServiceHealth
    KnowYourCustomer: ServiceHealth
    PartnerBank: ServiceHealth
+   CardIssuer: ServiceHealth
 }
 
 let getServiceHealth () : Async<Result<ServiceDiagnostics, Err>> = async {
@@ -37,6 +38,7 @@ let getServiceHealth () : Async<Result<ServiceDiagnostics, Err>> = async {
             Email = health circuitBreaker.Email
             KnowYourCustomer = health circuitBreaker.KnowYourCustomer
             PartnerBank = health circuitBreaker.PartnerBank
+            CardIssuer = health circuitBreaker.CardIssuer
          })
 }
 

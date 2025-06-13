@@ -8,6 +8,7 @@ open Lib.SharedTypes
 open Bank.Employee.Domain
 open Email
 open Lib.Saga
+open CardIssuer.Service.Domain
 
 [<RequireQualifiedAccess>]
 type CardSetupFailureReason = | CardProviderCardCreateFail
@@ -219,18 +220,10 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type CardProviderRequest = {
-   CardHolderName: string
-   CardType: string
-}
-
 type PersistenceHandlerDependencies = {
    getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
-   createCardViaThirdPartyProvider:
-      CardProviderRequest -> Async<CardSetupSagaEvent>
-   sendMessageToSelf:
-      OrgId -> CorrelationId -> Async<CardSetupSagaEvent> -> unit
+   getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>
 }
 
 let onStartEventPersisted
@@ -239,13 +232,15 @@ let onStartEventPersisted
    =
    let request = {
       CardHolderName = evt.EmployeeName
-      CardType = string evt.Event.Data.Card.CardType
+      CardType = evt.Event.Data.Card.CardType
+      Metadata = {
+         ReplyTo = SagaReplyTo.CardSetup
+         OrgId = evt.Event.OrgId
+         CorrelationId = evt.Event.CorrelationId
+      }
    }
 
-   dep.sendMessageToSelf
-      evt.Event.OrgId
-      evt.Event.CorrelationId
-      (dep.createCardViaThirdPartyProvider request)
+   dep.getCardIssuerServiceRef () <! CardIssuerMessage.CreateCard request
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)
@@ -316,20 +311,15 @@ let onEventPersisted
          | Activity.CreateCardViaThirdPartyProvider ->
             let request = {
                CardHolderName = updatedState.EmployeeName
-               CardType = string updatedState.CardType
+               CardType = updatedState.CardType
+               Metadata = {
+                  ReplyTo = SagaReplyTo.CardSetup
+                  OrgId = orgId
+                  CorrelationId = corrId
+               }
             }
 
-            dep.sendMessageToSelf
-               orgId
-               corrId
-               (dep.createCardViaThirdPartyProvider request)
+            dep.getCardIssuerServiceRef ()
+            <! CardIssuerMessage.CreateCard request
          | Activity.LinkProviderCardId ->
             updatedState.ProviderCardId |> Option.iter linkProviderCardId
-
-let createCardViaThirdPartyProvider (_: CardProviderRequest) = async {
-   do! Async.Sleep(1300)
-
-   let response = Guid.NewGuid() |> ThirdPartyProviderCardId |> Ok
-
-   return CardSetupSagaEvent.CardCreateResponse response
-}

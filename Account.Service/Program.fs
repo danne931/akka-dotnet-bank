@@ -11,9 +11,10 @@ open Akkling
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Bank.Infrastructure
 open DomesticTransfer.Service.Domain
 open PartnerBank.Service.Domain
+open CardIssuer.Service.Domain
+open Bank.Infrastructure
 open ActorUtil
 open SignalRBroadcast
 
@@ -165,6 +166,7 @@ builder.Services.AddAkka(
                      SchedulingActor.get
                      KnowYourCustomerServiceActor.getProducer
                      PartnerBankServiceActor.getProducer
+                     CardIssuerServiceActor.getProducer
                      Env.config.AccountActorSupervisor
                      Env.config.SagaPassivateIdleEntityAfter
                      persistenceId
@@ -211,6 +213,19 @@ builder.Services.AddAkka(
                   (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
+         )
+         .WithSingleton<ActorMetadata.CardIssuerServiceMarker>(
+            ActorMetadata.cardIssuerService.Name,
+            (fun system _ _ ->
+               CardIssuerServiceActor.initProps
+                  (getQueueConnection provider)
+                  EnvEmployee.config.CardIssuerServiceQueue
+                  Env.config.QueueConsumerStreamBackoffRestart
+                  (EnvEmployee.config.cardIssuerServiceCircuitBreaker system)
+                  (provider.GetRequiredService<SignalRBroadcast>())
+                  (AppSaga.getEntityRef system)
+               |> _.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.employee)
          )
          .WithSingleton<ActorMetadata.SagaAlarmClockMarker>(
             ActorMetadata.sagaAlarmClock.Name,
@@ -432,6 +447,17 @@ builder.Services.AddAkka(
                   system
                   (getQueueConnection provider)
                   Env.config.PartnerBankServiceQueue
+                  Env.config.QueueConsumerStreamBackoffRestart
+               |> untyped
+            )
+
+            // Enqueues messages into RabbitMq for the CardIssuerService
+            // singleton actor to process.
+            registry.Register<ActorMetadata.CardIssuerServiceProducerMarker>(
+               Lib.Queue.startProducer<CardIssuerMessage>
+                  system
+                  (getQueueConnection provider)
+                  EnvEmployee.config.CardIssuerServiceQueue
                   Env.config.QueueConsumerStreamBackoffRestart
                |> untyped
             )

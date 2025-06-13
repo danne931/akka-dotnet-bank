@@ -10,6 +10,7 @@ open Bank.Org.Domain
 open CommandApproval
 open Email
 open Lib.Saga
+open CardIssuer.Service.Domain
 
 [<RequireQualifiedAccess>]
 type OnboardingFailureReason = | CardProviderCardCreateFail
@@ -384,19 +385,11 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type CardProviderRequest = {
-   CardHolderName: string
-   CardType: string
-}
-
 type PersistenceHandlerDependencies = {
    getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
    getOrgRef: OrgId -> IEntityRef<OrgMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
-   createCardViaThirdPartyProvider:
-      CardProviderRequest -> Async<EmployeeOnboardingSagaEvent>
-   sendMessageToSelf:
-      OrgId -> CorrelationId -> Async<EmployeeOnboardingSagaEvent> -> unit
+   getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>
 }
 
 // Org onboarding saga is started by a submitted application
@@ -533,13 +526,15 @@ let onEventPersisted
       =
       let request = {
          CardHolderName = employeeName
-         CardType = string info.CardType
+         CardType = info.CardType
+         Metadata = {
+            ReplyTo = SagaReplyTo.EmployeeOnboard
+            OrgId = orgId
+            CorrelationId = corrId
+         }
       }
 
-      dep.sendMessageToSelf
-         orgId
-         corrId
-         (dep.createCardViaThirdPartyProvider request)
+      dep.getCardIssuerServiceRef () <! CardIssuerMessage.CreateCard request
 
    match evt with
    | EmployeeOnboardingSagaEvent.InviteTokenRefreshed _ ->
@@ -583,11 +578,3 @@ let onEventPersisted
             | Some providerCardId, Some cardInfo ->
                associateCardWithEmployee providerCardId cardInfo
             | _ -> ()
-
-let createCardViaThirdPartyProvider (_: CardProviderRequest) = async {
-   do! Async.Sleep(1300)
-
-   let response = Guid.NewGuid() |> ThirdPartyProviderCardId |> Ok
-
-   return EmployeeOnboardingSagaEvent.CardCreateResponse response
-}

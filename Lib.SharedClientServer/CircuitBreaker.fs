@@ -8,6 +8,7 @@ type CircuitBreakerService =
    | Email
    | KnowYourCustomer
    | PartnerBank
+   | CardIssuer
 
 [<RequireQualifiedAccess>]
 type CircuitBreakerStatus =
@@ -31,4 +32,5 @@ type CircuitBreakerState = {
    Email: CircuitBreakerStatus
    KnowYourCustomer: CircuitBreakerStatus
    PartnerBank: CircuitBreakerStatus
+   CardIssuer: CircuitBreakerStatus
 }

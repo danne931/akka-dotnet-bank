@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
@@ -8,6 +8,7 @@
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />
     <Compile Include="AggregateTypes.fs" />
+    <Compile Include="CardIssuerService.fs" />
     <Compile Include="Employee.fs" />
     <Compile Include="Query.fs" />
   </ItemGroup>

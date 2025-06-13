@@ -17,6 +17,7 @@ type State = {
    Email: ServiceHealth
    KnowYourCustomer: ServiceHealth
    PartnerBank: ServiceHealth
+   CardIssuer: ServiceHealth
 }
 
 let init () =
@@ -25,6 +26,7 @@ let init () =
       Email = ServiceHealth.Good
       KnowYourCustomer = ServiceHealth.Good
       PartnerBank = ServiceHealth.Good
+      CardIssuer = ServiceHealth.Good
    },
    Cmd.ofMsg <| Load Started
 
@@ -64,6 +66,10 @@ let update msg (state: State) =
          | CircuitBreakerService.PartnerBank -> {
             state with
                PartnerBank = health
+           }
+         | CircuitBreakerService.CardIssuer -> {
+            state with
+               CardIssuer = health
            }
 
       state, Cmd.none
@@ -113,6 +119,7 @@ let ServiceHealthComponent () =
             renderServiceHealth "Email" state.Email
             renderServiceHealth "Know Your Customer" state.KnowYourCustomer
             renderServiceHealth "Partner Bank" state.PartnerBank
+            renderServiceHealth "Card Issuer" state.CardIssuer
          ]
       ]
    ]

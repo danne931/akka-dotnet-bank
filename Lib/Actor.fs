@@ -145,6 +145,12 @@ module ActorMetadata =
    /// Enqueues know-your-customer messages into RabbitMq
    type KYCServiceProducerMarker() = class end
 
+   /// Singleton consumes card issuer messages off RabbitMq
+   type CardIssuerServiceMarker() = class end
+
+   /// Enqueues card issuer messages into RabbitMq
+   type CardIssuerServiceProducerMarker() = class end
+
    type CircuitBreakerMarker() = class end
 
    type AccountLoadTestMarker() = class end
@@ -237,6 +243,16 @@ module ActorMetadata =
    let knowYourCustomerProducer = {
       Name = "know-your-customer-producer"
       Route = "know-your-customer-producer"
+   }
+
+   let cardIssuerService = {
+      Name = "card-issuer-service-consumer"
+      Route = "card-issuer-service-consumer"
+   }
+
+   let cardIssuerServiceProducer = {
+      Name = "card-issuer-service-producer"
+      Route = "card-issuer-service-producer"
    }
 
    let account = { Name = "account"; Route = "account" }

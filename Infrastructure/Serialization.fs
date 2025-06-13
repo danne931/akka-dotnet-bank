@@ -14,6 +14,7 @@ open Bank.Employee.Domain
 open Bank.Account.Domain
 open DomesticTransfer.Service.Domain
 open PartnerBank.Service.Domain
+open CardIssuer.Service.Domain
 open BillingStatement
 open Lib.SharedTypes
 open Lib.CircuitBreaker
@@ -159,6 +160,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | _ -> "OrgMessage"
       | :? KYCMessage -> "KYCMessage"
       | :? PartnerBankServiceMessage -> "PartnerBankServiceMessage"
+      | :? CardIssuerMessage -> "CardIssuerServiceMessage"
       | :? EmployeeSnapshot -> "EmployeeSnapshot"
       | :? Option<Employee> -> "EmployeeOption"
       | :? EmployeeMessage as msg ->
@@ -302,6 +304,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? KYCMessage
       // Partner bank third party api message serialized for RabbitMq
       | :? PartnerBankServiceMessage
+      // Card issuer third party api message serialized for RabbitMq
+      | :? CardIssuerMessage
       // OrgMessage.GetOrg response serialized for message sent
       // from org cluster nodes to Web node.
       | :? Option<Org>
@@ -348,6 +352,9 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "PartnerBankServiceMessage"
          | "PartnerBank.Service.Domain+PartnerBankServiceMessage, Account.Domain" ->
             typeof<PartnerBankServiceMessage>
+         | "CardIssuerServiceMessage"
+         | "CardIssuer.Service.Domain+CardIssuerMessage, Employee.Domain" ->
+            typeof<CardIssuerMessage>
          | "EmployeeSnapshot" -> typeof<EmployeeSnapshot>
          | "EmployeeOption" -> typeof<Employee option>
          | "EmployeeEvent" -> typeof<EmployeeEvent>

@@ -4,9 +4,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Environment.fs" />
     <Compile Include="EmployeeActor.fs" />
     <Compile Include="EmployeeReadModelSyncActor.fs" />
     <Compile Include="EmployeeApi.fs" />
+    <Compile Include="CardIssuerService.fs" /> 
   </ItemGroup>
 
   <ItemGroup>
