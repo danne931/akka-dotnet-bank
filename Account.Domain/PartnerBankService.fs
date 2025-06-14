@@ -31,7 +31,7 @@ type PartnerBankMetadata = {
    CorrelationId: CorrelationId
 }
 
-type PartnerBankAccountReference = {
+type PartnerBankAccountLink = {
    AccountNumber: ParentAccountNumber
    RoutingNumber: ParentRoutingNumber
 }
@@ -44,7 +44,7 @@ type PartnerBankAccountLinking = {
 
 type PartnerBankSyncPurchase = {
    Amount: decimal
-   Account: PartnerBankAccountReference
+   Account: PartnerBankAccountLink
    Metadata: PartnerBankMetadata
 }
 
@@ -55,8 +55,8 @@ type TransferSagaReplyTo =
 
 type PartnerBankSyncTransferBetweenOrgs = {
    Amount: decimal
-   From: PartnerBankAccountReference
-   To: PartnerBankAccountReference
+   From: PartnerBankAccountLink
+   To: PartnerBankAccountLink
    Metadata: PartnerBankMetadata
    ReplyTo: TransferSagaReplyTo
 }
@@ -75,7 +75,7 @@ type PartnerBankServiceMessage =
 
 type AccountLinkResponse = {
    Accepted: bool
-   PartnerBankAccountReference: PartnerBankAccountReference
+   Link: PartnerBankAccountLink
 }
 
 type PartnerBankSyncTransferBetweenOrgsResponse = { ConfirmationId: Guid }

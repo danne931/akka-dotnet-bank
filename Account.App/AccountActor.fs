@@ -189,7 +189,10 @@ let onPersisted
       ()
    | AccountEvent.DebitedAccount e ->
       let msg =
-         PurchaseSagaEvent.PurchaseConfirmedByAccount
+         PurchaseSagaEvent.PurchaseConfirmedByAccount {
+            AccountNumber = state.AccountNumber
+            RoutingNumber = state.RoutingNumber
+         }
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg

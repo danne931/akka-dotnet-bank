@@ -27,8 +27,7 @@ type OrgOnboardingSagaEvent =
    | ApplicationProcessingNotificationSent
    | KYCResponse of Result<unit, OrgOnboardingVerificationError>
    | ReceivedInfoFixDemandedByKYCService of OrgOnboardingApplicationSubmitted
-   | LinkAccountToPartnerBankResponse of
-      Result<PartnerBankAccountReference, string>
+   | LinkAccountToPartnerBankResponse of Result<PartnerBankAccountLink, string>
    | InitializedPrimaryVirtualAccount
    | OrgActivated
    | ApplicationAcceptedNotificationSent

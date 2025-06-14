@@ -65,7 +65,7 @@ let actorProps
                | PartnerBankServiceMessage.LinkAccount req,
                  PartnerBankResponse.LinkAccount res ->
                   let msg =
-                     Ok res.PartnerBankAccountReference
+                     Ok res.Link
                      |> OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse
                      |> AppSaga.Message.orgOnboard orgId corrId
 
@@ -118,7 +118,7 @@ let private networkRequestToPartnerBankService
          return
             PartnerBankResponse.LinkAccount {
                Accepted = true
-               PartnerBankAccountReference = {
+               Link = {
                   AccountNumber =
                      ParentAccountNumber <| AccountNumber.generate ()
                   RoutingNumber = ParentRoutingNumber RoutingNumber.Empty

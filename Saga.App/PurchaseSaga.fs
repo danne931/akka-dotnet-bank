@@ -25,7 +25,7 @@ type PurchaseSagaStartEvent =
 [<RequireQualifiedAccess>]
 type PurchaseSagaEvent =
    | PurchaseRefundedToCard
-   | PurchaseConfirmedByAccount
+   | PurchaseConfirmedByAccount of PartnerBankAccountLink
    | PurchaseRejectedByAccount of PurchaseAccountFailReason
    | PurchaseRefundedToAccount
    | PurchaseRejectedCardNetworkResponse of
@@ -77,6 +77,7 @@ type PurchaseSaga = {
    Status: PurchaseSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
    RefundReason: PurchaseRefundReason option
+   PartnerBankAccountLink: PartnerBankAccountLink option
 } with
 
    member x.DeductedFromEmployeeCard =
@@ -128,6 +129,7 @@ let applyStartEvent
             ]
       }
       RefundReason = None
+      PartnerBankAccountLink = None
      }
    | PurchaseSagaStartEvent.PurchaseRejectedByCard(info, reason) -> {
       PurchaseInfo = info
@@ -143,6 +145,7 @@ let applyStartEvent
             ]
       }
       RefundReason = None
+      PartnerBankAccountLink = None
      }
 
 let applyEvent
@@ -162,12 +165,13 @@ let applyEvent
    }
 
    match evt with
-   | PurchaseSagaEvent.PurchaseConfirmedByAccount -> {
+   | PurchaseSagaEvent.PurchaseConfirmedByAccount link -> {
       saga with
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.DeductFromAccount
             |> addActivity Activity.NotifyCardNetworkOfConfirmedPurchase
+         PartnerBankAccountLink = Some link
      }
    | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse(_,
                                                            cardNetworkResponse) ->
@@ -325,7 +329,7 @@ let stateTransition
       | PurchaseSagaEvent.PurchaseRefundedToAccount ->
          activityIsDone Activity.RefundAccount
       | PurchaseSagaEvent.PurchaseRejectedByAccount _
-      | PurchaseSagaEvent.PurchaseConfirmedByAccount ->
+      | PurchaseSagaEvent.PurchaseConfirmedByAccount _ ->
          activityIsDone Activity.DeductFromAccount
       | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
          activityIsDone Activity.NotifyCardNetworkOfRejectedPurchase
@@ -455,22 +459,22 @@ let onEventPersisted
          (dep.cardNetworkConfirmPurchase purchaseInfo)
 
    let syncToPartnerBank () =
-      dep.getPartnerBankServiceRef ()
-      <! PartnerBankServiceMessage.Purchase {
-         Amount = purchaseInfo.Amount
-         // TODO: get from parent account
-         Account = {
-            AccountNumber = ParentAccountNumber AccountNumber.Empty
-            RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
-         }
-         Metadata = {
-            OrgId = purchaseInfo.OrgId
-            CorrelationId = purchaseInfo.CorrelationId
-         }
-      }
+      updatedState.PartnerBankAccountLink
+      |> Option.iter (fun link ->
+         let msg =
+            PartnerBankServiceMessage.Purchase {
+               Amount = purchaseInfo.Amount
+               Account = link
+               Metadata = {
+                  OrgId = purchaseInfo.OrgId
+                  CorrelationId = purchaseInfo.CorrelationId
+               }
+            }
+
+         dep.getPartnerBankServiceRef () <! msg)
 
    match evt with
-   | PurchaseSagaEvent.PurchaseConfirmedByAccount ->
+   | PurchaseSagaEvent.PurchaseConfirmedByAccount _ ->
       cardNetworkConfirmPurchase ()
    | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ -> ()
    | PurchaseSagaEvent.CardNetworkResponse res ->

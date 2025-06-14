@@ -163,7 +163,7 @@ type Event =
          | PurchaseSagaEvent.PurchaseRefundedToCard -> "PurchaseRefundedToCard"
          | PurchaseSagaEvent.PurchaseRefundedToAccount ->
             "PurchaseRefundedToAccount"
-         | PurchaseSagaEvent.PurchaseConfirmedByAccount ->
+         | PurchaseSagaEvent.PurchaseConfirmedByAccount _ ->
             "PurchaseConfirmedByAccount"
          | PurchaseSagaEvent.PurchaseRejectedByAccount _ ->
             "PurchaseRejectedByAccount"
