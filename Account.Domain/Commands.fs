@@ -283,6 +283,46 @@ module SkipMaintenanceFeeCommand =
       =
       Ok <| BankEvent.create<MaintenanceFeeSkipped> cmd
 
+type SettlePurchaseCommand = Command<PurchaseSettled>
+
+module SettlePurchaseCommand =
+   let create
+      (parentAccountId: ParentAccountId, orgId: OrgId)
+      (correlationId: CorrelationId)
+      (initiator: Initiator)
+      (data: PurchaseSettled)
+      =
+      Command.create
+         (ParentAccountId.toEntityId parentAccountId)
+         orgId
+         correlationId
+         initiator
+         data
+
+   let fromPurchase (purchaseInfo: PurchaseInfo) (settlementId: SettlementId) =
+      create
+         (purchaseInfo.ParentAccountId, purchaseInfo.OrgId)
+         purchaseInfo.CorrelationId
+         purchaseInfo.InitiatedBy
+         {
+            AccountId = purchaseInfo.AccountId
+            EmployeePurchaseReference = {
+               EmployeeName = purchaseInfo.EmployeeName
+               EmployeeId = purchaseInfo.EmployeeId
+               EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
+               CardId = purchaseInfo.CardId
+            }
+            Merchant = purchaseInfo.Merchant
+            Amount = purchaseInfo.Amount
+            SettlementId = settlementId
+         }
+
+   let toEvent
+      (cmd: SettlePurchaseCommand)
+      : ValidationResult<BankEvent<PurchaseSettled>>
+      =
+      Ok <| BankEvent.create<PurchaseSettled> cmd
+
 type CloseAccountCommand = Command<AccountClosed>
 
 module CloseAccountCommand =

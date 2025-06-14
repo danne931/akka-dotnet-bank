@@ -181,6 +181,15 @@ type CommandApprovalProgressId =
       let (CorrelationId id) = progressId
       id
 
+/// ID indicating a transaction has been synced successfully
+/// to the partner bank and is considered settled.
+type SettlementId =
+   | SettlementId of Guid
+
+   override x.ToString() =
+      let (SettlementId id) = x
+      string id
+
 type Initiator = { Id: InitiatedById; Name: string }
 
 module Initiator =

@@ -399,15 +399,23 @@ let seedBalanceHistory () = taskResultOption {
          AND {EmployeeEventFields.name} <> 'PurchaseApplied';
       """,
       sqlParams
-
       $"""
       UPDATE {AccountEventSqlMapper.table}
       SET
-         {aeFields.timestamp} = @timestamp,
+         {aeFields.timestamp} =
+            CASE
+               WHEN {aeFields.name} = 'PurchaseSettled' THEN @timestamp + '3 seconds'::interval
+               ELSE @timestamp
+            END,
          {aeFields.event} = jsonb_set(
             {aeFields.event},
             '{{1,Timestamp}}',
-            to_jsonb(@timestamp),
+            to_jsonb(
+               CASE
+                  WHEN {aeFields.name} = 'PurchaseSettled' THEN @timestamp + '3 seconds'::interval
+                  ELSE @timestamp
+               END
+            ),
             false
          )
       WHERE

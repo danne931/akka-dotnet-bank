@@ -32,7 +32,8 @@ type PurchaseSagaEvent =
       PurchaseFailReason *
       Result<string, string>
    | CardNetworkResponse of Result<string, string>
-   | PartnerBankSyncResponse of Result<string, string>
+   | PartnerBankSyncResponse of Result<SettlementId, string>
+   | PurchaseSettled
    | PurchaseNotificationSent
    | SupportTeamResolvedPartnerBankSync
    | EvaluateRemainingWork
@@ -45,6 +46,7 @@ type Activity =
    | NotifyCardNetworkOfRejectedPurchase
    | NotifyCardNetworkOfConfirmedPurchase
    | SyncToPartnerBank
+   | SettlePurchase
    | SendPurchaseNotification
    | RefundCard
    | RefundAccount
@@ -68,7 +70,8 @@ type Activity =
          | DeductFromEmployeeCard
          | DeductFromAccount
          | RefundCard
-         | RefundAccount -> Some(TimeSpan.FromSeconds 4)
+         | RefundAccount
+         | SettlePurchase -> Some(TimeSpan.FromSeconds 4)
 
 type PurchaseSaga = {
    PurchaseInfo: PurchaseInfo
@@ -95,6 +98,13 @@ type PurchaseSaga = {
    member x.RequiresAccountRefund =
       x.LifeCycle.InProgress
       |> List.exists (fun w -> w.Activity = Activity.RefundAccount)
+
+   member x.SyncedToPartnerBank =
+      x.Events
+      |> List.tryPick (function
+         | PurchaseSagaEvent.PartnerBankSyncResponse(Ok settlementId) ->
+            Some settlementId
+         | _ -> None)
 
    member x.RequiresManualSupportFixForPartnerBankSync =
       x.LifeCycle.InProgress
@@ -255,8 +265,15 @@ let applyEvent
             LifeCycle =
                saga.LifeCycle
                |> finishActivity activity
-               |> addActivity Activity.SendPurchaseNotification
+               |> addActivity Activity.SettlePurchase
         }
+   | PurchaseSagaEvent.PurchaseSettled -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.SettlePurchase
+            |> addActivity Activity.SendPurchaseNotification
+     }
    | PurchaseSagaEvent.PurchaseNotificationSent -> {
       saga with
          Status = PurchaseSagaStatus.Completed
@@ -337,6 +354,8 @@ let stateTransition
          activityIsDone Activity.NotifyCardNetworkOfConfirmedPurchase
       | PurchaseSagaEvent.PartnerBankSyncResponse _ ->
          activityIsDone Activity.SyncToPartnerBank
+      | PurchaseSagaEvent.PurchaseSettled ->
+         activityIsDone Activity.SettlePurchase
 
    if saga.Status = PurchaseSagaStatus.Completed then
       Error SagaStateTransitionError.HasAlreadyCompleted
@@ -473,6 +492,14 @@ let onEventPersisted
 
          dep.getPartnerBankServiceRef () <! msg)
 
+   let settlePurchase settlementId =
+      let msg =
+         SettlePurchaseCommand.fromPurchase purchaseInfo settlementId
+         |> AccountCommand.SettlePurchase
+         |> AccountMessage.StateChange
+
+      dep.getAccountRef purchaseInfo.ParentAccountId <! msg
+
    match evt with
    | PurchaseSagaEvent.PurchaseConfirmedByAccount _ ->
       cardNetworkConfirmPurchase ()
@@ -496,7 +523,7 @@ let onEventPersisted
                refundAccount reason
    | PurchaseSagaEvent.PartnerBankSyncResponse res ->
       match res with
-      | Ok _ -> sendPurchaseEmail ()
+      | Ok settlementId -> settlePurchase settlementId
       | Error reason ->
          if
             previousState.LifeCycle.ActivityHasRemainingAttempts
@@ -523,6 +550,7 @@ let onEventPersisted
    | PurchaseSagaEvent.ResetInProgressActivityAttempts
    | PurchaseSagaEvent.PurchaseRefundedToAccount
    | PurchaseSagaEvent.PurchaseRefundedToCard -> ()
+   | PurchaseSagaEvent.PurchaseSettled -> sendPurchaseEmail ()
    | PurchaseSagaEvent.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
@@ -539,6 +567,8 @@ let onEventPersisted
          | Activity.NotifyCardNetworkOfConfirmedPurchase ->
             cardNetworkConfirmPurchase ()
          | Activity.SyncToPartnerBank -> syncToPartnerBank ()
+         | Activity.SettlePurchase ->
+            updatedState.SyncedToPartnerBank |> Option.iter settlePurchase
          | Activity.SendPurchaseNotification -> sendPurchaseEmail ()
          | Activity.RefundCard ->
             updatedState.RefundReason |> Option.iter refundCard

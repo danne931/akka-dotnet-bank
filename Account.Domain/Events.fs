@@ -76,3 +76,11 @@ type AccountClosed = {
    AccountId: AccountId
    Reference: string option
 }
+
+type PurchaseSettled = {
+   AccountId: AccountId
+   SettlementId: SettlementId
+   Merchant: string
+   Amount: decimal
+   EmployeePurchaseReference: EmployeePurchaseReference
+}

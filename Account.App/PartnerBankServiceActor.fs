@@ -73,7 +73,7 @@ let actorProps
                | PartnerBankServiceMessage.Purchase req,
                  PartnerBankResponse.Purchase res ->
                   let msg =
-                     Ok ""
+                     Ok(SettlementId res.ConfirmationId)
                      |> PurchaseSagaEvent.PartnerBankSyncResponse
                      |> AppSaga.Message.purchase orgId corrId
 

@@ -33,6 +33,7 @@ let filtersToOriginatingEventNames
          @ match e with
            | AccountEventGroupFilter.Purchase -> [
               typeof<DebitedAccount>.Name
+              typeof<PurchaseSettled>.Name
              ]
            | AccountEventGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
            | AccountEventGroupFilter.InternalTransferWithinOrg -> [

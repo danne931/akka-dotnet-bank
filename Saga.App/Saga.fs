@@ -160,6 +160,7 @@ type Event =
          | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
             "PurchaseRejectedCardNetworkResponse"
          | PurchaseSagaEvent.CardNetworkResponse _ -> "CardNetworkResponse"
+         | PurchaseSagaEvent.PurchaseSettled -> "PurchaseSettled"
          | PurchaseSagaEvent.PurchaseRefundedToCard -> "PurchaseRefundedToCard"
          | PurchaseSagaEvent.PurchaseRefundedToAccount ->
             "PurchaseRefundedToAccount"

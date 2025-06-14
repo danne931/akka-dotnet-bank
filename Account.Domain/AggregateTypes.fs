@@ -23,6 +23,7 @@ type AccountCommand =
    | CreateVirtualAccount of CreateVirtualAccountCommand
    | DepositCash of DepositCashCommand
    | Debit of DebitCommand
+   | SettlePurchase of SettlePurchaseCommand
    | RefundDebit of RefundDebitCommand
    | MaintenanceFee of MaintenanceFeeCommand
    | SkipMaintenanceFee of SkipMaintenanceFeeCommand
@@ -59,6 +60,7 @@ type AccountCommand =
       | CreateVirtualAccount cmd -> Command.envelope cmd
       | DepositCash cmd -> Command.envelope cmd
       | Debit cmd -> Command.envelope cmd
+      | SettlePurchase cmd -> Command.envelope cmd
       | RefundDebit cmd -> Command.envelope cmd
       | MaintenanceFee cmd -> Command.envelope cmd
       | SkipMaintenanceFee cmd -> Command.envelope cmd
@@ -101,6 +103,7 @@ type AccountCommand =
       | CreateVirtualAccount cmd -> cmd.Data.AccountId
       | DepositCash cmd -> cmd.Data.AccountId
       | Debit cmd -> cmd.Data.AccountId
+      | SettlePurchase cmd -> cmd.Data.AccountId
       | RefundDebit cmd -> cmd.Data.AccountId
       | MaintenanceFee cmd -> cmd.Data.AccountId
       | SkipMaintenanceFee cmd -> cmd.Data.AccountId
@@ -157,6 +160,7 @@ type AccountEvent =
    | CreatedVirtualAccount of BankEvent<CreatedVirtualAccount>
    | DepositedCash of BankEvent<DepositedCash>
    | DebitedAccount of BankEvent<DebitedAccount>
+   | PurchaseSettled of BankEvent<PurchaseSettled>
    | RefundedDebit of BankEvent<RefundedDebit>
    | MaintenanceFeeDebited of BankEvent<MaintenanceFeeDebited>
    | MaintenanceFeeSkipped of BankEvent<MaintenanceFeeSkipped>
@@ -203,6 +207,7 @@ type AccountEvent =
       | CreatedVirtualAccount evt -> evt.Data.AccountId
       | DepositedCash evt -> evt.Data.AccountId
       | DebitedAccount evt -> evt.Data.AccountId
+      | PurchaseSettled evt -> evt.Data.AccountId
       | RefundedDebit evt -> evt.Data.AccountId
       | MaintenanceFeeDebited evt -> evt.Data.AccountId
       | MaintenanceFeeSkipped evt -> evt.Data.AccountId
@@ -255,6 +260,8 @@ module AccountEvent =
          Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Origin
       | AccountEvent.DebitedAccount evt ->
          Some evt.Data.Amount, Some MoneyFlow.Out, Some evt.Data.Merchant
+      | AccountEvent.PurchaseSettled evt ->
+         Some evt.Data.Amount, None, Some evt.Data.Merchant
       | AccountEvent.RefundedDebit evt ->
          Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Merchant
       | AccountEvent.InternalTransferWithinOrgPending evt ->
@@ -343,6 +350,7 @@ module AccountEnvelope =
       | :? BankEvent<CreatedVirtualAccount> as evt -> CreatedVirtualAccount evt
       | :? BankEvent<DepositedCash> as evt -> DepositedCash evt
       | :? BankEvent<DebitedAccount> as evt -> DebitedAccount evt
+      | :? BankEvent<PurchaseSettled> as evt -> PurchaseSettled evt
       | :? BankEvent<RefundedDebit> as evt -> RefundedDebit evt
       | :? BankEvent<MaintenanceFeeDebited> as evt -> MaintenanceFeeDebited evt
       | :? BankEvent<MaintenanceFeeSkipped> as evt -> MaintenanceFeeSkipped evt
@@ -412,6 +420,7 @@ module AccountEnvelope =
       | CreatedVirtualAccount evt -> wrap evt, get evt
       | DepositedCash evt -> wrap evt, get evt
       | DebitedAccount evt -> wrap evt, get evt
+      | PurchaseSettled evt -> wrap evt, get evt
       | RefundedDebit evt -> wrap evt, get evt
       | MaintenanceFeeDebited evt -> wrap evt, get evt
       | MaintenanceFeeSkipped evt -> wrap evt, get evt

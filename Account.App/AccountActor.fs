@@ -199,6 +199,12 @@ let onPersisted
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
+   | AccountEvent.PurchaseSettled e ->
+      let msg =
+         PurchaseSagaEvent.PurchaseSettled
+         |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
    | AccountEvent.RefundedDebit e ->
       let msg =
          PurchaseSagaEvent.PurchaseRefundedToAccount

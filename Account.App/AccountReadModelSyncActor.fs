@@ -207,6 +207,8 @@ let private accountEventReducer
                Some e.Data.EmployeePurchaseReference.CardId
             | AccountEvent.RefundedDebit e ->
                Some e.Data.EmployeePurchaseReference.CardId
+            | AccountEvent.PurchaseSettled e ->
+               Some e.Data.EmployeePurchaseReference.CardId
             | _ -> None
          )
       ]

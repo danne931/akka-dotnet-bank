@@ -356,7 +356,8 @@ let renderTransactionInfo
                               $"Purchase requested by {employeeHistory.EmployeeName}'s 
                               card **{e.Data.Info.CardNumberLast4}"
                         | EmployeeEvent.PurchaseRefunded e ->
-                           Html.p $"Purchase refunded due to {e.Data.Reason}"
+                           Html.p
+                              $"Purchase refunded to card due to {e.Data.Reason}"
                         | _ -> ()
                      | History.Account accountHistory ->
                         match accountHistory.Event with
@@ -393,6 +394,10 @@ let renderTransactionInfo
                            Html.p $"Deposited money via {e.Data.Origin}"
                         | AccountEvent.DebitedAccount _ ->
                            Html.p "Deducted funds from account."
+                        | AccountEvent.RefundedDebit _ ->
+                           Html.p "Refunded funds to account."
+                        | AccountEvent.PurchaseSettled _ ->
+                           Html.p "Purchase settled."
                         | AccountEvent.InternalTransferWithinOrgPending e ->
                            Html.p
                               $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"

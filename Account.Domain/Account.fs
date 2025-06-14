@@ -130,6 +130,7 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
+   | PurchaseSettled _ -> account
 
 let transitionErr (err: AccountStateTransitionError) =
    Error <| AccountStateTransitionError err
@@ -519,6 +520,12 @@ module private StateTransition =
          map InternalAutomatedTransferDeposited account
          <| (DepositInternalAutoTransferCommand.toEvent cmd)
 
+   let settlePurchase (account: Account) (cmd: SettlePurchaseCommand) =
+      if account.Status <> AccountStatus.Active then
+         accountNotActiveError account
+      else
+         map PurchaseSettled account (SettlePurchaseCommand.toEvent cmd)
+
 let stateTransition (account: Account) (command: AccountCommand) =
    match command with
    | AccountCommand.InitializePrimaryCheckingAccount cmd ->
@@ -579,6 +586,8 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.failInternalAutoTransfer account cmd
    | AccountCommand.DepositInternalAutoTransfer cmd ->
       StateTransition.depositInternalAutoTransfer account cmd
+   | AccountCommand.SettlePurchase cmd ->
+      StateTransition.settlePurchase account cmd
    | AccountCommand.ParentAccount _ ->
       account.AccountId
       |> AccountStateTransitionError.AccountNotFound

@@ -206,6 +206,12 @@ let transactionInfoFromHistory
       | AccountEvent.DebitedAccount e ->
          Some(
             TransactionType.Purchase,
+            TransactionStatus.InProgress,
+            e.Data.Amount
+         )
+      | AccountEvent.PurchaseSettled e ->
+         Some(
+            TransactionType.Purchase,
             TransactionStatus.Complete,
             e.Data.Amount
          )

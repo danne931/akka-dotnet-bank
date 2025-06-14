@@ -238,12 +238,6 @@ let accountHistoryUIFriendly
       |> Option.map _.FullName
       |> Option.defaultValue recipientFromEvt.FullName
 
-   let domesticRecipientNameFromId (recipientId: AccountId) =
-      org.DomesticTransferRecipients
-      |> Map.tryFind recipientId
-      |> Option.map _.FullName
-      |> Option.defaultValue "Unknown"
-
    let accountName =
       org.AccountProfiles.TryFind(history.Event.AccountId)
       |> Option.map (fun a -> a.Account.Name)
@@ -270,9 +264,19 @@ let accountHistoryUIFriendly
          props with
             Name = "Purchase"
             Info =
-               $"Purchase from {evt.Data.Merchant} with card {card} ({accountName})"
+               $"Purchase from {evt.Data.Merchant} with card {card} applied to account ({accountName})"
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
+      }
+   | PurchaseSettled evt ->
+      let card =
+         $"**{evt.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
+
+      {
+         props with
+            Name = "Purchase Settled"
+            Info = $"Purchase from {evt.Data.Merchant} with card {card} settled"
+            Amount = Some <| Money.format evt.Data.Amount
       }
    | RefundedDebit e ->
       let card = $"**{e.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
