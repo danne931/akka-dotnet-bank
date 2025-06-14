@@ -207,11 +207,11 @@ type Event =
             "PlatformTransferScheduledJobCreated"
          | PlatformTransferSagaEvent.ScheduledJobExecuted ->
             "PlatformTransferScheduledJobExecuted"
-         | PlatformTransferSagaEvent.SenderAccountDeductedFunds ->
+         | PlatformTransferSagaEvent.SenderAccountDeductedFunds _ ->
             "PlatformTransferSenderAccountDeductedFunds"
          | PlatformTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
             "PlatformTransferSenderAccountUnableToDeductFunds"
-         | PlatformTransferSagaEvent.RecipientAccountDepositedFunds ->
+         | PlatformTransferSagaEvent.RecipientAccountDepositedFunds _ ->
             "PlatformTransferRecipientAccountDepositedFunds"
          | PlatformTransferSagaEvent.RecipientAccountUnableToDepositFunds _ ->
             "PlatformTransferRecipientAccountUnableToDepositFunds"
@@ -241,7 +241,7 @@ type Event =
             "PlatformPaymentPayerAccountDeductedFunds"
          | PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds _ ->
             "PlatformPaymentPayerAccountUnableToDeductFunds"
-         | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds ->
+         | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds _ ->
             "PlatformPaymentPayeeAccountDepositedFunds"
          | PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds _ ->
             "PlatformPaymentPayeeAccountUnableToDepositFunds"

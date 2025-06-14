@@ -21,16 +21,18 @@ type PlatformTransferSagaStatus =
 
 [<RequireQualifiedAccess>]
 type PlatformTransferSagaStartEvent =
-   | SenderAccountDeductedFunds of BankEvent<InternalTransferBetweenOrgsPending>
+   | SenderAccountDeductedFunds of
+      BankEvent<InternalTransferBetweenOrgsPending> *
+      PartnerBankAccountLink
    | ScheduleTransferRequest of BankEvent<InternalTransferBetweenOrgsScheduled>
 
 [<RequireQualifiedAccess>]
 type PlatformTransferSagaEvent =
    | ScheduledJobCreated
    | ScheduledJobExecuted
-   | SenderAccountDeductedFunds
+   | SenderAccountDeductedFunds of PartnerBankAccountLink
    | SenderAccountUnableToDeductFunds of InternalTransferFailReason
-   | RecipientAccountDepositedFunds
+   | RecipientAccountDepositedFunds of PartnerBankAccountLink
    | RecipientAccountUnableToDepositFunds of InternalTransferFailReason
    | TransferNotificationSent
    | TransferDepositNotificationSent
@@ -84,6 +86,8 @@ type PlatformTransferSaga = {
    Status: PlatformTransferSagaStatus
    TransferInfo: BaseInternalTransferInfo
    LifeCycle: SagaLifeCycle<Activity>
+   PartnerBankSenderAccountLink: PartnerBankAccountLink option
+   PartnerBankRecipientAccountLink: PartnerBankAccountLink option
 } with
 
    member x.SyncedToPartnerBank =
@@ -108,11 +112,13 @@ let applyStartEvent
    (timestamp: DateTime)
    =
    match evt with
-   | StartEvent.SenderAccountDeductedFunds e -> {
+   | StartEvent.SenderAccountDeductedFunds(e, partnerBankSenderAccountLink) -> {
       Status = PlatformTransferSagaStatus.InProgress
       StartEvent = evt
       Events = []
       TransferInfo = e.Data.BaseInfo
+      PartnerBankSenderAccountLink = Some partnerBankSenderAccountLink
+      PartnerBankRecipientAccountLink = None
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -137,6 +143,8 @@ let applyStartEvent
       StartEvent = evt
       Events = []
       TransferInfo = e.Data.BaseInfo
+      PartnerBankSenderAccountLink = None
+      PartnerBankRecipientAccountLink = None
       LifeCycle =
          SagaLifeCycle.empty
          |> SagaLifeCycle.addActivity timestamp Activity.ScheduleTransfer
@@ -169,8 +177,9 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
             |> finishActivity Activity.WaitForScheduledTransferExecution
             |> addActivity Activity.DeductFromSenderAccount
      }
-   | Event.SenderAccountDeductedFunds -> {
+   | Event.SenderAccountDeductedFunds partnerBankSenderAccountLink -> {
       saga with
+         PartnerBankSenderAccountLink = Some partnerBankSenderAccountLink
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.DeductFromSenderAccount
@@ -182,8 +191,9 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
             saga.LifeCycle |> failActivity Activity.DeductFromSenderAccount
          Status = PlatformTransferSagaStatus.Failed reason
      }
-   | Event.RecipientAccountDepositedFunds -> {
+   | Event.RecipientAccountDepositedFunds partnerBankRecipientAccountLink -> {
       saga with
+         PartnerBankRecipientAccountLink = Some partnerBankRecipientAccountLink
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.DepositToRecipientAccount
@@ -309,10 +319,10 @@ let stateTransition
          activityIsDone Activity.ScheduleTransfer
       | PlatformTransferSagaEvent.ScheduledJobExecuted ->
          activityIsDone Activity.WaitForScheduledTransferExecution
-      | PlatformTransferSagaEvent.SenderAccountDeductedFunds
+      | PlatformTransferSagaEvent.SenderAccountDeductedFunds _
       | PlatformTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
          activityIsDone Activity.DeductFromSenderAccount
-      | PlatformTransferSagaEvent.RecipientAccountDepositedFunds
+      | PlatformTransferSagaEvent.RecipientAccountDepositedFunds _
       | PlatformTransferSagaEvent.RecipientAccountUnableToDepositFunds _ ->
          activityIsDone Activity.DepositToRecipientAccount
       | PlatformTransferSagaEvent.RecipientAccountDepositUndo ->
@@ -370,7 +380,7 @@ let onStartEventPersisted
    (evt: TransferStartEvent)
    =
    match evt with
-   | TransferStartEvent.SenderAccountDeductedFunds e ->
+   | TransferStartEvent.SenderAccountDeductedFunds(e, _) ->
       depositTransfer dep.getAccountRef e.Data.BaseInfo
    | TransferStartEvent.ScheduleTransferRequest e ->
       dep.getSchedulingRef () <! scheduleTransferMessage e.Data.BaseInfo
@@ -431,31 +441,30 @@ let onEventPersisted
       dep.getEmailRef () <! msg
 
    let syncToPartnerBank () =
-      dep.getPartnerBankServiceRef ()
-      <! PartnerBankServiceMessage.TransferBetweenOrganizations {
-         Amount = transfer.Amount
-         // TODO: get from parent account
-         From = {
-            AccountNumber = ParentAccountNumber AccountNumber.Empty
-            RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
+      match
+         currentState.PartnerBankSenderAccountLink,
+         currentState.PartnerBankRecipientAccountLink
+      with
+      | Some sender, Some recipient ->
+         dep.getPartnerBankServiceRef ()
+         <! PartnerBankServiceMessage.TransferBetweenOrganizations {
+            Amount = transfer.Amount
+            From = sender
+            To = recipient
+            Metadata = {
+               OrgId = transfer.Sender.OrgId
+               CorrelationId = correlationId
+            }
+            ReplyTo = TransferSagaReplyTo.PlatformTransfer
          }
-         To = {
-            AccountNumber = ParentAccountNumber AccountNumber.Empty
-            RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
-         }
-         Metadata = {
-            OrgId = transfer.Sender.OrgId
-            CorrelationId = correlationId
-         }
-         ReplyTo = TransferSagaReplyTo.PlatformTransfer
-      }
+      | _ -> ()
 
    match evt with
    | TransferEvent.ScheduledJobCreated -> ()
    | TransferEvent.ScheduledJobExecuted -> deductFromSender ()
-   | TransferEvent.SenderAccountDeductedFunds ->
+   | TransferEvent.SenderAccountDeductedFunds _ ->
       depositTransfer dep.getAccountRef transfer
-   | TransferEvent.RecipientAccountDepositedFunds ->
+   | TransferEvent.RecipientAccountDepositedFunds _ ->
       transferSentEmail ()
       transferDepositEmail ()
       syncToPartnerBank ()

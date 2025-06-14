@@ -19,9 +19,11 @@ type PlatformPaymentSagaStartEvent =
 type PlatformPaymentSagaEvent =
    | PaymentRequestCancelled
    | PaymentRequestDeclined
-   | PayerAccountDeductedFunds of BankEvent<PlatformPaymentPaid>
+   | PayerAccountDeductedFunds of
+      BankEvent<PlatformPaymentPaid> *
+      PartnerBankAccountLink
    | PayerAccountUnableToDeductFunds of PlatformPaymentFailReason
-   | PayeeAccountDepositedFunds
+   | PayeeAccountDepositedFunds of PartnerBankAccountLink
    | PayeeAccountUnableToDepositFunds of
       PlatformPaymentFailReason *
       PaymentMethod
@@ -85,6 +87,8 @@ type PlatformPaymentSaga = {
    Status: PlatformPaymentSagaStatus
    PaymentInfo: PlatformPaymentBaseInfo
    LifeCycle: SagaLifeCycle<Activity>
+   PartnerBankSenderAccountLink: PartnerBankAccountLink option
+   PartnerBankRecipientAccountLink: PartnerBankAccountLink option
 } with
 
    member x.PaymentSyncedToPartnerBank =
@@ -107,6 +111,8 @@ let applyStartEvent (e: PlatformPaymentSagaStartEvent) (timestamp: DateTime) =
       Events = []
       Status = PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Unpaid
       PaymentInfo = evt.Data.BaseInfo
+      PartnerBankSenderAccountLink = None
+      PartnerBankRecipientAccountLink = None
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -146,8 +152,9 @@ let applyEvent
             |> finishActivity Activity.WaitForPayment
             |> addActivity Activity.NotifyPayeeOfDecline
      }
-   | Event.PayerAccountDeductedFunds _ -> {
+   | Event.PayerAccountDeductedFunds(_, senderLink) -> {
       saga with
+         PartnerBankSenderAccountLink = Some senderLink
          Status =
             PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Paid
          LifeCycle =
@@ -160,8 +167,9 @@ let applyEvent
          LifeCycle = saga.LifeCycle |> failActivity Activity.WaitForPayment
          Status = PlatformPaymentSagaStatus.Failed reason
      }
-   | Event.PayeeAccountDepositedFunds -> {
+   | Event.PayeeAccountDepositedFunds recipientLink -> {
       saga with
+         PartnerBankRecipientAccountLink = Some recipientLink
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.DepositToPayeeAccount
@@ -315,7 +323,7 @@ let stateTransition
       | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
          activityIsDone Activity.WaitForPayment
       | PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds _
-      | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds ->
+      | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds _ ->
          activityIsDone Activity.DepositToPayeeAccount
       | PlatformPaymentSagaEvent.PartnerBankSyncResponse _ ->
          activityIsDone Activity.SyncToPartnerBank
@@ -450,30 +458,29 @@ let onEventPersisted
             (dep.refundPaymentToThirdParty payment payMethod)
 
    let syncToPartnerBank () =
-      dep.getPartnerBankServiceRef ()
-      <! PartnerBankServiceMessage.TransferBetweenOrganizations {
-         Amount = payment.Amount
-         // TODO: get from parent account
-         From = {
-            AccountNumber = ParentAccountNumber AccountNumber.Empty
-            RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
+      match
+         state.PartnerBankSenderAccountLink,
+         state.PartnerBankRecipientAccountLink
+      with
+      | Some sender, Some recipient ->
+         dep.getPartnerBankServiceRef ()
+         <! PartnerBankServiceMessage.TransferBetweenOrganizations {
+            Amount = payment.Amount
+            From = sender
+            To = recipient
+            Metadata = {
+               OrgId = payment.Payee.OrgId
+               CorrelationId = correlationId
+            }
+            ReplyTo = TransferSagaReplyTo.PlatformPayment
          }
-         To = {
-            AccountNumber = ParentAccountNumber AccountNumber.Empty
-            RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
-         }
-         Metadata = {
-            OrgId = payment.Payee.OrgId
-            CorrelationId = correlationId
-         }
-         ReplyTo = TransferSagaReplyTo.PlatformPayment
-      }
+      | _ -> ()
 
    match evt with
    | Event.PaymentRequestCancelled -> ()
    | Event.PaymentRequestDeclined -> notifyPayeeOfPaymentDecline ()
-   | Event.PayerAccountDeductedFunds e -> depositToPayeeAccount e
-   | Event.PayeeAccountDepositedFunds ->
+   | Event.PayerAccountDeductedFunds(e, _) -> depositToPayeeAccount e
+   | Event.PayeeAccountDepositedFunds _ ->
       notifyPayerOfPaymentSent ()
       notifyPayeeOfPaymentDeposit ()
       syncToPartnerBank ()
@@ -521,7 +528,8 @@ let onEventPersisted
          | Activity.DepositToPayeeAccount ->
             state.Events
             |> List.tryPick (function
-               | PlatformPaymentSagaEvent.PayerAccountDeductedFunds e -> Some e
+               | PlatformPaymentSagaEvent.PayerAccountDeductedFunds(e, _) ->
+                  Some e
                | _ -> None)
             |> Option.iter depositToPayeeAccount
          | Activity.RefundThirdPartyPaymentMethod
