@@ -83,11 +83,11 @@ let actorProps
                   let msg =
                      match req.ReplyTo with
                      | TransferSagaReplyTo.PlatformTransfer ->
-                        Ok ""
+                        Ok(SettlementId res.ConfirmationId)
                         |> PlatformTransferSagaEvent.PartnerBankSyncResponse
                         |> AppSaga.Message.platformTransfer orgId corrId
                      | TransferSagaReplyTo.PlatformPayment ->
-                        Ok ""
+                        Ok(SettlementId res.ConfirmationId)
                         |> PlatformPaymentSagaEvent.PartnerBankSyncResponse
                         |> AppSaga.Message.platformPayment orgId corrId
 

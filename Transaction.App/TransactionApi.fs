@@ -51,6 +51,7 @@ let filtersToOriginatingEventNames
            | AccountEventGroupFilter.PlatformPayment -> [
               typeof<PlatformPaymentPaid>.Name // Outgoing payments
               typeof<PlatformPaymentDeposited>.Name // Incoming payments
+              typeof<PlatformPaymentSettled>.Name
              ])
       []
    |> List.toArray

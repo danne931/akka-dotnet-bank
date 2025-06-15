@@ -218,6 +218,8 @@ type Event =
             "PlatformTransferRecipientAccountUnableToDepositFunds"
          | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
             "PlatformTransferPartnerBankSyncResponse"
+         | PlatformTransferSagaEvent.TransferSettled ->
+            "PlatformTransferSettled"
          | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
             "PlatformTransferSupportTeamResolvedPartnerBankSync"
          | PlatformTransferSagaEvent.SenderAccountRefunded ->
@@ -248,6 +250,7 @@ type Event =
             "PlatformPaymentPayeeAccountUnableToDepositFunds"
          | PlatformPaymentSagaEvent.PartnerBankSyncResponse _ ->
             "PlatformPaymentPartnerBankSyncResponse"
+         | PlatformPaymentSagaEvent.PaymentSettled -> "PlatformPaymentSettled"
          | PlatformPaymentSagaEvent.SupportTeamResolvedPartnerBankSync ->
             "PlatformPaymentSupportTeamResolvedPartnerBankSync"
          | PlatformPaymentSagaEvent.PayerAccountRefunded ->

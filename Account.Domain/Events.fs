@@ -52,6 +52,14 @@ type DebitedAccount = {
    EmployeePurchaseReference: EmployeePurchaseReference
 }
 
+type PurchaseSettled = {
+   AccountId: AccountId
+   SettlementId: SettlementId
+   Merchant: string
+   Amount: decimal
+   EmployeePurchaseReference: EmployeePurchaseReference
+}
+
 type RefundedDebit = {
    AccountId: AccountId
    EmployeePurchaseReference: EmployeePurchaseReference
@@ -75,12 +83,4 @@ type MaintenanceFeeSkipped = {
 type AccountClosed = {
    AccountId: AccountId
    Reference: string option
-}
-
-type PurchaseSettled = {
-   AccountId: AccountId
-   SettlementId: SettlementId
-   Merchant: string
-   Amount: decimal
-   EmployeePurchaseReference: EmployeePurchaseReference
 }

@@ -93,6 +93,8 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
+   | InternalTransferBetweenOrgsSettled _ -> account
+   | PlatformPaymentSettled _ -> account
    | PlatformPaymentRequested _ -> account
    | PlatformPaymentCancelled _ -> account
    | PlatformPaymentDeclined _ -> account
@@ -273,6 +275,15 @@ module private StateTransition =
             account
             (InternalTransferBetweenOrgsCommand.toEvent cmd)
 
+   let settleInternalTransferBetweenOrgs
+      (account: Account)
+      (cmd: SettleInternalTransferBetweenOrgsCommand)
+      =
+      map
+         InternalTransferBetweenOrgsSettled
+         account
+         (SettleInternalTransferBetweenOrgsCommand.toEvent cmd)
+
    let failInternalTransferBetweenOrgs
       (account: Account)
       (cmd: FailInternalTransferBetweenOrgsCommand)
@@ -446,6 +457,15 @@ module private StateTransition =
             account
             (DepositPlatformPaymentCommand.toEvent cmd)
 
+   let settlePlatformPayment
+      (account: Account)
+      (cmd: SettlePlatformPaymentCommand)
+      =
+      map
+         PlatformPaymentSettled
+         account
+         (SettlePlatformPaymentCommand.toEvent cmd)
+
    let closeAccount (account: Account) (cmd: CloseAccountCommand) =
       map AccountEvent.AccountClosed account (CloseAccountCommand.toEvent cmd)
 
@@ -521,10 +541,7 @@ module private StateTransition =
          <| (DepositInternalAutoTransferCommand.toEvent cmd)
 
    let settlePurchase (account: Account) (cmd: SettlePurchaseCommand) =
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      else
-         map PurchaseSettled account (SettlePurchaseCommand.toEvent cmd)
+      map PurchaseSettled account (SettlePurchaseCommand.toEvent cmd)
 
 let stateTransition (account: Account) (command: AccountCommand) =
    match command with
@@ -553,6 +570,8 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.depositTransferWithinOrg account cmd
    | AccountCommand.DepositTransferBetweenOrgs cmd ->
       StateTransition.depositTransferBetweenOrgs account cmd
+   | AccountCommand.SettleInternalTransferBetweenOrgs cmd ->
+      StateTransition.settleInternalTransferBetweenOrgs account cmd
    | AccountCommand.ScheduleDomesticTransfer cmd ->
       StateTransition.scheduleDomesticTransfer account cmd
    | AccountCommand.DomesticTransfer cmd ->
@@ -570,6 +589,8 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.platformPaymentPaid account cmd
    | AccountCommand.RefundPlatformPayment cmd ->
       StateTransition.platformPaymentRefunded account cmd
+   | AccountCommand.SettlePlatformPayment cmd ->
+      StateTransition.settlePlatformPayment account cmd
    | AccountCommand.DepositPlatformPayment cmd ->
       StateTransition.platformPaymentDeposited account cmd
    | AccountCommand.CancelPlatformPayment cmd ->

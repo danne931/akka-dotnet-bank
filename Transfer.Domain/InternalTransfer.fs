@@ -29,6 +29,7 @@ type InternalTransferStatus =
    | Scheduled
    | Pending
    | Deposited
+   | Settled
    | Failed of InternalTransferFailReason
 
 type BaseInternalTransferInfo = {

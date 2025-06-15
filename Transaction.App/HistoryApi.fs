@@ -80,6 +80,7 @@ let accountEventFilterNames
               typeof<InternalTransferBetweenOrgsPending>.Name
               typeof<InternalTransferBetweenOrgsFailed>.Name
               typeof<InternalTransferBetweenOrgsDeposited>.Name
+              typeof<InternalTransferBetweenOrgsSettled>.Name
              ]
            | AccountEventGroupFilter.InternalAutomatedTransfer -> [
               typeof<InternalAutomatedTransferPending>.Name
@@ -96,6 +97,8 @@ let accountEventFilterNames
               typeof<PlatformPaymentRequested>.Name
               typeof<PlatformPaymentPaid>.Name
               typeof<PlatformPaymentDeposited>.Name
+              typeof<PlatformPaymentRefunded>.Name
+              typeof<PlatformPaymentSettled>.Name
               typeof<PlatformPaymentDeclined>.Name
               typeof<PlatformPaymentCancelled>.Name
              ])

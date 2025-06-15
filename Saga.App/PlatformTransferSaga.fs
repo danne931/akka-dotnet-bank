@@ -36,10 +36,11 @@ type PlatformTransferSagaEvent =
    | RecipientAccountUnableToDepositFunds of InternalTransferFailReason
    | TransferNotificationSent
    | TransferDepositNotificationSent
-   | PartnerBankSyncResponse of Result<string, string>
+   | PartnerBankSyncResponse of Result<SettlementId, string>
    | SupportTeamResolvedPartnerBankSync
    | SenderAccountRefunded
    | RecipientAccountDepositUndo
+   | TransferSettled
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
@@ -53,6 +54,7 @@ type Activity =
    | DeductFromSenderAccount
    | DepositToRecipientAccount
    | SyncToPartnerBank
+   | SettleTransfer
    | SendTransferNotification
    | SendTransferDepositNotification
    | RefundSenderAccount
@@ -75,6 +77,7 @@ type Activity =
          | ScheduleTransfer
          | DeductFromSenderAccount
          | DepositToRecipientAccount
+         | SettleTransfer
          | RefundSenderAccount
          | UndoRecipientDeposit -> Some(TimeSpan.FromSeconds 5)
          | WaitForScheduledTransferExecution
@@ -93,6 +96,17 @@ type PlatformTransferSaga = {
    member x.SyncedToPartnerBank =
       x.LifeCycle.Completed
       |> List.exists (fun w -> w.Activity = Activity.SyncToPartnerBank)
+
+   member x.IsSettled =
+      x.LifeCycle.Completed
+      |> List.exists (fun w -> w.Activity = Activity.SettleTransfer)
+
+   member x.SettlementId =
+      x.Events
+      |> List.tryPick (function
+         | PlatformTransferSagaEvent.PartnerBankSyncResponse(Ok settlementId) ->
+            Some settlementId
+         | _ -> None)
 
    member x.TransferNotificationSent =
       x.LifeCycle.Completed
@@ -232,16 +246,10 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
             }
       | Ok _ -> {
          saga with
-            Status =
-               if
-                  saga.TransferNotificationSent
-                  && saga.TransferDepositNotificationSent
-               then
-                  PlatformTransferSagaStatus.Completed
-               else
-                  saga.Status
             LifeCycle =
-               saga.LifeCycle |> finishActivity Activity.SyncToPartnerBank
+               saga.LifeCycle
+               |> finishActivity Activity.SyncToPartnerBank
+               |> addActivity Activity.SettleTransfer
         }
    | Event.SupportTeamResolvedPartnerBankSync -> {
       saga with
@@ -256,9 +264,7 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.SendTransferNotification
          Status =
-            if
-               saga.TransferDepositNotificationSent && saga.SyncedToPartnerBank
-            then
+            if saga.TransferDepositNotificationSent && saga.IsSettled then
                PlatformTransferSagaStatus.Completed
             else
                saga.Status
@@ -269,7 +275,7 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
             saga.LifeCycle
             |> finishActivity Activity.SendTransferDepositNotification
          Status =
-            if saga.TransferNotificationSent && saga.SyncedToPartnerBank then
+            if saga.TransferNotificationSent && saga.IsSettled then
                PlatformTransferSagaStatus.Completed
             else
                saga.Status
@@ -294,6 +300,18 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
    | Event.ResetInProgressActivityAttempts -> {
       saga with
          LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
+     }
+   | Event.TransferSettled -> {
+      saga with
+         LifeCycle = saga.LifeCycle |> finishActivity Activity.SettleTransfer
+         Status =
+            if
+               saga.TransferNotificationSent
+               && saga.TransferDepositNotificationSent
+            then
+               PlatformTransferSagaStatus.Completed
+            else
+               saga.Status
      }
 
 let stateTransitionStart
@@ -337,6 +355,8 @@ let stateTransition
          activityIsDone Activity.SendTransferDepositNotification
       | PlatformTransferSagaEvent.SenderAccountRefunded ->
          activityIsDone Activity.RefundSenderAccount
+      | PlatformTransferSagaEvent.TransferSettled ->
+         activityIsDone Activity.SettleTransfer
 
    if saga.Status = PlatformTransferSagaStatus.Completed then
       Error SagaStateTransitionError.HasAlreadyCompleted
@@ -459,6 +479,20 @@ let onEventPersisted
          }
       | _ -> ()
 
+   let settleTransfer settlementId =
+      let msg =
+         SettleInternalTransferBetweenOrgsCommand.create
+            correlationId
+            transfer.InitiatedBy
+            {
+               BaseInfo = transfer
+               SettlementId = settlementId
+            }
+         |> AccountCommand.SettleInternalTransferBetweenOrgs
+         |> AccountMessage.StateChange
+
+      dep.getAccountRef transfer.Sender.ParentAccountId <! msg
+
    match evt with
    | TransferEvent.ScheduledJobCreated -> ()
    | TransferEvent.ScheduledJobExecuted -> deductFromSender ()
@@ -470,7 +504,7 @@ let onEventPersisted
       syncToPartnerBank ()
    | TransferEvent.PartnerBankSyncResponse res ->
       match res with
-      | Ok _ -> ()
+      | Ok settlementId -> settleTransfer settlementId
       | Error reason ->
          if
             previousState.LifeCycle.ActivityHasRemainingAttempts
@@ -507,6 +541,7 @@ let onEventPersisted
       // reattempt syncing transaction to partner bank.
       syncToPartnerBank ()
    | TransferEvent.SenderAccountRefunded -> ()
+   | TransferEvent.TransferSettled -> ()
    | TransferEvent.RecipientAccountDepositUndo -> ()
    | TransferEvent.ResetInProgressActivityAttempts -> ()
    | TransferEvent.EvaluateRemainingWork ->
@@ -541,3 +576,5 @@ let onEventPersisted
          | Activity.UndoRecipientDeposit
          | Activity.WaitForScheduledTransferExecution
          | Activity.WaitForSupportTeamToResolvePartnerBankSync -> ()
+         | Activity.SettleTransfer ->
+            currentState.SettlementId |> Option.iter settleTransfer

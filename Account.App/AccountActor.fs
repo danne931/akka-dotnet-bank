@@ -257,6 +257,12 @@ let onPersisted
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
+   | AccountEvent.PlatformPaymentSettled e ->
+      let msg =
+         PlatformPaymentSagaEvent.PaymentSettled
+         |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
    | AccountEvent.PlatformPaymentRefunded e ->
       let msg =
          PlatformPaymentSagaEvent.PayerAccountRefunded
@@ -294,6 +300,12 @@ let onPersisted
       let msg =
          partnerBankAccountLink
          |> PlatformTransferSagaEvent.RecipientAccountDepositedFunds
+         |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+
+      getSagaRef e.CorrelationId <! msg
+   | AccountEvent.InternalTransferBetweenOrgsSettled e ->
+      let msg =
+         PlatformTransferSagaEvent.TransferSettled
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg

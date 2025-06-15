@@ -199,6 +199,7 @@ module TransferSqlWriter =
          | InternalTransferStatus.Scheduled -> "Scheduled"
          | InternalTransferStatus.Pending -> "Pending"
          | InternalTransferStatus.Deposited -> "Deposited"
+         | InternalTransferStatus.Settled -> "Settled"
          | InternalTransferStatus.Failed _ -> "Failed"
          >> Sql.string
 

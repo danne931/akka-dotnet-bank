@@ -332,6 +332,16 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
       }
+   | InternalTransferBetweenOrgsSettled evt ->
+      let info = evt.Data.BaseInfo
+
+      {
+         props with
+            Name = "Transfer Between Orgs Settled"
+            Info =
+               $"Transfer from {accountName} to {info.Recipient.Name} settled"
+            Amount = Some <| Money.format info.Amount
+      }
    | InternalTransferBetweenOrgsScheduled evt ->
       let info = evt.Data.BaseInfo
 
@@ -508,6 +518,15 @@ let accountHistoryUIFriendly
             Info = $"{p.Payer.OrgName} declined payment request"
             Amount = Some <| Money.format p.Amount
             MoneyFlow = None
+      }
+   | PlatformPaymentSettled evt ->
+      let p = evt.Data.BaseInfo
+
+      {
+         props with
+            Name = "Payment Settled"
+            Info = $"Payment from {p.Payer.OrgName} settled"
+            Amount = Some <| Money.format p.Amount
       }
    | AutoTransferRuleConfigured evt -> {
       props with

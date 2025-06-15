@@ -138,6 +138,7 @@ module PaymentSqlWriter =
          | PlatformPaymentStatus.Unpaid -> "Unpaid"
          | PlatformPaymentStatus.Paid -> "Paid"
          | PlatformPaymentStatus.Deposited -> "Deposited"
+         | PlatformPaymentStatus.Settled -> "Settled"
          | PlatformPaymentStatus.Cancelled -> "Cancelled"
          | PlatformPaymentStatus.Declined -> "Declined"
          | PlatformPaymentStatus.Failed _ -> "Failed"

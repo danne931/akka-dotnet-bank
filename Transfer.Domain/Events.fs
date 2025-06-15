@@ -27,6 +27,11 @@ type InternalTransferBetweenOrgsDeposited = {
    BaseInfo: BaseInternalTransferInfo
 }
 
+type InternalTransferBetweenOrgsSettled = {
+   BaseInfo: BaseInternalTransferInfo
+   SettlementId: SettlementId
+}
+
 type InternalTransferBetweenOrgsFailed = {
    BaseInfo: BaseInternalTransferInfo
    Reason: InternalTransferFailReason
@@ -141,6 +146,11 @@ type PlatformPaymentPaid = {
 type PlatformPaymentDeposited = {
    BaseInfo: PlatformPaymentBaseInfo
    PaymentMethod: PaymentMethod
+}
+
+type PlatformPaymentSettled = {
+   BaseInfo: PlatformPaymentBaseInfo
+   SettlementId: SettlementId
 }
 
 type PlatformPaymentCancelled = {

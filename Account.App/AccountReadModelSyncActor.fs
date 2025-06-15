@@ -425,6 +425,11 @@ let sqlParamReducer
             Transfer = transferParams :: acc.Transfer
             InternalTransfer = internalTransferParams :: acc.InternalTransfer
       }
+   | AccountEvent.InternalTransferBetweenOrgsSettled e ->
+      internalTransferStatusReducer
+         acc
+         InternalTransferStatus.Settled
+         e.Data.BaseInfo
    | AccountEvent.InternalTransferBetweenOrgsFailed e ->
       internalTransferStatusReducer
          acc
@@ -614,6 +619,20 @@ let sqlParamReducer
       }
    | AccountEvent.PlatformPaymentDeposited e ->
       let status = PlatformPaymentStatus.Deposited
+
+      let pParams =
+         [
+            "status", PaymentSqlWriter.Platform.status status
+            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
+         ]
+         @ platformPaymentBaseSqlParams e.Data.BaseInfo
+
+      {
+         acc with
+            PlatformPayment = pParams :: acc.PlatformPayment
+      }
+   | AccountEvent.PlatformPaymentSettled e ->
+      let status = PlatformPaymentStatus.Settled
 
       let pParams =
          [

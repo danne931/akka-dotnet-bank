@@ -404,7 +404,8 @@ let seedBalanceHistory () = taskResultOption {
       SET
          {aeFields.timestamp} =
             CASE
-               WHEN {aeFields.name} = 'PurchaseSettled' THEN @timestamp + '3 seconds'::interval
+               WHEN {aeFields.name} IN ('PurchaseSettled', 'InternalTransferBetweenOrgsSettled', 'PlatformPaymentSettled')
+               THEN @timestamp + '3 seconds'::interval
                ELSE @timestamp
             END,
          {aeFields.event} = jsonb_set(
@@ -412,7 +413,8 @@ let seedBalanceHistory () = taskResultOption {
             '{{1,Timestamp}}',
             to_jsonb(
                CASE
-                  WHEN {aeFields.name} = 'PurchaseSettled' THEN @timestamp + '3 seconds'::interval
+                  WHEN {aeFields.name} IN ('PurchaseSettled', 'InternalTransferBetweenOrgsSettled', 'PlatformPaymentSettled')
+                  THEN @timestamp + '3 seconds'::interval
                   ELSE @timestamp
                END
             ),

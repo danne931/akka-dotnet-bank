@@ -390,14 +390,16 @@ let renderTransactionInfo
                            Html.p $"Payment fulfilled by {txn.Source}"
                         | AccountEvent.PlatformPaymentDeposited _ ->
                            Html.p $"Deposit received by {txn.Destination}"
+                        | AccountEvent.PlatformPaymentSettled _ ->
+                           Html.p $"Payment settled"
                         | AccountEvent.DepositedCash e ->
                            Html.p $"Deposited money via {e.Data.Origin}"
                         | AccountEvent.DebitedAccount _ ->
-                           Html.p "Deducted funds from account."
+                           Html.p "Deducted funds from account"
                         | AccountEvent.RefundedDebit _ ->
-                           Html.p "Refunded funds to account."
+                           Html.p "Refunded funds to account"
                         | AccountEvent.PurchaseSettled _ ->
-                           Html.p "Purchase settled."
+                           Html.p "Purchase settled"
                         | AccountEvent.InternalTransferWithinOrgPending e ->
                            Html.p
                               $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
@@ -415,6 +417,8 @@ let renderTransactionInfo
                         | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
                            Html.p
                               $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                        | AccountEvent.InternalTransferBetweenOrgsSettled _ ->
+                           Html.p "Transfer settled"
                         | AccountEvent.InternalTransferBetweenOrgsFailed e ->
                            Html.p $"Failed: {e.Data.Reason}"
                         | AccountEvent.InternalAutomatedTransferPending _ ->

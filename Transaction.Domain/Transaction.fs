@@ -176,6 +176,12 @@ let transactionInfoFromHistory
       | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
          Some(
             TransactionType.InternalTransferBetweenOrgs,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount
+         )
+      | AccountEvent.InternalTransferBetweenOrgsSettled e ->
+         Some(
+            TransactionType.InternalTransferBetweenOrgs,
             TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
@@ -260,10 +266,22 @@ let transactionInfoFromHistory
       | AccountEvent.PlatformPaymentPaid e ->
          Some(
             TransactionType.Payment,
-            TransactionStatus.Complete,
+            TransactionStatus.InProgress,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.PlatformPaymentDeposited e ->
+         Some(
+            TransactionType.Payment,
+            TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount
+         )
+      | AccountEvent.PlatformPaymentRefunded e ->
+         Some(
+            TransactionType.Payment,
+            TransactionStatus.Failed,
+            e.Data.BaseInfo.Amount
+         )
+      | AccountEvent.PlatformPaymentSettled e ->
          Some(
             TransactionType.Payment,
             TransactionStatus.Complete,

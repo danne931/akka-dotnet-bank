@@ -249,6 +249,28 @@ module DepositInternalTransferBetweenOrgsCommand =
       =
       BankEvent.create<InternalTransferBetweenOrgsDeposited> cmd |> Ok
 
+type SettleInternalTransferBetweenOrgsCommand =
+   Command<InternalTransferBetweenOrgsSettled>
+
+module SettleInternalTransferBetweenOrgsCommand =
+   let create
+      correlationId
+      (initiatedBy: Initiator)
+      (data: InternalTransferBetweenOrgsSettled)
+      =
+      Command.create
+         (ParentAccountId.toEntityId data.BaseInfo.Recipient.ParentAccountId)
+         data.BaseInfo.Recipient.OrgId
+         correlationId
+         initiatedBy
+         data
+
+   let toEvent
+      (cmd: SettleInternalTransferBetweenOrgsCommand)
+      : ValidationResult<BankEvent<InternalTransferBetweenOrgsSettled>>
+      =
+      BankEvent.create<InternalTransferBetweenOrgsSettled> cmd |> Ok
+
 type DomesticTransferRecipientInput = {
    AccountId: AccountId
    LastName: string
@@ -718,6 +740,25 @@ module DepositPlatformPaymentCommand =
       : ValidationResult<BankEvent<PlatformPaymentDeposited>>
       =
       BankEvent.create<PlatformPaymentDeposited> cmd |> Ok
+
+type SettlePlatformPaymentCommand = Command<PlatformPaymentSettled>
+
+module SettlePlatformPaymentCommand =
+   let create (initiatedBy: Initiator) (data: PlatformPaymentSettled) =
+      let payee = data.BaseInfo.Payee
+
+      Command.create
+         (ParentAccountId.toEntityId payee.ParentAccountId)
+         payee.OrgId
+         (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
+         initiatedBy
+         data
+
+   let toEvent
+      (cmd: SettlePlatformPaymentCommand)
+      : ValidationResult<BankEvent<PlatformPaymentSettled>>
+      =
+      BankEvent.create<PlatformPaymentSettled> cmd |> Ok
 
 type RefundPlatformPaymentCommand = Command<PlatformPaymentRefunded>
 

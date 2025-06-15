@@ -641,6 +641,7 @@ CREATE TYPE internal_transfer_status AS ENUM (
    'Scheduled',
    'Pending',
    'Deposited',
+   'Settled',
    'Failed'
 );
 
@@ -759,6 +760,7 @@ CREATE TYPE platform_payment_status AS ENUM (
    'Unpaid',
    'Paid',
    'Deposited',
+   'Settled',
    'Cancelled',
    'Declined',
    'Failed'

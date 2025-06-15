@@ -48,6 +48,7 @@ type PlatformPaymentStatus =
    | Unpaid
    | Paid
    | Deposited
+   | Settled
    | Cancelled
    | Declined
    | Failed of PlatformPaymentFailReason
@@ -171,6 +172,7 @@ module Payment =
       | Payment.Platform p ->
          match p.Status with
          | PlatformPaymentStatus.Unpaid when isExpired payment -> 6
+         | PlatformPaymentStatus.Settled
          | PlatformPaymentStatus.Deposited -> 5
          | PlatformPaymentStatus.Paid -> 4
          | PlatformPaymentStatus.Cancelled -> 3

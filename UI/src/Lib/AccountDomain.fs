@@ -556,7 +556,8 @@ let private matchesAccountEventGroupFilter
       match event with
       | AccountEvent.InternalTransferBetweenOrgsPending _
       | AccountEvent.InternalTransferBetweenOrgsFailed _
-      | AccountEvent.InternalTransferBetweenOrgsDeposited _ -> true
+      | AccountEvent.InternalTransferBetweenOrgsDeposited _
+      | AccountEvent.InternalTransferBetweenOrgsSettled _ -> true
       | _ -> false
    | AccountEventGroupFilter.InternalAutomatedTransfer ->
       match event with
@@ -576,6 +577,7 @@ let private matchesAccountEventGroupFilter
       | AccountEvent.PlatformPaymentRequested _
       | AccountEvent.PlatformPaymentPaid _
       | AccountEvent.PlatformPaymentDeposited _
+      | AccountEvent.PlatformPaymentSettled _
       | AccountEvent.PlatformPaymentDeclined _
       | AccountEvent.PlatformPaymentCancelled _ -> true
       | _ -> false
