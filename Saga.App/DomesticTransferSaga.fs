@@ -233,6 +233,7 @@ let applyEvent
                   saga.LifeCycle
                   |> addActivity Activity.WaitForDevelopmentTeamFix
            }
+         | DomesticTransferThirdPartyFailReason.NoTransferFound
          | DomesticTransferThirdPartyFailReason.InvalidAmount
          | DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo
          | DomesticTransferThirdPartyFailReason.RecipientAccountNotActive ->
@@ -255,7 +256,10 @@ let applyEvent
          Status = DomesticTransferProgress.WaitingForTransferServiceAck
          TransferInfo.Recipient =
             updatedRecipient |> Option.defaultValue saga.TransferInfo.Recipient
-         LifeCycle = saga.LifeCycle |> addActivity Activity.TransferServiceAck
+         LifeCycle =
+            saga.LifeCycle
+            |> addActivity Activity.TransferServiceAck
+            |> addActivity Activity.WaitForTransferServiceComplete
      }
    | DomesticTransferSagaEvent.TransferMarkedAsSettled -> {
       saga with

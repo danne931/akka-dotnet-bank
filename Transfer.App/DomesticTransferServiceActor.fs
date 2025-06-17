@@ -47,6 +47,7 @@ let private failReasonFromError (err: string) : FailReason =
    | Contains "InvalidDepository" ->
       FailReason.Infra InfraFailReason.RecipientAccountInvalidDepository
    | Contains "InactiveAccount" -> FailReason.RecipientAccountInvalidInfo
+   | Contains "NoTransferProcessing" -> FailReason.NoTransferFound
    | e -> FailReason.Infra(InfraFailReason.Unknown e)
 
 let private networkSender

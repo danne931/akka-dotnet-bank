@@ -103,6 +103,7 @@ type DomesticTransferThirdPartyFailReason =
    | InvalidAmount
    | RecipientAccountInvalidInfo
    | RecipientAccountNotActive
+   | NoTransferFound
    | Infra of DomesticTransferInfraFailReason
 
    member x.Display =
@@ -110,6 +111,7 @@ type DomesticTransferThirdPartyFailReason =
       | InvalidAmount -> "Invalid Amount"
       | RecipientAccountInvalidInfo -> "Invalid Recipient Account Info Provided"
       | RecipientAccountNotActive -> "Recipient Account Not Active"
+      | NoTransferFound -> "No Transfer Found During Progress Check"
       | Infra infraRelated -> infraRelated.Display
 
 [<RequireQualifiedAccess>]

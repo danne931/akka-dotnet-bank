@@ -3,17 +3,6 @@ module DomesticTransfer.Service.Domain
 open Bank.Transfer.Domain
 
 [<RequireQualifiedAccess>]
-type DomesticTransferServiceFailReason =
-   | CorruptData
-   | InvalidAction
-   | InvalidPaymentNetwork
-   | InvalidDepository
-   | InvalidAmount
-   | AccountClosed
-   | InvalidAccountInfo
-   | Unknown of string
-
-[<RequireQualifiedAccess>]
 type DomesticTransferServiceAction =
    | TransferAck
    | ProgressCheck
