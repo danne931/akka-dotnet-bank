@@ -124,6 +124,9 @@ let applyStartEvent
          SagaLifeCycle.empty with
             InProgress = [
                ActivityLifeCycle.init timestamp Activity.TransferServiceAck
+               ActivityLifeCycle.init
+                  timestamp
+                  Activity.WaitForTransferServiceComplete
             ]
             Completed = [
                {
@@ -185,6 +188,7 @@ let applyEvent
             saga.LifeCycle
             |> finishActivity Activity.DeductFromSenderAccount
             |> addActivity Activity.TransferServiceAck
+            |> addActivity Activity.WaitForTransferServiceComplete
          Status = DomesticTransferProgress.WaitingForTransferServiceAck
      }
    | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
@@ -196,7 +200,6 @@ let applyEvent
                saga.LifeCycle
                |> finishActivity Activity.TransferServiceAck
                |> addActivity Activity.SendTransferInitiatedNotification
-               |> addActivity Activity.WaitForTransferServiceComplete
         }
       | DomesticTransferThirdPartyUpdate.ProgressDetail _ -> {
          saga with
@@ -213,6 +216,10 @@ let applyEvent
       | DomesticTransferThirdPartyUpdate.Failed reason ->
          let saga = {
             saga with
+               LifeCycle =
+                  saga.LifeCycle
+                  |> failActivity Activity.TransferServiceAck
+                  |> failActivity Activity.WaitForTransferServiceComplete
                Status =
                   reason
                   |> DomesticTransferFailReason.ThirdParty
@@ -224,8 +231,6 @@ let applyEvent
             saga with
                LifeCycle =
                   saga.LifeCycle
-                  |> failActivity Activity.TransferServiceAck
-                  |> failActivity Activity.WaitForTransferServiceComplete
                   |> addActivity Activity.WaitForDevelopmentTeamFix
            }
          | DomesticTransferThirdPartyFailReason.InvalidAmount
@@ -239,11 +244,7 @@ let applyEvent
 
             {
                saga with
-                  LifeCycle =
-                     saga.LifeCycle
-                     |> failActivity Activity.TransferServiceAck
-                     |> failActivity Activity.WaitForTransferServiceComplete
-                     |> refundIfNotRetrying
+                  LifeCycle = refundIfNotRetrying saga.LifeCycle
             }
    | DomesticTransferSagaEvent.RetryTransferServiceRequest updatedRecipient -> {
       saga with
@@ -326,8 +327,7 @@ let stateTransition
       | DomesticTransferSagaEvent.SenderAccountDeductedFunds ->
          activityIsDone Activity.DeductFromSenderAccount
       | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
-         activityIsDone Activity.TransferServiceAck
-         && activityIsDone Activity.WaitForTransferServiceComplete
+         activityIsDone Activity.WaitForTransferServiceComplete
       | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
          saga.LifeCycle.ActivityHasFailed(Activity.TransferServiceAck) |> not
       | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
