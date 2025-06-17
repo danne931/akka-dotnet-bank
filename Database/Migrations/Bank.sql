@@ -218,6 +218,7 @@ CREATE TABLE account (
    account_name VARCHAR(50) NOT NULL,
    depository account_depository NOT NULL,
    balance MONEY NOT NULL,
+   pending_deductions MONEY NOT NULL,
    currency VARCHAR(3) NOT NULL,
    status account_status NOT NULL,
    auto_transfer_rule JSONB,
@@ -530,7 +531,7 @@ COMMENT ON COLUMN account_event.source IS
 This property is used only for analytics queries.';
 COMMENT ON COLUMN account_event.correlation_id IS
 'Correlation ID allows us to trace the lifecycle of some transaction
-(ex: DomesticTransferRequested -> DomesticTransferProgressUpdate -> DomesticTransferCompleted)
+(ex: DomesticTransferPending -> DomesticTransferProgressUpdate -> DomesticTransferSettled)
 is an example where 3 events share the same correlation_id.';
 
 
@@ -699,7 +700,7 @@ CREATE TYPE domestic_transfer_status AS ENUM (
    'ProcessingSenderAccountDeduction',
    'WaitingForTransferServiceAck',
    'ThirdPartyProcessing',
-   'Completed',
+   'Settled',
    'Failed'
 );
 
@@ -758,7 +759,7 @@ COMMENT ON TABLE payment IS
 --- PLATFORM PAYMENTS ---
 CREATE TYPE platform_payment_status AS ENUM (
    'Unpaid',
-   'Paid',
+   'PaymentPending',
    'Deposited',
    'Settled',
    'Cancelled',
@@ -1106,10 +1107,9 @@ BEGIN
       -- Exclude internal transfers within an org while
       -- still fetching internal transfers between orgs.
       AND ae.name NOT IN(
-         'InternalTransferWithinOrgPending',
-         'InternalTransferWithinOrgFailed',
+         'InternalTransferWithinOrgDeducted',
          'InternalTransferWithinOrgDeposited',
-         'InternalAutomatedTransferPending',
+         'InternalAutomatedTransferDeducted',
          'InternalAutomatedTransferFailed',
          'InternalAutomatedTransferDeposited'
       )
@@ -1162,10 +1162,9 @@ BEGIN
          -- Exclude internal transfers within an org while
          -- still fetching internal transfers between orgs.
          AND name NOT IN(
-            'InternalTransferWithinOrgPending',
-            'InternalTransferWithinOrgFailed',
+            'InternalTransferWithinOrgDeducted',
             'InternalTransferWithinOrgDeposited',
-            'InternalAutomatedTransferPending',
+            'InternalAutomatedTransferDeducted',
             'InternalAutomatedTransferFailed',
             'InternalAutomatedTransferDeposited'
          )
@@ -1202,10 +1201,9 @@ BEGIN
       -- Exclude internal transfers within an org while
       -- still fetching internal transfers between orgs.
       AND name NOT IN(
-         'InternalTransferWithinOrgPending',
-         'InternalTransferWithinOrgFailed', 
+         'InternalTransferWithinOrgDeducted',
          'InternalTransferWithinOrgDeposited',
-         'InternalAutomatedTransferPending',
+         'InternalAutomatedTransferDeducted',
          'InternalAutomatedTransferFailed',
          'InternalAutomatedTransferDeposited'
       )
@@ -1232,8 +1230,9 @@ BEGIN
       employee.first_name || ' ' || employee.last_name as employee_name,
       COALESCE(SUM(ae.amount::numeric), 0) AS amount
    FROM employee_event
-   JOIN saga ON correlation_id = saga.id AND saga.status = 'Completed'
-   JOIN account_event ae using(correlation_id)
+   JOIN account_event ae
+      ON correlation_id = ae.correlation_id
+      AND ae.name = 'DebitSettled'
    JOIN employee using(employee_id)
    WHERE
       employee_event.org_id = orgId
@@ -1254,7 +1253,7 @@ SELECT
 FROM account_event
 WHERE
    amount IS NOT NULL
-   AND name = 'DebitedAccount'
+   AND name = 'DebitSettled'
    AND timestamp::date = CURRENT_DATE
 GROUP BY account_id;
 
@@ -1265,7 +1264,7 @@ SELECT
 FROM account_event
 WHERE
    amount IS NOT NULL
-   AND name = 'DebitedAccount'
+   AND name = 'DebitSettled'
    AND timestamp::date >= date_trunc('month', CURRENT_DATE)
 GROUP BY account_id;
 
@@ -1276,7 +1275,7 @@ SELECT
 FROM account_event
 WHERE
    amount IS NOT NULL
-   AND name = 'DebitedAccount'
+   AND name = 'DebitSettled'
    AND timestamp::date = CURRENT_DATE
 GROUP BY card_id;
 
@@ -1287,7 +1286,7 @@ SELECT
 FROM account_event
 WHERE
    amount IS NOT NULL
-   AND name = 'DebitedAccount'
+   AND name = 'DebitSettled'
    AND timestamp::date >= date_trunc('month', CURRENT_DATE)
 GROUP BY card_id;
 
@@ -1313,17 +1312,10 @@ BEGIN
         SUM(
            CASE
            WHEN ae.name IN(
-              'InternalTransferWithinOrgPending',
-              'InternalAutomatedTransferPending'
+              'InternalTransferWithinOrgDeducted',
+              'InternalAutomatedTransferDeducted'
            )
            THEN ae.amount::numeric
-
-           WHEN ae.name IN(
-              'InternalTransferWithinOrgFailed',
-              'InternalAutomatedTransferFailed'
-           )
-           THEN -ae.amount::numeric
-
            ELSE 0
            END
         ),
@@ -1333,12 +1325,8 @@ BEGIN
      COALESCE(
         SUM(
            CASE
-           WHEN ae.name = 'InternalTransferBetweenOrgsPending'
+           WHEN ae.name = 'InternalTransferBetweenOrgsSettled'
            THEN ae.amount::numeric
-
-           WHEN ae.name = 'InternalTransferBetweenOrgsFailed'
-           THEN -ae.amount::numeric
-
            ELSE 0
            END
         ),
@@ -1348,8 +1336,7 @@ BEGIN
      COALESCE(
         SUM(
            CASE
-           WHEN ae.name = 'DomesticTransferPending' THEN ae.amount::numeric
-           WHEN ae.name = 'DomesticTransferFailed' THEN -ae.amount::numeric
+           WHEN ae.name = 'DomesticTransferSettled' THEN ae.amount::numeric
            ELSE 0
            END
         ),
@@ -1359,7 +1346,8 @@ BEGIN
      COALESCE(
         SUM(
            CASE
-           WHEN ae.name = 'PlatformPaymentPaid' THEN ae.amount::numeric
+           WHEN ae.name = 'PlatformPaymentSettled' THEN ae.amount::numeric
+           WHEN ae.name = 'PlatformPaymentRefunded' THEN -ae.amount::numeric
            ELSE 0
            END
         ),
@@ -1375,11 +1363,12 @@ BEGIN
      ae.org_id = orgId
      AND ae.amount IS NOT NULL
      AND ae.name IN (
-        'InternalAutomatedTransferPending', 'InternalAutomatedTransferFailed',
-        'InternalTransferWithinOrgPending', 'InternalTransferWithinOrgFailed',
-        'InternalTransferBetweenOrgsPending', 'InternalTransferBetweenOrgsFailed',
-        'DomesticTransferPending', 'DomesticTransferFailed',
-        'PlatformPaymentPaid'
+        'InternalAutomatedTransferDeducted',
+        'InternalTransferWithinOrgDeducted',
+        'InternalTransferBetweenOrgsSettled',
+        'DomesticTransferSettled',
+        'PlatformPaymentSettled',
+        'PlatformPaymentRefunded'
      )
      AND (
        partner_bank_parent_account.last_billing_cycle_at IS NULL 
@@ -1393,7 +1382,7 @@ BEGIN
           WHEN transfer.scheduled_at IS NOT NULL
           THEN transfer.scheduled_at::date = CURRENT_DATE
 
-          WHEN ae.name = 'PlatformPaymentPaid'
+          WHEN ae.name = 'PlatformPaymentSettled'
           THEN ae.timestamp::date = CURRENT_DATE
 
           ELSE false
@@ -1401,7 +1390,7 @@ BEGIN
        WHEN timeFrame = 'Month'
        THEN
           CASE
-          WHEN ae.name = 'PlatformPaymentPaid'
+          WHEN ae.name = 'PlatformPaymentSettled'
           THEN ae.timestamp::date >= date_trunc('month', CURRENT_DATE)
           -- Account event corresponds to a transfer rather than a payment.
           -- Need to check it's scheduled_at date rather than account_event.timestamp.

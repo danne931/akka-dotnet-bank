@@ -20,6 +20,7 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       Depository = AccountDepository.Checking
       Currency = Currency.USD
       Balance = 0m
+      PendingDeductions = 0m
       Status = AccountStatus.Active
       AutoTransferRule = None
      }
@@ -32,7 +33,8 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       Name = e.Data.Name
       Depository = e.Data.Depository
       Currency = e.Data.Currency
-      Balance = e.Data.Balance
+      Balance = 0m
+      PendingDeductions = 0m
       Status = AccountStatus.Active
       AutoTransferRule = None
      }
@@ -44,11 +46,20 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       account with
          Balance = account.Balance + e.Data.Amount
      }
-   | DebitedAccount e -> {
+   | DebitPending e -> {
+      account with
+         PendingDeductions = account.PendingDeductions + e.Data.Amount
+     }
+   | DebitSettled e -> {
       account with
          Balance = account.Balance - e.Data.Amount
+         PendingDeductions = account.PendingDeductions - e.Data.Amount
      }
-   | RefundedDebit e -> {
+   | DebitFailed e -> {
+      account with
+         PendingDeductions = account.PendingDeductions - e.Data.Amount
+     }
+   | DebitRefunded e -> {
       account with
          Balance = account.Balance + e.Data.Amount
      }
@@ -57,61 +68,86 @@ let applyEvent (account: Account) (evt: AccountEvent) =
          Balance = account.Balance - e.Data.Amount
      }
    | MaintenanceFeeSkipped _ -> account
-   | DomesticTransferScheduled _ -> account
+   | DomesticTransferScheduled e -> {
+      account with
+         PendingDeductions = account.PendingDeductions + e.Data.BaseInfo.Amount
+     }
    | DomesticTransferPending e -> {
       account with
-         Balance = account.Balance - e.Data.BaseInfo.Amount
+         PendingDeductions =
+            // PendingDeductions already computed when transfer was scheduled.
+            if e.Data.FromSchedule then
+               account.PendingDeductions
+            else
+               account.PendingDeductions + e.Data.BaseInfo.Amount
      }
    | DomesticTransferProgress _ -> account
-   | DomesticTransferCompleted _ -> account
+   | DomesticTransferSettled e -> {
+      account with
+         Balance = account.Balance - e.Data.BaseInfo.Amount
+         PendingDeductions = account.PendingDeductions - e.Data.BaseInfo.Amount
+     }
    | DomesticTransferFailed e -> {
       account with
-         Balance = account.Balance + e.Data.BaseInfo.Amount
+         PendingDeductions = account.PendingDeductions - e.Data.BaseInfo.Amount
      }
-   | InternalTransferWithinOrgPending e -> {
+   | InternalTransferWithinOrgDeducted e -> {
       account with
          Balance = account.Balance - e.Data.BaseInfo.Amount
-     }
-   | InternalTransferWithinOrgFailed e -> {
-      account with
-         Balance = account.Balance + e.Data.BaseInfo.Amount
-     }
-   | InternalTransferBetweenOrgsScheduled _ -> account
-   | InternalTransferBetweenOrgsPending e -> {
-      account with
-         Balance = account.Balance - e.Data.BaseInfo.Amount
-     }
-   | InternalTransferBetweenOrgsFailed e -> {
-      account with
-         Balance = account.Balance + e.Data.BaseInfo.Amount
      }
    | InternalTransferWithinOrgDeposited e -> {
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
+   | InternalTransferBetweenOrgsScheduled e -> {
+      account with
+         PendingDeductions = account.PendingDeductions + e.Data.BaseInfo.Amount
+     }
+   | InternalTransferBetweenOrgsPending e -> {
+      account with
+         PendingDeductions =
+            // PendingDeductions already computed when transfer was scheduled.
+            if e.Data.FromSchedule then
+               account.PendingDeductions
+            else
+               account.PendingDeductions + e.Data.BaseInfo.Amount
+     }
+   | InternalTransferBetweenOrgsFailed e -> {
+      account with
+         PendingDeductions = account.PendingDeductions - e.Data.BaseInfo.Amount
+     }
    | InternalTransferBetweenOrgsDeposited e -> {
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
-   | InternalTransferBetweenOrgsSettled _ -> account
-   | PlatformPaymentSettled _ -> account
+   | InternalTransferBetweenOrgsSettled e -> {
+      account with
+         Balance = account.Balance - e.Data.BaseInfo.Amount
+         PendingDeductions = account.PendingDeductions - e.Data.BaseInfo.Amount
+     }
    | PlatformPaymentRequested _ -> account
    | PlatformPaymentCancelled _ -> account
    | PlatformPaymentDeclined _ -> account
-   | PlatformPaymentPaid e ->
-      // If payment fulfilled with account funds then deduct the
-      // payment amount from the account.
+   | PlatformPaymentPending e ->
+      // If payment fulfilled with account funds then
+      // add the deducted amount to PendingDeductions.
       match e.Data.PaymentMethod with
       | PaymentMethod.Platform _ -> {
          account with
-            Balance = account.Balance - e.Data.BaseInfo.Amount
+            PendingDeductions =
+               account.PendingDeductions + e.Data.BaseInfo.Amount
         }
       | PaymentMethod.ThirdParty _ -> account
-   | PlatformPaymentRefunded e -> {
+   | PlatformPaymentDeposited e -> {
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
-   | PlatformPaymentDeposited e -> {
+   | PlatformPaymentSettled e -> {
+      account with
+         Balance = account.Balance - e.Data.BaseInfo.Amount
+         PendingDeductions = account.PendingDeductions - e.Data.BaseInfo.Amount
+     }
+   | PlatformPaymentRefunded e -> {
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
@@ -120,19 +156,15 @@ let applyEvent (account: Account) (evt: AccountEvent) =
          AutoTransferRule = Some e.Data.Config
      }
    | AutoTransferRuleDeleted _ -> { account with AutoTransferRule = None }
-   | InternalAutomatedTransferPending e -> {
+   | InternalAutomatedTransferDeducted e -> {
       account with
          Balance = account.Balance - e.Data.BaseInfo.Amount
      }
-   | InternalAutomatedTransferFailed e -> {
-      account with
-         Balance = account.Balance + e.Data.BaseInfo.Amount
-     }
+   | InternalAutomatedTransferFailed _ -> account
    | InternalAutomatedTransferDeposited e -> {
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
-   | PurchaseSettled _ -> account
 
 let transitionErr (err: AccountStateTransitionError) =
    Error <| AccountStateTransitionError err
@@ -182,19 +214,27 @@ module private StateTransition =
 
    let debit (account: Account) (cmd: DebitCommand) =
       let input = cmd.Data
+      let availableBalance = account.Balance - account.PendingDeductions
 
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif availableBalance - input.Amount < 0m then
+         transitionErr
+         <| InsufficientBalance(availableBalance, account.FullName)
       else
-         map DebitedAccount account (DebitCommand.toEvent cmd)
+         map DebitPending account (DebitCommand.toEvent cmd)
+
+   let settleDebit (account: Account) (cmd: SettleDebitCommand) =
+      map DebitSettled account (SettleDebitCommand.toEvent cmd)
+
+   let failDebit (account: Account) (cmd: FailDebitCommand) =
+      map DebitFailed account (FailDebitCommand.toEvent cmd)
 
    let refundDebit (account: Account) (cmd: RefundDebitCommand) =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
       else
-         map RefundedDebit account (RefundDebitCommand.toEvent cmd)
+         map DebitRefunded account (RefundDebitCommand.toEvent cmd)
 
    let maintenanceFee (account: Account) (cmd: MaintenanceFeeCommand) =
       if account.Status <> AccountStatus.Active then
@@ -218,41 +258,45 @@ module private StateTransition =
       (cmd: InternalTransferWithinOrgCommand)
       =
       let input = cmd.Data
+      let availableBalance = account.Balance - account.PendingDeductions
 
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif availableBalance - input.Amount < 0m then
+         transitionErr
+         <| InsufficientBalance(availableBalance, account.FullName)
       elif input.Recipient.OrgId <> account.OrgId then
          transitionErr TransferExpectedToOccurWithinOrg
       else
          map
-            InternalTransferWithinOrgPending
+            InternalTransferWithinOrgDeducted
             account
             (InternalTransferWithinOrgCommand.toEvent cmd)
 
-   let failInternalTransfer
+   let depositTransferWithinOrg
       (account: Account)
-      (cmd: FailInternalTransferWithinOrgCommand)
+      (cmd: DepositInternalTransferWithinOrgCommand)
       =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
       else
          map
-            InternalTransferWithinOrgFailed
+            InternalTransferWithinOrgDeposited
             account
-            (FailInternalTransferWithinOrgCommand.toEvent cmd)
+            (DepositInternalTransferWithinOrgCommand.toEvent cmd)
 
    let scheduleInternalTransferBetweenOrgs
       (account: Account)
       (cmd: ScheduleInternalTransferBetweenOrgsCommand)
       =
       let input = cmd.Data.TransferInput
+      let availableBalance = account.Balance - account.PendingDeductions
 
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif availableBalance - input.Amount < 0m then
+         transitionErr
+         <| InsufficientBalance(availableBalance, account.FullName)
       else
          map
             InternalTransferBetweenOrgsScheduled
@@ -265,10 +309,18 @@ module private StateTransition =
       =
       let input = cmd.Data
 
+      let availableBalance =
+         // PendingDeductions already applied when transfer was scheduled.
+         if cmd.Data.OriginatedFromSchedule then
+            account.Balance
+         else
+            account.Balance - account.PendingDeductions
+
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif availableBalance - input.Amount < 0m then
+         transitionErr
+         <| InsufficientBalance(availableBalance, account.FullName)
       else
          map
             InternalTransferBetweenOrgsPending
@@ -288,24 +340,23 @@ module private StateTransition =
       (account: Account)
       (cmd: FailInternalTransferBetweenOrgsCommand)
       =
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      else
-         map
-            InternalTransferBetweenOrgsFailed
-            account
-            (FailInternalTransferBetweenOrgsCommand.toEvent cmd)
+      map
+         InternalTransferBetweenOrgsFailed
+         account
+         (FailInternalTransferBetweenOrgsCommand.toEvent cmd)
 
    let scheduleDomesticTransfer
       (account: Account)
       (cmd: ScheduleDomesticTransferCommand)
       =
       let input = cmd.Data.TransferInput
+      let availableBalance = account.Balance - account.PendingDeductions
 
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif availableBalance - input.Amount < 0m then
+         transitionErr
+         <| InsufficientBalance(availableBalance, account.FullName)
       else
          map
             DomesticTransferScheduled
@@ -315,10 +366,18 @@ module private StateTransition =
    let domesticTransfer (account: Account) (cmd: DomesticTransferCommand) =
       let input = cmd.Data
 
+      let availableBalance =
+         // PendingDeductions already applied when transfer was scheduled.
+         if cmd.Data.OriginatedFromSchedule then
+            account.Balance
+         else
+            account.Balance - account.PendingDeductions
+
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif availableBalance - input.Amount < 0m then
+         transitionErr
+         <| InsufficientBalance(availableBalance, account.FullName)
       else
          map
             DomesticTransferPending
@@ -337,39 +396,23 @@ module private StateTransition =
             account
             (UpdateDomesticTransferProgressCommand.toEvent cmd)
 
-   let completeDomesticTransfer
+   let settleDomesticTransfer
       (account: Account)
-      (cmd: CompleteDomesticTransferCommand)
+      (cmd: SettleDomesticTransferCommand)
       =
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      else
-         map
-            DomesticTransferCompleted
-            account
-            (CompleteDomesticTransferCommand.toEvent cmd)
+      map
+         DomesticTransferSettled
+         account
+         (SettleDomesticTransferCommand.toEvent cmd)
 
    let failDomesticTransfer
       (account: Account)
       (cmd: FailDomesticTransferCommand)
       =
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      else
-         map
-            DomesticTransferFailed
-            account
-            (FailDomesticTransferCommand.toEvent cmd)
-
-   let depositTransferWithinOrg
-      (account: Account)
-      (cmd: DepositInternalTransferWithinOrgCommand)
-      =
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      else
-         map InternalTransferWithinOrgDeposited account
-         <| (DepositInternalTransferWithinOrgCommand.toEvent cmd)
+      map
+         DomesticTransferFailed
+         account
+         (FailDomesticTransferCommand.toEvent cmd)
 
    let depositTransferBetweenOrgs
       (account: Account)
@@ -417,21 +460,17 @@ module private StateTransition =
             account
             (DeclinePlatformPaymentCommand.toEvent cmd)
 
-   let platformPaymentPaid
-      (account: Account)
-      (cmd: FulfillPlatformPaymentCommand)
-      =
+   let platformPaymentPending (account: Account) (cmd: PlatformPaymentCommand) =
       let input = cmd.Data.RequestedPayment.BaseInfo
+      let availableBalance = account.Balance - account.PendingDeductions
 
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - input.Amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif availableBalance - input.Amount < 0m then
+         transitionErr
+         <| InsufficientBalance(availableBalance, account.FullName)
       else
-         map
-            PlatformPaymentPaid
-            account
-            (FulfillPlatformPaymentCommand.toEvent cmd)
+         map PlatformPaymentPending account (PlatformPaymentCommand.toEvent cmd)
 
    let platformPaymentRefunded
       (account: Account)
@@ -505,16 +544,18 @@ module private StateTransition =
       =
       let input = cmd.Data.Transfer
       let amount = PositiveAmount.get input.Amount
+      let availableBalance = account.Balance - account.PendingDeductions
 
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif availableBalance - amount < 0m then
+         transitionErr
+         <| InsufficientBalance(availableBalance, account.FullName)
       elif input.Recipient.OrgId <> account.OrgId then
          transitionErr TransferExpectedToOccurWithinOrg
       else
          map
-            InternalAutomatedTransferPending
+            InternalAutomatedTransferDeducted
             account
             (InternalAutoTransferCommand.toEvent cmd)
 
@@ -540,9 +581,6 @@ module private StateTransition =
          map InternalAutomatedTransferDeposited account
          <| (DepositInternalAutoTransferCommand.toEvent cmd)
 
-   let settlePurchase (account: Account) (cmd: SettlePurchaseCommand) =
-      map PurchaseSettled account (SettlePurchaseCommand.toEvent cmd)
-
 let stateTransition (account: Account) (command: AccountCommand) =
    match command with
    | AccountCommand.InitializePrimaryCheckingAccount cmd ->
@@ -551,6 +589,8 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.create account cmd
    | AccountCommand.DepositCash cmd -> StateTransition.deposit account cmd
    | AccountCommand.Debit cmd -> StateTransition.debit account cmd
+   | AccountCommand.SettleDebit cmd -> StateTransition.settleDebit account cmd
+   | AccountCommand.FailDebit cmd -> StateTransition.failDebit account cmd
    | AccountCommand.RefundDebit cmd -> StateTransition.refundDebit account cmd
    | AccountCommand.MaintenanceFee cmd ->
       StateTransition.maintenanceFee account cmd
@@ -558,8 +598,6 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.skipMaintenanceFee account cmd
    | AccountCommand.InternalTransfer cmd ->
       StateTransition.internalTransfer account cmd
-   | AccountCommand.FailInternalTransfer cmd ->
-      StateTransition.failInternalTransfer account cmd
    | AccountCommand.ScheduleInternalTransferBetweenOrgs cmd ->
       StateTransition.scheduleInternalTransferBetweenOrgs account cmd
    | AccountCommand.InternalTransferBetweenOrgs cmd ->
@@ -576,8 +614,8 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.scheduleDomesticTransfer account cmd
    | AccountCommand.DomesticTransfer cmd ->
       StateTransition.domesticTransfer account cmd
-   | AccountCommand.CompleteDomesticTransfer cmd ->
-      StateTransition.completeDomesticTransfer account cmd
+   | AccountCommand.SettleDomesticTransfer cmd ->
+      StateTransition.settleDomesticTransfer account cmd
    | AccountCommand.FailDomesticTransfer cmd ->
       StateTransition.failDomesticTransfer account cmd
    | AccountCommand.UpdateDomesticTransferProgress cmd ->
@@ -585,8 +623,8 @@ let stateTransition (account: Account) (command: AccountCommand) =
    | AccountCommand.CloseAccount cmd -> StateTransition.closeAccount account cmd
    | AccountCommand.RequestPlatformPayment cmd ->
       StateTransition.platformPaymentRequested account cmd
-   | AccountCommand.FulfillPlatformPayment cmd ->
-      StateTransition.platformPaymentPaid account cmd
+   | AccountCommand.PlatformPayment cmd ->
+      StateTransition.platformPaymentPending account cmd
    | AccountCommand.RefundPlatformPayment cmd ->
       StateTransition.platformPaymentRefunded account cmd
    | AccountCommand.SettlePlatformPayment cmd ->
@@ -607,8 +645,6 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.failInternalAutoTransfer account cmd
    | AccountCommand.DepositInternalAutoTransfer cmd ->
       StateTransition.depositInternalAutoTransfer account cmd
-   | AccountCommand.SettlePurchase cmd ->
-      StateTransition.settlePurchase account cmd
    | AccountCommand.ParentAccount _ ->
       account.AccountId
       |> AccountStateTransitionError.AccountNotFound

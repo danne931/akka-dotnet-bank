@@ -139,30 +139,22 @@ let update msg state =
 
             let metrics =
                match evt with
-               | AccountEvent.InternalTransferWithinOrgPending e ->
+               | AccountEvent.InternalTransferWithinOrgDeducted e ->
                   internalTransferWithinOrg e.Data.BaseInfo.Amount
-               | AccountEvent.InternalTransferWithinOrgFailed e ->
-                  internalTransferWithinOrg -e.Data.BaseInfo.Amount
-               | AccountEvent.InternalAutomatedTransferPending e ->
+               | AccountEvent.InternalAutomatedTransferDeducted e ->
                   internalTransferWithinOrg e.Data.BaseInfo.Amount
-               | AccountEvent.InternalAutomatedTransferFailed e ->
-                  internalTransferWithinOrg -e.Data.BaseInfo.Amount
                | AccountEvent.DomesticTransferPending e ->
                   domesticTransfer e.Data.BaseInfo.Amount
-               | AccountEvent.DomesticTransferFailed e ->
-                  domesticTransfer -e.Data.BaseInfo.Amount
                | AccountEvent.InternalTransferBetweenOrgsPending e ->
                   internalTransferBetweenOrgs e.Data.BaseInfo.Amount
-               | AccountEvent.InternalTransferBetweenOrgsFailed e ->
-                  internalTransferBetweenOrgs -e.Data.BaseInfo.Amount
-               | AccountEvent.PlatformPaymentPaid e -> {
+               | AccountEvent.PlatformPaymentPending e -> {
                   metrics with
                      DailyPaymentPaid =
                         metrics.DailyPaymentPaid + e.Data.BaseInfo.Amount
                      MonthlyPaymentPaid =
                         metrics.MonthlyPaymentPaid + e.Data.BaseInfo.Amount
                  }
-               | AccountEvent.DebitedAccount e -> {
+               | AccountEvent.DebitPending e -> {
                   metrics with
                      DailyPurchase = metrics.DailyPurchase + e.Data.Amount
                      MonthlyPurchase = metrics.MonthlyPurchase + e.Data.Amount
@@ -200,22 +192,14 @@ let update msg state =
 
          let recipient =
             match evt with
-            | AccountEvent.InternalTransferWithinOrgPending e ->
+            | AccountEvent.InternalTransferWithinOrgDeducted e ->
                recipientBalanceUpdate
                   e.Data.BaseInfo.Recipient.AccountId
                   e.Data.BaseInfo.Amount
-            | AccountEvent.InternalAutomatedTransferPending e ->
+            | AccountEvent.InternalAutomatedTransferDeducted e ->
                recipientBalanceUpdate
                   e.Data.BaseInfo.Recipient.AccountId
                   e.Data.BaseInfo.Amount
-            | AccountEvent.InternalTransferWithinOrgFailed e ->
-               recipientBalanceUpdate
-                  e.Data.BaseInfo.Recipient.AccountId
-                  -e.Data.BaseInfo.Amount
-            | AccountEvent.InternalAutomatedTransferFailed e ->
-               recipientBalanceUpdate
-                  e.Data.BaseInfo.Recipient.AccountId
-                  -e.Data.BaseInfo.Amount
             | _ -> None
 
          let profiles =

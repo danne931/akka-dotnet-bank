@@ -206,7 +206,7 @@ let renderTransactionInfo
       |> List.tryPick (function
          | History.Account accountHistory ->
             match accountHistory.Event with
-            | AccountEvent.DebitedAccount e -> Some e.Data.Merchant
+            | AccountEvent.DebitPending e -> Some e.Data.Merchant
             | _ -> None
          | _ -> None)
 
@@ -371,7 +371,7 @@ let renderTransactionInfo
 
                            Html.p
                               $"Refunded account: {e.Data.BaseInfo.Sender.Name}"
-                        | AccountEvent.DomesticTransferCompleted _ ->
+                        | AccountEvent.DomesticTransferSettled _ ->
                            Html.p "ACH transfer processor completed transfer"
                         | AccountEvent.DomesticTransferScheduled e ->
                            let date =
@@ -386,21 +386,24 @@ let renderTransactionInfo
                               else
                                  $"Received payment request from {txn.Destination}"
                            )
-                        | AccountEvent.PlatformPaymentPaid _ ->
+                        | AccountEvent.PlatformPaymentPending _ ->
                            Html.p $"Payment fulfilled by {txn.Source}"
                         | AccountEvent.PlatformPaymentDeposited _ ->
-                           Html.p $"Deposit received by {txn.Destination}"
+                           Html.p $"Payment deposited into {txn.Destination}"
                         | AccountEvent.PlatformPaymentSettled _ ->
                            Html.p $"Payment settled"
                         | AccountEvent.DepositedCash e ->
                            Html.p $"Deposited money via {e.Data.Origin}"
-                        | AccountEvent.DebitedAccount _ ->
+                        | AccountEvent.DebitPending _ ->
+                           Html.p "Pending deduction of funds from account"
+                        | AccountEvent.DebitSettled _ ->
                            Html.p "Deducted funds from account"
-                        | AccountEvent.RefundedDebit _ ->
-                           Html.p "Refunded funds to account"
-                        | AccountEvent.PurchaseSettled _ ->
-                           Html.p "Purchase settled"
-                        | AccountEvent.InternalTransferWithinOrgPending e ->
+                        | AccountEvent.DebitFailed _ ->
+                           Html.p "Failed to deduct funds from account"
+                        | AccountEvent.DebitRefunded e ->
+                           Html.p
+                              $"Account refund applied due to {e.Data.Reason}"
+                        | AccountEvent.InternalTransferWithinOrgDeducted e ->
                            Html.p
                               $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
                         | AccountEvent.InternalTransferWithinOrgDeposited e ->
@@ -413,7 +416,7 @@ let renderTransactionInfo
 
                            Html.p $"Scheduled for {date}"
                         | AccountEvent.InternalTransferBetweenOrgsPending _ ->
-                           Html.p $"Funds deducted from {txn.Source}"
+                           Html.p $"Transfer processing from {txn.Source}"
                         | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
                            Html.p
                               $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
@@ -421,7 +424,7 @@ let renderTransactionInfo
                            Html.p "Transfer settled"
                         | AccountEvent.InternalTransferBetweenOrgsFailed e ->
                            Html.p $"Failed: {e.Data.Reason}"
-                        | AccountEvent.InternalAutomatedTransferPending _ ->
+                        | AccountEvent.InternalAutomatedTransferDeducted _ ->
                            Html.p $"Funds deducted from {txn.Source}"
                         | AccountEvent.InternalAutomatedTransferDeposited e ->
                            Html.p

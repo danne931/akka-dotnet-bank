@@ -4,12 +4,7 @@ open System
 
 open Lib.SharedTypes
 
-type InternalTransferWithinOrgPending = { BaseInfo: BaseInternalTransferInfo }
-
-type InternalTransferWithinOrgFailed = {
-   BaseInfo: BaseInternalTransferInfo
-   Reason: InternalTransferFailReason
-}
+type InternalTransferWithinOrgDeducted = { BaseInfo: BaseInternalTransferInfo }
 
 type InternalTransferWithinOrgDeposited = { BaseInfo: BaseInternalTransferInfo }
 
@@ -50,10 +45,10 @@ type DomesticTransferProgressUpdated = {
    InProgressInfo: DomesticTransferThirdPartyUpdate
 }
 
-type DomesticTransferCompleted = {
+type DomesticTransferSettled = {
    BaseInfo: BaseDomesticTransferInfo
-   /// Indicates the transfer was completed after previously failing
-   /// and then retrying.
+   /// Indicates the transfer was settled after previously
+   /// failing and then retrying.
    FromRetry: DomesticTransferFailReason option
 }
 
@@ -138,7 +133,7 @@ module PlatformPaymentRequested =
          PaidBy = None
       }
 
-type PlatformPaymentPaid = {
+type PlatformPaymentPending = {
    BaseInfo: PlatformPaymentBaseInfo
    PaymentMethod: PaymentMethod
 }
@@ -151,6 +146,7 @@ type PlatformPaymentDeposited = {
 type PlatformPaymentSettled = {
    BaseInfo: PlatformPaymentBaseInfo
    SettlementId: SettlementId
+   PaymentMethod: PaymentMethod
 }
 
 type PlatformPaymentCancelled = {
@@ -200,7 +196,7 @@ type AutomaticTransferRuleConfigured = {
 
 type AutomaticTransferRuleDeleted = { AccountId: AccountId; RuleId: Guid }
 
-type InternalAutomatedTransferPending = {
+type InternalAutomatedTransferDeducted = {
    BaseInfo: BaseInternalTransferInfo
    Rule: AutomaticTransfer.AutomaticTransferRule
 }

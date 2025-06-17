@@ -67,35 +67,36 @@ let accountEventFilterNames
          acc
          @ match e with
            | AccountEventGroupFilter.Purchase -> [
-              typeof<DebitedAccount>.Name
-              typeof<PurchaseSettled>.Name
+              typeof<DebitPending>.Name
+              typeof<DebitSettled>.Name
              ]
            | AccountEventGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
            | AccountEventGroupFilter.InternalTransferWithinOrg -> [
-              typeof<InternalTransferWithinOrgPending>.Name
-              typeof<InternalTransferWithinOrgFailed>.Name
+              typeof<InternalTransferWithinOrgDeducted>.Name
               typeof<InternalTransferWithinOrgDeposited>.Name
              ]
            | AccountEventGroupFilter.InternalTransferBetweenOrgs -> [
+              typeof<InternalTransferBetweenOrgsScheduled>.Name
               typeof<InternalTransferBetweenOrgsPending>.Name
               typeof<InternalTransferBetweenOrgsFailed>.Name
               typeof<InternalTransferBetweenOrgsDeposited>.Name
               typeof<InternalTransferBetweenOrgsSettled>.Name
              ]
            | AccountEventGroupFilter.InternalAutomatedTransfer -> [
-              typeof<InternalAutomatedTransferPending>.Name
+              typeof<InternalAutomatedTransferDeducted>.Name
               typeof<InternalAutomatedTransferFailed>.Name
               typeof<InternalAutomatedTransferDeposited>.Name
              ]
            | AccountEventGroupFilter.DomesticTransfer -> [
+              typeof<DomesticTransferScheduled>.Name
               typeof<DomesticTransferPending>.Name
-              typeof<DomesticTransferCompleted>.Name
+              typeof<DomesticTransferSettled>.Name
               typeof<DomesticTransferFailed>.Name
               typeof<DomesticTransferProgressUpdated>.Name
              ]
            | AccountEventGroupFilter.PlatformPayment -> [
               typeof<PlatformPaymentRequested>.Name
-              typeof<PlatformPaymentPaid>.Name
+              typeof<PlatformPaymentPending>.Name
               typeof<PlatformPaymentDeposited>.Name
               typeof<PlatformPaymentRefunded>.Name
               typeof<PlatformPaymentSettled>.Name

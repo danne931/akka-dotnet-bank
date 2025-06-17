@@ -217,7 +217,7 @@ module TransferSqlWriter =
             "ProcessingSenderAccountDeduction"
          | DomesticTransferProgress.WaitingForTransferServiceAck ->
             "WaitingForTransferServiceAck"
-         | DomesticTransferProgress.Completed -> "Completed"
+         | DomesticTransferProgress.Settled -> "Settled"
          | DomesticTransferProgress.ThirdParty _ -> "ThirdPartyProcessing"
          | DomesticTransferProgress.Failed _ -> "Failed"
          >> Sql.string

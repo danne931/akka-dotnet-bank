@@ -24,7 +24,6 @@ type CreatedVirtualAccount = {
    AccountId: AccountId
    Name: string
    Depository: AccountDepository
-   Balance: decimal
    Currency: Currency
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
@@ -43,7 +42,7 @@ type EmployeePurchaseReference = {
    CardId: CardId
 }
 
-type DebitedAccount = {
+type DebitPending = {
    AccountId: AccountId
    Date: DateTime
    Amount: decimal
@@ -52,7 +51,7 @@ type DebitedAccount = {
    EmployeePurchaseReference: EmployeePurchaseReference
 }
 
-type PurchaseSettled = {
+type DebitSettled = {
    AccountId: AccountId
    SettlementId: SettlementId
    Merchant: string
@@ -60,12 +59,20 @@ type PurchaseSettled = {
    EmployeePurchaseReference: EmployeePurchaseReference
 }
 
-type RefundedDebit = {
+type DebitRefunded = {
    AccountId: AccountId
    EmployeePurchaseReference: EmployeePurchaseReference
    Merchant: string
    Amount: decimal
    Reason: PurchaseRefundReason
+}
+
+type DebitFailed = {
+   AccountId: AccountId
+   EmployeePurchaseReference: EmployeePurchaseReference
+   Merchant: string
+   Amount: decimal
+   Reason: PurchaseFailReason
 }
 
 type MaintenanceFeeDebited = {

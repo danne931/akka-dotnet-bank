@@ -340,7 +340,7 @@ type ApprovableCommandPerCommand =
    | ManageApprovalRule of ManageApprovalRuleCommand
 
 type ApprovableCommandAmountBased =
-   | FulfillPlatformPayment of FulfillPlatformPaymentCommand
+   | FulfillPlatformPayment of PlatformPaymentCommand
    | InternalTransferBetweenOrgs of InternalTransferBetweenOrgsCommand
    | DomesticTransfer of DomesticTransferCommand
 

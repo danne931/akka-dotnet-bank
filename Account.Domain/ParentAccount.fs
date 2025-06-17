@@ -20,6 +20,7 @@ module AutoTransfer =
       |> List.choose _.AutoTransferRule
       |> CycleDetection.cycleDetected newRule
 
+/// Transfer amounts accrued include settled and in flight transactions.
 module TransferLimits =
    /// Transfers & payments between orgs on the platform
    let DailyPlatformLimit = 999_999_999m
@@ -50,8 +51,10 @@ module TransferLimits =
          | AccountEvent.InternalTransferBetweenOrgsFailed e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, -info.Amount)
-         | AccountEvent.PlatformPaymentPaid e ->
+         | AccountEvent.PlatformPaymentPending e ->
             Some(e.Timestamp, e.Data.BaseInfo.Amount)
+         | AccountEvent.PlatformPaymentRefunded e ->
+            Some(e.Timestamp, -e.Data.BaseInfo.Amount)
          | _ -> None)
 
    let dailyDomesticTransferAccrued =
@@ -150,18 +153,15 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
             MaintenanceFeeCriteria = MaintenanceFee.reset updated.Balance
             LastBillingCycleDate = Some e.Data.BillingDate
         }
-      | AccountEvent.DebitedAccount _
-      | AccountEvent.DomesticTransferPending _
-      | AccountEvent.InternalTransferWithinOrgPending _
-      | AccountEvent.InternalTransferBetweenOrgsPending _
-      | AccountEvent.InternalAutomatedTransferPending _ -> {
+      | AccountEvent.DebitSettled _
+      | AccountEvent.InternalTransferBetweenOrgsSettled _ -> {
          updated with
             MaintenanceFeeCriteria =
                MaintenanceFee.fromDebit
                   state.MaintenanceFeeCriteria
                   updated.Balance
         }
-      | AccountEvent.PlatformPaymentPaid e ->
+      | AccountEvent.PlatformPaymentSettled e ->
          match e.Data.PaymentMethod with
          | PaymentMethod.Platform _ -> {
             updated with
@@ -172,9 +172,9 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
            }
          | PaymentMethod.ThirdParty _ -> updated
       // When a domestic transfer lifecycle is as follows:
-      // (fails due to invalid account info -> retries -> completed)
+      // (fails due to invalid account info -> retries -> settled)
       // then update the recipient status to Confirmed.
-      | AccountEvent.DomesticTransferCompleted e ->
+      | AccountEvent.DomesticTransferSettled e ->
          let previouslyFailedDueToInvalidRecipient =
             match e.Data.FromRetry with
             | Some(DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo) ->
@@ -183,6 +183,10 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
 
          {
             updated with
+               MaintenanceFeeCriteria =
+                  MaintenanceFee.fromDebit
+                     state.MaintenanceFeeCriteria
+                     updated.Balance
                DomesticTransferRecipients =
                   if previouslyFailedDueToInvalidRecipient then
                      state.DomesticTransferRecipients.Change(
@@ -206,10 +210,6 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
 
          {
             updated with
-               MaintenanceFeeCriteria =
-                  MaintenanceFee.fromDebitReversal
-                     state.MaintenanceFeeCriteria
-                     updated.Balance
                DomesticTransferRecipients =
                   match updateStatusDueToRecipientRelatedFailure with
                   | Some failStatus ->
@@ -222,11 +222,8 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
                      )
                   | None -> state.DomesticTransferRecipients
          }
-      | AccountEvent.RefundedDebit _
-      | AccountEvent.PlatformPaymentRefunded _
-      | AccountEvent.InternalTransferWithinOrgFailed _
-      | AccountEvent.InternalTransferBetweenOrgsFailed _
-      | AccountEvent.InternalAutomatedTransferFailed _ -> {
+      | AccountEvent.DebitRefunded _
+      | AccountEvent.PlatformPaymentRefunded _ -> {
          updated with
             MaintenanceFeeCriteria =
                MaintenanceFee.fromDebitReversal
@@ -446,7 +443,7 @@ let stateTransition
       |> Result.bind (
          validatePlatformTransferLimit cmd.Data.Amount cmd.Timestamp
       )
-   | AccountCommand.FulfillPlatformPayment cmd, Some account ->
+   | AccountCommand.PlatformPayment cmd, Some account ->
       validateParentAccountActive state
       |> Result.bind (virtualAccountTransition account command)
       |> Result.bind (

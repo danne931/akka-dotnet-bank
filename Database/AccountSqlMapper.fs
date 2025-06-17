@@ -23,6 +23,7 @@ module AccountFields =
    let currency = "currency"
    let status = "status"
    let balance = "balance"
+   let pendingDeductions = "pending_deductions"
    let autoTransferRule = "auto_transfer_rule"
    let autoTransferRuleFrequency = "auto_transfer_rule_frequency"
 
@@ -56,6 +57,9 @@ module AccountSqlReader =
 
    let balance (read: RowReader) = read.decimal AccountFields.balance
 
+   let pendingDeductions (read: RowReader) =
+      read.decimal AccountFields.pendingDeductions
+
    let autoTransferRule (read: RowReader) : AutomaticTransferConfig option =
       read.textOrNone AccountFields.autoTransferRule
       |> Option.map Serialization.deserializeUnsafe<AutomaticTransferConfig>
@@ -71,6 +75,7 @@ module AccountSqlReader =
       Currency = currency read
       Status = status read
       Balance = balance read
+      PendingDeductions = pendingDeductions read
       AutoTransferRule = autoTransferRule read
    }
 
@@ -88,6 +93,7 @@ module AccountSqlWriter =
    let depository (dep: AccountDepository) = dep |> string |> Sql.string
    let name = Sql.string
    let balance = Sql.money
+   let pendingDeductions = Sql.money
    let currency (currency: Currency) = Sql.string <| string currency
    let status (status: AccountStatus) = status |> string |> Sql.string
 

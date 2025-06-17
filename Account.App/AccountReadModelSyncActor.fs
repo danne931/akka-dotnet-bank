@@ -203,11 +203,13 @@ let private accountEventReducer
          "cardId",
          aeSqlWriter.cardId (
             match evt with
-            | AccountEvent.DebitedAccount e ->
+            | AccountEvent.DebitPending e ->
                Some e.Data.EmployeePurchaseReference.CardId
-            | AccountEvent.RefundedDebit e ->
+            | AccountEvent.DebitRefunded e ->
                Some e.Data.EmployeePurchaseReference.CardId
-            | AccountEvent.PurchaseSettled e ->
+            | AccountEvent.DebitSettled e ->
+               Some e.Data.EmployeePurchaseReference.CardId
+            | AccountEvent.DebitFailed e ->
                Some e.Data.EmployeePurchaseReference.CardId
             | _ -> None
          )
@@ -301,7 +303,7 @@ let sqlParamReducer
             UpdatedDomesticTransferRecipientNickname =
                qParams :: acc.UpdatedDomesticTransferRecipientNickname
       }
-   | AccountEvent.InternalTransferWithinOrgPending e ->
+   | AccountEvent.InternalTransferWithinOrgDeducted e ->
       let info = e.Data.BaseInfo
 
       let transferParams =
@@ -327,17 +329,12 @@ let sqlParamReducer
             Transfer = transferParams :: acc.Transfer
             InternalTransfer = internalTransferParams :: acc.InternalTransfer
       }
-   | AccountEvent.InternalTransferWithinOrgFailed e ->
-      internalTransferStatusReducer
-         acc
-         (InternalTransferStatus.Failed e.Data.Reason)
-         e.Data.BaseInfo
    | AccountEvent.InternalTransferWithinOrgDeposited e ->
       internalTransferStatusReducer
          acc
          InternalTransferStatus.Deposited
          e.Data.BaseInfo
-   | AccountEvent.InternalAutomatedTransferPending e ->
+   | AccountEvent.InternalAutomatedTransferDeducted e ->
       let info = e.Data.BaseInfo
 
       let transferParams =
@@ -524,11 +521,11 @@ let sqlParamReducer
                   qParams :: acc.UpdatedDomesticTransferRecipientStatus
          }
       | None -> acc
-   | AccountEvent.DomesticTransferCompleted e ->
+   | AccountEvent.DomesticTransferSettled e ->
       let acc =
          domesticTransferStatusReducer
             acc
-            DomesticTransferProgress.Completed
+            DomesticTransferProgress.Settled
             e.Data.BaseInfo
 
       match e.Data.FromRetry with
@@ -589,8 +586,8 @@ let sqlParamReducer
          acc with
             PlatformPayment = pParams :: acc.PlatformPayment
       }
-   | AccountEvent.PlatformPaymentPaid e ->
-      let status = PlatformPaymentStatus.Paid
+   | AccountEvent.PlatformPaymentPending e ->
+      let status = PlatformPaymentStatus.PaymentPending
 
       let pParams =
          [
@@ -700,6 +697,8 @@ let sqlParamsFromAccount (account: Account) : (string * SqlValue) list = [
    "name", AccountSqlWriter.name account.Name
    "depository", AccountSqlWriter.depository account.Depository
    "balance", AccountSqlWriter.balance account.Balance
+   "pendingDeductions",
+   AccountSqlWriter.pendingDeductions account.PendingDeductions
    "currency", AccountSqlWriter.currency account.Currency
    "status", AccountSqlWriter.status account.Status
    "autoTransferRule",
@@ -789,6 +788,7 @@ let upsertReadModels
           {AccountFields.name},
           {AccountFields.depository},
           {AccountFields.balance},
+          {AccountFields.pendingDeductions},
           {AccountFields.currency},
           {AccountFields.status},
           {AccountFields.autoTransferRule},
@@ -802,6 +802,7 @@ let upsertReadModels
           @name,
           @depository::{AccountTypeCast.depository},
           @balance,
+          @pendingDeductions,
           @currency,
           @status::{AccountTypeCast.status},
           @autoTransferRule,
@@ -809,6 +810,7 @@ let upsertReadModels
       ON CONFLICT ({AccountFields.accountId})
       DO UPDATE SET
          {AccountFields.balance} = @balance,
+         {AccountFields.pendingDeductions} = @pendingDeductions,
          {AccountFields.status} = @status::{AccountTypeCast.status},
          {AccountFields.autoTransferRule} = @autoTransferRule,
          {AccountFields.autoTransferRuleFrequency} = @autoTransferRuleFrequency::{AccountTypeCast.autoTransferRuleFrequency};

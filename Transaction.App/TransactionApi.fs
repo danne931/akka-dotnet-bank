@@ -31,27 +31,23 @@ let filtersToOriginatingEventNames
       (fun acc e ->
          acc
          @ match e with
-           | AccountEventGroupFilter.Purchase -> [
-              typeof<DebitedAccount>.Name
-              typeof<PurchaseSettled>.Name
-             ]
+           | AccountEventGroupFilter.Purchase -> [ typeof<DebitPending>.Name ]
            | AccountEventGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
            | AccountEventGroupFilter.InternalTransferWithinOrg -> [
-              typeof<InternalTransferWithinOrgPending>.Name
+              typeof<InternalTransferWithinOrgDeducted>.Name
+             ]
+           | AccountEventGroupFilter.InternalAutomatedTransfer -> [
+              typeof<InternalAutomatedTransferDeducted>.Name
              ]
            | AccountEventGroupFilter.InternalTransferBetweenOrgs -> [
               typeof<InternalTransferBetweenOrgsPending>.Name
-             ]
-           | AccountEventGroupFilter.InternalAutomatedTransfer -> [
-              typeof<InternalAutomatedTransferPending>.Name
              ]
            | AccountEventGroupFilter.DomesticTransfer -> [
               typeof<DomesticTransferPending>.Name
              ]
            | AccountEventGroupFilter.PlatformPayment -> [
-              typeof<PlatformPaymentPaid>.Name // Outgoing payments
+              typeof<PlatformPaymentPending>.Name // Outgoing payments
               typeof<PlatformPaymentDeposited>.Name // Incoming payments
-              typeof<PlatformPaymentSettled>.Name
              ])
       []
    |> List.toArray
@@ -159,19 +155,13 @@ let transactionQuery (query: TransactionQuery) =
          query.DateRange
 
    let agg =
-      match query.MoneyFlow with
-      | None ->
-         let queryParams, where, joinAncillary = agg
-
-         queryParams,
-         $"{where} AND {Fields.moneyFlow} IS NOT NULL",
-         joinAncillary
-      | Some direction ->
-         let queryParams, where, joinAncillary = agg
-
-         ("direction", Writer.moneyFlow (Some direction)) :: queryParams,
-         $"{where} AND {Fields.moneyFlow} = @direction::{TypeCast.moneyFlow}",
-         joinAncillary
+      Option.fold
+         (fun (queryParams, where, joinAncillary) direction ->
+            ("direction", Writer.moneyFlow (Some direction)) :: queryParams,
+            $"{where} AND {Fields.moneyFlow} = @direction::{TypeCast.moneyFlow}",
+            joinAncillary)
+         agg
+         query.MoneyFlow
 
    let agg =
       Option.fold

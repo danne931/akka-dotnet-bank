@@ -115,11 +115,11 @@ let update orgId msg state =
                                     | Payment.ThirdParty p ->
                                        Payment.ThirdParty p)
                         }
-                     | AccountEvent.PlatformPaymentPaid e ->
+                     | AccountEvent.PlatformPaymentPending e ->
                         let updateStatus =
                            updatePlatformPaymentStatus
                               e.Data.BaseInfo.Id
-                              PlatformPaymentStatus.Paid
+                              PlatformPaymentStatus.PaymentPending
 
                         {
                            paymentSummary with

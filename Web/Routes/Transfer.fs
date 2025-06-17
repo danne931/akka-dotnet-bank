@@ -229,26 +229,25 @@ let startTransferRoutes (app: WebApplication) =
    app
       .MapPost(
          PaymentPath.FulfillPayment,
-         Func<ActorSystem, FulfillPlatformPaymentCommand, Task<IResult>>
-            (fun sys cmd ->
-               taskResult {
-                  let validation =
-                     cmd
-                     |> FulfillPlatformPaymentCommand.toEvent
-                     |> Result.map AccountEnvelope.get
+         Func<ActorSystem, PlatformPaymentCommand, Task<IResult>>(fun sys cmd ->
+            taskResult {
+               let validation =
+                  cmd
+                  |> PlatformPaymentCommand.toEvent
+                  |> Result.map AccountEnvelope.get
 
-                  let! res = validation |> Result.mapError Err.ValidationError
+               let! res = validation |> Result.mapError Err.ValidationError
 
-                  let msg =
-                     cmd
-                     |> FulfillPlatformPayment
-                     |> ApprovableCommand.AmountBased
-                     |> OrgMessage.ApprovableRequest
+               let msg =
+                  cmd
+                  |> FulfillPlatformPayment
+                  |> ApprovableCommand.AmountBased
+                  |> OrgMessage.ApprovableRequest
 
-                  (OrgActor.get sys cmd.OrgId) <! msg
-                  return res
-               }
-               |> RouteUtil.unwrapTaskResult)
+               (OrgActor.get sys cmd.OrgId) <! msg
+               return res
+            }
+            |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)
    |> ignore

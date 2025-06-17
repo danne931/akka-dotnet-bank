@@ -96,7 +96,6 @@ module CreateVirtualAccountCommand =
                {
                   Name = accountName
                   Depository = input.Depository
-                  Balance = 0m
                   Currency = input.Currency
                   RoutingNumber = routingNumber
                   AccountNumber = accountNumber
@@ -141,14 +140,14 @@ module DepositCashCommand =
             }
       }
 
-type DebitCommand = Command<DebitedAccount>
+type DebitCommand = Command<DebitPending>
 
 module DebitCommand =
    let create
       (parentAccountId: ParentAccountId, orgId: OrgId)
       (correlationId: CorrelationId)
       (initiator: Initiator)
-      (data: DebitedAccount)
+      (data: DebitPending)
       =
       Command.create
          (ParentAccountId.toEntityId parentAccountId)
@@ -176,27 +175,45 @@ module DebitCommand =
             }
          }
 
-   let toEvent
-      (cmd: DebitCommand)
-      : ValidationResult<BankEvent<DebitedAccount>>
+   let toEvent (cmd: DebitCommand) : ValidationResult<BankEvent<DebitPending>> = validate {
+      let input = cmd.Data
+      let! _ = amountValidator "Debit amount" input.Amount
+      let! _ = dateNotDefaultValidator "Date" input.Date
+      let! _ = merchantValidator input.Merchant
+
+      return BankEvent.create<DebitPending> cmd
+   }
+
+type FailDebitCommand = Command<DebitFailed>
+
+module FailDebitCommand =
+   let create
+      (parentAccountId: ParentAccountId, orgId: OrgId)
+      (correlationId: CorrelationId)
+      (initiator: Initiator)
+      (data: DebitFailed)
       =
-      validate {
-         let input = cmd.Data
-         let! _ = amountValidator "Debit amount" input.Amount
-         let! _ = dateNotDefaultValidator "Date" input.Date
-         let! _ = merchantValidator input.Merchant
+      Command.create
+         (ParentAccountId.toEntityId parentAccountId)
+         orgId
+         correlationId
+         initiator
+         data
 
-         return BankEvent.create<DebitedAccount> cmd
-      }
+   let toEvent
+      (cmd: FailDebitCommand)
+      : ValidationResult<BankEvent<DebitFailed>>
+      =
+      BankEvent.create<DebitFailed> cmd |> Ok
 
-type RefundDebitCommand = Command<RefundedDebit>
+type RefundDebitCommand = Command<DebitRefunded>
 
 module RefundDebitCommand =
    let create
       (parentAccountId: ParentAccountId, orgId: OrgId)
       (correlationId: CorrelationId)
       (initiator: Initiator)
-      (data: RefundedDebit)
+      (data: DebitRefunded)
       =
       Command.create
          (ParentAccountId.toEntityId parentAccountId)
@@ -228,9 +245,9 @@ module RefundDebitCommand =
 
    let toEvent
       (cmd: RefundDebitCommand)
-      : ValidationResult<BankEvent<RefundedDebit>>
+      : ValidationResult<BankEvent<DebitRefunded>>
       =
-      BankEvent.create<RefundedDebit> cmd |> Ok
+      BankEvent.create<DebitRefunded> cmd |> Ok
 
 type MaintenanceFeeCommand = Command<MaintenanceFeeDebited>
 
@@ -283,14 +300,14 @@ module SkipMaintenanceFeeCommand =
       =
       Ok <| BankEvent.create<MaintenanceFeeSkipped> cmd
 
-type SettlePurchaseCommand = Command<PurchaseSettled>
+type SettleDebitCommand = Command<DebitSettled>
 
-module SettlePurchaseCommand =
+module SettleDebitCommand =
    let create
       (parentAccountId: ParentAccountId, orgId: OrgId)
       (correlationId: CorrelationId)
       (initiator: Initiator)
-      (data: PurchaseSettled)
+      (data: DebitSettled)
       =
       Command.create
          (ParentAccountId.toEntityId parentAccountId)
@@ -318,10 +335,10 @@ module SettlePurchaseCommand =
          }
 
    let toEvent
-      (cmd: SettlePurchaseCommand)
-      : ValidationResult<BankEvent<PurchaseSettled>>
+      (cmd: SettleDebitCommand)
+      : ValidationResult<BankEvent<DebitSettled>>
       =
-      Ok <| BankEvent.create<PurchaseSettled> cmd
+      Ok <| BankEvent.create<DebitSettled> cmd
 
 type CloseAccountCommand = Command<AccountClosed>
 

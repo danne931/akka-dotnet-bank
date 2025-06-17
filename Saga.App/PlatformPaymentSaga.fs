@@ -20,7 +20,7 @@ type PlatformPaymentSagaEvent =
    | PaymentRequestCancelled
    | PaymentRequestDeclined
    | PayerAccountDeductedFunds of
-      BankEvent<PlatformPaymentPaid> *
+      BankEvent<PlatformPaymentPending> *
       PartnerBankAccountLink
    | PayerAccountUnableToDeductFunds of PlatformPaymentFailReason
    | PayeeAccountDepositedFunds of PartnerBankAccountLink
@@ -110,6 +110,13 @@ type PlatformPaymentSaga = {
             Some settlementId
          | _ -> None)
 
+   member x.PaymentMethod =
+      x.Events
+      |> List.tryPick (function
+         | PlatformPaymentSagaEvent.PayerAccountDeductedFunds(e, _) ->
+            Some e.Data.PaymentMethod
+         | _ -> None)
+
    member x.PaymentPaidNotificationSentToPayer =
       x.LifeCycle.Completed
       |> List.exists (fun w -> w.Activity = Activity.NotifyPayerOfPaymentSent)
@@ -172,7 +179,8 @@ let applyEvent
       saga with
          PartnerBankSenderAccountLink = Some senderLink
          Status =
-            PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Paid
+            PlatformPaymentSagaStatus.InProgress
+               PlatformPaymentStatus.PaymentPending
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.WaitForPayment
@@ -448,7 +456,7 @@ let onEventPersisted
 
       emailRef <! msg
 
-   let depositToPayeeAccount (e: BankEvent<PlatformPaymentPaid>) =
+   let depositToPayeeAccount (e: BankEvent<PlatformPaymentPending>) =
       let msg =
          DepositPlatformPaymentCommand.create e.InitiatedBy {
             BaseInfo = payment
@@ -496,11 +504,12 @@ let onEventPersisted
          }
       | _ -> ()
 
-   let settlePayment settlementId =
+   let settlePayment settlementId payMethod =
       let msg =
          SettlePlatformPaymentCommand.create state.InitiatedBy {
             BaseInfo = payment
             SettlementId = settlementId
+            PaymentMethod = payMethod
          }
          |> AccountCommand.SettlePlatformPayment
          |> AccountMessage.StateChange
@@ -517,7 +526,8 @@ let onEventPersisted
       syncToPartnerBank ()
    | Event.PartnerBankSyncResponse res ->
       match res with
-      | Ok settlementId -> settlePayment settlementId
+      | Ok settlementId ->
+         state.PaymentMethod |> Option.iter (settlePayment settlementId)
       | Error reason ->
          if
             previousState.LifeCycle.ActivityHasRemainingAttempts
@@ -558,7 +568,9 @@ let onEventPersisted
             notifyPayeeOfPaymentDeposit ()
          | Activity.SyncToPartnerBank -> syncToPartnerBank ()
          | Activity.SettlePayment ->
-            state.SettlementId |> Option.iter settlePayment
+            match state.SettlementId, state.PaymentMethod with
+            | Some id, Some payMethod -> settlePayment id payMethod
+            | _ -> ()
          | Activity.DepositToPayeeAccount ->
             state.Events
             |> List.tryPick (function

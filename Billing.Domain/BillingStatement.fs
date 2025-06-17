@@ -22,23 +22,19 @@ module BillingTransaction =
       else
          match evt with
          | DepositedCash _
-         | DebitedAccount _
-         | RefundedDebit _
+         | DebitSettled _
+         | DebitRefunded _
          | MaintenanceFeeDebited _
-         | InternalTransferWithinOrgPending _
-         | InternalTransferWithinOrgFailed _
+         | InternalTransferWithinOrgDeducted _
          | InternalTransferWithinOrgDeposited _
-         | InternalTransferBetweenOrgsPending _
-         | InternalTransferBetweenOrgsFailed _
+         | InternalTransferBetweenOrgsSettled _
          | InternalTransferBetweenOrgsDeposited _
-         | InternalAutomatedTransferPending _
-         | InternalAutomatedTransferFailed _
+         | InternalAutomatedTransferDeducted _
          | InternalAutomatedTransferDeposited _
-         | PlatformPaymentPaid _
+         | PlatformPaymentSettled _
          | PlatformPaymentDeposited _
          | PlatformPaymentRefunded _
-         | DomesticTransferPending _
-         | DomesticTransferFailed _ -> Some(BillingTransaction evt)
+         | DomesticTransferSettled _ -> Some(BillingTransaction evt)
          | _ -> None
 
    let value (BillingTransaction evt) = evt

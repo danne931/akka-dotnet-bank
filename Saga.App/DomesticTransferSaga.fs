@@ -262,7 +262,7 @@ let applyEvent
             saga.LifeCycle |> finishActivity Activity.MarkTransferAsSettled
          Status =
             if saga.TransferInitiatedNotificationSent then
-               DomesticTransferProgress.Completed
+               DomesticTransferProgress.Settled
             else
                saga.Status
      }
@@ -270,7 +270,7 @@ let applyEvent
       saga with
          Status =
             if saga.TransferMarkedAsSettled then
-               DomesticTransferProgress.Completed
+               DomesticTransferProgress.Settled
             else
                saga.Status
          LifeCycle =
@@ -338,7 +338,7 @@ let stateTransition
          activityIsDone Activity.RefundSenderAccount
       | _ -> false
 
-   if saga.Status = DomesticTransferProgress.Completed then
+   if saga.Status = DomesticTransferProgress.Settled then
       Error SagaStateTransitionError.HasAlreadyCompleted
    elif invalidStepProgression then
       Error SagaStateTransitionError.InvalidStepProgression
@@ -436,14 +436,14 @@ let onEventPersisted
 
    let updateTransferAsComplete () =
       let cmd =
-         CompleteDomesticTransferCommand.create correlationId info.InitiatedBy {
+         SettleDomesticTransferCommand.create correlationId info.InitiatedBy {
             BaseInfo = info
             FromRetry = currentState.ReasonForRetryServiceAck
          }
 
       let msg =
          cmd
-         |> AccountCommand.CompleteDomesticTransfer
+         |> AccountCommand.SettleDomesticTransfer
          |> AccountMessage.StateChange
 
       dep.getAccountRef info.Sender.ParentAccountId <! msg

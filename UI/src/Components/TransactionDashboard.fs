@@ -558,12 +558,12 @@ let transactions
    let mayBeDisplayedAsNewTransaction evt =
       match evt with
       | AccountEvent.DepositedCash _
-      | AccountEvent.DebitedAccount _
-      | AccountEvent.InternalTransferWithinOrgPending _
+      | AccountEvent.DebitPending _
+      | AccountEvent.InternalTransferWithinOrgDeducted _
       | AccountEvent.InternalTransferBetweenOrgsPending _
-      | AccountEvent.InternalAutomatedTransferPending _
+      | AccountEvent.InternalAutomatedTransferDeducted _
       | AccountEvent.DomesticTransferPending _
-      | AccountEvent.PlatformPaymentPaid _
+      | AccountEvent.PlatformPaymentPending _
       | AccountEvent.PlatformPaymentDeposited _ -> true
       | _ -> false
 

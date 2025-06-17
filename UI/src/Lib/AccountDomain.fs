@@ -265,7 +265,7 @@ let getMerchant
    merchants |> Map.tryFind (merchantName.ToLower())
 
 let debitWithMerchantAlias
-   (evt: BankEvent<DebitedAccount>)
+   (evt: BankEvent<DebitPending>)
    (merchants: Map<string, Merchant>)
    =
    {
@@ -356,7 +356,7 @@ let transactionUIFriendly
          |> List.tryPick (function
             | History.Account accountHistory ->
                match accountHistory.Event with
-               | AccountEvent.DebitedAccount e ->
+               | AccountEvent.DebitPending e ->
                   let em = e.Data.EmployeePurchaseReference
 
                   let merchant =
@@ -392,7 +392,7 @@ let transactionUIFriendly
          |> List.tryPick (function
             | History.Account accountHistory ->
                match accountHistory.Event with
-               | AccountEvent.InternalTransferWithinOrgPending e ->
+               | AccountEvent.InternalTransferWithinOrgDeducted e ->
                   let i = e.Data.BaseInfo
                   Some(i.Sender.Name, i.Recipient.Name)
                | _ -> None
@@ -414,7 +414,13 @@ let transactionUIFriendly
                match accountHistory.Event with
                | AccountEvent.InternalTransferBetweenOrgsPending e ->
                   let i = e.Data.BaseInfo
-                  let sender = accountName i.Sender.AccountId
+
+                  let sender =
+                     if e.OrgId = org.Org.OrgId then
+                        accountName i.Sender.AccountId
+                     else
+                        i.Sender.Name
+
                   Some(sender, i.Recipient.Name)
                | _ -> None
             | _ -> None)
@@ -479,7 +485,9 @@ let transactionUIFriendly
                      accountName i.Payee.AccountId,
                      Some MoneyFlow.In
                   )
-               | AccountEvent.PlatformPaymentPaid e when e.OrgId = org.Org.OrgId ->
+               | AccountEvent.PlatformPaymentSettled e when
+                  e.OrgId = org.Org.OrgId
+                  ->
                   let i = e.Data.BaseInfo
 
                   let sender =
@@ -491,6 +499,12 @@ let transactionUIFriendly
                         | ThirdPartyPaymentMethod.Card -> "3rd party card"
 
                   Some(sender, i.Payee.OrgName, Some MoneyFlow.Out)
+               | AccountEvent.PlatformPaymentRequested e when
+                  e.OrgId = org.Org.OrgId
+                  ->
+                  let i = e.Data.BaseInfo
+
+                  Some(i.Payer.OrgName, accountName i.Payee.AccountId, None)
                | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown", None)
@@ -513,7 +527,7 @@ let transactionUIFriendly
          |> List.tryPick (function
             | History.Account accountHistory ->
                match accountHistory.Event with
-               | AccountEvent.InternalAutomatedTransferPending e ->
+               | AccountEvent.InternalAutomatedTransferDeducted e ->
                   Some(
                      e.Data.BaseInfo.Sender.Name,
                      e.Data.BaseInfo.Recipient.Name,
@@ -540,7 +554,10 @@ let private matchesAccountEventGroupFilter
    match filter with
    | AccountEventGroupFilter.Purchase ->
       match event with
-      | AccountEvent.DebitedAccount _ -> true
+      | AccountEvent.DebitPending _
+      | AccountEvent.DebitFailed _
+      | AccountEvent.DebitRefunded _
+      | AccountEvent.DebitSettled _ -> true
       | _ -> false
    | AccountEventGroupFilter.Deposit ->
       match event with
@@ -548,12 +565,12 @@ let private matchesAccountEventGroupFilter
       | _ -> false
    | AccountEventGroupFilter.InternalTransferWithinOrg ->
       match event with
-      | AccountEvent.InternalTransferWithinOrgPending _
-      | AccountEvent.InternalTransferWithinOrgFailed _
+      | AccountEvent.InternalTransferWithinOrgDeducted _
       | AccountEvent.InternalTransferWithinOrgDeposited _ -> true
       | _ -> false
    | AccountEventGroupFilter.InternalTransferBetweenOrgs ->
       match event with
+      | AccountEvent.InternalTransferBetweenOrgsScheduled _
       | AccountEvent.InternalTransferBetweenOrgsPending _
       | AccountEvent.InternalTransferBetweenOrgsFailed _
       | AccountEvent.InternalTransferBetweenOrgsDeposited _
@@ -561,21 +578,22 @@ let private matchesAccountEventGroupFilter
       | _ -> false
    | AccountEventGroupFilter.InternalAutomatedTransfer ->
       match event with
-      | AccountEvent.InternalAutomatedTransferPending _
+      | AccountEvent.InternalAutomatedTransferDeducted _
       | AccountEvent.InternalAutomatedTransferFailed _
       | AccountEvent.InternalAutomatedTransferDeposited _ -> true
       | _ -> false
    | AccountEventGroupFilter.DomesticTransfer ->
       match event with
+      | AccountEvent.DomesticTransferScheduled _
       | AccountEvent.DomesticTransferPending _
-      | AccountEvent.DomesticTransferCompleted _
+      | AccountEvent.DomesticTransferSettled _
       | AccountEvent.DomesticTransferFailed _
       | AccountEvent.DomesticTransferProgress _ -> true
       | _ -> false
    | AccountEventGroupFilter.PlatformPayment ->
       match event with
       | AccountEvent.PlatformPaymentRequested _
-      | AccountEvent.PlatformPaymentPaid _
+      | AccountEvent.PlatformPaymentPending _
       | AccountEvent.PlatformPaymentDeposited _
       | AccountEvent.PlatformPaymentSettled _
       | AccountEvent.PlatformPaymentDeclined _
@@ -607,7 +625,7 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
 
    let qualifiedCard =
       match query.CardIds, evt with
-      | Some cards, AccountEvent.DebitedAccount e ->
+      | Some cards, AccountEvent.DebitPending e ->
          cards
          |> List.exists (fun cardId ->
             cardId = e.Data.EmployeePurchaseReference.CardId)

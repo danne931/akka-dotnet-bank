@@ -138,7 +138,7 @@ type DomesticTransferProgress =
    | ProcessingSenderAccountDeduction
    | WaitingForTransferServiceAck
    | ThirdParty of DomesticTransferThirdPartyUpdate
-   | Completed
+   | Settled
    | Failed of DomesticTransferFailReason
 
 type DomesticTransferSender = {
@@ -152,7 +152,7 @@ type DomesticTransferSender = {
 
 // Info received from the initial domestic transfer request will
 // carry over unaltered for all event progressions
-// (ProgressUpdate/Completed/Rejected/Retry).
+// (ProgressUpdate/Settled/Failed/Retry).
 type BaseDomesticTransferInfo = {
    Sender: DomesticTransferSender
    Recipient: DomesticTransferRecipient

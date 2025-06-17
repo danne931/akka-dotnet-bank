@@ -84,7 +84,7 @@ let private sendApprovedCommand
 
          let cmd =
             { cmd with Timestamp = DateTime.UtcNow }
-            |> AccountCommand.FulfillPlatformPayment
+            |> AccountCommand.PlatformPayment
 
          accountRef <! AccountMessage.StateChange cmd
       | DomesticTransfer cmd ->

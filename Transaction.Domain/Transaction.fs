@@ -143,16 +143,10 @@ let transactionInfoFromHistory
       | _ -> None
    | History.Account accountHistory ->
       match accountHistory.Event with
-      | AccountEvent.InternalTransferWithinOrgPending e ->
+      | AccountEvent.InternalTransferWithinOrgDeducted e ->
          Some(
             TransactionType.InternalTransferWithinOrg,
             TransactionStatus.InProgress,
-            e.Data.BaseInfo.Amount
-         )
-      | AccountEvent.InternalTransferWithinOrgFailed e ->
-         Some(
-            TransactionType.InternalTransferWithinOrg,
-            TransactionStatus.Failed,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalTransferWithinOrgDeposited e ->
@@ -167,12 +161,6 @@ let transactionInfoFromHistory
             TransactionStatus.InProgress,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.InternalTransferBetweenOrgsFailed e ->
-         Some(
-            TransactionType.InternalTransferBetweenOrgs,
-            TransactionStatus.Failed,
-            e.Data.BaseInfo.Amount
-         )
       | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
          Some(
             TransactionType.InternalTransferBetweenOrgs,
@@ -185,10 +173,16 @@ let transactionInfoFromHistory
             TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.InternalAutomatedTransferPending e ->
+      | AccountEvent.InternalTransferBetweenOrgsFailed e ->
+         Some(
+            TransactionType.InternalTransferBetweenOrgs,
+            TransactionStatus.Failed,
+            e.Data.BaseInfo.Amount
+         )
+      | AccountEvent.InternalAutomatedTransferDeducted e ->
          Some(
             TransactionType.InternalAutomatedTransfer,
-            TransactionStatus.InProgress,
+            TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalAutomatedTransferDeposited e ->
@@ -209,34 +203,42 @@ let transactionInfoFromHistory
             TransactionStatus.Complete,
             e.Data.Amount
          )
-      | AccountEvent.DebitedAccount e ->
+      | AccountEvent.DebitPending e ->
          Some(
             TransactionType.Purchase,
             TransactionStatus.InProgress,
             e.Data.Amount
          )
-      | AccountEvent.PurchaseSettled e ->
+      | AccountEvent.DebitSettled e ->
          Some(
             TransactionType.Purchase,
             TransactionStatus.Complete,
             e.Data.Amount
          )
+      | AccountEvent.DebitRefunded e ->
+         Some(
+            TransactionType.Purchase,
+            TransactionStatus.Complete,
+            e.Data.Amount
+         )
+      | AccountEvent.DebitFailed e ->
+         Some(TransactionType.Purchase, TransactionStatus.Failed, e.Data.Amount)
       | AccountEvent.DomesticTransferPending e ->
          Some(
             TransactionType.DomesticTransfer,
             TransactionStatus.InProgress,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.DomesticTransferCompleted e ->
-         Some(
-            TransactionType.DomesticTransfer,
-            TransactionStatus.Complete,
-            e.Data.BaseInfo.Amount
-         )
       | AccountEvent.DomesticTransferProgress e ->
          Some(
             TransactionType.DomesticTransfer,
             TransactionStatus.InProgress,
+            e.Data.BaseInfo.Amount
+         )
+      | AccountEvent.DomesticTransferSettled e ->
+         Some(
+            TransactionType.DomesticTransfer,
+            TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.DomesticTransferFailed e ->
@@ -263,7 +265,7 @@ let transactionInfoFromHistory
             TransactionStatus.Failed,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.PlatformPaymentPaid e ->
+      | AccountEvent.PlatformPaymentPending e ->
          Some(
             TransactionType.Payment,
             TransactionStatus.InProgress,

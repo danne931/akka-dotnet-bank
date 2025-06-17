@@ -46,7 +46,7 @@ type PlatformPaymentRefundReason = PaymentFailed of PlatformPaymentFailReason
 [<RequireQualifiedAccess>]
 type PlatformPaymentStatus =
    | Unpaid
-   | Paid
+   | PaymentPending
    | Deposited
    | Settled
    | Cancelled
@@ -174,7 +174,7 @@ module Payment =
          | PlatformPaymentStatus.Unpaid when isExpired payment -> 6
          | PlatformPaymentStatus.Settled
          | PlatformPaymentStatus.Deposited -> 5
-         | PlatformPaymentStatus.Paid -> 4
+         | PlatformPaymentStatus.PaymentPending -> 4
          | PlatformPaymentStatus.Cancelled -> 3
          | PlatformPaymentStatus.Declined -> 3
          | PlatformPaymentStatus.Failed _ -> 2

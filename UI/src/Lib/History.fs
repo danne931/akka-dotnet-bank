@@ -256,7 +256,7 @@ let accountHistoryUIFriendly
          MoneyFlow = Some MoneyFlow.In
          Amount = Some <| Money.format evt.Data.Amount
      }
-   | DebitedAccount evt ->
+   | DebitPending evt ->
       let card =
          $"**{evt.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
 
@@ -264,11 +264,10 @@ let accountHistoryUIFriendly
          props with
             Name = "Purchase"
             Info =
-               $"Purchase from {evt.Data.Merchant} with card {card} applied to account ({accountName})"
+               $"Pending purchase from {evt.Data.Merchant} with card {card} to account ({accountName})"
             Amount = Some <| Money.format evt.Data.Amount
-            MoneyFlow = Some MoneyFlow.Out
       }
-   | PurchaseSettled evt ->
+   | DebitSettled evt ->
       let card =
          $"**{evt.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
 
@@ -277,8 +276,19 @@ let accountHistoryUIFriendly
             Name = "Purchase Settled"
             Info = $"Purchase from {evt.Data.Merchant} with card {card} settled"
             Amount = Some <| Money.format evt.Data.Amount
+            MoneyFlow = Some MoneyFlow.Out
       }
-   | RefundedDebit e ->
+   | DebitFailed e ->
+      let card = $"**{e.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
+
+      {
+         props with
+            Name = "Purchase Failed"
+            Info =
+               $"Purchase from {e.Data.Merchant} with card {card} failed due to {e.Data.Reason}."
+            Amount = Some <| Money.format e.Data.Amount
+      }
+   | DebitRefunded e ->
       let card = $"**{e.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
 
       {
@@ -287,6 +297,7 @@ let accountHistoryUIFriendly
             Info =
                $"Refunded purchase from {e.Data.Merchant} with card {card} ({accountName}) due to {e.Data.Reason}."
             Amount = Some <| Money.format e.Data.Amount
+            MoneyFlow = Some MoneyFlow.In
       }
    | MaintenanceFeeDebited evt -> {
       props with
@@ -298,7 +309,7 @@ let accountHistoryUIFriendly
       props with
          Info = "Skipped Maintenance Fee"
      }
-   | InternalTransferWithinOrgPending evt ->
+   | InternalTransferWithinOrgDeducted evt ->
       let info = evt.Data.BaseInfo
 
       {
@@ -309,38 +320,16 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
       }
-   | InternalTransferWithinOrgFailed evt ->
+   | InternalTransferWithinOrgDeposited evt ->
       let info = evt.Data.BaseInfo
+      let sender = info.Sender.Name
 
       {
          props with
-            Name = "Internal Transfer Failed"
-            Info =
-               $"Failed money movement from {info.Sender.Name} to {info.Recipient.Name} 
-              - Reason: {evt.Data.Reason} 
-              - Account refunded"
+            Name = "Transfer Deposit Within Org"
+            Info = $"Transfer received from {sender} into {accountName}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
-      }
-   | InternalTransferBetweenOrgsPending evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Transfer Between Orgs"
-            Info = $"Transfer from {accountName} to {info.Recipient.Name}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.Out
-      }
-   | InternalTransferBetweenOrgsSettled evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Transfer Between Orgs Settled"
-            Info =
-               $"Transfer from {accountName} to {info.Recipient.Name} settled"
-            Amount = Some <| Money.format info.Amount
       }
    | InternalTransferBetweenOrgsScheduled evt ->
       let info = evt.Data.BaseInfo
@@ -349,9 +338,40 @@ let accountHistoryUIFriendly
          props with
             Name = "Transfer Between Orgs Scheduled"
             Info =
-               $"Transfer from {accountName} to {info.Recipient.Name} scheduled for {DateTime.formatShort info.ScheduledDate}"
+               $"Transfer scheduled from {accountName} to {info.Recipient.Name} for {DateTime.formatShort info.ScheduledDate}"
             Amount = Some <| Money.format info.Amount
-            MoneyFlow = None
+      }
+   | InternalTransferBetweenOrgsPending evt ->
+      let info = evt.Data.BaseInfo
+
+      {
+         props with
+            Name = "Transfer Between Orgs"
+            Info =
+               $"Transfer processing from {accountName} to {info.Recipient.Name}"
+            Amount = Some <| Money.format info.Amount
+      }
+   | InternalTransferBetweenOrgsDeposited evt ->
+      let info = evt.Data.BaseInfo
+      let sender = info.Sender.Name
+
+      {
+         props with
+            Name = "Transfer Deposit Between Orgs"
+            Info = $"Transfer received from {sender} into {accountName}"
+            Amount = Some <| Money.format info.Amount
+            MoneyFlow = Some MoneyFlow.In
+      }
+   | InternalTransferBetweenOrgsSettled evt ->
+      let info = evt.Data.BaseInfo
+
+      {
+         props with
+            Name = "Transfer Between Orgs Settled"
+            Info =
+               $"Transfer settled from {accountName} to {info.Recipient.Name}"
+            Amount = Some <| Money.format info.Amount
+            MoneyFlow = Some MoneyFlow.Out
       }
    | InternalTransferBetweenOrgsFailed evt ->
       let info = evt.Data.BaseInfo
@@ -360,11 +380,23 @@ let accountHistoryUIFriendly
          props with
             Name = "Transfer Between Orgs Failed"
             Info =
-               $"Failed transfer from {accountName} to {info.Recipient.Name} 
+               $"Transfer failed from {accountName} to {info.Recipient.Name}
               - Reason: {evt.Data.Reason} 
               - Account refunded"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.In
+      }
+   | DomesticTransferScheduled evt ->
+      let info = evt.Data.BaseInfo
+      let recipientName = domesticRecipientName info.Recipient
+      let payNetwork = info.Recipient.PaymentNetwork
+
+      {
+         props with
+            Name = "Domestic Transfer"
+            Info =
+               $"{payNetwork} transfer scheduled from {info.Sender.Name} to {recipientName} for {DateTime.formatShort info.ScheduledDate}"
+            Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferPending evt ->
       let info = evt.Data.BaseInfo
@@ -377,31 +409,18 @@ let accountHistoryUIFriendly
             Info =
                $"{payNetwork} transfer processing from {info.Sender.Name} to {recipientName}"
             Amount = Some <| Money.format info.Amount
+      }
+   | DomesticTransferSettled evt ->
+      let info = evt.Data.BaseInfo
+      let payNetwork = info.Recipient.PaymentNetwork
+
+      {
+         props with
+            Name = "Domestic Transfer Settled"
+            Info =
+               $"{payNetwork} transfer settled from {info.Sender.Name} to {domesticRecipientName info.Recipient}"
+            Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
-      }
-   | DomesticTransferScheduled evt ->
-      let info = evt.Data.BaseInfo
-      let recipientName = domesticRecipientName info.Recipient
-      let payNetwork = info.Recipient.PaymentNetwork
-
-      {
-         props with
-            Name = "Domestic Transfer"
-            Info =
-               $"{payNetwork} transfer from {info.Sender.Name} to {recipientName} scheduled for {DateTime.formatShort info.ScheduledDate}"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = None
-      }
-   | DomesticTransferCompleted evt ->
-      let info = evt.Data.BaseInfo
-      let payNetwork = info.Recipient.PaymentNetwork
-
-      {
-         props with
-            Name = "Domestic Transfer Completed"
-            Info =
-               $"{payNetwork} transfer completed from {info.Sender.Name} to {domesticRecipientName info.Recipient}"
-            Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferFailed evt ->
       let info = evt.Data.BaseInfo
@@ -413,10 +432,9 @@ let accountHistoryUIFriendly
          props with
             Name = "Domestic Transfer Failed"
             Info =
-               $"{payNetwork} transfer from {accountName} to {recipientName} failed
+               $"{payNetwork} transfer failed from {accountName} to {recipientName}
                - Reason: {evt.Data.Reason.Display}"
             Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
       }
    | DomesticTransferProgress evt ->
       let info = evt.Data.BaseInfo
@@ -431,28 +449,6 @@ let accountHistoryUIFriendly
                  - {evt.Data.InProgressInfo}"
             Amount = Some <| Money.format info.Amount
       }
-   | InternalTransferWithinOrgDeposited evt ->
-      let info = evt.Data.BaseInfo
-      let sender = info.Sender.Name
-
-      {
-         props with
-            Name = "Transfer Deposit Within Org"
-            Info = $"{accountName} received transfer from {sender}."
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-      }
-   | InternalTransferBetweenOrgsDeposited evt ->
-      let info = evt.Data.BaseInfo
-      let sender = info.Sender.Name
-
-      {
-         props with
-            Name = "Transfer Deposit Between Orgs"
-            Info = $"{accountName} received transfer from {sender}."
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-      }
    | AccountClosed evt -> {
       props with
          Info = $"Closed Account - Reference: {evt.Data.Reference}"
@@ -464,27 +460,29 @@ let accountHistoryUIFriendly
          props with
             Name = "Payment Requested"
             Info =
-               $"Requested payment from {p.Payer.OrgName} into {accountName}"
+               if evt.OrgId = org.Org.OrgId then
+                  $"Payment request sent to {p.Payer.OrgName}"
+               else
+                  $"Received payment request from {p.Payee.OrgName}"
             Amount = Some <| Money.format p.Amount
-            MoneyFlow = None
       }
-   | PlatformPaymentPaid evt ->
+   | PlatformPaymentPending evt ->
       let p = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Payment Fulfilled"
-            Info = $"Fulfilled payment to {p.Payee.OrgName} from {accountName}."
+            Name = "Payment Pending"
+            Info = $"Payment pending to {p.Payee.OrgName} from {accountName}."
             Amount = Some <| Money.format p.Amount
-            MoneyFlow = Some MoneyFlow.Out
       }
    | PlatformPaymentDeposited evt ->
       let p = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Payment"
-            Info = $"{accountName} received payment from {p.Payer.OrgName}."
+            Name = "Payment Deposited"
+            Info =
+               $"Payment received from {p.Payer.OrgName} into {accountName}."
             Amount = Some <| Money.format p.Amount
             MoneyFlow = Some MoneyFlow.In
       }
@@ -495,7 +493,7 @@ let accountHistoryUIFriendly
          props with
             Name = "Payment Refunded"
             Info =
-               $"Refunded payment to {p.Payer.OrgName} due to {evt.Data.Reason}."
+               $"Payment refunded to {p.Payer.OrgName} due to {evt.Data.Reason}."
             Amount = Some <| Money.format p.Amount
             MoneyFlow = Some MoneyFlow.In
       }
@@ -505,9 +503,8 @@ let accountHistoryUIFriendly
       {
          props with
             Name = "Payment Cancelled"
-            Info = $"Cancelled payment request to {p.Payer.OrgName}"
+            Info = $"Payment request cancelled to {p.Payer.OrgName}"
             Amount = Some <| Money.format p.Amount
-            MoneyFlow = None
       }
    | PlatformPaymentDeclined evt ->
       let p = evt.Data.BaseInfo
@@ -515,9 +512,8 @@ let accountHistoryUIFriendly
       {
          props with
             Name = "Payment Declined"
-            Info = $"{p.Payer.OrgName} declined payment request"
+            Info = $"Payment request declined by {p.Payer.OrgName}"
             Amount = Some <| Money.format p.Amount
-            MoneyFlow = None
       }
    | PlatformPaymentSettled evt ->
       let p = evt.Data.BaseInfo
@@ -525,8 +521,9 @@ let accountHistoryUIFriendly
       {
          props with
             Name = "Payment Settled"
-            Info = $"Payment from {p.Payer.OrgName} settled"
+            Info = $"Payment settled to {p.Payee.OrgName}"
             Amount = Some <| Money.format p.Amount
+            MoneyFlow = Some MoneyFlow.Out
       }
    | AutoTransferRuleConfigured evt -> {
       props with
@@ -538,7 +535,7 @@ let accountHistoryUIFriendly
          Name = "Auto Transfer Rule Deleted"
          Info = $"Deleted auto transfer rule"
      }
-   | InternalAutomatedTransferPending evt ->
+   | InternalAutomatedTransferDeducted evt ->
       let info = evt.Data.BaseInfo
       let reason = UIDomain.Account.autoTransferRuleDisplay evt.Data.Rule
 
@@ -663,7 +660,10 @@ let private matchesAccountEventFilter
    match filter with
    | AccountEventGroupFilter.Purchase ->
       match event with
-      | AccountEvent.DebitedAccount _ -> true
+      | AccountEvent.DebitPending _
+      | AccountEvent.DebitSettled _
+      | AccountEvent.DebitRefunded _
+      | AccountEvent.DebitFailed _ -> true
       | _ -> false
    | AccountEventGroupFilter.Deposit ->
       match event with
@@ -671,34 +671,37 @@ let private matchesAccountEventFilter
       | _ -> false
    | AccountEventGroupFilter.InternalTransferWithinOrg ->
       match event with
-      | AccountEvent.InternalTransferWithinOrgPending _
-      | AccountEvent.InternalTransferWithinOrgFailed _
+      | AccountEvent.InternalTransferWithinOrgDeducted _
       | AccountEvent.InternalTransferWithinOrgDeposited _ -> true
       | _ -> false
    | AccountEventGroupFilter.InternalTransferBetweenOrgs ->
       match event with
+      | AccountEvent.InternalTransferBetweenOrgsScheduled _
       | AccountEvent.InternalTransferBetweenOrgsPending _
       | AccountEvent.InternalTransferBetweenOrgsFailed _
-      | AccountEvent.InternalTransferBetweenOrgsDeposited _ -> true
+      | AccountEvent.InternalTransferBetweenOrgsDeposited _
+      | AccountEvent.InternalTransferBetweenOrgsSettled _ -> true
       | _ -> false
    | AccountEventGroupFilter.InternalAutomatedTransfer ->
       match event with
-      | AccountEvent.InternalAutomatedTransferPending _
+      | AccountEvent.InternalAutomatedTransferDeducted _
       | AccountEvent.InternalAutomatedTransferFailed _
       | AccountEvent.InternalAutomatedTransferDeposited _ -> true
       | _ -> false
    | AccountEventGroupFilter.DomesticTransfer ->
       match event with
+      | AccountEvent.DomesticTransferScheduled _
       | AccountEvent.DomesticTransferPending _
-      | AccountEvent.DomesticTransferCompleted _
+      | AccountEvent.DomesticTransferSettled _
       | AccountEvent.DomesticTransferFailed _
       | AccountEvent.DomesticTransferProgress _ -> true
       | _ -> false
    | AccountEventGroupFilter.PlatformPayment ->
       match event with
       | AccountEvent.PlatformPaymentRequested _
-      | AccountEvent.PlatformPaymentPaid _
+      | AccountEvent.PlatformPaymentPending _
       | AccountEvent.PlatformPaymentDeposited _
+      | AccountEvent.PlatformPaymentRefunded _
       | AccountEvent.PlatformPaymentDeclined _
       | AccountEvent.PlatformPaymentCancelled _ -> true
       | _ -> false

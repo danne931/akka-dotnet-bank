@@ -16,7 +16,7 @@ open CommandApproval
 
 type Values = { AccountIdSourceOfFunds: string }
 
-let formFulfillPlatformPayment
+let formPlatformPayment
    (payerAccounts: Map<AccountId, Account>)
    (payment: PlatformPayment)
    (initiatedBy: Initiator)
@@ -51,14 +51,14 @@ let formFulfillPlatformPayment
          selectedFundingSourceAccountId |> Guid.Parse |> AccountId
 
       let cmd =
-         FulfillPlatformPaymentCommand.create initiatedBy {
+         PlatformPaymentCommand.create initiatedBy {
             PaymentMethod = PaymentMethod.Platform selectedAccountId
             RequestedPayment = {
                PlatformPaymentRequested.fromPayment payment with
                   BaseInfo.InitiatedById = initiatedBy.Id
             }
          }
-         |> AccountCommand.FulfillPlatformPayment
+         |> AccountCommand.PlatformPayment
          |> FormCommand.Account
 
       Msg.GetAndSubmit(FormEntityId.Account selectedAccountId, cmd)
@@ -136,10 +136,7 @@ let PaymentFulfillmentFormComponent
             FormContainer {|
                InitialValues = initValues
                Form =
-                  formFulfillPlatformPayment
-                     payerAccounts
-                     payment
-                     session.AsInitiator
+                  formPlatformPayment payerAccounts payment session.AsInitiator
                Action = Some(Form.View.Action.SubmitOnly "Submit Payment")
                Session = session
                ComponentName = "FulfillPaymentForm"
@@ -154,7 +151,7 @@ let PaymentFulfillmentFormComponent
                   function
                   | FormSubmitReceipt.Account receipt ->
                      match receipt.PendingCommand with
-                     | AccountCommand.FulfillPlatformPayment cmd ->
+                     | AccountCommand.PlatformPayment cmd ->
                         let cmd =
                            cmd
                            |> FulfillPlatformPayment

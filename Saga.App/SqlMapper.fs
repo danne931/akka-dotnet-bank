@@ -117,7 +117,7 @@ module Writer =
             | DomesticTransferProgress.ProcessingSenderAccountDeduction
             | DomesticTransferProgress.WaitingForTransferServiceAck
             | DomesticTransferProgress.ThirdParty _ -> inProgressOrExhausted
-            | DomesticTransferProgress.Completed -> "Completed"
+            | DomesticTransferProgress.Settled -> "Completed"
             | DomesticTransferProgress.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.PlatformTransfer s ->
             match s.Status with

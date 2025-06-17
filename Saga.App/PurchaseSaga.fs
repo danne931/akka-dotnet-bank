@@ -494,8 +494,8 @@ let onEventPersisted
 
    let settlePurchase settlementId =
       let msg =
-         SettlePurchaseCommand.fromPurchase purchaseInfo settlementId
-         |> AccountCommand.SettlePurchase
+         SettleDebitCommand.fromPurchase purchaseInfo settlementId
+         |> AccountCommand.SettleDebit
          |> AccountMessage.StateChange
 
       dep.getAccountRef purchaseInfo.ParentAccountId <! msg

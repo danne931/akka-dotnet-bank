@@ -812,7 +812,7 @@ let seedPayments
 
       let msg =
          {
-            FulfillPlatformPaymentCommand.create
+            PlatformPaymentCommand.create
                {
                   Id = InitiatedById payer.AccountOwnerId
                   Name = payer.BusinessName
@@ -831,7 +831,7 @@ let seedPayments
                } with
                Timestamp = buffer.AddHours 2
          }
-         |> AccountCommand.FulfillPlatformPayment
+         |> AccountCommand.PlatformPayment
          |> AccountMessage.StateChange
 
       (getAccountRef payer.ParentAccountId) <! msg

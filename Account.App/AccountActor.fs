@@ -32,8 +32,7 @@ open BillingSaga
 // money flow but they can not generate an auto transfer.
 let private canProduceAutoTransfer =
    function
-   | AccountEvent.InternalAutomatedTransferPending _
-   | AccountEvent.InternalAutomatedTransferFailed _
+   | AccountEvent.InternalAutomatedTransferDeducted _
    | AccountEvent.InternalAutomatedTransferDeposited _ -> false
    | e ->
       let _, flow, _ = AccountEvent.moneyTransaction e
@@ -99,7 +98,7 @@ let private onValidationError
                         cmd.OrgId
                         cmd.CorrelationId
                )
-            | AccountCommand.FulfillPlatformPayment cmd ->
+            | AccountCommand.PlatformPayment cmd ->
                false,
                Some(
                   cmd.CorrelationId,
@@ -192,20 +191,20 @@ let onPersisted
       <! AccountClosureMessage.Register account
       *)
       ()
-   | AccountEvent.DebitedAccount e ->
+   | AccountEvent.DebitPending e ->
       let msg =
          partnerBankAccountLink
          |> PurchaseSagaEvent.PurchaseConfirmedByAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PurchaseSettled e ->
+   | AccountEvent.DebitSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettled
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.RefundedDebit e ->
+   | AccountEvent.DebitRefunded e ->
       let msg =
          PurchaseSagaEvent.PurchaseRefundedToAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
@@ -229,7 +228,7 @@ let onPersisted
          |> AppSaga.Message.platformPaymentStart e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentPaid e ->
+   | AccountEvent.PlatformPaymentPending e ->
       let msg =
          PlatformPaymentSagaEvent.PayerAccountDeductedFunds(
             e,
@@ -334,7 +333,7 @@ let onPersisted
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.DomesticTransferCompleted e ->
+   | AccountEvent.DomesticTransferSettled e ->
       let msg =
          DomesticTransferSagaEvent.TransferMarkedAsSettled
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
@@ -355,13 +354,10 @@ let onPersisted
 let persistInternalTransferWithinOrgEvent
    (logError: string -> unit)
    (confirmPersist: AccountMessage -> PersistentEffect<obj>)
-   (transfer: BankEvent<InternalTransferWithinOrgPending>)
+   (transfer: BankEvent<InternalTransferWithinOrgDeducted>)
    (state: ParentAccountSnapshot)
    : Effect<obj>
    =
-   let transferPendingEvt =
-      AccountEvent.InternalTransferWithinOrgPending transfer
-
    let correspondingTransferDeposit =
       DepositInternalTransferWithinOrgCommand.fromPending transfer
       |> AccountCommand.DepositTransferWithinOrg
@@ -389,7 +385,10 @@ let persistInternalTransferWithinOrgEvent
             |> Option.sequenceResult
             |> ResultOption.map (fun (state, evts2) -> state, evts @ evts2))
 
-      let toConfirm = AccountMessage.Event transferPendingEvt
+      let toConfirm =
+         transfer
+         |> AccountEvent.InternalTransferWithinOrgDeducted
+         |> AccountMessage.Event
 
       match autoTransferStateTransitions with
       | Ok None ->
@@ -499,7 +498,7 @@ let actorProps
 
                   match validation with
                   | Error err -> onValidationError cmd err
-                  | Ok(InternalTransferWithinOrgPending transfer, state) ->
+                  | Ok(InternalTransferWithinOrgDeducted transfer, state) ->
                      return!
                         persistInternalTransferWithinOrgEvent
                            logError

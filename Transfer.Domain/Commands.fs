@@ -35,7 +35,7 @@ module InternalTransferWithinOrgCommand =
 
    let toEvent
       (cmd: InternalTransferWithinOrgCommand)
-      : ValidationResult<BankEvent<InternalTransferWithinOrgPending>>
+      : ValidationResult<BankEvent<InternalTransferWithinOrgDeducted>>
       =
       validate {
          let info = cmd.Data
@@ -44,7 +44,7 @@ module InternalTransferWithinOrgCommand =
          return
             BankEvent.create2<
                InternalTransferInput,
-               InternalTransferWithinOrgPending
+               InternalTransferWithinOrgDeducted
              >
                cmd
                {
@@ -62,28 +62,6 @@ module InternalTransferWithinOrgCommand =
                   }
                }
       }
-
-type FailInternalTransferWithinOrgCommand =
-   Command<InternalTransferWithinOrgFailed>
-
-module FailInternalTransferWithinOrgCommand =
-   let create
-      correlationId
-      (initiator: Initiator)
-      (data: InternalTransferWithinOrgFailed)
-      =
-      Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
-         data.BaseInfo.Sender.OrgId
-         correlationId
-         initiator
-         data
-
-   let toEvent
-      (cmd: FailInternalTransferWithinOrgCommand)
-      : ValidationResult<BankEvent<InternalTransferWithinOrgFailed>>
-      =
-      BankEvent.create<InternalTransferWithinOrgFailed> cmd |> Ok
 
 type InternalTransferBetweenOrgsCommand = Command<InternalTransferInput>
 
@@ -209,7 +187,7 @@ module DepositInternalTransferWithinOrgCommand =
          data
 
    let fromPending
-      (evt: BankEvent<InternalTransferWithinOrgPending>)
+      (evt: BankEvent<InternalTransferWithinOrgDeducted>)
       : DepositInternalTransferWithinOrgCommand
       =
       let info = evt.Data.BaseInfo
@@ -259,8 +237,8 @@ module SettleInternalTransferBetweenOrgsCommand =
       (data: InternalTransferBetweenOrgsSettled)
       =
       Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Recipient.ParentAccountId)
-         data.BaseInfo.Recipient.OrgId
+         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
          data
@@ -521,13 +499,13 @@ module ScheduleDomesticTransferCommand =
                }
       }
 
-type CompleteDomesticTransferCommand = Command<DomesticTransferCompleted>
+type SettleDomesticTransferCommand = Command<DomesticTransferSettled>
 
-module CompleteDomesticTransferCommand =
+module SettleDomesticTransferCommand =
    let create
       correlationId
       (initiatedBy: Initiator)
-      (data: DomesticTransferCompleted)
+      (data: DomesticTransferSettled)
       =
       Command.create
          (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
@@ -537,10 +515,10 @@ module CompleteDomesticTransferCommand =
          data
 
    let toEvent
-      (cmd: CompleteDomesticTransferCommand)
-      : ValidationResult<BankEvent<DomesticTransferCompleted>>
+      (cmd: SettleDomesticTransferCommand)
+      : ValidationResult<BankEvent<DomesticTransferSettled>>
       =
-      BankEvent.create<DomesticTransferCompleted> cmd |> Ok
+      BankEvent.create<DomesticTransferSettled> cmd |> Ok
 
 type FailDomesticTransferCommand = Command<DomesticTransferFailed>
 
@@ -694,15 +672,15 @@ module DeclinePlatformPaymentCommand =
          }
       |> Ok
 
-type FulfillPlatformPaymentInput = {
+type PlatformPaymentInput = {
    RequestedPayment: PlatformPaymentRequested
    PaymentMethod: PaymentMethod
 }
 
-type FulfillPlatformPaymentCommand = Command<FulfillPlatformPaymentInput>
+type PlatformPaymentCommand = Command<PlatformPaymentInput>
 
-module FulfillPlatformPaymentCommand =
-   let create (initiatedBy: Initiator) (data: FulfillPlatformPaymentInput) =
+module PlatformPaymentCommand =
+   let create (initiatedBy: Initiator) (data: PlatformPaymentInput) =
       let payer = data.RequestedPayment.BaseInfo.Payer
 
       Command.create
@@ -713,10 +691,10 @@ module FulfillPlatformPaymentCommand =
          data
 
    let toEvent
-      (cmd: FulfillPlatformPaymentCommand)
-      : ValidationResult<BankEvent<PlatformPaymentPaid>>
+      (cmd: PlatformPaymentCommand)
+      : ValidationResult<BankEvent<PlatformPaymentPending>>
       =
-      BankEvent.create2<FulfillPlatformPaymentInput, PlatformPaymentPaid> cmd {
+      BankEvent.create2<PlatformPaymentInput, PlatformPaymentPending> cmd {
          BaseInfo = cmd.Data.RequestedPayment.BaseInfo
          PaymentMethod = cmd.Data.PaymentMethod
       }
@@ -745,11 +723,11 @@ type SettlePlatformPaymentCommand = Command<PlatformPaymentSettled>
 
 module SettlePlatformPaymentCommand =
    let create (initiatedBy: Initiator) (data: PlatformPaymentSettled) =
-      let payee = data.BaseInfo.Payee
+      let payer = data.BaseInfo.Payer
 
       Command.create
-         (ParentAccountId.toEntityId payee.ParentAccountId)
-         payee.OrgId
+         (ParentAccountId.toEntityId payer.ParentAccountId)
+         payer.OrgId
          (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
@@ -857,7 +835,7 @@ module InternalAutoTransferCommand =
 
    let toEvent
       (cmd: InternalAutoTransferCommand)
-      : ValidationResult<BankEvent<InternalAutomatedTransferPending>>
+      : ValidationResult<BankEvent<InternalAutomatedTransferDeducted>>
       =
       validate {
          let info = cmd.Data
@@ -866,7 +844,7 @@ module InternalAutoTransferCommand =
          return
             BankEvent.create2<
                AutomaticTransfer.AutoTransferDerivedFromRule,
-               InternalAutomatedTransferPending
+               InternalAutomatedTransferDeducted
              >
                cmd
                {

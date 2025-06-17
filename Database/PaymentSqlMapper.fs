@@ -136,7 +136,7 @@ module PaymentSqlWriter =
       let status =
          function
          | PlatformPaymentStatus.Unpaid -> "Unpaid"
-         | PlatformPaymentStatus.Paid -> "Paid"
+         | PlatformPaymentStatus.PaymentPending -> "PaymentPending"
          | PlatformPaymentStatus.Deposited -> "Deposited"
          | PlatformPaymentStatus.Settled -> "Settled"
          | PlatformPaymentStatus.Cancelled -> "Cancelled"
