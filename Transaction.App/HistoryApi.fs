@@ -245,7 +245,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
                // date_trunc function below.  I reckon this will be plenty
                // sufficient for now.
                let ts = $"date_trunc('milliseconds', {Fields.timestamp})"
-               $"{ts} < @timestamp OR ({ts} = @timestamp AND {Fields.eventId} < @eventId)"
+               $"({ts} < @timestamp OR ({ts} = @timestamp AND {Fields.eventId} < @eventId))"
 
             queryParams,
             {
