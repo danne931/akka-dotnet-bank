@@ -123,16 +123,19 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
          props with
             Name = "Purchase Failed"
             Info =
-               $"Purchase failed for {txn.EmployeeName} {card} at {e.Data.Info.Merchant} due to {e.Data.Reason}"
+               $"Failed purchase for {txn.EmployeeName} {card} at {e.Data.Info.Merchant} due to {e.Data.Reason}"
             Amount = Some <| Money.format e.Data.Info.Amount
       }
-   | EmployeeEvent.PurchaseRefunded e -> {
-      props with
-         Name = "Purchase Refunded to Card"
-         Info =
-            $"Purchase refunded to card for {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
-         Amount = Some <| Money.format e.Data.Info.Amount
-     }
+   | EmployeeEvent.PurchaseRefunded e ->
+      let card = $"**{e.Data.Info.CardNumberLast4}"
+
+      {
+         props with
+            Name = "Purchase Refunded to Card"
+            Info =
+               $"Refunded purchase for {txn.EmployeeName} {card} at {e.Data.Info.Merchant} due to {e.Data.Reason}"
+            Amount = Some <| Money.format e.Data.Info.Amount
+      }
    | EmployeeEvent.CreatedEmployee e -> {
       props with
          Name =
@@ -284,28 +287,24 @@ let accountHistoryUIFriendly
       {
          props with
             Name = "Purchase Settled"
-            Info = $"Purchase from {evt.Data.Merchant} with card {card} settled"
+            Info = $"Settled purchase from {evt.Data.Merchant} with card {card}"
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
       }
    | DebitFailed e -> {
       props with
-         Name = "Purchase Failed"
-         Info =
-            $"Purchase from {e.Data.Merchant} against account {accountName} failed due to {e.Data.Reason}"
+         Name = "Debit Failed"
+         Info = $"Failed debit to account {accountName} due to {e.Data.Reason}"
          Amount = Some <| Money.format e.Data.Amount
      }
-   | DebitRefunded e ->
-      let card = $"**{e.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
-
-      {
-         props with
-            Name = "Purchase Refunded to Card"
-            Info =
-               $"Refunded purchase from {e.Data.Merchant} with card {card} ({accountName}) due to {e.Data.Reason}."
-            Amount = Some <| Money.format e.Data.Amount
-            MoneyFlow = Some MoneyFlow.In
-      }
+   | DebitRefunded e -> {
+      props with
+         Name = "Debit Refunded to Account"
+         Info =
+            $"Refunded debit to account {accountName} at {e.Data.Merchant} due to {e.Data.Reason}."
+         Amount = Some <| Money.format e.Data.Amount
+         MoneyFlow = Some MoneyFlow.In
+     }
    | MaintenanceFeeDebited evt -> {
       props with
          Info = "Maintenance Fee"

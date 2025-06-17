@@ -69,6 +69,8 @@ let accountEventFilterNames
            | AccountEventGroupFilter.Purchase -> [
               typeof<DebitPending>.Name
               typeof<DebitSettled>.Name
+              typeof<DebitFailed>.Name
+              typeof<DebitRefunded>.Name
              ]
            | AccountEventGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
            | AccountEventGroupFilter.InternalTransferWithinOrg -> [
@@ -129,6 +131,7 @@ let employeeEventFilterNames
              ]
            | EmployeeEventGroupFilter.Purchase -> [
               typeof<PurchaseApplied>.Name
+              typeof<PurchaseFailed>.Name
               typeof<PurchaseRefunded>.Name
              ]
            | EmployeeEventGroupFilter.CreatedCard -> [
