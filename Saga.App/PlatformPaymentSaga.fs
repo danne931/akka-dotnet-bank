@@ -22,7 +22,7 @@ type PlatformPaymentSagaEvent =
    | PayerAccountReservedFunds of
       BankEvent<PlatformPaymentPending> *
       PartnerBankAccountLink
-   | PayerAccountUnableToDeductFunds of PlatformPaymentFailReason
+   | PayerAccountUnableToReserveFunds of PlatformPaymentFailReason
    | PayeeAccountDepositedFunds of PartnerBankAccountLink
    | PayeeAccountUnableToDepositFunds of
       PlatformPaymentFailReason *
@@ -186,7 +186,7 @@ let applyEvent
             |> finishActivity Activity.WaitForPayment
             |> addActivity Activity.DepositToPayeeAccount
      }
-   | Event.PayerAccountUnableToDeductFunds reason -> {
+   | Event.PayerAccountUnableToReserveFunds reason -> {
       saga with
          LifeCycle = saga.LifeCycle |> failActivity Activity.WaitForPayment
          Status = PlatformPaymentSagaStatus.Failed reason
@@ -346,7 +346,7 @@ let stateTransition
       | PlatformPaymentSagaEvent.EvaluateRemainingWork
       | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts -> false
       | PlatformPaymentSagaEvent.PayerAccountReservedFunds _
-      | PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds _
+      | PlatformPaymentSagaEvent.PayerAccountUnableToReserveFunds _
       | PlatformPaymentSagaEvent.PaymentRequestDeclined
       | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
          activityIsDone Activity.WaitForPayment
@@ -545,7 +545,7 @@ let onEventPersisted
 
             emailRef <! msg
    | Event.PaymentSettled -> ()
-   | Event.PayerAccountUnableToDeductFunds _ -> ()
+   | Event.PayerAccountUnableToReserveFunds _ -> ()
    | Event.PayeeAccountUnableToDepositFunds(reason, payMethod) ->
       refundPayment (reason, payMethod)
    | Event.SupportTeamResolvedPartnerBankSync ->

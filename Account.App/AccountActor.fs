@@ -83,7 +83,7 @@ let private onValidationError
                Some(
                   cmd.CorrelationId,
                   InternalTransferFailReason.AccountClosed
-                  |> PlatformTransferSagaEvent.SenderAccountUnableToDeductFunds
+                  |> PlatformTransferSagaEvent.SenderUnableToReserveFunds
                   |> AppSaga.Message.platformTransfer
                         cmd.OrgId
                         cmd.CorrelationId
@@ -93,7 +93,7 @@ let private onValidationError
                Some(
                   cmd.CorrelationId,
                   InternalTransferFailReason.AccountClosed
-                  |> PlatformTransferSagaEvent.RecipientAccountUnableToDepositFunds
+                  |> PlatformTransferSagaEvent.RecipientUnableToDepositFunds
                   |> AppSaga.Message.platformTransfer
                         cmd.OrgId
                         cmd.CorrelationId
@@ -103,7 +103,7 @@ let private onValidationError
                Some(
                   cmd.CorrelationId,
                   PlatformPaymentFailReason.AccountClosed
-                  |> PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds
+                  |> PlatformPaymentSagaEvent.PayerAccountUnableToReserveFunds
                   |> AppSaga.Message.platformPayment cmd.OrgId cmd.CorrelationId
                )
             | AccountCommand.DepositPlatformPayment cmd ->
@@ -275,13 +275,13 @@ let onPersisted
       if e.Data.FromSchedule then
          let msg =
             partnerBankAccountLink
-            |> PlatformTransferSagaEvent.SenderAccountDeductedFunds
+            |> PlatformTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 
          getSagaRef e.CorrelationId <! msg
       else
          let msg =
-            PlatformTransferSagaStartEvent.SenderAccountDeductedFunds(
+            PlatformTransferSagaStartEvent.SenderReservedFunds(
                e,
                partnerBankAccountLink
             )
@@ -297,7 +297,7 @@ let onPersisted
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       let msg =
          partnerBankAccountLink
-         |> PlatformTransferSagaEvent.RecipientAccountDepositedFunds
+         |> PlatformTransferSagaEvent.RecipientDepositedFunds
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg

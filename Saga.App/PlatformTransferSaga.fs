@@ -21,7 +21,7 @@ type PlatformTransferSagaStatus =
 
 [<RequireQualifiedAccess>]
 type PlatformTransferSagaStartEvent =
-   | SenderAccountDeductedFunds of
+   | SenderReservedFunds of
       BankEvent<InternalTransferBetweenOrgsPending> *
       PartnerBankAccountLink
    | ScheduleTransferRequest of BankEvent<InternalTransferBetweenOrgsScheduled>
@@ -30,16 +30,16 @@ type PlatformTransferSagaStartEvent =
 type PlatformTransferSagaEvent =
    | ScheduledJobCreated
    | ScheduledJobExecuted
-   | SenderAccountDeductedFunds of PartnerBankAccountLink
-   | SenderAccountUnableToDeductFunds of InternalTransferFailReason
-   | RecipientAccountDepositedFunds of PartnerBankAccountLink
-   | RecipientAccountUnableToDepositFunds of InternalTransferFailReason
+   | SenderReservedFunds of PartnerBankAccountLink
+   | SenderUnableToReserveFunds of InternalTransferFailReason
+   | RecipientDepositedFunds of PartnerBankAccountLink
+   | RecipientUnableToDepositFunds of InternalTransferFailReason
    | TransferNotificationSent
    | TransferDepositNotificationSent
    | PartnerBankSyncResponse of Result<SettlementId, string>
    | SupportTeamResolvedPartnerBankSync
-   | SenderAccountRefunded
-   | RecipientAccountDepositUndo
+   | SenderReleasedReservedFunds
+   | RecipientDepositUndo
    | TransferSettled
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
@@ -51,13 +51,13 @@ type private Event = PlatformTransferSagaEvent
 type Activity =
    | ScheduleTransfer
    | WaitForScheduledTransferExecution
-   | DeductFromSenderAccount
+   | ReserveSenderFunds
    | DepositToRecipientAccount
    | SyncToPartnerBank
    | SettleTransfer
    | SendTransferNotification
    | SendTransferDepositNotification
-   | RefundSenderAccount
+   | ReleaseSenderFunds
    | UndoRecipientDeposit
    | WaitForSupportTeamToResolvePartnerBankSync
 
@@ -75,10 +75,10 @@ type Activity =
          | SendTransferDepositNotification
          | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4)
          | ScheduleTransfer
-         | DeductFromSenderAccount
+         | ReserveSenderFunds
          | DepositToRecipientAccount
          | SettleTransfer
-         | RefundSenderAccount
+         | ReleaseSenderFunds
          | UndoRecipientDeposit -> Some(TimeSpan.FromSeconds 5)
          | WaitForScheduledTransferExecution
          | WaitForSupportTeamToResolvePartnerBankSync -> None
@@ -117,16 +117,16 @@ type PlatformTransferSaga = {
       |> List.exists (fun w ->
          w.Activity = Activity.SendTransferDepositNotification)
 
-   member x.RequiresSenderAccountRefund =
+   member x.RequiresReleaseSenderFunds =
       x.LifeCycle.InProgress
-      |> List.exists (fun w -> w.Activity = Activity.RefundSenderAccount)
+      |> List.exists (fun w -> w.Activity = Activity.ReleaseSenderFunds)
 
 let applyStartEvent
    (evt: PlatformTransferSagaStartEvent)
    (timestamp: DateTime)
    =
    match evt with
-   | StartEvent.SenderAccountDeductedFunds(e, partnerBankSenderAccountLink) -> {
+   | StartEvent.SenderReservedFunds(e, partnerBankSenderAccountLink) -> {
       Status = PlatformTransferSagaStatus.InProgress
       StartEvent = evt
       Events = []
@@ -144,9 +144,9 @@ let applyStartEvent
                {
                   Start = timestamp
                   End = Some timestamp
-                  Activity = Activity.DeductFromSenderAccount
+                  Activity = Activity.ReserveSenderFunds
                   MaxAttempts =
-                     (Activity.DeductFromSenderAccount :> IActivity).MaxAttempts
+                     (Activity.ReserveSenderFunds :> IActivity).MaxAttempts
                   Attempts = 1
                }
             ]
@@ -189,23 +189,22 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.WaitForScheduledTransferExecution
-            |> addActivity Activity.DeductFromSenderAccount
+            |> addActivity Activity.ReserveSenderFunds
      }
-   | Event.SenderAccountDeductedFunds partnerBankSenderAccountLink -> {
+   | Event.SenderReservedFunds partnerBankSenderAccountLink -> {
       saga with
          PartnerBankSenderAccountLink = Some partnerBankSenderAccountLink
          LifeCycle =
             saga.LifeCycle
-            |> finishActivity Activity.DeductFromSenderAccount
+            |> finishActivity Activity.ReserveSenderFunds
             |> addActivity Activity.DepositToRecipientAccount
      }
-   | Event.SenderAccountUnableToDeductFunds reason -> {
+   | Event.SenderUnableToReserveFunds reason -> {
       saga with
-         LifeCycle =
-            saga.LifeCycle |> failActivity Activity.DeductFromSenderAccount
+         LifeCycle = saga.LifeCycle |> failActivity Activity.ReserveSenderFunds
          Status = PlatformTransferSagaStatus.Failed reason
      }
-   | Event.RecipientAccountDepositedFunds partnerBankRecipientAccountLink -> {
+   | Event.RecipientDepositedFunds partnerBankRecipientAccountLink -> {
       saga with
          PartnerBankRecipientAccountLink = Some partnerBankRecipientAccountLink
          LifeCycle =
@@ -215,12 +214,12 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
             |> addActivity Activity.SendTransferNotification
             |> addActivity Activity.SendTransferDepositNotification
      }
-   | Event.RecipientAccountUnableToDepositFunds _ -> {
+   | Event.RecipientUnableToDepositFunds _ -> {
       saga with
          LifeCycle =
             saga.LifeCycle
             |> failActivity Activity.DepositToRecipientAccount
-            |> addActivity Activity.RefundSenderAccount
+            |> addActivity Activity.ReleaseSenderFunds
      }
    | Event.PartnerBankSyncResponse res ->
       match res with
@@ -280,12 +279,12 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
             else
                saga.Status
      }
-   | Event.SenderAccountRefunded -> {
+   | Event.SenderReleasedReservedFunds -> {
       saga with
          LifeCycle =
-            saga.LifeCycle |> finishActivity Activity.RefundSenderAccount
+            saga.LifeCycle |> finishActivity Activity.ReleaseSenderFunds
      }
-   | Event.RecipientAccountDepositUndo -> {
+   | Event.RecipientDepositUndo -> {
       saga with
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.UndoRecipientDeposit
@@ -337,13 +336,13 @@ let stateTransition
          activityIsDone Activity.ScheduleTransfer
       | PlatformTransferSagaEvent.ScheduledJobExecuted ->
          activityIsDone Activity.WaitForScheduledTransferExecution
-      | PlatformTransferSagaEvent.SenderAccountDeductedFunds _
-      | PlatformTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
-         activityIsDone Activity.DeductFromSenderAccount
-      | PlatformTransferSagaEvent.RecipientAccountDepositedFunds _
-      | PlatformTransferSagaEvent.RecipientAccountUnableToDepositFunds _ ->
+      | PlatformTransferSagaEvent.SenderReservedFunds _
+      | PlatformTransferSagaEvent.SenderUnableToReserveFunds _ ->
+         activityIsDone Activity.ReserveSenderFunds
+      | PlatformTransferSagaEvent.RecipientDepositedFunds _
+      | PlatformTransferSagaEvent.RecipientUnableToDepositFunds _ ->
          activityIsDone Activity.DepositToRecipientAccount
-      | PlatformTransferSagaEvent.RecipientAccountDepositUndo ->
+      | PlatformTransferSagaEvent.RecipientDepositUndo ->
          activityIsDone Activity.UndoRecipientDeposit
       | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
          activityIsDone Activity.SyncToPartnerBank
@@ -353,8 +352,8 @@ let stateTransition
          activityIsDone Activity.SendTransferNotification
       | PlatformTransferSagaEvent.TransferDepositNotificationSent ->
          activityIsDone Activity.SendTransferDepositNotification
-      | PlatformTransferSagaEvent.SenderAccountRefunded ->
-         activityIsDone Activity.RefundSenderAccount
+      | PlatformTransferSagaEvent.SenderReleasedReservedFunds ->
+         activityIsDone Activity.ReleaseSenderFunds
       | PlatformTransferSagaEvent.TransferSettled ->
          activityIsDone Activity.SettleTransfer
 
@@ -400,7 +399,7 @@ let onStartEventPersisted
    (evt: TransferStartEvent)
    =
    match evt with
-   | TransferStartEvent.SenderAccountDeductedFunds(e, _) ->
+   | TransferStartEvent.SenderReservedFunds(e, _) ->
       depositTransfer dep.getAccountRef e.Data.BaseInfo
    | TransferStartEvent.ScheduleTransferRequest e ->
       dep.getSchedulingRef () <! scheduleTransferMessage e.Data.BaseInfo
@@ -414,7 +413,7 @@ let onEventPersisted
    let transfer = currentState.TransferInfo
    let correlationId = TransferId.toCorrelationId transfer.TransferId
 
-   let deductFromSender () =
+   let reserveSenderFunds () =
       let cmd = {
          InternalTransferBetweenOrgsCommand.create transfer.InitiatedBy {
             Amount = transfer.Amount
@@ -495,10 +494,10 @@ let onEventPersisted
 
    match evt with
    | TransferEvent.ScheduledJobCreated -> ()
-   | TransferEvent.ScheduledJobExecuted -> deductFromSender ()
-   | TransferEvent.SenderAccountDeductedFunds _ ->
+   | TransferEvent.ScheduledJobExecuted -> reserveSenderFunds ()
+   | TransferEvent.SenderReservedFunds _ ->
       depositTransfer dep.getAccountRef transfer
-   | TransferEvent.RecipientAccountDepositedFunds _ ->
+   | TransferEvent.RecipientDepositedFunds _ ->
       transferSentEmail ()
       transferDepositEmail ()
       syncToPartnerBank ()
@@ -521,9 +520,9 @@ let onEventPersisted
             dep.getEmailRef () <! msg
    | TransferEvent.TransferNotificationSent -> ()
    | TransferEvent.TransferDepositNotificationSent -> ()
-   | TransferEvent.SenderAccountUnableToDeductFunds _ -> ()
-   | TransferEvent.RecipientAccountUnableToDepositFunds reason ->
-      if currentState.RequiresSenderAccountRefund then
+   | TransferEvent.SenderUnableToReserveFunds _ -> ()
+   | TransferEvent.RecipientUnableToDepositFunds reason ->
+      if currentState.RequiresReleaseSenderFunds then
          let cmd =
             FailInternalTransferBetweenOrgsCommand.create
                correlationId
@@ -540,24 +539,24 @@ let onEventPersisted
       // Support team resolved dispute with partner bank so
       // reattempt syncing transaction to partner bank.
       syncToPartnerBank ()
-   | TransferEvent.SenderAccountRefunded -> ()
+   | TransferEvent.SenderReleasedReservedFunds -> ()
    | TransferEvent.TransferSettled -> ()
-   | TransferEvent.RecipientAccountDepositUndo -> ()
+   | TransferEvent.RecipientDepositUndo -> ()
    | TransferEvent.ResetInProgressActivityAttempts -> ()
    | TransferEvent.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
          | Activity.ScheduleTransfer ->
             dep.getSchedulingRef () <! scheduleTransferMessage transfer
-         | Activity.DeductFromSenderAccount -> deductFromSender ()
+         | Activity.ReserveSenderFunds -> reserveSenderFunds ()
          | Activity.DepositToRecipientAccount ->
             depositTransfer dep.getAccountRef transfer
          | Activity.SyncToPartnerBank -> syncToPartnerBank ()
          | Activity.SendTransferNotification -> transferSentEmail ()
          | Activity.SendTransferDepositNotification -> transferDepositEmail ()
-         | Activity.RefundSenderAccount ->
+         | Activity.ReleaseSenderFunds ->
             match
-               currentState.RequiresSenderAccountRefund, currentState.Status
+               currentState.RequiresReleaseSenderFunds, currentState.Status
             with
             | true, PlatformTransferSagaStatus.Failed reason ->
                let cmd =

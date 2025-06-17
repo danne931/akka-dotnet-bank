@@ -70,8 +70,8 @@ type StartEvent =
             "DomesticTransferScheduleTransferRequest"
       | PlatformTransfer e ->
          match e with
-         | PlatformTransferSagaStartEvent.SenderAccountDeductedFunds _ ->
-            "PlatformTransferSenderAccountDeductedFunds"
+         | PlatformTransferSagaStartEvent.SenderReservedFunds _ ->
+            "PlatformTransferSenderReservedFunds"
          | PlatformTransferSagaStartEvent.ScheduleTransferRequest _ ->
             "PlatformTransferScheduleTransferRequest"
       | PlatformPayment e ->
@@ -209,24 +209,24 @@ type Event =
             "PlatformTransferScheduledJobCreated"
          | PlatformTransferSagaEvent.ScheduledJobExecuted ->
             "PlatformTransferScheduledJobExecuted"
-         | PlatformTransferSagaEvent.SenderAccountDeductedFunds _ ->
-            "PlatformTransferSenderAccountDeductedFunds"
-         | PlatformTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
-            "PlatformTransferSenderAccountUnableToDeductFunds"
-         | PlatformTransferSagaEvent.RecipientAccountDepositedFunds _ ->
-            "PlatformTransferRecipientAccountDepositedFunds"
-         | PlatformTransferSagaEvent.RecipientAccountUnableToDepositFunds _ ->
-            "PlatformTransferRecipientAccountUnableToDepositFunds"
+         | PlatformTransferSagaEvent.SenderReservedFunds _ ->
+            "PlatformTransferSenderReservedFunds"
+         | PlatformTransferSagaEvent.SenderUnableToReserveFunds _ ->
+            "PlatformTransferSenderUnableToReserveFunds"
+         | PlatformTransferSagaEvent.RecipientDepositedFunds _ ->
+            "PlatformTransferRecipientDepositedFunds"
+         | PlatformTransferSagaEvent.RecipientUnableToDepositFunds _ ->
+            "PlatformTransferRecipientUnableToDepositFunds"
          | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
             "PlatformTransferPartnerBankSyncResponse"
          | PlatformTransferSagaEvent.TransferSettled ->
             "PlatformTransferSettled"
          | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
             "PlatformTransferSupportTeamResolvedPartnerBankSync"
-         | PlatformTransferSagaEvent.SenderAccountRefunded ->
-            "PlatformTransferSenderAccountRefunded"
-         | PlatformTransferSagaEvent.RecipientAccountDepositUndo ->
-            "PlatformTransferRecipientAccountDepositUndo"
+         | PlatformTransferSagaEvent.SenderReleasedReservedFunds ->
+            "PlatformTransferSenderReleasedReservedFunds"
+         | PlatformTransferSagaEvent.RecipientDepositUndo ->
+            "PlatformTransferRecipientDepositUndo"
          | PlatformTransferSagaEvent.TransferNotificationSent ->
             "PlatformTransferNotificationSent"
          | PlatformTransferSagaEvent.TransferDepositNotificationSent ->
@@ -243,8 +243,8 @@ type Event =
             "PlatformPaymentRequestDeclined"
          | PlatformPaymentSagaEvent.PayerAccountReservedFunds _ ->
             "PlatformPaymentPayerAccountReservedFunds"
-         | PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds _ ->
-            "PlatformPaymentPayerAccountUnableToDeductFunds"
+         | PlatformPaymentSagaEvent.PayerAccountUnableToReserveFunds _ ->
+            "PlatformPaymentPayerAccountUnableToReserveFunds"
          | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds _ ->
             "PlatformPaymentPayeeAccountDepositedFunds"
          | PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds _ ->
