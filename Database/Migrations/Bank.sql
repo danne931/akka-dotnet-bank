@@ -1231,7 +1231,7 @@ BEGIN
       COALESCE(SUM(ae.amount::numeric), 0) AS amount
    FROM employee_event
    JOIN account_event ae
-      ON correlation_id = ae.correlation_id
+      ON ae.correlation_id = employee_event.correlation_id
       AND ae.name = 'DebitSettled'
    JOIN employee using(employee_id)
    WHERE
