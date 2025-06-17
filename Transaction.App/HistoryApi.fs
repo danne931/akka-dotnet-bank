@@ -401,9 +401,15 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
          timestamp,
          event,
          employee_name,
+         -- Display name for the initiator.
+         -- When the initiator is an employee of the org being queried, display their name.
+         -- Otherwise, display the org name.  Example: for payments received from another org
+         -- on the platform, it may be a privacy concern for an org to know the employee name
+         -- of the sender so we will display the org name instead.
          CASE
             WHEN {Fields.initiatedById} = '{string Initiator.System.Id}' THEN '{Initiator.System.Name}'
-            ELSE initiators.first_name || ' ' || initiators.last_name
+            WHEN initiators.org_id = @orgId THEN initiators.first_name || ' ' || initiators.last_name
+            ELSE orgs.org_name
          END as initiator_name
       FROM (
          {historySubQueries}
@@ -411,6 +417,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
          LIMIT @limit
       )
       JOIN {employeeTable} initiators ON {Fields.initiatedById} = initiators.{Fields.employeeId}
+      JOIN {OrganizationSqlMapper.table} orgs ON initiators.org_id = orgs.org_id
       ORDER BY timestamp desc
       """
 
