@@ -64,8 +64,8 @@ type StartEvent =
             "PurchaseRejectedByCard"
       | DomesticTransfer e ->
          match e with
-         | DomesticTransferSagaStartEvent.SenderAccountDeductedFunds _ ->
-            "DomesticTransferSenderAccountDeductedFunds"
+         | DomesticTransferSagaStartEvent.SenderReservedFunds _ ->
+            "DomesticTransferSenderReservedFunds"
          | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ ->
             "DomesticTransferScheduleTransferRequest"
       | PlatformTransfer e ->
@@ -184,18 +184,18 @@ type Event =
             "DomesticTransferScheduledJobCreated"
          | DomesticTransferSagaEvent.ScheduledJobExecuted ->
             "DomesticTransferScheduledJobExecuted"
-         | DomesticTransferSagaEvent.SenderAccountDeductedFunds ->
-            "DomesticTransferSenderAccountDeductedFunds"
-         | DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds _ ->
-            "DomesticTransferSenderAccountUnableToDeductFunds"
+         | DomesticTransferSagaEvent.SenderReservedFunds ->
+            "DomesticTransferSenderReservedFunds"
+         | DomesticTransferSagaEvent.SenderReleasedReservedFunds ->
+            "DomesticTransferSenderReleasedReservedFunds"
+         | DomesticTransferSagaEvent.SenderUnableToDeductFunds _ ->
+            "DomesticTransferSenderUnableToDeductFunds"
          | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
             "DomesticTransferTransferProcessorProgressUpdate"
          | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
             "DomesticTransferRetryTransferServiceRequest"
-         | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
-            "DomesticTransferMarkedAsSettled"
-         | DomesticTransferSagaEvent.SenderAccountRefunded ->
-            "DomesticTransferSenderAccountRefunded"
+         | DomesticTransferSagaEvent.SenderDeductedFunds ->
+            "DomesticTransferSenderDeductedFunds"
          | DomesticTransferSagaEvent.TransferInitiatedNotificationSent ->
             "DomesticTransferInitiatedNotificationSent"
          | DomesticTransferSagaEvent.EvaluateRemainingWork ->

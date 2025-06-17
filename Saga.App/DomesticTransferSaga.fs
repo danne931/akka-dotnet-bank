@@ -19,21 +19,21 @@ type private ServiceAction =
 
 [<RequireQualifiedAccess>]
 type DomesticTransferSagaStartEvent =
-   | SenderAccountDeductedFunds of BankEvent<DomesticTransferPending>
+   | SenderReservedFunds of BankEvent<DomesticTransferPending>
    | ScheduleTransferRequest of BankEvent<DomesticTransferScheduled>
 
 [<RequireQualifiedAccess>]
 type DomesticTransferSagaEvent =
    | ScheduledJobCreated
    | ScheduledJobExecuted
-   | SenderAccountDeductedFunds
+   | SenderReservedFunds
+   | SenderReleasedReservedFunds
    | TransferProcessorProgressUpdate of DomesticTransferThirdPartyUpdate
-   | TransferMarkedAsSettled
+   | SenderDeductedFunds
    | TransferInitiatedNotificationSent
    | RetryTransferServiceRequest of
       updatedRecipient: DomesticTransferRecipient option
-   | SenderAccountUnableToDeductFunds of DomesticTransferFailReason
-   | SenderAccountRefunded
+   | SenderUnableToDeductFunds of DomesticTransferFailReason
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
@@ -41,12 +41,12 @@ type DomesticTransferSagaEvent =
 type Activity =
    | ScheduleTransfer
    | WaitForScheduledTransferExecution
-   | DeductFromSenderAccount
+   | ReserveSenderFunds
+   | ReleaseSenderReservedFunds
    | TransferServiceAck
    | WaitForTransferServiceComplete
-   | MarkTransferAsSettled
+   | DeductSenderFunds
    | SendTransferInitiatedNotification
-   | RefundSenderAccount
    | WaitForDevelopmentTeamFix
 
    interface IActivity with
@@ -71,10 +71,10 @@ type Activity =
             )
          | TransferServiceAck
          | SendTransferInitiatedNotification -> Some(TimeSpan.FromMinutes 4)
-         | DeductFromSenderAccount
-         | MarkTransferAsSettled
-         | ScheduleTransfer
-         | RefundSenderAccount -> Some(TimeSpan.FromSeconds 5)
+         | ReserveSenderFunds
+         | ReleaseSenderReservedFunds
+         | DeductSenderFunds
+         | ScheduleTransfer -> Some(TimeSpan.FromSeconds 5)
 
 type DomesticTransferSaga = {
    StartEvent: DomesticTransferSagaStartEvent
@@ -91,9 +91,9 @@ type DomesticTransferSaga = {
          | DomesticTransferSagaEvent.ScheduledJobCreated -> true
          | _ -> false)
 
-   member x.TransferMarkedAsSettled =
+   member x.SenderDeductedFunds =
       x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.MarkTransferAsSettled)
+      |> List.exists (fun w -> w.Activity = Activity.DeductSenderFunds)
 
    member x.TransferInitiatedNotificationSent =
       x.LifeCycle.Completed
@@ -102,7 +102,7 @@ type DomesticTransferSaga = {
 
    member x.RequiresAccountRefund =
       x.LifeCycle.InProgress
-      |> List.exists (fun w -> w.Activity = Activity.RefundSenderAccount)
+      |> List.exists (fun w -> w.Activity = Activity.ReleaseSenderReservedFunds)
 
    member x.RequiresTransferServiceDevelopmentFix =
       x.LifeCycle.InProgress
@@ -114,7 +114,7 @@ let applyStartEvent
    : DomesticTransferSaga
    =
    match start with
-   | DomesticTransferSagaStartEvent.SenderAccountDeductedFunds evt -> {
+   | DomesticTransferSagaStartEvent.SenderReservedFunds evt -> {
       Status = DomesticTransferProgress.WaitingForTransferServiceAck
       StartEvent = start
       Events = []
@@ -132,9 +132,9 @@ let applyStartEvent
                {
                   Start = timestamp
                   End = Some timestamp
-                  Activity = Activity.DeductFromSenderAccount
+                  Activity = Activity.ReserveSenderFunds
                   MaxAttempts =
-                     (Activity.DeductFromSenderAccount :> IActivity).MaxAttempts
+                     (Activity.ReserveSenderFunds :> IActivity).MaxAttempts
                   Attempts = 1
                }
             ]
@@ -179,14 +179,14 @@ let applyEvent
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.WaitForScheduledTransferExecution
-            |> addActivity Activity.DeductFromSenderAccount
+            |> addActivity Activity.ReserveSenderFunds
          Status = DomesticTransferProgress.ProcessingSenderAccountDeduction
      }
-   | DomesticTransferSagaEvent.SenderAccountDeductedFunds -> {
+   | DomesticTransferSagaEvent.SenderReservedFunds -> {
       saga with
          LifeCycle =
             saga.LifeCycle
-            |> finishActivity Activity.DeductFromSenderAccount
+            |> finishActivity Activity.ReserveSenderFunds
             |> addActivity Activity.TransferServiceAck
             |> addActivity Activity.WaitForTransferServiceComplete
          Status = DomesticTransferProgress.WaitingForTransferServiceAck
@@ -211,7 +211,7 @@ let applyEvent
             LifeCycle =
                saga.LifeCycle
                |> finishActivity Activity.WaitForTransferServiceComplete
-               |> addActivity Activity.MarkTransferAsSettled
+               |> addActivity Activity.DeductSenderFunds
         }
       | DomesticTransferThirdPartyUpdate.Failed reason ->
          let saga = {
@@ -241,7 +241,7 @@ let applyEvent
                if saga.ReasonForRetryServiceAck.IsSome then
                   id
                else
-                  addActivity Activity.RefundSenderAccount
+                  addActivity Activity.ReleaseSenderReservedFunds
 
             {
                saga with
@@ -261,10 +261,9 @@ let applyEvent
             |> addActivity Activity.TransferServiceAck
             |> addActivity Activity.WaitForTransferServiceComplete
      }
-   | DomesticTransferSagaEvent.TransferMarkedAsSettled -> {
+   | DomesticTransferSagaEvent.SenderDeductedFunds -> {
       saga with
-         LifeCycle =
-            saga.LifeCycle |> finishActivity Activity.MarkTransferAsSettled
+         LifeCycle = saga.LifeCycle |> finishActivity Activity.DeductSenderFunds
          Status =
             if saga.TransferInitiatedNotificationSent then
                DomesticTransferProgress.Settled
@@ -274,7 +273,7 @@ let applyEvent
    | DomesticTransferSagaEvent.TransferInitiatedNotificationSent -> {
       saga with
          Status =
-            if saga.TransferMarkedAsSettled then
+            if saga.SenderDeductedFunds then
                DomesticTransferProgress.Settled
             else
                saga.Status
@@ -283,15 +282,15 @@ let applyEvent
                Activity.SendTransferInitiatedNotification
                saga.LifeCycle
      }
-   | DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds reason -> {
+   | DomesticTransferSagaEvent.SenderUnableToDeductFunds reason -> {
       saga with
-         LifeCycle =
-            saga.LifeCycle |> failActivity Activity.DeductFromSenderAccount
+         LifeCycle = saga.LifeCycle |> failActivity Activity.ReserveSenderFunds
          Status = DomesticTransferProgress.Failed reason
      }
-   | DomesticTransferSagaEvent.SenderAccountRefunded -> {
+   | DomesticTransferSagaEvent.SenderReleasedReservedFunds -> {
       saga with
-         LifeCycle = finishActivity Activity.RefundSenderAccount saga.LifeCycle
+         LifeCycle =
+            finishActivity Activity.ReleaseSenderReservedFunds saga.LifeCycle
      }
    | DomesticTransferSagaEvent.EvaluateRemainingWork -> {
       saga with
@@ -328,18 +327,18 @@ let stateTransition
          activityIsDone Activity.ScheduleTransfer
       | DomesticTransferSagaEvent.ScheduledJobExecuted ->
          activityIsDone Activity.WaitForScheduledTransferExecution
-      | DomesticTransferSagaEvent.SenderAccountDeductedFunds ->
-         activityIsDone Activity.DeductFromSenderAccount
+      | DomesticTransferSagaEvent.SenderReservedFunds ->
+         activityIsDone Activity.ReserveSenderFunds
       | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
          activityIsDone Activity.WaitForTransferServiceComplete
       | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
          saga.LifeCycle.ActivityHasFailed(Activity.TransferServiceAck) |> not
-      | DomesticTransferSagaEvent.TransferMarkedAsSettled ->
-         activityIsDone Activity.MarkTransferAsSettled
+      | DomesticTransferSagaEvent.SenderDeductedFunds ->
+         activityIsDone Activity.DeductSenderFunds
       | DomesticTransferSagaEvent.TransferInitiatedNotificationSent ->
          activityIsDone Activity.SendTransferInitiatedNotification
-      | DomesticTransferSagaEvent.SenderAccountRefunded ->
-         activityIsDone Activity.RefundSenderAccount
+      | DomesticTransferSagaEvent.SenderReleasedReservedFunds ->
+         activityIsDone Activity.ReleaseSenderReservedFunds
       | _ -> false
 
    if saga.Status = DomesticTransferProgress.Settled then
@@ -362,7 +361,7 @@ let onStartEventPersisted
    (evt: DomesticTransferSagaStartEvent)
    =
    match evt with
-   | DomesticTransferSagaStartEvent.SenderAccountDeductedFunds e ->
+   | DomesticTransferSagaStartEvent.SenderReservedFunds e ->
       let transfer = TransferEventToDomesticTransfer.fromPending e
 
       let msg =
@@ -465,7 +464,7 @@ let onEventPersisted
 
       dep.getEmailRef () <! emailMsg
 
-   let refundSenderAccount reason =
+   let releaseSenderAccountReservedFunds reason =
       let msg =
          FailDomesticTransferCommand.create correlationId info.InitiatedBy {
             BaseInfo = info
@@ -480,9 +479,9 @@ let onEventPersisted
    | DomesticTransferSagaEvent.ScheduledJobCreated -> ()
    | DomesticTransferSagaEvent.ScheduledJobExecuted ->
       deductFromSenderAccount ()
-   | DomesticTransferSagaEvent.SenderAccountDeductedFunds ->
+   | DomesticTransferSagaEvent.SenderReservedFunds ->
       sendTransferToProcessorService ()
-   | DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds _ -> ()
+   | DomesticTransferSagaEvent.SenderUnableToDeductFunds _ -> ()
    | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
       match progress with
       | DomesticTransferThirdPartyUpdate.ServiceAckReceived ->
@@ -504,9 +503,10 @@ let onEventPersisted
 
             dep.getEmailRef () <! msg
          elif currentState.RequiresAccountRefund then
-            DomesticTransferFailReason.ThirdParty reason |> refundSenderAccount
-   | DomesticTransferSagaEvent.SenderAccountRefunded -> ()
-   | DomesticTransferSagaEvent.TransferMarkedAsSettled -> ()
+            DomesticTransferFailReason.ThirdParty reason
+            |> releaseSenderAccountReservedFunds
+   | DomesticTransferSagaEvent.SenderReleasedReservedFunds -> ()
+   | DomesticTransferSagaEvent.SenderDeductedFunds -> ()
    | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> ()
    | DomesticTransferSagaEvent.TransferInitiatedNotificationSent -> ()
    | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
@@ -519,16 +519,16 @@ let onEventPersisted
          | Activity.ScheduleTransfer ->
             dep.getSchedulingRef ()
             <! SchedulerMessage.ScheduleDomesticTransfer info
-         | Activity.DeductFromSenderAccount -> deductFromSenderAccount ()
+         | Activity.ReserveSenderFunds -> deductFromSenderAccount ()
          | Activity.TransferServiceAck -> sendTransferToProcessorService ()
          | Activity.SendTransferInitiatedNotification ->
             sendTransferInitiatedEmail ()
-         | Activity.RefundSenderAccount ->
+         | Activity.ReleaseSenderReservedFunds ->
             match currentState.Status with
             | DomesticTransferProgress.Failed reason ->
-               refundSenderAccount reason
+               releaseSenderAccountReservedFunds reason
             | _ -> ()
          | Activity.WaitForTransferServiceComplete -> checkOnTransferProgress ()
-         | Activity.MarkTransferAsSettled -> updateTransferAsComplete ()
+         | Activity.DeductSenderFunds -> updateTransferAsComplete ()
          | Activity.WaitForScheduledTransferExecution
          | Activity.WaitForDevelopmentTeamFix -> ()

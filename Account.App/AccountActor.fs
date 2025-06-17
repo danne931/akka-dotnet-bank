@@ -71,7 +71,7 @@ let private onValidationError
                Some(
                   cmd.CorrelationId,
                   DomesticTransferFailReason.SenderAccountNotActive
-                  |> DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds
+                  |> DomesticTransferSagaEvent.SenderUnableToDeductFunds
                   |> AppSaga.Message.domesticTransfer
                         cmd.OrgId
                         cmd.CorrelationId
@@ -134,7 +134,7 @@ let private onValidationError
                Some(
                   cmd.CorrelationId,
                   DomesticTransferFailReason.SenderAccountInsufficientFunds
-                  |> DomesticTransferSagaEvent.SenderAccountUnableToDeductFunds
+                  |> DomesticTransferSagaEvent.SenderUnableToDeductFunds
                   |> AppSaga.Message.domesticTransfer
                         cmd.OrgId
                         cmd.CorrelationId
@@ -153,7 +153,6 @@ let private onValidationError
          err
 
       fail |> Option.iter (fun (corrId, msg) -> getSagaRef corrId <! msg)
-
 
 let onPersisted
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
@@ -317,25 +316,25 @@ let onPersisted
    | AccountEvent.DomesticTransferPending e ->
       if e.Data.FromSchedule then
          let msg =
-            DomesticTransferSagaEvent.SenderAccountDeductedFunds
+            DomesticTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
 
          getSagaRef e.CorrelationId <! msg
       else
          let msg =
-            DomesticTransferSagaStartEvent.SenderAccountDeductedFunds e
+            DomesticTransferSagaStartEvent.SenderReservedFunds e
             |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
          getSagaRef e.CorrelationId <! msg
    | AccountEvent.DomesticTransferFailed e ->
       let msg =
-         DomesticTransferSagaEvent.SenderAccountRefunded
+         DomesticTransferSagaEvent.SenderReleasedReservedFunds
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
    | AccountEvent.DomesticTransferSettled e ->
       let msg =
-         DomesticTransferSagaEvent.TransferMarkedAsSettled
+         DomesticTransferSagaEvent.SenderDeductedFunds
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
