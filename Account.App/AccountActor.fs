@@ -193,7 +193,7 @@ let onPersisted
    | AccountEvent.DebitPending e ->
       let msg =
          partnerBankAccountLink
-         |> PurchaseSagaEvent.PurchaseConfirmedByAccount
+         |> PurchaseSagaEvent.AccountReservedFunds
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
@@ -203,9 +203,9 @@ let onPersisted
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.DebitRefunded e ->
+   | AccountEvent.DebitFailed e ->
       let msg =
-         PurchaseSagaEvent.PurchaseRefundedToAccount
+         PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg

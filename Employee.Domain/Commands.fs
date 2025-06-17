@@ -272,6 +272,23 @@ module PurchaseCommand =
             }
       }
 
+type FailPurchaseCommand = Command<PurchaseFailed>
+
+module FailPurchaseCommand =
+   let create (employeeId: EmployeeId, orgId: OrgId) (data: PurchaseFailed) =
+      Command.create
+         (EmployeeId.toEntityId employeeId)
+         orgId
+         data.Info.CorrelationId
+         data.Info.InitiatedBy
+         data
+
+   let toEvent
+      (cmd: FailPurchaseCommand)
+      : ValidationResult<BankEvent<PurchaseFailed>>
+      =
+      BankEvent.create<PurchaseFailed> cmd |> Ok
+
 type RefundPurchaseCommand = Command<PurchaseRefunded>
 
 module RefundPurchaseCommand =

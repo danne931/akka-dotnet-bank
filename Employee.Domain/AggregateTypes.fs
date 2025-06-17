@@ -11,6 +11,7 @@ type EmployeeCommand =
    | CreateCard of CreateCardCommand
    | LinkThirdPartyProviderCard of LinkThirdPartyProviderCardCommand
    | Purchase of PurchaseCommand
+   | FailPurchase of FailPurchaseCommand
    | RefundPurchase of RefundPurchaseCommand
    | LimitDailyDebits of LimitDailyDebitsCommand
    | LimitMonthlyDebits of LimitMonthlyDebitsCommand
@@ -31,6 +32,7 @@ type EmployeeCommand =
       | CreateCard cmd -> Command.envelope cmd
       | LinkThirdPartyProviderCard cmd -> Command.envelope cmd
       | Purchase cmd -> Command.envelope cmd
+      | FailPurchase cmd -> Command.envelope cmd
       | RefundPurchase cmd -> Command.envelope cmd
       | LimitDailyDebits cmd -> Command.envelope cmd
       | LimitMonthlyDebits cmd -> Command.envelope cmd
@@ -50,6 +52,7 @@ type EmployeeEvent =
    | CreatedCard of BankEvent<CreatedCard>
    | ThirdPartyProviderCardLinked of BankEvent<ThirdPartyProviderCardLinked>
    | PurchaseApplied of BankEvent<PurchaseApplied>
+   | PurchaseFailed of BankEvent<PurchaseFailed>
    | PurchaseRefunded of BankEvent<PurchaseRefunded>
    | DailyDebitLimitUpdated of BankEvent<DailyDebitLimitUpdated>
    | MonthlyDebitLimitUpdated of BankEvent<MonthlyDebitLimitUpdated>
@@ -85,6 +88,7 @@ module EmployeeEnvelope =
       | :? BankEvent<ThirdPartyProviderCardLinked> as evt ->
          ThirdPartyProviderCardLinked evt
       | :? BankEvent<PurchaseApplied> as evt -> PurchaseApplied evt
+      | :? BankEvent<PurchaseFailed> as evt -> PurchaseFailed evt
       | :? BankEvent<PurchaseRefunded> as evt -> PurchaseRefunded evt
       | :? BankEvent<DailyDebitLimitUpdated> as evt ->
          DailyDebitLimitUpdated evt
@@ -109,6 +113,7 @@ module EmployeeEnvelope =
       | CreatedCard evt -> wrap evt, get evt
       | ThirdPartyProviderCardLinked evt -> wrap evt, get evt
       | PurchaseApplied evt -> wrap evt, get evt
+      | PurchaseFailed evt -> wrap evt, get evt
       | PurchaseRefunded evt -> wrap evt, get evt
       | DailyDebitLimitUpdated evt -> wrap evt, get evt
       | MonthlyDebitLimitUpdated evt -> wrap evt, get evt

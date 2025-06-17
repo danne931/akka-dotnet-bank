@@ -179,7 +179,6 @@ type PurchaseFailReason =
 type PurchaseRefundReason =
    | FraudulentActivity
    | DuplicateCharge
-   | AccountStateInvalid of PurchaseAccountFailReason
-   | CardNetworkError of string
+   | UserRequested of reason: string
 
 type BillingPeriod = { Month: int; Year: int }

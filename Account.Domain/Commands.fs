@@ -200,6 +200,24 @@ module FailDebitCommand =
          initiator
          data
 
+   let fromPurchase (purchaseInfo: PurchaseInfo) (reason: PurchaseFailReason) =
+      create
+         (purchaseInfo.ParentAccountId, purchaseInfo.OrgId)
+         purchaseInfo.CorrelationId
+         purchaseInfo.InitiatedBy
+         {
+            AccountId = purchaseInfo.AccountId
+            EmployeePurchaseReference = {
+               EmployeeName = purchaseInfo.EmployeeName
+               EmployeeId = purchaseInfo.EmployeeId
+               EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
+               CardId = purchaseInfo.CardId
+            }
+            Merchant = purchaseInfo.Merchant
+            Amount = purchaseInfo.Amount
+            Reason = reason
+         }
+
    let toEvent
       (cmd: FailDebitCommand)
       : ValidationResult<BankEvent<DebitFailed>>

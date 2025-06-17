@@ -116,6 +116,16 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
             $"Purchase requested by {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
          Amount = Some <| Money.format e.Data.Info.Amount
      }
+   | EmployeeEvent.PurchaseFailed e ->
+      let card = $"**{e.Data.Info.CardNumberLast4}"
+
+      {
+         props with
+            Name = "Purchase Failed"
+            Info =
+               $"Purchase failed for {txn.EmployeeName} {card} at {e.Data.Info.Merchant} due to {e.Data.Reason}"
+            Amount = Some <| Money.format e.Data.Info.Amount
+      }
    | EmployeeEvent.PurchaseRefunded e -> {
       props with
          Name = "Purchase Refunded to Card"
@@ -278,16 +288,13 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
       }
-   | DebitFailed e ->
-      let card = $"**{e.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
-
-      {
-         props with
-            Name = "Purchase Failed"
-            Info =
-               $"Purchase from {e.Data.Merchant} with card {card} failed due to {e.Data.Reason}."
-            Amount = Some <| Money.format e.Data.Amount
-      }
+   | DebitFailed e -> {
+      props with
+         Name = "Purchase Failed"
+         Info =
+            $"Purchase from {e.Data.Merchant} against account {accountName} failed due to {e.Data.Reason}"
+         Amount = Some <| Money.format e.Data.Amount
+     }
    | DebitRefunded e ->
       let card = $"**{e.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
 
@@ -384,7 +391,6 @@ let accountHistoryUIFriendly
               - Reason: {evt.Data.Reason} 
               - Account refunded"
             Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
       }
    | DomesticTransferScheduled evt ->
       let info = evt.Data.BaseInfo
@@ -495,7 +501,6 @@ let accountHistoryUIFriendly
             Info =
                $"Payment refunded to {p.Payer.OrgName} due to {evt.Data.Reason}."
             Amount = Some <| Money.format p.Amount
-            MoneyFlow = Some MoneyFlow.In
       }
    | PlatformPaymentCancelled evt ->
       let p = evt.Data.BaseInfo

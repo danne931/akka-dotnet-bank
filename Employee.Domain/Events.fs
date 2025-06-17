@@ -45,6 +45,11 @@ type ThirdPartyProviderCardLinked = {
 
 type PurchaseApplied = { Info: PurchaseInfo }
 
+type PurchaseFailed = {
+   Info: PurchaseInfo
+   Reason: PurchaseFailReason
+}
+
 type PurchaseRefunded = {
    Info: PurchaseInfo
    Reason: PurchaseRefundReason

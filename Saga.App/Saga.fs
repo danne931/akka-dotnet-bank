@@ -161,11 +161,12 @@ type Event =
             "PurchaseRejectedCardNetworkResponse"
          | PurchaseSagaEvent.CardNetworkResponse _ -> "CardNetworkResponse"
          | PurchaseSagaEvent.PurchaseSettled -> "PurchaseSettled"
-         | PurchaseSagaEvent.PurchaseRefundedToCard -> "PurchaseRefundedToCard"
-         | PurchaseSagaEvent.PurchaseRefundedToAccount ->
-            "PurchaseRefundedToAccount"
-         | PurchaseSagaEvent.PurchaseConfirmedByAccount _ ->
-            "PurchaseConfirmedByAccount"
+         | PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard ->
+            "PurchaseFailureAcknowledgedByCard"
+         | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount ->
+            "PurchaseFailureAcknowledgedByAccount"
+         | PurchaseSagaEvent.AccountReservedFunds _ ->
+            "PurchaseAccountReservedFunds"
          | PurchaseSagaEvent.PurchaseRejectedByAccount _ ->
             "PurchaseRejectedByAccount"
          | PurchaseSagaEvent.PurchaseNotificationSent ->

@@ -24,6 +24,13 @@ let private purchaseAccrued
                acc + e.Amount
             else
                acc
+         | PurchaseFailed e ->
+            let e = e.Data.Info
+
+            if e.CardId = cardId && satisfiesDate e.Date then
+               acc - e.Amount
+            else
+               acc
          | PurchaseRefunded e ->
             let e = e.Data.Info
 
@@ -121,6 +128,7 @@ let applyEvent
 
         }
       | PurchaseRefunded _ -> em
+      | PurchaseFailed _ -> em
       | DailyDebitLimitUpdated e -> {
          em with
             Cards =
@@ -349,6 +357,9 @@ module private StateTransition =
             else
                map PurchaseApplied state (PurchaseCommand.toEvent cmd)
 
+   let failPurchase (state: EmployeeSnapshot) (cmd: FailPurchaseCommand) =
+      map PurchaseFailed state (FailPurchaseCommand.toEvent cmd)
+
    let refundPurchase (state: EmployeeSnapshot) (cmd: RefundPurchaseCommand) =
       let em = state.Info
 
@@ -439,6 +450,7 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
    | EmployeeCommand.LinkThirdPartyProviderCard cmd ->
       StateTransition.linkThirdPartyProviderCard state cmd
    | EmployeeCommand.Purchase cmd -> StateTransition.purchase state cmd
+   | EmployeeCommand.FailPurchase cmd -> StateTransition.failPurchase state cmd
    | EmployeeCommand.RefundPurchase cmd ->
       StateTransition.refundPurchase state cmd
    | EmployeeCommand.LimitDailyDebits cmd ->

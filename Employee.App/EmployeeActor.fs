@@ -177,9 +177,9 @@ let private onPersist
          |> AppSaga.Message.purchaseStart e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | EmployeeEvent.PurchaseRefunded e ->
+   | EmployeeEvent.PurchaseFailed e ->
       let msg =
-         PurchaseSagaEvent.PurchaseRefundedToCard
+         PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
