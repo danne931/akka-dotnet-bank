@@ -738,10 +738,10 @@ module SettlePlatformPaymentCommand =
       =
       BankEvent.create<PlatformPaymentSettled> cmd |> Ok
 
-type RefundPlatformPaymentCommand = Command<PlatformPaymentRefunded>
+type FailPlatformPaymentCommand = Command<PlatformPaymentFailed>
 
-module RefundPlatformPaymentCommand =
-   let create (initiatedBy: Initiator) (data: PlatformPaymentRefunded) =
+module FailPlatformPaymentCommand =
+   let create (initiatedBy: Initiator) (data: PlatformPaymentFailed) =
       let payer = data.BaseInfo.Payer
 
       Command.create
@@ -752,10 +752,10 @@ module RefundPlatformPaymentCommand =
          data
 
    let toEvent
-      (cmd: RefundPlatformPaymentCommand)
-      : ValidationResult<BankEvent<PlatformPaymentRefunded>>
+      (cmd: FailPlatformPaymentCommand)
+      : ValidationResult<BankEvent<PlatformPaymentFailed>>
       =
-      BankEvent.create<PlatformPaymentRefunded> cmd |> Ok
+      BankEvent.create<PlatformPaymentFailed> cmd |> Ok
 
 type ConfigureAutoTransferRuleInput = {
    RuleIdToUpdate: Guid option

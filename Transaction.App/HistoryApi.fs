@@ -98,7 +98,7 @@ let accountEventFilterNames
               typeof<PlatformPaymentRequested>.Name
               typeof<PlatformPaymentPending>.Name
               typeof<PlatformPaymentDeposited>.Name
-              typeof<PlatformPaymentRefunded>.Name
+              typeof<PlatformPaymentFailed>.Name
               typeof<PlatformPaymentSettled>.Name
               typeof<PlatformPaymentDeclined>.Name
               typeof<PlatformPaymentCancelled>.Name

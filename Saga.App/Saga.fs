@@ -240,8 +240,8 @@ type Event =
             "PlatformPaymentRequestCancelled"
          | PlatformPaymentSagaEvent.PaymentRequestDeclined ->
             "PlatformPaymentRequestDeclined"
-         | PlatformPaymentSagaEvent.PayerAccountDeductedFunds _ ->
-            "PlatformPaymentPayerAccountDeductedFunds"
+         | PlatformPaymentSagaEvent.PayerAccountReservedFunds _ ->
+            "PlatformPaymentPayerAccountReservedFunds"
          | PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds _ ->
             "PlatformPaymentPayerAccountUnableToDeductFunds"
          | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds _ ->
@@ -253,8 +253,8 @@ type Event =
          | PlatformPaymentSagaEvent.PaymentSettled -> "PlatformPaymentSettled"
          | PlatformPaymentSagaEvent.SupportTeamResolvedPartnerBankSync ->
             "PlatformPaymentSupportTeamResolvedPartnerBankSync"
-         | PlatformPaymentSagaEvent.PayerAccountRefunded ->
-            "PlatformPaymentPayerAccountRefunded"
+         | PlatformPaymentSagaEvent.PayerAccountReleasedReservedFunds ->
+            "PlatformPaymentPayerAccountReleasedReservedFunds"
          | PlatformPaymentSagaEvent.ThirdPartyPaymentMethodRefunded ->
             "PlatformPaymentThirdPartyPaymentMethodRefunded"
          | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->

@@ -53,7 +53,7 @@ module TransferLimits =
             Some(info.ScheduledDate, -info.Amount)
          | AccountEvent.PlatformPaymentPending e ->
             Some(e.Timestamp, e.Data.BaseInfo.Amount)
-         | AccountEvent.PlatformPaymentRefunded e ->
+         | AccountEvent.PlatformPaymentFailed e ->
             Some(e.Timestamp, -e.Data.BaseInfo.Amount)
          | _ -> None)
 
@@ -222,8 +222,7 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
                      )
                   | None -> state.DomesticTransferRecipients
          }
-      | AccountEvent.DebitRefunded _
-      | AccountEvent.PlatformPaymentRefunded _ -> {
+      | AccountEvent.DebitRefunded _ -> {
          updated with
             MaintenanceFeeCriteria =
                MaintenanceFee.fromDebitReversal

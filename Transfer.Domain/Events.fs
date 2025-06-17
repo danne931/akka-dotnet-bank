@@ -159,9 +159,9 @@ type PlatformPaymentDeclined = {
    Reason: string option
 }
 
-type PlatformPaymentRefunded = {
+type PlatformPaymentFailed = {
    BaseInfo: PlatformPaymentBaseInfo
-   Reason: PlatformPaymentRefundReason
+   Reason: PlatformPaymentFailReason
    PaymentMethod: PaymentMethod
 }
 

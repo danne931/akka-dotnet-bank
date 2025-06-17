@@ -33,7 +33,6 @@ module BillingTransaction =
          | InternalAutomatedTransferDeposited _
          | PlatformPaymentSettled _
          | PlatformPaymentDeposited _
-         | PlatformPaymentRefunded _
          | DomesticTransferSettled _ -> Some(BillingTransaction evt)
          | _ -> None
 

@@ -19,7 +19,7 @@ type PlatformPaymentSagaStartEvent =
 type PlatformPaymentSagaEvent =
    | PaymentRequestCancelled
    | PaymentRequestDeclined
-   | PayerAccountDeductedFunds of
+   | PayerAccountReservedFunds of
       BankEvent<PlatformPaymentPending> *
       PartnerBankAccountLink
    | PayerAccountUnableToDeductFunds of PlatformPaymentFailReason
@@ -35,7 +35,7 @@ type PlatformPaymentSagaEvent =
    | PaymentSettled
    | SupportTeamResolvedPartnerBankSync
    | ThirdPartyPaymentMethodRefunded
-   | PayerAccountRefunded
+   | PayerAccountReleasedReservedFunds
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
@@ -58,7 +58,7 @@ type Activity =
    | NotifyPayerOfPaymentSent
    | NotifyPayeeOfPaymentDeposit
    | RefundThirdPartyPaymentMethod
-   | RefundPayerAccount
+   | ReleasePayerAccountReservedFunds
    | WaitForPayment
    | WaitForSupportTeamToResolvePartnerBankSync
 
@@ -81,7 +81,7 @@ type Activity =
          | NotifyPayeeOfDecline
          | NotifyPayeeOfPaymentDeposit -> Some(TimeSpan.FromMinutes 4)
          | DepositToPayeeAccount
-         | RefundPayerAccount
+         | ReleasePayerAccountReservedFunds
          | SettlePayment -> Some(TimeSpan.FromSeconds 5)
 
 type PlatformPaymentSaga = {
@@ -113,7 +113,7 @@ type PlatformPaymentSaga = {
    member x.PaymentMethod =
       x.Events
       |> List.tryPick (function
-         | PlatformPaymentSagaEvent.PayerAccountDeductedFunds(e, _) ->
+         | PlatformPaymentSagaEvent.PayerAccountReservedFunds(e, _) ->
             Some e.Data.PaymentMethod
          | _ -> None)
 
@@ -175,7 +175,7 @@ let applyEvent
             |> finishActivity Activity.WaitForPayment
             |> addActivity Activity.NotifyPayeeOfDecline
      }
-   | Event.PayerAccountDeductedFunds(_, senderLink) -> {
+   | Event.PayerAccountReservedFunds(_, senderLink) -> {
       saga with
          PartnerBankSenderAccountLink = Some senderLink
          Status =
@@ -211,7 +211,8 @@ let applyEvent
             |> failActivity Activity.DepositToPayeeAccount
             |> addActivity (
                match payMethod with
-               | PaymentMethod.Platform _ -> Activity.RefundPayerAccount
+               | PaymentMethod.Platform _ ->
+                  Activity.ReleasePayerAccountReservedFunds
                | PaymentMethod.ThirdParty _ ->
                   Activity.RefundThirdPartyPaymentMethod
             )
@@ -307,10 +308,11 @@ let applyEvent
             saga.LifeCycle
             |> finishActivity Activity.RefundThirdPartyPaymentMethod
      }
-   | Event.PayerAccountRefunded -> {
+   | Event.PayerAccountReleasedReservedFunds -> {
       saga with
          LifeCycle =
-            saga.LifeCycle |> finishActivity Activity.RefundPayerAccount
+            saga.LifeCycle
+            |> finishActivity Activity.ReleasePayerAccountReservedFunds
      }
    | Event.EvaluateRemainingWork -> {
       saga with
@@ -343,7 +345,7 @@ let stateTransition
       match evt with
       | PlatformPaymentSagaEvent.EvaluateRemainingWork
       | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts -> false
-      | PlatformPaymentSagaEvent.PayerAccountDeductedFunds _
+      | PlatformPaymentSagaEvent.PayerAccountReservedFunds _
       | PlatformPaymentSagaEvent.PayerAccountUnableToDeductFunds _
       | PlatformPaymentSagaEvent.PaymentRequestDeclined
       | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
@@ -365,8 +367,8 @@ let stateTransition
          activityIsDone Activity.NotifyPayeeOfPaymentDeposit
       | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
          activityIsDone Activity.NotifyPayeeOfDecline
-      | PlatformPaymentSagaEvent.PayerAccountRefunded ->
-         activityIsDone Activity.RefundPayerAccount
+      | PlatformPaymentSagaEvent.PayerAccountReleasedReservedFunds ->
+         activityIsDone Activity.ReleasePayerAccountReservedFunds
       | PlatformPaymentSagaEvent.ThirdPartyPaymentMethodRefunded ->
          activityIsDone Activity.RefundThirdPartyPaymentMethod
 
@@ -471,12 +473,12 @@ let onEventPersisted
       match payMethod with
       | PaymentMethod.Platform _ ->
          let msg =
-            RefundPlatformPaymentCommand.create state.InitiatedBy {
+            FailPlatformPaymentCommand.create state.InitiatedBy {
                BaseInfo = payment
-               Reason = PlatformPaymentRefundReason.PaymentFailed reason
+               Reason = reason
                PaymentMethod = payMethod
             }
-            |> AccountCommand.RefundPlatformPayment
+            |> AccountCommand.FailPlatformPayment
             |> AccountMessage.StateChange
 
          dep.getAccountRef payment.Payee.ParentAccountId <! msg
@@ -519,7 +521,7 @@ let onEventPersisted
    match evt with
    | Event.PaymentRequestCancelled -> ()
    | Event.PaymentRequestDeclined -> notifyPayeeOfPaymentDecline ()
-   | Event.PayerAccountDeductedFunds(e, _) -> depositToPayeeAccount e
+   | Event.PayerAccountReservedFunds(e, _) -> depositToPayeeAccount e
    | Event.PayeeAccountDepositedFunds _ ->
       notifyPayerOfPaymentSent ()
       notifyPayeeOfPaymentDeposit ()
@@ -552,7 +554,7 @@ let onEventPersisted
       syncToPartnerBank ()
    | Event.ResetInProgressActivityAttempts
    | Event.ThirdPartyPaymentMethodRefunded
-   | Event.PayerAccountRefunded
+   | Event.PayerAccountReleasedReservedFunds
    | Event.PaymentDeclinedNotificationSentToPayee
    | Event.PaymentRequestNotificationSentToPayer
    | Event.PaymentPaidNotificationSentToPayer
@@ -574,12 +576,12 @@ let onEventPersisted
          | Activity.DepositToPayeeAccount ->
             state.Events
             |> List.tryPick (function
-               | PlatformPaymentSagaEvent.PayerAccountDeductedFunds(e, _) ->
+               | PlatformPaymentSagaEvent.PayerAccountReservedFunds(e, _) ->
                   Some e
                | _ -> None)
             |> Option.iter depositToPayeeAccount
          | Activity.RefundThirdPartyPaymentMethod
-         | Activity.RefundPayerAccount ->
+         | Activity.ReleasePayerAccountReservedFunds ->
             state.Events
             |> List.tryPick (function
                | Event.PayeeAccountUnableToDepositFunds(reason, payMethod) ->

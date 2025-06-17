@@ -147,9 +147,9 @@ let applyEvent (account: Account) (evt: AccountEvent) =
          Balance = account.Balance - e.Data.BaseInfo.Amount
          PendingDeductions = account.PendingDeductions - e.Data.BaseInfo.Amount
      }
-   | PlatformPaymentRefunded e -> {
+   | PlatformPaymentFailed e -> {
       account with
-         Balance = account.Balance + e.Data.BaseInfo.Amount
+         PendingDeductions = account.PendingDeductions - e.Data.BaseInfo.Amount
      }
    | AutoTransferRuleConfigured e -> {
       account with
@@ -424,7 +424,7 @@ module private StateTransition =
          map InternalTransferBetweenOrgsDeposited account
          <| (DepositInternalTransferBetweenOrgsCommand.toEvent cmd)
 
-   let platformPaymentRequested
+   let requestPlatformPayment
       (account: Account)
       (cmd: RequestPlatformPaymentCommand)
       =
@@ -436,7 +436,7 @@ module private StateTransition =
             account
             (RequestPlatformPaymentCommand.toEvent cmd)
 
-   let platformPaymentCancelled
+   let cancelPlatformPayment
       (account: Account)
       (cmd: CancelPlatformPaymentCommand)
       =
@@ -448,7 +448,7 @@ module private StateTransition =
             account
             (CancelPlatformPaymentCommand.toEvent cmd)
 
-   let platformPaymentDeclined
+   let declinePlatformPayment
       (account: Account)
       (cmd: DeclinePlatformPaymentCommand)
       =
@@ -472,19 +472,19 @@ module private StateTransition =
       else
          map PlatformPaymentPending account (PlatformPaymentCommand.toEvent cmd)
 
-   let platformPaymentRefunded
+   let failPlatformPayment
       (account: Account)
-      (cmd: RefundPlatformPaymentCommand)
+      (cmd: FailPlatformPaymentCommand)
       =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
       else
          map
-            PlatformPaymentRefunded
+            PlatformPaymentFailed
             account
-            (RefundPlatformPaymentCommand.toEvent cmd)
+            (FailPlatformPaymentCommand.toEvent cmd)
 
-   let platformPaymentDeposited
+   let depositPlatformPayment
       (account: Account)
       (cmd: DepositPlatformPaymentCommand)
       =
@@ -622,19 +622,19 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.domesticTransferProgress account cmd
    | AccountCommand.CloseAccount cmd -> StateTransition.closeAccount account cmd
    | AccountCommand.RequestPlatformPayment cmd ->
-      StateTransition.platformPaymentRequested account cmd
+      StateTransition.requestPlatformPayment account cmd
    | AccountCommand.PlatformPayment cmd ->
       StateTransition.platformPaymentPending account cmd
-   | AccountCommand.RefundPlatformPayment cmd ->
-      StateTransition.platformPaymentRefunded account cmd
+   | AccountCommand.FailPlatformPayment cmd ->
+      StateTransition.failPlatformPayment account cmd
    | AccountCommand.SettlePlatformPayment cmd ->
       StateTransition.settlePlatformPayment account cmd
    | AccountCommand.DepositPlatformPayment cmd ->
-      StateTransition.platformPaymentDeposited account cmd
+      StateTransition.depositPlatformPayment account cmd
    | AccountCommand.CancelPlatformPayment cmd ->
-      StateTransition.platformPaymentCancelled account cmd
+      StateTransition.cancelPlatformPayment account cmd
    | AccountCommand.DeclinePlatformPayment cmd ->
-      StateTransition.platformPaymentDeclined account cmd
+      StateTransition.declinePlatformPayment account cmd
    | AccountCommand.ConfigureAutoTransferRule cmd ->
       StateTransition.configureAutoTransferRule account cmd
    | AccountCommand.DeleteAutoTransferRule cmd ->

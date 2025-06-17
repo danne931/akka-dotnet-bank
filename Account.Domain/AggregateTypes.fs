@@ -47,7 +47,7 @@ type AccountCommand =
    | DeclinePlatformPayment of DeclinePlatformPaymentCommand
    | PlatformPayment of PlatformPaymentCommand
    | DepositPlatformPayment of DepositPlatformPaymentCommand
-   | RefundPlatformPayment of RefundPlatformPaymentCommand
+   | FailPlatformPayment of FailPlatformPaymentCommand
    | SettlePlatformPayment of SettlePlatformPaymentCommand
    | CloseAccount of CloseAccountCommand
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
@@ -85,7 +85,7 @@ type AccountCommand =
       | DeclinePlatformPayment cmd -> Command.envelope cmd
       | PlatformPayment cmd -> Command.envelope cmd
       | DepositPlatformPayment cmd -> Command.envelope cmd
-      | RefundPlatformPayment cmd -> Command.envelope cmd
+      | FailPlatformPayment cmd -> Command.envelope cmd
       | SettlePlatformPayment cmd -> Command.envelope cmd
       | CloseAccount cmd -> Command.envelope cmd
       | ConfigureAutoTransferRule cmd -> Command.envelope cmd
@@ -139,7 +139,7 @@ type AccountCommand =
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | DepositPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
       | SettlePlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
-      | RefundPlatformPayment cmd ->
+      | FailPlatformPayment cmd ->
          match cmd.Data.PaymentMethod with
          | PaymentMethod.Platform accountId -> accountId
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
@@ -198,7 +198,7 @@ type AccountEvent =
    | PlatformPaymentPending of BankEvent<PlatformPaymentPending>
    | PlatformPaymentDeposited of BankEvent<PlatformPaymentDeposited>
    | PlatformPaymentSettled of BankEvent<PlatformPaymentSettled>
-   | PlatformPaymentRefunded of BankEvent<PlatformPaymentRefunded>
+   | PlatformPaymentFailed of BankEvent<PlatformPaymentFailed>
    | AccountClosed of BankEvent<AccountClosed>
    | AutoTransferRuleConfigured of BankEvent<AutomaticTransferRuleConfigured>
    | AutoTransferRuleDeleted of BankEvent<AutomaticTransferRuleDeleted>
@@ -250,7 +250,7 @@ type AccountEvent =
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | PlatformPaymentDeposited evt -> evt.Data.BaseInfo.Payee.AccountId
       | PlatformPaymentSettled evt -> evt.Data.BaseInfo.Payee.AccountId
-      | PlatformPaymentRefunded evt ->
+      | PlatformPaymentFailed evt ->
          match evt.Data.PaymentMethod with
          | PaymentMethod.Platform accountId -> accountId
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
@@ -354,7 +354,7 @@ module AccountEvent =
       | AccountEvent.PlatformPaymentSettled evt ->
          let p = evt.Data.BaseInfo
          Some p.Amount, Some MoneyFlow.Out, Some p.Payee.OrgName
-      | AccountEvent.PlatformPaymentRefunded evt ->
+      | AccountEvent.PlatformPaymentFailed evt ->
          let p = evt.Data.BaseInfo
          Some p.Amount, Some MoneyFlow.In, Some p.Payee.OrgName
       | _ -> None, None, None
@@ -421,8 +421,7 @@ module AccountEnvelope =
          PlatformPaymentDeposited evt
       | :? BankEvent<PlatformPaymentSettled> as evt ->
          PlatformPaymentSettled evt
-      | :? BankEvent<PlatformPaymentRefunded> as evt ->
-         PlatformPaymentRefunded evt
+      | :? BankEvent<PlatformPaymentFailed> as evt -> PlatformPaymentFailed evt
       | :? BankEvent<AccountClosed> as evt -> AccountClosed evt
       | :? BankEvent<AutomaticTransferRuleConfigured> as evt ->
          AutoTransferRuleConfigured evt
@@ -476,7 +475,7 @@ module AccountEnvelope =
       | PlatformPaymentDeclined evt -> wrap evt, get evt
       | PlatformPaymentPending evt -> wrap evt, get evt
       | PlatformPaymentDeposited evt -> wrap evt, get evt
-      | PlatformPaymentRefunded evt -> wrap evt, get evt
+      | PlatformPaymentFailed evt -> wrap evt, get evt
       | PlatformPaymentSettled evt -> wrap evt, get evt
       | AccountClosed evt -> wrap evt, get evt
       | AutoTransferRuleConfigured evt -> wrap evt, get evt

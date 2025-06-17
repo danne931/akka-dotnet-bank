@@ -277,7 +277,7 @@ let transactionInfoFromHistory
             TransactionStatus.InProgress,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.PlatformPaymentRefunded e ->
+      | AccountEvent.PlatformPaymentFailed e ->
          Some(
             TransactionType.Payment,
             TransactionStatus.Failed,

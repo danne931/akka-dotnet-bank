@@ -1347,7 +1347,6 @@ BEGIN
         SUM(
            CASE
            WHEN ae.name = 'PlatformPaymentSettled' THEN ae.amount::numeric
-           WHEN ae.name = 'PlatformPaymentRefunded' THEN -ae.amount::numeric
            ELSE 0
            END
         ),
@@ -1367,8 +1366,7 @@ BEGIN
         'InternalTransferWithinOrgDeducted',
         'InternalTransferBetweenOrgsSettled',
         'DomesticTransferSettled',
-        'PlatformPaymentSettled',
-        'PlatformPaymentRefunded'
+        'PlatformPaymentSettled'
      )
      AND (
        partner_bank_parent_account.last_billing_cycle_at IS NULL 

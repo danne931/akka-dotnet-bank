@@ -229,7 +229,7 @@ let onPersisted
       getSagaRef e.CorrelationId <! msg
    | AccountEvent.PlatformPaymentPending e ->
       let msg =
-         PlatformPaymentSagaEvent.PayerAccountDeductedFunds(
+         PlatformPaymentSagaEvent.PayerAccountReservedFunds(
             e,
             partnerBankAccountLink
          )
@@ -261,9 +261,9 @@ let onPersisted
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentRefunded e ->
+   | AccountEvent.PlatformPaymentFailed e ->
       let msg =
-         PlatformPaymentSagaEvent.PayerAccountRefunded
+         PlatformPaymentSagaEvent.PayerAccountReleasedReservedFunds
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg

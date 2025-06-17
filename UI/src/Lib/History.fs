@@ -486,7 +486,7 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format p.Amount
             MoneyFlow = Some MoneyFlow.In
       }
-   | PlatformPaymentRefunded evt ->
+   | PlatformPaymentFailed evt ->
       let p = evt.Data.BaseInfo
 
       {
@@ -701,7 +701,7 @@ let private matchesAccountEventFilter
       | AccountEvent.PlatformPaymentRequested _
       | AccountEvent.PlatformPaymentPending _
       | AccountEvent.PlatformPaymentDeposited _
-      | AccountEvent.PlatformPaymentRefunded _
+      | AccountEvent.PlatformPaymentFailed _
       | AccountEvent.PlatformPaymentDeclined _
       | AccountEvent.PlatformPaymentCancelled _ -> true
       | _ -> false
