@@ -71,7 +71,7 @@ let private onValidationError
                Some(
                   cmd.CorrelationId,
                   DomesticTransferFailReason.SenderAccountNotActive
-                  |> DomesticTransferSagaEvent.SenderUnableToDeductFunds
+                  |> DomesticTransferSagaEvent.SenderUnableToReserveFunds
                   |> AppSaga.Message.domesticTransfer
                         cmd.OrgId
                         cmd.CorrelationId
@@ -134,7 +134,7 @@ let private onValidationError
                Some(
                   cmd.CorrelationId,
                   DomesticTransferFailReason.SenderAccountInsufficientFunds
-                  |> DomesticTransferSagaEvent.SenderUnableToDeductFunds
+                  |> DomesticTransferSagaEvent.SenderUnableToReserveFunds
                   |> AppSaga.Message.domesticTransfer
                         cmd.OrgId
                         cmd.CorrelationId

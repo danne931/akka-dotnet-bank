@@ -33,7 +33,7 @@ type DomesticTransferSagaEvent =
    | TransferInitiatedNotificationSent
    | RetryTransferServiceRequest of
       updatedRecipient: DomesticTransferRecipient option
-   | SenderUnableToDeductFunds of DomesticTransferFailReason
+   | SenderUnableToReserveFunds of DomesticTransferFailReason
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
@@ -282,7 +282,7 @@ let applyEvent
                Activity.SendTransferInitiatedNotification
                saga.LifeCycle
      }
-   | DomesticTransferSagaEvent.SenderUnableToDeductFunds reason -> {
+   | DomesticTransferSagaEvent.SenderUnableToReserveFunds reason -> {
       saga with
          LifeCycle = saga.LifeCycle |> failActivity Activity.ReserveSenderFunds
          Status = DomesticTransferProgress.Failed reason
@@ -481,7 +481,7 @@ let onEventPersisted
       deductFromSenderAccount ()
    | DomesticTransferSagaEvent.SenderReservedFunds ->
       sendTransferToProcessorService ()
-   | DomesticTransferSagaEvent.SenderUnableToDeductFunds _ -> ()
+   | DomesticTransferSagaEvent.SenderUnableToReserveFunds _ -> ()
    | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
       match progress with
       | DomesticTransferThirdPartyUpdate.ServiceAckReceived ->
