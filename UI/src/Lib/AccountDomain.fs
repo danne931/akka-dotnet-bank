@@ -579,7 +579,6 @@ let private matchesAccountEventGroupFilter
    | AccountEventGroupFilter.InternalAutomatedTransfer ->
       match event with
       | AccountEvent.InternalAutomatedTransferDeducted _
-      | AccountEvent.InternalAutomatedTransferFailed _
       | AccountEvent.InternalAutomatedTransferDeposited _ -> true
       | _ -> false
    | AccountEventGroupFilter.DomesticTransfer ->

@@ -86,7 +86,6 @@ let accountEventFilterNames
              ]
            | AccountEventGroupFilter.InternalAutomatedTransfer -> [
               typeof<InternalAutomatedTransferDeducted>.Name
-              typeof<InternalAutomatedTransferFailed>.Name
               typeof<InternalAutomatedTransferDeposited>.Name
              ]
            | AccountEventGroupFilter.DomesticTransfer -> [

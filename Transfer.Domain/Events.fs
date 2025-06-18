@@ -201,12 +201,6 @@ type InternalAutomatedTransferDeducted = {
    Rule: AutomaticTransfer.AutomaticTransferRule
 }
 
-type InternalAutomatedTransferFailed = {
-   BaseInfo: BaseInternalTransferInfo
-   Reason: InternalTransferFailReason
-   Rule: AutomaticTransfer.AutomaticTransferRule
-}
-
 type InternalAutomatedTransferDeposited = {
    BaseInfo: BaseInternalTransferInfo
    Rule: AutomaticTransfer.AutomaticTransferRule

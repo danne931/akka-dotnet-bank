@@ -191,12 +191,6 @@ let transactionInfoFromHistory
             TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.InternalAutomatedTransferFailed e ->
-         Some(
-            TransactionType.InternalAutomatedTransfer,
-            TransactionStatus.Failed,
-            e.Data.BaseInfo.Amount
-         )
       | AccountEvent.DepositedCash e ->
          Some(
             TransactionType.Deposit,

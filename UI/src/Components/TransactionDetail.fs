@@ -429,8 +429,6 @@ let renderTransactionInfo
                         | AccountEvent.InternalAutomatedTransferDeposited e ->
                            Html.p
                               $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
-                        | AccountEvent.InternalAutomatedTransferFailed e ->
-                           Html.p $"Failed: {e.Data.Reason}"
                         | _ -> Html.p "Unknown"
 
                      Html.small (

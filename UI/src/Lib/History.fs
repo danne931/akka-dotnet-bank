@@ -552,19 +552,6 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
       }
-   | InternalAutomatedTransferFailed evt ->
-      let info = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Internal Automated Transfer Failed"
-            Info =
-               $"Auto Balance Management: failed transfer from {info.Sender.Name} to {info.Recipient.Name} 
-              - Reason: {evt.Data.Reason} 
-              - Account refunded"
-            Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.In
-      }
    | InternalAutomatedTransferDeposited evt ->
       let info = evt.Data.BaseInfo
       let sender = info.Sender.Name
@@ -689,7 +676,6 @@ let private matchesAccountEventFilter
    | AccountEventGroupFilter.InternalAutomatedTransfer ->
       match event with
       | AccountEvent.InternalAutomatedTransferDeducted _
-      | AccountEvent.InternalAutomatedTransferFailed _
       | AccountEvent.InternalAutomatedTransferDeposited _ -> true
       | _ -> false
    | AccountEventGroupFilter.DomesticTransfer ->
@@ -733,6 +719,7 @@ let private matchesEmployeeEventFilter
    | EmployeeEventGroupFilter.Purchase ->
       match event with
       | EmployeeEvent.PurchaseApplied _
+      | EmployeeEvent.PurchaseFailed _
       | EmployeeEvent.PurchaseRefunded _ -> true
       | _ -> false
    | EmployeeEventGroupFilter.CreatedCard ->

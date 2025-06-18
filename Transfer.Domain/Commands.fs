@@ -862,29 +862,6 @@ module InternalAutoTransferCommand =
                }
       }
 
-type FailInternalAutoTransferCommand = Command<InternalAutomatedTransferFailed>
-
-module FailInternalAutoTransferCommand =
-   let create
-      correlationId
-      (initiatedBy: Initiator)
-      (data: InternalAutomatedTransferFailed)
-      =
-      let sender = data.BaseInfo.Sender
-
-      Command.create
-         (ParentAccountId.toEntityId sender.ParentAccountId)
-         sender.OrgId
-         correlationId
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: FailInternalAutoTransferCommand)
-      : ValidationResult<BankEvent<InternalAutomatedTransferFailed>>
-      =
-      BankEvent.create<InternalAutomatedTransferFailed> cmd |> Ok
-
 type DepositInternalAutoTransferCommand =
    Command<InternalAutomatedTransferDeposited>
 

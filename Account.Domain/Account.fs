@@ -160,7 +160,6 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       account with
          Balance = account.Balance - e.Data.BaseInfo.Amount
      }
-   | InternalAutomatedTransferFailed _ -> account
    | InternalAutomatedTransferDeposited e -> {
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
@@ -559,18 +558,6 @@ module private StateTransition =
             account
             (InternalAutoTransferCommand.toEvent cmd)
 
-   let failInternalAutoTransfer
-      (account: Account)
-      (cmd: FailInternalAutoTransferCommand)
-      =
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      else
-         map
-            InternalAutomatedTransferFailed
-            account
-            (FailInternalAutoTransferCommand.toEvent cmd)
-
    let depositInternalAutoTransfer
       (account: Account)
       (cmd: DepositInternalAutoTransferCommand)
@@ -641,8 +628,6 @@ let stateTransition (account: Account) (command: AccountCommand) =
       StateTransition.deleteAutoTransferRule account cmd
    | AccountCommand.InternalAutoTransfer cmd ->
       StateTransition.internalAutoTransfer account cmd
-   | AccountCommand.FailInternalAutoTransfer cmd ->
-      StateTransition.failInternalAutoTransfer account cmd
    | AccountCommand.DepositInternalAutoTransfer cmd ->
       StateTransition.depositInternalAutoTransfer account cmd
    | AccountCommand.ParentAccount _ ->

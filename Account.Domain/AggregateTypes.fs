@@ -53,7 +53,6 @@ type AccountCommand =
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
    | DeleteAutoTransferRule of DeleteAutoTransferRuleCommand
    | InternalAutoTransfer of InternalAutoTransferCommand
-   | FailInternalAutoTransfer of FailInternalAutoTransferCommand
    | DepositInternalAutoTransfer of DepositInternalAutoTransferCommand
    | ParentAccount of ParentAccountCommand
 
@@ -91,7 +90,6 @@ type AccountCommand =
       | ConfigureAutoTransferRule cmd -> Command.envelope cmd
       | DeleteAutoTransferRule cmd -> Command.envelope cmd
       | InternalAutoTransfer cmd -> Command.envelope cmd
-      | FailInternalAutoTransfer cmd -> Command.envelope cmd
       | DepositInternalAutoTransfer cmd -> Command.envelope cmd
       | ParentAccount cmd ->
          match cmd with
@@ -147,7 +145,6 @@ type AccountCommand =
       | ConfigureAutoTransferRule cmd -> cmd.Data.AccountId
       | DeleteAutoTransferRule cmd -> cmd.Data.AccountId
       | InternalAutoTransfer cmd -> cmd.Data.Transfer.Sender.AccountId
-      | FailInternalAutoTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
       | DepositInternalAutoTransfer cmd -> cmd.Data.BaseInfo.Recipient.AccountId
       // Commands pertaining to the parent account do not have
       // an AccountId, only a ParentAccountId.
@@ -204,8 +201,6 @@ type AccountEvent =
    | AutoTransferRuleDeleted of BankEvent<AutomaticTransferRuleDeleted>
    | InternalAutomatedTransferDeducted of
       BankEvent<InternalAutomatedTransferDeducted>
-   | InternalAutomatedTransferFailed of
-      BankEvent<InternalAutomatedTransferFailed>
    | InternalAutomatedTransferDeposited of
       BankEvent<InternalAutomatedTransferDeposited>
    | ParentAccount of ParentAccountEvent
@@ -259,8 +254,6 @@ type AccountEvent =
       | AutoTransferRuleDeleted evt -> evt.Data.AccountId
       | InternalAutomatedTransferDeducted evt ->
          evt.Data.BaseInfo.Sender.AccountId
-      | InternalAutomatedTransferFailed evt ->
-         evt.Data.BaseInfo.Sender.AccountId
       | InternalAutomatedTransferDeposited evt ->
          evt.Data.BaseInfo.Recipient.AccountId
       | ParentAccount _ -> AccountId Guid.Empty
@@ -294,10 +287,6 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.In,
          Some evt.Data.BaseInfo.Sender.Name
-      | AccountEvent.InternalAutomatedTransferFailed evt ->
-         Some evt.Data.BaseInfo.Amount,
-         None,
-         Some evt.Data.BaseInfo.Recipient.Name
       | AccountEvent.InternalTransferBetweenOrgsScheduled evt ->
          Some evt.Data.BaseInfo.Amount,
          None,
@@ -429,8 +418,6 @@ module AccountEnvelope =
          AutoTransferRuleDeleted evt
       | :? BankEvent<InternalAutomatedTransferDeducted> as evt ->
          InternalAutomatedTransferDeducted evt
-      | :? BankEvent<InternalAutomatedTransferFailed> as evt ->
-         InternalAutomatedTransferFailed evt
       | :? BankEvent<InternalAutomatedTransferDeposited> as evt ->
          InternalAutomatedTransferDeposited evt
       | :? BankEvent<RegisteredDomesticTransferRecipient> as evt ->
@@ -481,7 +468,6 @@ module AccountEnvelope =
       | AutoTransferRuleConfigured evt -> wrap evt, get evt
       | AutoTransferRuleDeleted evt -> wrap evt, get evt
       | InternalAutomatedTransferDeducted evt -> wrap evt, get evt
-      | InternalAutomatedTransferFailed evt -> wrap evt, get evt
       | InternalAutomatedTransferDeposited evt -> wrap evt, get evt
       | ParentAccount evt ->
          match evt with
