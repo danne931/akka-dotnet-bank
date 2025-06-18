@@ -9,7 +9,8 @@ open Bank.Transfer.Domain
 
 module Table =
    let transfer = "transfer"
-   let internalTransfer = "transfer_internal"
+   let internalTransferWithinOrg = "transfer_internal_within_org"
+   let internalTransferBetweenOrgs = "transfer_internal_between_orgs"
    let domesticTransfer = "transfer_domestic"
    let domesticRecipient = "transfer_domestic_recipient"
 
@@ -21,7 +22,11 @@ module TransferTypeCast =
 
    let domesticRecipientStatus = "domestic_transfer_recipient_status"
    let domesticTransferStatus = "domestic_transfer_status"
-   let internalTransferStatus = "internal_transfer_status"
+
+   let internalTransferBetweenOrgsStatus =
+      "internal_transfer_between_orgs_status"
+
+   let internalTransferWithinOrgStatus = "internal_transfer_within_org_status"
    let transferCategory = "transfer_category"
 
 module TransferFields =
@@ -35,8 +40,15 @@ module TransferFields =
    let memo = "memo"
    let createdAt = "created_at"
 
-   // Specific to internal_transfer table
-   module Internal =
+   // Internal transfer fields
+   module InternalWithinOrg =
+      let isAutomated = "is_automated"
+      let status = "status"
+      let statusDetail = "status_detail"
+      let recipientOrgId = "recipient_org_id"
+      let recipientAccountId = "recipient_account_id"
+
+   module InternalBetweenOrgs =
       let status = "transfer_status"
       let statusDetail = "transfer_status_detail"
       let recipientOrgId = "recipient_org_id"
@@ -88,17 +100,36 @@ module TransferSqlReader =
 
    let createdAt (read: RowReader) = read.dateTime TransferFields.createdAt
 
-   module Internal =
+   module InternalWithinOrg =
+      let isAutomated (read: RowReader) =
+         read.bool TransferFields.InternalWithinOrg.isAutomated
+
       let status (read: RowReader) =
-         TransferFields.Internal.statusDetail
+         TransferFields.InternalWithinOrg.statusDetail
          |> read.text
-         |> Serialization.deserializeUnsafe<InternalTransferStatus>
+         |> Serialization.deserializeUnsafe<InternalTransferWithinOrgStatus>
 
       let recipientOrgId (read: RowReader) =
-         TransferFields.Internal.recipientOrgId |> read.uuid |> OrgId
+         TransferFields.InternalWithinOrg.recipientOrgId |> read.uuid |> OrgId
 
       let recipientAccountId (read: RowReader) =
-         TransferFields.Internal.recipientAccountId |> read.uuid |> AccountId
+         TransferFields.InternalWithinOrg.recipientAccountId
+         |> read.uuid
+         |> AccountId
+
+   module InternalBetweenOrgs =
+      let status (read: RowReader) =
+         TransferFields.InternalBetweenOrgs.statusDetail
+         |> read.text
+         |> Serialization.deserializeUnsafe<InternalTransferBetweenOrgsStatus>
+
+      let recipientOrgId (read: RowReader) =
+         TransferFields.InternalBetweenOrgs.recipientOrgId |> read.uuid |> OrgId
+
+      let recipientAccountId (read: RowReader) =
+         TransferFields.InternalBetweenOrgs.recipientAccountId
+         |> read.uuid
+         |> AccountId
 
    module DomesticRecipient =
       let recipientAccountId (read: RowReader) =
@@ -193,18 +224,33 @@ module TransferSqlWriter =
    let memo = Sql.textOrNone
    let createdAt (date: DateTime) = Sql.timestamptz date
 
-   module Internal =
+   module InternalWithinOrg =
+      let isAutomated = Sql.bool
+
+      let status (status: InternalTransferWithinOrgStatus) =
+         match status with
+         | InternalTransferWithinOrgStatus.Pending -> "Pending"
+         | InternalTransferWithinOrgStatus.Settled -> "Settled"
+         |> Sql.string
+
+      let statusDetail (status: InternalTransferWithinOrgStatus) =
+         Serialization.serialize status |> Sql.jsonb
+
+      let recipientOrgId = OrgSqlWriter.orgId
+      let recipientAccountId = AccountSqlWriter.accountId
+
+   module InternalBetweenOrgs =
       let status =
          function
-         | InternalTransferStatus.Scheduled -> "Scheduled"
-         | InternalTransferStatus.Pending -> "Pending"
-         | InternalTransferStatus.Deposited -> "Deposited"
-         | InternalTransferStatus.Settled -> "Settled"
-         | InternalTransferStatus.Failed _ -> "Failed"
+         | InternalTransferBetweenOrgsStatus.Scheduled -> "Scheduled"
+         | InternalTransferBetweenOrgsStatus.Pending -> "Pending"
+         | InternalTransferBetweenOrgsStatus.Deposited -> "Deposited"
+         | InternalTransferBetweenOrgsStatus.Settled -> "Settled"
+         | InternalTransferBetweenOrgsStatus.Failed _ -> "Failed"
          >> Sql.string
 
-      let statusDetail (status: InternalTransferStatus) =
-         status |> Serialization.serialize |> Sql.jsonb
+      let statusDetail (status: InternalTransferBetweenOrgsStatus) =
+         Serialization.serialize status |> Sql.jsonb
 
       let recipientOrgId = OrgSqlWriter.orgId
       let recipientAccountId = AccountSqlWriter.accountId

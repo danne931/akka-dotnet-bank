@@ -25,7 +25,12 @@ type InternalTransferFailReason =
    | PartnerBankSync of string
 
 [<RequireQualifiedAccess>]
-type InternalTransferStatus =
+type InternalTransferWithinOrgStatus =
+   | Pending
+   | Settled
+
+[<RequireQualifiedAccess>]
+type InternalTransferBetweenOrgsStatus =
    | Scheduled
    | Pending
    | Deposited
@@ -45,4 +50,6 @@ type BaseInternalTransferInfo = {
 type InProgressInternalTransfer = {
    TransferId: TransferId
    Info: BaseInternalTransferInfo
+   IsAutomated: bool
+   Status: InternalTransferWithinOrgStatus
 }

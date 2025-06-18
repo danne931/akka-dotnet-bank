@@ -18,7 +18,8 @@ DROP TABLE IF EXISTS billing_statement;
 DROP TABLE IF EXISTS payment_platform;
 DROP TABLE IF EXISTS payment_third_party;
 DROP TABLE IF EXISTS payment;
-DROP TABLE IF EXISTS transfer_internal;
+DROP TABLE IF EXISTS transfer_internal_within_org;
+DROP TABLE IF EXISTS transfer_internal_between_orgs;
 DROP TABLE IF EXISTS transfer_domestic;
 DROP TABLE IF EXISTS transfer;
 DROP TABLE IF EXISTS transfer_domestic_recipient;
@@ -60,7 +61,8 @@ DROP TYPE IF EXISTS payment_network;
 DROP TYPE IF EXISTS domestic_transfer_recipient_account_depository;
 DROP TYPE IF EXISTS domestic_transfer_recipient_status;
 DROP TYPE IF EXISTS domestic_transfer_status;
-DROP TYPE IF EXISTS internal_transfer_status;
+DROP TYPE IF EXISTS internal_transfer_within_org_status;
+DROP TYPE IF EXISTS internal_transfer_between_orgs_status;
 DROP TYPE IF EXISTS transfer_category;
 DROP TYPE IF EXISTS approvable_command;
 DROP TYPE IF EXISTS command_approval_criteria;
@@ -631,14 +633,43 @@ CREATE INDEX transfer_sender_account_id_idx ON transfer (sender_account_id);
 CREATE INDEX transfer_sender_org_id_idx ON transfer (sender_org_id);
 
 COMMENT ON TABLE transfer IS
-'Parent of two kinds of transfers, each of which has an associated child table:
+'Parent of three kinds of transfers, each of which has an associated child table:
 
-- Internal transfers (within the platform)
+- Internal transfers within an organization
+- Internal transfers between organizations
 - Domestic transfers (from an account on the platform to a domestic account outside the platform)
 ';
 
---- INTERNAL TRANSFERS ---
-CREATE TYPE internal_transfer_status AS ENUM (
+-- Status for internal transfers within an organization
+CREATE TYPE internal_transfer_within_org_status AS ENUM (
+   'Pending',
+   'Settled'
+);
+
+-- Transfers on the platform between accounts within the same organization
+CREATE TABLE transfer_internal_within_org (
+   transfer_id UUID PRIMARY KEY REFERENCES transfer ON DELETE CASCADE,
+   status internal_transfer_within_org_status NOT NULL,
+   status_detail JSONB NOT NULL,
+   is_automated BOOLEAN NOT NULL,
+   recipient_org_id UUID NOT NULL REFERENCES organization(org_id),
+   recipient_account_id UUID NOT NULL REFERENCES account(account_id)
+);
+
+SELECT add_created_at_column('transfer_internal_within_org');
+SELECT add_updated_at_column_and_trigger('transfer_internal_within_org');
+
+CREATE INDEX transfer_internal_within_org_recipient_org_id_idx 
+ON transfer_internal_within_org (recipient_org_id);
+
+CREATE INDEX transfer_internal_within_org_recipient_account_id_idx 
+ON transfer_internal_within_org (recipient_account_id);
+
+COMMENT ON TABLE transfer_internal_within_org IS
+'Child table of transfers represents transfers which occur within an organization.';
+
+
+CREATE TYPE internal_transfer_between_orgs_status AS ENUM (
    'Scheduled',
    'Pending',
    'Deposited',
@@ -646,25 +677,26 @@ CREATE TYPE internal_transfer_status AS ENUM (
    'Failed'
 );
 
-CREATE TABLE transfer_internal(
-   transfer_id UUID PRIMARY KEY REFERENCES transfer,
-   transfer_status internal_transfer_status NOT NULL,
+-- Transfers on the platform between different organizations
+CREATE TABLE transfer_internal_between_orgs (
+   transfer_id UUID PRIMARY KEY REFERENCES transfer ON DELETE CASCADE,
+   transfer_status internal_transfer_between_orgs_status NOT NULL,
    transfer_status_detail JSONB NOT NULL,
    recipient_org_id UUID NOT NULL REFERENCES organization(org_id),
-   recipient_account_id UUID REFERENCES account(account_id)
+   recipient_account_id UUID NOT NULL REFERENCES account(account_id)
 );
 
-SELECT add_created_at_column('transfer_internal');
-SELECT add_updated_at_column_and_trigger('transfer_internal');
+SELECT add_created_at_column('transfer_internal_between_orgs');
+SELECT add_updated_at_column_and_trigger('transfer_internal_between_orgs');
 
-CREATE INDEX transfer_internal_recipient_org_id_idx ON transfer_internal (recipient_org_id);
-CREATE INDEX transfer_internal_recipient_account_id_idx ON transfer_internal (recipient_account_id)
-WHERE recipient_account_id IS NOT NULL;
+CREATE INDEX transfer_internal_between_orgs_recipient_org_id_idx 
+ON transfer_internal_between_orgs (recipient_org_id);
 
-COMMENT ON TABLE transfer_internal IS
-'Child table of transfers represents transfers which occur within the platform.
+CREATE INDEX transfer_internal_between_orgs_recipient_account_id_idx 
+ON transfer_internal_between_orgs (recipient_account_id);
 
-Transfers occur either between accounts within an organization or between organizations.';
+COMMENT ON TABLE transfer_internal_between_orgs IS
+'Child table of transfers represents transfers which occur between organizations.';
 
 --- DOMESTIC TRANSFER RECIPIENTS ---
 CREATE TYPE domestic_transfer_recipient_account_depository

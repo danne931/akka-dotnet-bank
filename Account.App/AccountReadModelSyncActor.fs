@@ -31,7 +31,8 @@ type SqlParamsDerivedFromAccountEvents = {
    Payment: SqlParams
    PlatformPayment: SqlParams
    Transfer: SqlParams
-   InternalTransfer: SqlParams
+   InternalTransferWithinOrg: SqlParams
+   InternalTransferBetweenOrgs: SqlParams
    DomesticTransfer: SqlParams
    PartnerBankInitialized: SqlParams
    BillingCycle: SqlParams
@@ -72,11 +73,6 @@ let private internalTransferBaseSqlParams (o: BaseInternalTransferInfo) = [
    "scheduledAt", TransferSqlWriter.scheduledAt o.ScheduledDate
 
    "amount", TransferSqlWriter.amount o.Amount
-
-   "recipientAccountId",
-   TransferSqlWriter.Internal.recipientAccountId o.Recipient.AccountId
-
-   "recipientOrgId", TransferSqlWriter.Internal.recipientOrgId o.Recipient.OrgId
 ]
 
 let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
@@ -98,21 +94,58 @@ let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
    "memo", TransferSqlWriter.memo o.Memo
 ]
 
-let private internalTransferStatusReducer
+let private internalTransferWithinOrgStatusReducer
    (acc: SqlParamsDerivedFromAccountEvents)
-   (status: InternalTransferStatus)
+   (status: InternalTransferWithinOrgStatus)
+   (info: BaseInternalTransferInfo)
+   (isAutomated: bool)
+   =
+   let qParams =
+      internalTransferBaseSqlParams info
+      @ [
+         "recipientOrgId",
+         TransferSqlWriter.InternalWithinOrg.recipientOrgId info.Recipient.OrgId
+
+         "recipientAccountId",
+         TransferSqlWriter.InternalWithinOrg.recipientAccountId
+            info.Recipient.AccountId
+
+         "status", TransferSqlWriter.InternalWithinOrg.status status
+         "statusDetail", TransferSqlWriter.InternalWithinOrg.statusDetail status
+         "isAutomated",
+         TransferSqlWriter.InternalWithinOrg.isAutomated isAutomated
+      ]
+
+   {
+      acc with
+         InternalTransferWithinOrg = qParams :: acc.InternalTransferWithinOrg
+   }
+
+let private internalTransferBetweenOrgsStatusReducer
+   (acc: SqlParamsDerivedFromAccountEvents)
+   (status: InternalTransferBetweenOrgsStatus)
    (info: BaseInternalTransferInfo)
    =
    let qParams =
       internalTransferBaseSqlParams info
       @ [
-         "status", TransferSqlWriter.Internal.status status
-         "statusDetail", TransferSqlWriter.Internal.statusDetail status
+         "recipientOrgId",
+         TransferSqlWriter.InternalBetweenOrgs.recipientOrgId
+            info.Recipient.OrgId
+
+         "recipientAccountId",
+         TransferSqlWriter.InternalBetweenOrgs.recipientAccountId
+            info.Recipient.AccountId
+
+         "status", TransferSqlWriter.InternalBetweenOrgs.status status
+         "statusDetail",
+         TransferSqlWriter.InternalBetweenOrgs.statusDetail status
       ]
 
    {
       acc with
-         InternalTransfer = qParams :: acc.InternalTransfer
+         InternalTransferBetweenOrgs =
+            qParams :: acc.InternalTransferBetweenOrgs
    }
 
 let private domesticRecipientReducer
@@ -315,25 +348,20 @@ let sqlParamReducer
                TransferCategory.InternalWithinOrg
          ]
 
-      let status = InternalTransferStatus.Pending
-
-      let internalTransferParams =
-         internalTransferBaseSqlParams info
-         @ [
-            "status", TransferSqlWriter.Internal.status status
-            "statusDetail", TransferSqlWriter.Internal.statusDetail status
-         ]
-
-      {
-         acc with
-            Transfer = transferParams :: acc.Transfer
-            InternalTransfer = internalTransferParams :: acc.InternalTransfer
-      }
-   | AccountEvent.InternalTransferWithinOrgDeposited e ->
-      internalTransferStatusReducer
-         acc
-         InternalTransferStatus.Deposited
+      internalTransferWithinOrgStatusReducer
+         {
+            acc with
+               Transfer = transferParams :: acc.Transfer
+         }
+         InternalTransferWithinOrgStatus.Pending
          e.Data.BaseInfo
+         false
+   | AccountEvent.InternalTransferWithinOrgDeposited e ->
+      internalTransferWithinOrgStatusReducer
+         acc
+         InternalTransferWithinOrgStatus.Settled
+         e.Data.BaseInfo
+         false
    | AccountEvent.InternalAutomatedTransferDeducted e ->
       let info = e.Data.BaseInfo
 
@@ -346,96 +374,73 @@ let sqlParamReducer
                TransferCategory.InternalAutomatedWithinOrg
          ]
 
-      let status = InternalTransferStatus.Pending
-
-      let internalTransferParams =
-         internalTransferBaseSqlParams info
-         @ [
-            "status", TransferSqlWriter.Internal.status status
-            "statusDetail", TransferSqlWriter.Internal.statusDetail status
-         ]
-
-      {
-         acc with
-            Transfer = transferParams :: acc.Transfer
-            InternalTransfer = internalTransferParams :: acc.InternalTransfer
-      }
-   | AccountEvent.InternalAutomatedTransferFailed e ->
-      internalTransferStatusReducer
-         acc
-         (InternalTransferStatus.Failed e.Data.Reason)
+      internalTransferWithinOrgStatusReducer
+         {
+            acc with
+               Transfer = transferParams :: acc.Transfer
+         }
+         InternalTransferWithinOrgStatus.Pending
          e.Data.BaseInfo
+         true
    | AccountEvent.InternalAutomatedTransferDeposited e ->
-      internalTransferStatusReducer
+      internalTransferWithinOrgStatusReducer
          acc
-         InternalTransferStatus.Deposited
+         InternalTransferWithinOrgStatus.Settled
          e.Data.BaseInfo
+         true
    | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
       let info = e.Data.BaseInfo
 
       let transferParams =
          internalTransferBaseSqlParams info
          @ [
-            "memo", TransferSqlWriter.memo e.Data.BaseInfo.Memo
+            "memo", TransferSqlWriter.memo info.Memo
             "transferCategory",
             TransferSqlWriter.transferCategory
                TransferCategory.InternalBetweenOrgs
          ]
 
-      let status = InternalTransferStatus.Scheduled
 
-      let internalTransferParams =
-         internalTransferBaseSqlParams info
-         @ [
-            "status", TransferSqlWriter.Internal.status status
-            "statusDetail", TransferSqlWriter.Internal.statusDetail status
-         ]
-
-      {
-         acc with
-            Transfer = transferParams :: acc.Transfer
-            InternalTransfer = internalTransferParams :: acc.InternalTransfer
-      }
+      internalTransferBetweenOrgsStatusReducer
+         {
+            acc with
+               Transfer = transferParams :: acc.Transfer
+         }
+         InternalTransferBetweenOrgsStatus.Scheduled
+         info
    | AccountEvent.InternalTransferBetweenOrgsPending e ->
       let info = e.Data.BaseInfo
 
       let transferParams =
          internalTransferBaseSqlParams info
          @ [
-            "memo", TransferSqlWriter.memo e.Data.BaseInfo.Memo
+            "memo", TransferSqlWriter.memo info.Memo
             "transferCategory",
             TransferSqlWriter.transferCategory
                TransferCategory.InternalBetweenOrgs
          ]
 
-      let status = InternalTransferStatus.Pending
-
-      let internalTransferParams =
-         internalTransferBaseSqlParams info
-         @ [
-            "status", TransferSqlWriter.Internal.status status
-            "statusDetail", TransferSqlWriter.Internal.statusDetail status
-         ]
-
-      {
-         acc with
-            Transfer = transferParams :: acc.Transfer
-            InternalTransfer = internalTransferParams :: acc.InternalTransfer
-      }
+      internalTransferBetweenOrgsStatusReducer
+         {
+            acc with
+               Transfer = transferParams :: acc.Transfer
+         }
+         InternalTransferBetweenOrgsStatus.Pending
+         info
    | AccountEvent.InternalTransferBetweenOrgsSettled e ->
-      internalTransferStatusReducer
+      internalTransferBetweenOrgsStatusReducer
          acc
-         InternalTransferStatus.Settled
+         InternalTransferBetweenOrgsStatus.Settled
          e.Data.BaseInfo
    | AccountEvent.InternalTransferBetweenOrgsFailed e ->
-      internalTransferStatusReducer
+      internalTransferBetweenOrgsStatusReducer
          acc
-         (InternalTransferStatus.Failed e.Data.Reason)
+         (InternalTransferBetweenOrgsStatus.Failed e.Data.Reason)
          e.Data.BaseInfo
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
-      internalTransferStatusReducer
+      internalTransferBetweenOrgsStatusReducer
          acc
-         InternalTransferStatus.Deposited
+         InternalTransferBetweenOrgsStatus.Deposited
          e.Data.BaseInfo
    | AccountEvent.DomesticTransferScheduled e ->
       let info = e.Data.BaseInfo
@@ -745,7 +750,8 @@ let upsertReadModels
          Payment = []
          PlatformPayment = []
          Transfer = []
-         InternalTransfer = []
+         InternalTransferWithinOrg = []
+         InternalTransferBetweenOrgs = []
          DomesticTransfer = []
          DomesticTransferRecipient = []
          UpdatedDomesticTransferRecipientStatus = []
@@ -950,24 +956,46 @@ let upsertReadModels
       sqlParamsDerivedFromAccountEvents.Transfer
 
       $"""
-      INSERT into {TransferSqlMapper.Table.internalTransfer}
+      INSERT into {TransferSqlMapper.Table.internalTransferWithinOrg}
          ({TransferFields.transferId},
-          {TransferFields.Internal.status},
-          {TransferFields.Internal.statusDetail},
-          {TransferFields.Internal.recipientOrgId},
-          {TransferFields.Internal.recipientAccountId})
+          {TransferFields.InternalWithinOrg.status},
+          {TransferFields.InternalWithinOrg.statusDetail},
+          {TransferFields.InternalWithinOrg.isAutomated},
+          {TransferFields.InternalWithinOrg.recipientOrgId},
+          {TransferFields.InternalWithinOrg.recipientAccountId})
       VALUES
          (@transferId,
-          @status::{TransferTypeCast.internalTransferStatus},
+          @status::{TransferTypeCast.internalTransferWithinOrgStatus},
+          @statusDetail,
+          @isAutomated,
+          @recipientOrgId,
+          @recipientAccountId)
+      ON CONFLICT ({TransferFields.transferId})
+      DO UPDATE SET
+         {TransferFields.InternalWithinOrg.status} = @status::{TransferTypeCast.internalTransferWithinOrgStatus},
+         {TransferFields.InternalWithinOrg.statusDetail} = @statusDetail;
+      """,
+      sqlParamsDerivedFromAccountEvents.InternalTransferWithinOrg
+
+      $"""
+      INSERT into {TransferSqlMapper.Table.internalTransferBetweenOrgs}
+         ({TransferFields.transferId},
+          {TransferFields.InternalBetweenOrgs.status},
+          {TransferFields.InternalBetweenOrgs.statusDetail},
+          {TransferFields.InternalBetweenOrgs.recipientOrgId},
+          {TransferFields.InternalBetweenOrgs.recipientAccountId})
+      VALUES
+         (@transferId,
+          @status::{TransferTypeCast.internalTransferBetweenOrgsStatus},
           @statusDetail,
           @recipientOrgId,
           @recipientAccountId)
       ON CONFLICT ({TransferFields.transferId})
       DO UPDATE SET
-         {TransferFields.Internal.status} = @status::{TransferTypeCast.internalTransferStatus},
-         {TransferFields.Internal.statusDetail} = @statusDetail;
+         {TransferFields.InternalBetweenOrgs.status} = @status::{TransferTypeCast.internalTransferBetweenOrgsStatus},
+         {TransferFields.InternalBetweenOrgs.statusDetail} = @statusDetail;
       """,
-      sqlParamsDerivedFromAccountEvents.InternalTransfer
+      sqlParamsDerivedFromAccountEvents.InternalTransferBetweenOrgs
 
       $"""
       INSERT into {TransferSqlMapper.Table.domesticRecipient}
