@@ -238,14 +238,15 @@ let private initConsumerStream
          else
             try
                do!
-                  breaker.WithCircuitBreaker(fun () -> task {
-                     match! opts.protectedAction mailbox request with
-                     | Ok res ->
-                        response <- Some(mailbox, queueMessage, res)
-                        return ()
-                     // Raise exception to trip the circuit breaker
-                     | Error e -> return failwith (string e)
-                  })
+                  breaker.WithCircuitBreaker
+                     (fun (_: Threading.CancellationToken) -> task {
+                        match! opts.protectedAction mailbox request with
+                        | Ok res ->
+                           response <- Some(mailbox, queueMessage, res)
+                           return ()
+                        // Raise exception to trip the circuit breaker
+                        | Error e -> return failwith (string e)
+                     })
                   |> Async.AwaitTask
 
                do! committable.Ack() |> Async.AwaitTask
