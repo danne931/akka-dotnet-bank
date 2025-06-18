@@ -189,8 +189,8 @@ type Event =
             "DomesticTransferSenderReservedFunds"
          | DomesticTransferSagaEvent.SenderReleasedReservedFunds ->
             "DomesticTransferSenderReleasedReservedFunds"
-         | DomesticTransferSagaEvent.SenderUnableToDeductFunds _ ->
-            "DomesticTransferSenderUnableToDeductFunds"
+         | DomesticTransferSagaEvent.SenderUnableToReserveFunds _ ->
+            "DomesticTransferSenderUnableToReserveFunds"
          | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
             "DomesticTransferTransferProcessorProgressUpdate"
          | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->

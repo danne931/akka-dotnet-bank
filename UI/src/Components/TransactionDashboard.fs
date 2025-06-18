@@ -545,6 +545,9 @@ let transactions
    (txns: Transaction list)
    (realtimeAccountEvents: AccountEvent list)
    =
+   let historyIds =
+      txns |> List.collect _.History |> List.map _.Envelope.Id |> Set.ofList
+
    let txns = [ for txn in txns -> txn.Id, txn ] |> Map.ofList
 
    let filterRealtimeEvents =
@@ -589,10 +592,14 @@ let transactions
                      env.CorrelationId = envelope.CorrelationId
                      && (mayBeDisplayedAsNewTransaction e))
 
+            // Real-time event already exists in a displayed transaction's history
+            let eventAlreadyExists = historyIds.Contains(envelope.Id)
+
             if
-               correspondsToDisplayedTransaction
-               || mayBeDisplayedAsNewTransaction evt
-               || correspondsToDisplayedRealtimeEvent
+               (not eventAlreadyExists)
+               && (correspondsToDisplayedTransaction
+                   || mayBeDisplayedAsNewTransaction evt
+                   || correspondsToDisplayedRealtimeEvent)
             then
                let history =
                   History.Account {
