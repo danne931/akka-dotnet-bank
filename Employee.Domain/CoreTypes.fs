@@ -90,11 +90,6 @@ type Card = {
    member x.IsExpired() =
       DateTime(x.Expiration.Year, x.Expiration.Month, 1) <= DateTime.UtcNow
 
-   member x.IsPending =
-      match x.Status with
-      | CardStatus.Pending -> true
-      | _ -> false
-
    member x.IsFrozen =
       match x.Status with
       | CardStatus.Frozen detail -> Some detail.Reason

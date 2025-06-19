@@ -559,10 +559,7 @@ let private matchesAccountEventGroupFilter
       | AccountEvent.DebitRefunded _
       | AccountEvent.DebitSettled _ -> true
       | _ -> false
-   | AccountEventGroupFilter.Deposit ->
-      match event with
-      | AccountEvent.DepositedCash _ -> true
-      | _ -> false
+   | AccountEventGroupFilter.Deposit -> event.IsDepositedCash
    | AccountEventGroupFilter.InternalTransferWithinOrg ->
       match event with
       | AccountEvent.InternalTransferWithinOrgDeducted _

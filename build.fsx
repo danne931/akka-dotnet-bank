@@ -15,7 +15,7 @@ open Fake.Core.TargetOperators
 open Fake.IO
 open Globbing.Operators
 
-let projects = !! "**/*Web.fsproj" ++ "**/*.Service.fsproj"
+let projects = !!"**/*Web.fsproj" ++ "**/*.Service.fsproj"
 let appEntryDir = "./Web"
 let serverTestDir = "./Test"
 let sharedClientServerTestDir = "./Test.SharedClientServer/tests"
@@ -92,7 +92,7 @@ let buildImage (builder: ImageBuilder) fsprojPath =
       Shell.Exec(builder.Program, builder.GetArgs imageName dirName) |> ignore
 
 Target.create "Clean" (fun _ ->
-   let dirs = !! "**/bin/" ++ "**/obj/" ++ "./UI/dist/" ++ "./UI/node_modules/"
+   let dirs = !!"**/bin/" ++ "**/obj/" ++ "./UI/dist/" ++ "./UI/node_modules/"
    Trace.trace $"Cleaning directories: {dirs}"
    Shell.cleanDirs dirs
    Shell.rm $"{appEntryDir}/logs.json")

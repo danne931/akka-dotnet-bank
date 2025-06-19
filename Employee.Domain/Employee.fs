@@ -337,7 +337,7 @@ module private StateTransition =
             let dpa = dailyPurchaseAccrued state.Events card.CardId
             let mpa = monthlyPurchaseAccrued state.Events card.CardId
 
-            if card.IsPending then
+            if card.Status.IsPending then
                transitionErr CardPending
             elif card.IsFrozen.IsSome then
                transitionErr CardLocked

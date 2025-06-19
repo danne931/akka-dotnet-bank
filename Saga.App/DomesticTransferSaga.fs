@@ -86,27 +86,22 @@ type DomesticTransferSaga = {
 } with
 
    member x.OriginatedFromSchedule =
-      x.Events
-      |> List.exists (function
-         | DomesticTransferSagaEvent.ScheduledJobCreated -> true
-         | _ -> false)
+      x.Events |> List.exists _.IsScheduledJobCreated
 
    member x.SenderDeductedFunds =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.DeductSenderFunds)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsDeductSenderFunds
 
    member x.TransferInitiatedNotificationSent =
       x.LifeCycle.Completed
-      |> List.exists (fun w ->
-         w.Activity = Activity.SendTransferInitiatedNotification)
+      |> List.exists _.Activity.IsSendTransferInitiatedNotification
 
    member x.RequiresAccountRefund =
       x.LifeCycle.InProgress
-      |> List.exists (fun w -> w.Activity = Activity.ReleaseSenderReservedFunds)
+      |> List.exists _.Activity.IsReleaseSenderReservedFunds
 
    member x.RequiresTransferServiceDevelopmentFix =
       x.LifeCycle.InProgress
-      |> List.exists (fun w -> w.Activity = Activity.WaitForDevelopmentTeamFix)
+      |> List.exists _.Activity.IsWaitForDevelopmentTeamFix
 
 let applyStartEvent
    (start: DomesticTransferSagaStartEvent)
@@ -332,7 +327,7 @@ let stateTransition
       | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
          activityIsDone Activity.WaitForTransferServiceComplete
       | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
-         saga.LifeCycle.ActivityHasFailed(Activity.TransferServiceAck) |> not
+         saga.LifeCycle.ActivityHasFailed Activity.TransferServiceAck |> not
       | DomesticTransferSagaEvent.SenderDeductedFunds ->
          activityIsDone Activity.DeductSenderFunds
       | DomesticTransferSagaEvent.TransferInitiatedNotificationSent ->

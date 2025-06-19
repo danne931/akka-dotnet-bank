@@ -584,19 +584,19 @@ let transactions
             // Real-time event received for a currently displayed
             // transaction that was synthesized from a real-time event.
             let correspondsToDisplayedRealtimeEvent =
-               (not (mayBeDisplayedAsNewTransaction evt))
+               not (mayBeDisplayedAsNewTransaction evt)
                && realtimeAccountEvents
                   |> List.exists (fun e ->
                      let _, env = AccountEnvelope.unwrap e
 
                      env.CorrelationId = envelope.CorrelationId
-                     && (mayBeDisplayedAsNewTransaction e))
+                     && mayBeDisplayedAsNewTransaction e)
 
             // Real-time event already exists in a displayed transaction's history
-            let eventAlreadyExists = historyIds.Contains(envelope.Id)
+            let eventAlreadyExists = historyIds.Contains envelope.Id
 
             if
-               (not eventAlreadyExists)
+               not eventAlreadyExists
                && (correspondsToDisplayedTransaction
                    || mayBeDisplayedAsNewTransaction evt
                    || correspondsToDisplayedRealtimeEvent)

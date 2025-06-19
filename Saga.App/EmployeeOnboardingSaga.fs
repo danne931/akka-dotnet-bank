@@ -99,7 +99,7 @@ type EmployeeOnboardingSaga = {
 
    member x.IsWaitingForInviteConfirmation =
       x.LifeCycle.InProgress
-      |> List.exists (fun a -> a.Activity = Activity.WaitForInviteConfirmation)
+      |> List.exists _.Activity.IsWaitForInviteConfirmation
 
 
 let applyStartEvent

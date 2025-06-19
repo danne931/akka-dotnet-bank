@@ -166,7 +166,7 @@ module private StateTransition =
       |> Result.mapError ValidationError
       |> Result.map (fun evt ->
          let evt = eventTransform evt
-         (evt, applyEvent account evt))
+         evt, applyEvent account evt)
 
    let initializePrimaryCheckingAccount
       (account: Account)
@@ -381,7 +381,7 @@ module private StateTransition =
          accountNotActiveError account
       else
          map InternalTransferBetweenOrgsDeposited account
-         <| (DepositInternalTransferBetweenOrgsCommand.toEvent cmd)
+         <| DepositInternalTransferBetweenOrgsCommand.toEvent cmd
 
    let requestPlatformPayment
       (account: Account)
@@ -526,7 +526,7 @@ module private StateTransition =
          accountNotActiveError account
       else
          map InternalAutomatedTransferDeposited account
-         <| (DepositInternalAutoTransferCommand.toEvent cmd)
+         <| DepositInternalAutoTransferCommand.toEvent cmd
 
 let stateTransition (account: Account) (command: AccountCommand) =
    match command with

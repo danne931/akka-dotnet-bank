@@ -96,12 +96,10 @@ type PlatformPaymentSaga = {
 } with
 
    member x.PaymentSyncedToPartnerBank =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.SyncToPartnerBank)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsSyncToPartnerBank
 
    member x.IsSettled =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.SettlePayment)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsSettlePayment
 
    member x.SettlementId =
       x.Events
@@ -118,13 +116,11 @@ type PlatformPaymentSaga = {
          | _ -> None)
 
    member x.PaymentPaidNotificationSentToPayer =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.NotifyPayerOfPaymentSent)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsNotifyPayerOfPaymentSent
 
    member x.PaymentDepositedNotificationSentToPayee =
       x.LifeCycle.Completed
-      |> List.exists (fun w ->
-         w.Activity = Activity.NotifyPayeeOfPaymentDeposit)
+      |> List.exists _.Activity.IsNotifyPayeeOfPaymentDeposit
 
 let applyStartEvent (e: PlatformPaymentSagaStartEvent) (timestamp: DateTime) =
    match e with

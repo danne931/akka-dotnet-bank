@@ -94,12 +94,10 @@ type PlatformTransferSaga = {
 } with
 
    member x.SyncedToPartnerBank =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.SyncToPartnerBank)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsSyncToPartnerBank
 
    member x.IsSettled =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.SettleTransfer)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsSettleTransfer
 
    member x.SettlementId =
       x.Events
@@ -109,17 +107,14 @@ type PlatformTransferSaga = {
          | _ -> None)
 
    member x.TransferNotificationSent =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.SendTransferNotification)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsSendTransferNotification
 
    member x.TransferDepositNotificationSent =
       x.LifeCycle.Completed
-      |> List.exists (fun w ->
-         w.Activity = Activity.SendTransferDepositNotification)
+      |> List.exists _.Activity.IsSendTransferDepositNotification
 
    member x.RequiresReleaseSenderFunds =
-      x.LifeCycle.InProgress
-      |> List.exists (fun w -> w.Activity = Activity.ReleaseSenderFunds)
+      x.LifeCycle.InProgress |> List.exists _.Activity.IsReleaseSenderFunds
 
 let applyStartEvent
    (evt: PlatformTransferSagaStartEvent)

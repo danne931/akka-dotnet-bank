@@ -615,10 +615,7 @@ let private matchesOrgEventFilter
       | OrgEvent.OnboardingApplicationSubmitted _
       | OrgEvent.OnboardingFinished _ -> true
       | _ -> false
-   | OrgEventGroupFilter.FeatureFlagConfigured ->
-      match event with
-      | OrgEvent.FeatureFlagConfigured _ -> true
-      | _ -> false
+   | OrgEventGroupFilter.FeatureFlagConfigured -> event.IsFeatureFlagConfigured
    | OrgEventGroupFilter.CommandApprovalRule ->
       match event with
       | OrgEvent.CommandApprovalRuleConfigured _
@@ -656,10 +653,7 @@ let private matchesAccountEventFilter
       | AccountEvent.DebitRefunded _
       | AccountEvent.DebitFailed _ -> true
       | _ -> false
-   | AccountEventGroupFilter.Deposit ->
-      match event with
-      | AccountEvent.DepositedCash _ -> true
-      | _ -> false
+   | AccountEventGroupFilter.Deposit -> event.IsDepositedCash
    | AccountEventGroupFilter.InternalTransferWithinOrg ->
       match event with
       | AccountEvent.InternalTransferWithinOrgDeducted _
@@ -712,24 +706,15 @@ let private matchesEmployeeEventFilter
       | EmployeeEvent.LockedCard _
       | EmployeeEvent.UnlockedCard _ -> true
       | _ -> false
-   | EmployeeEventGroupFilter.AccessRestored ->
-      match event with
-      | EmployeeEvent.AccessRestored _ -> true
-      | _ -> false
+   | EmployeeEventGroupFilter.AccessRestored -> event.IsAccessRestored
    | EmployeeEventGroupFilter.Purchase ->
       match event with
       | EmployeeEvent.PurchaseApplied _
       | EmployeeEvent.PurchaseFailed _
       | EmployeeEvent.PurchaseRefunded _ -> true
       | _ -> false
-   | EmployeeEventGroupFilter.CreatedCard ->
-      match event with
-      | EmployeeEvent.CreatedCard _ -> true
-      | _ -> false
-   | EmployeeEventGroupFilter.UpdatedRole ->
-      match event with
-      | EmployeeEvent.UpdatedRole _ -> true
-      | _ -> false
+   | EmployeeEventGroupFilter.CreatedCard -> event.IsCreatedCard
+   | EmployeeEventGroupFilter.UpdatedRole -> event.IsUpdatedRole
    | EmployeeEventGroupFilter.PurchaseLimitUpdated ->
       match event with
       | EmployeeEvent.DailyDebitLimitUpdated _

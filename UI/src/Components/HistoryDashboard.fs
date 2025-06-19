@@ -229,13 +229,8 @@ let private renderEventFilterCheckboxes state dispatch browserQuery =
          OnChange =
             fun employeeEventFilters ->
                let isPurchaseFilterSelected =
-                  match employeeEventFilters with
-                  | Some filters ->
-                     filters
-                     |> List.exists (function
-                        | EmployeeEventGroupFilter.Purchase -> true
-                        | _ -> false)
-                  | None -> false
+                  employeeEventFilters
+                  |> Option.exists (List.exists _.IsPurchase)
 
                let accountEventFilters =
                   match

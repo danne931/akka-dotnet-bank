@@ -84,22 +84,18 @@ type PurchaseSaga = {
 } with
 
    member x.DeductedFromEmployeeCard =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.DeductFromEmployeeCard)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsDeductFromEmployeeCard
 
    member x.DeductedFromAccount =
-      x.LifeCycle.Completed
-      |> List.exists (fun w -> w.Activity = Activity.ReserveAccountFunds)
+      x.LifeCycle.Completed |> List.exists _.Activity.IsReserveAccountFunds
 
    member x.RequiresCardFailureAcknowledgement =
       x.LifeCycle.InProgress
-      |> List.exists (fun w ->
-         w.Activity = Activity.AcquireCardFailureAcknowledgement)
+      |> List.exists _.Activity.IsAcquireCardFailureAcknowledgement
 
    member x.RequiresAccountFailureAcknowledgement =
       x.LifeCycle.InProgress
-      |> List.exists (fun w ->
-         w.Activity = Activity.AcquireAccountFailureAcknowledgement)
+      |> List.exists _.Activity.IsAcquireAccountFailureAcknowledgement
 
    member x.SyncedToPartnerBank =
       x.Events
@@ -110,8 +106,7 @@ type PurchaseSaga = {
 
    member x.RequiresManualSupportFixForPartnerBankSync =
       x.LifeCycle.InProgress
-      |> List.exists (fun w ->
-         w.Activity = Activity.WaitForSupportTeamToResolvePartnerBankSync)
+      |> List.exists _.Activity.IsWaitForSupportTeamToResolvePartnerBankSync
 
 let applyStartEvent
    (start: PurchaseSagaStartEvent)
