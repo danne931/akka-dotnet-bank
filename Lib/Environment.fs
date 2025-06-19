@@ -80,20 +80,20 @@ type BackoffSupervisorInput = {
    MaxBackoffSeconds: float option
    RandomFactor: float option
    MaxNrOfRetries: int option
-   ResetCounterAfterSeconds: int option
+   ResetCounterAfterSeconds: float option
 }
 
 let backoffSupervisorOptionsFromInput (input: BackoffSupervisorInput) = {
    MinBackoff =
-      input.MinBackoffSeconds |> Option.defaultValue 3 |> TimeSpan.FromSeconds
+      input.MinBackoffSeconds |> Option.defaultValue 3. |> TimeSpan.FromSeconds
    MaxBackoff =
-      input.MaxBackoffSeconds |> Option.defaultValue 30 |> TimeSpan.FromSeconds
+      input.MaxBackoffSeconds |> Option.defaultValue 30. |> TimeSpan.FromSeconds
    // Adds 20% "noise" to vary intervals slightly
    RandomFactor = input.RandomFactor |> Option.defaultValue 0.2
    MaxNrOfRetries = input.MaxNrOfRetries |> Option.defaultValue -1
    ResetCounterAfter =
       input.ResetCounterAfterSeconds
-      |> Option.defaultValue 60
+      |> Option.defaultValue 60.
       |> TimeSpan.FromSeconds
 }
 
@@ -108,7 +108,7 @@ let persistentSupervisorOptionsFromInput (input: PersistenceSupervisorInput) = {
    MinBackoff =
       input.MinBackoffSeconds |> Option.defaultValue 0.1 |> TimeSpan.FromSeconds
    MaxBackoff =
-      input.MaxBackoffSeconds |> Option.defaultValue 2 |> TimeSpan.FromSeconds
+      input.MaxBackoffSeconds |> Option.defaultValue 2. |> TimeSpan.FromSeconds
    // Adds 20% "noise" to vary intervals slightly
    RandomFactor = input.RandomFactor |> Option.defaultValue 0.2
    MaxNrOfRetries = input.MaxNrOfRetries |> Option.defaultValue 10
@@ -130,7 +130,7 @@ type StreamBackoffRestartSettingsInput = {|
    MaxBackoffSeconds: float option
    RandomFactor: float option
    MaxRestarts: int option
-   MaxRestartsWithinSeconds: int option
+   MaxRestartsWithinSeconds: float option
 |}
 
 let streamBackoffRestartSettingsFromInput
@@ -139,11 +139,11 @@ let streamBackoffRestartSettingsFromInput
    let restartSettings =
       Akka.Streams.RestartSettings.Create(
          input.MinBackoffSeconds
-         |> Option.defaultValue 3
+         |> Option.defaultValue 3.
          |> TimeSpan.FromSeconds,
 
          input.MaxBackoffSeconds
-         |> Option.defaultValue 30
+         |> Option.defaultValue 30.
          |> TimeSpan.FromSeconds,
 
          // Adds 20% "noise" to vary intervals slightly.  Will help avoid
@@ -193,8 +193,8 @@ type private BankConfigInput = {
    SagaPassivateIdleEntityAfter: TimeSpan option
    PartnerBankServiceCircuitBreaker: {|
       MaxFailures: int option
-      CallTimeoutSeconds: int option
-      ResetTimeoutSeconds: int option
+      CallTimeoutSeconds: float option
+      ResetTimeoutSeconds: float option
    |}
    PartnerBankServiceQueue: {|
       Name: string option
@@ -278,7 +278,7 @@ let config =
                |> Option.defaultValue 5000
             Duration =
                input.BillingCycleFanoutThrottle.Seconds
-               |> Option.defaultValue 1
+               |> Option.defaultValue 1.
                |> TimeSpan.FromSeconds
          }
          AccountCluster = {
@@ -292,7 +292,7 @@ let config =
             Burst = input.AccountDeleteThrottle.Burst |> Option.defaultValue 5
             Duration =
                input.AccountDeleteThrottle.Seconds
-               |> Option.defaultValue 1
+               |> Option.defaultValue 1.
                |> TimeSpan.FromSeconds
          }
          AccountEventProjectionChunking = {
@@ -301,26 +301,26 @@ let config =
                |> Option.defaultValue 5000
             Duration =
                input.AccountEventProjectionChunking.Seconds
-               |> Option.defaultValue 5
+               |> Option.defaultValue 5.
                |> TimeSpan.FromSeconds
          }
          AccountEventReadModelPersistenceBackoffRestart =
             streamBackoffRestartSettingsFromInput
                input.AccountEventReadModelPersistenceBackoffRestart
-         AccountEventReadModelRetryPersistenceAfter = TimeSpan.FromSeconds 7
+         AccountEventReadModelRetryPersistenceAfter = TimeSpan.FromSeconds 7.
          BillingStatementPersistenceChunking = {
             Size =
                input.BillingStatementPersistenceChunking.Size
                |> Option.defaultValue 100
             Duration =
                input.BillingStatementPersistenceChunking.Seconds
-               |> Option.defaultValue 5
+               |> Option.defaultValue 5.
                |> TimeSpan.FromSeconds
          }
          BillingStatementPersistenceBackoffRestart =
             streamBackoffRestartSettingsFromInput
                input.BillingStatementPersistenceBackoffRestart
-         BillingStatementRetryPersistenceAfter = TimeSpan.FromSeconds 7
+         BillingStatementRetryPersistenceAfter = TimeSpan.FromSeconds 7.
          CircuitBreakerActorSupervisor =
             backoffSupervisorOptionsFromInput
                input.CircuitBreakerActorSupervisor
@@ -333,12 +333,12 @@ let config =
             Burst = input.SleepingSagaThrottle.Burst |> Option.defaultValue 1500
             Duration =
                input.SleepingSagaThrottle.Seconds
-               |> Option.defaultValue 10
+               |> Option.defaultValue 10.
                |> TimeSpan.FromSeconds
          }
          SagaPassivateIdleEntityAfter =
             input.SagaPassivateIdleEntityAfter
-            |> Option.defaultValue (TimeSpan.FromMinutes 2)
+            |> Option.defaultValue (TimeSpan.FromMinutes 2.)
          PartnerBankServiceCircuitBreaker =
             fun system ->
                Akka.Pattern.CircuitBreaker(
@@ -351,7 +351,7 @@ let config =
                   |> TimeSpan.FromSeconds,
 
                   input.PartnerBankServiceCircuitBreaker.ResetTimeoutSeconds
-                  |> Option.defaultValue 20
+                  |> Option.defaultValue 20.
                   |> TimeSpan.FromSeconds
                )
          PartnerBankServiceQueue = {

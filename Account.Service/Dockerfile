@@ -1,8 +1,8 @@
-FROM bitnami/dotnet-sdk:8
+FROM bitnami/dotnet-sdk:9
 
 RUN mkdir -p /home/app
 
-COPY ./bin/Release/net8.0/publish /home/app
+COPY ./bin/Release/net9.0/publish /home/app
 
 WORKDIR /home/app
 

@@ -24,7 +24,7 @@ let createConnection
          AmqpCredentials.Create(settings.Username, settings.Password)
       )
       .WithAutomaticRecoveryEnabled(true)
-      .WithNetworkRecoveryInterval(TimeSpan.FromSeconds(1))
+      .WithNetworkRecoveryInterval(TimeSpan.FromSeconds(1.))
 
 let createQueueDeclaration (queueName: string) =
    QueueDeclaration.Create(queueName).WithDurable(true).WithAutoDelete(false)

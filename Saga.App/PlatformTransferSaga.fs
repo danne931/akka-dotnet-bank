@@ -73,13 +73,13 @@ type Activity =
          match x with
          | SendTransferNotification
          | SendTransferDepositNotification
-         | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4)
+         | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4.)
          | ScheduleTransfer
          | ReserveSenderFunds
          | DepositToRecipientAccount
          | SettleTransfer
          | ReleaseSenderFunds
-         | UndoRecipientDeposit -> Some(TimeSpan.FromSeconds 5)
+         | UndoRecipientDeposit -> Some(TimeSpan.FromSeconds 5.)
          | WaitForScheduledTransferExecution
          | WaitForSupportTeamToResolvePartnerBankSync -> None
 

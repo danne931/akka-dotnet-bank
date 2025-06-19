@@ -20,8 +20,8 @@ type NotificationsInput = {
    SupportEmail: string option
    CircuitBreaker: {|
       MaxFailures: int option
-      CallTimeoutSeconds: int option
-      ResetTimeoutSeconds: int option
+      CallTimeoutSeconds: float option
+      ResetTimeoutSeconds: float option
    |}
    EmailQueue: {|
       Name: string option
@@ -95,11 +95,11 @@ let config =
                   input.CircuitBreaker.MaxFailures |> Option.defaultValue 2,
 
                   input.CircuitBreaker.CallTimeoutSeconds
-                  |> Option.defaultValue 7
+                  |> Option.defaultValue 7.
                   |> TimeSpan.FromSeconds,
 
                   input.CircuitBreaker.ResetTimeoutSeconds
-                  |> Option.defaultValue 30
+                  |> Option.defaultValue 30.
                   |> TimeSpan.FromSeconds
                )
       }

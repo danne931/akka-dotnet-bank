@@ -66,13 +66,13 @@ type Activity =
          | WaitForInfoFixDemandedByKYCService
          | WaitForSupportTeamToResolvePartnerBankLink -> None
          | KYCVerification
-         | LinkAccountToPartnerBank -> Some(TimeSpan.FromMinutes 2)
+         | LinkAccountToPartnerBank -> Some(TimeSpan.FromMinutes 2.)
          | SendApplicationProcessingNotification
          | SendApplicationRequiresRevisionForKYCServiceNotification
          | SendApplicationAcceptedNotification
-         | SendApplicationRejectedNotification -> Some(TimeSpan.FromMinutes 4)
+         | SendApplicationRejectedNotification -> Some(TimeSpan.FromMinutes 4.)
          | InitializePrimaryVirtualAccount
-         | ActivateOrg -> Some(TimeSpan.FromSeconds 5)
+         | ActivateOrg -> Some(TimeSpan.FromSeconds 5.)
 
 type OrgOnboardingSaga = {
    OrgId: OrgId

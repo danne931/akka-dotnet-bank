@@ -11,8 +11,8 @@ let builder = Env.builder
 type private Input = {
    CardIssuerServiceCircuitBreaker: {|
       MaxFailures: int option
-      CallTimeoutSeconds: int option
-      ResetTimeoutSeconds: int option
+      CallTimeoutSeconds: float option
+      ResetTimeoutSeconds: float option
    |}
    CardIssuerServiceQueue: {|
       Name: string option
@@ -36,10 +36,10 @@ let config =
                input.CardIssuerServiceCircuitBreaker.MaxFailures
                |> Option.defaultValue 2,
                input.CardIssuerServiceCircuitBreaker.CallTimeoutSeconds
-               |> Option.defaultValue 7
+               |> Option.defaultValue 7.
                |> TimeSpan.FromSeconds,
                input.CardIssuerServiceCircuitBreaker.ResetTimeoutSeconds
-               |> Option.defaultValue 20
+               |> Option.defaultValue 20.
                |> TimeSpan.FromSeconds
             )
       CardIssuerServiceQueue = {

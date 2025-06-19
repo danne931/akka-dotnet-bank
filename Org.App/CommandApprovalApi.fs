@@ -185,7 +185,7 @@ let getTodaysCommandApprovalDailyAccrualByInitiatedBy
       let! accrual =
          ref.Ask(
             OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy initiatedById,
-            Some(TimeSpan.FromSeconds 3)
+            Some(TimeSpan.FromSeconds 3.)
          )
 
       return accrual

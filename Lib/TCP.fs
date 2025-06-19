@@ -24,15 +24,15 @@ let request
          do!
             client
                .ConnectAsync(IPEndPoint(host, port))
-               .WaitAsync(TimeSpan.FromSeconds 3)
+               .WaitAsync(TimeSpan.FromSeconds 3.)
 
          use stream = client.GetStream()
 
-         let ctsWrite = new CancellationTokenSource(TimeSpan.FromSeconds(1))
+         let ctsWrite = new CancellationTokenSource(TimeSpan.FromSeconds(1.))
          do! stream.WriteAsync(msg, ctsWrite.Token)
 
          let buffer: byte[] = Array.zeroCreate 1024
-         let ctsRead = new CancellationTokenSource(TimeSpan.FromSeconds(4))
+         let ctsRead = new CancellationTokenSource(TimeSpan.FromSeconds(4.))
          let! received = stream.ReadAsync(buffer, ctsRead.Token)
 
          return Ok(encoding.GetString(buffer, 0, received))

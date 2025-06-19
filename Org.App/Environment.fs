@@ -11,8 +11,8 @@ let builder = Env.builder
 type private Input = {
    KnowYourCustomerServiceCircuitBreaker: {|
       MaxFailures: int option
-      CallTimeoutSeconds: int option
-      ResetTimeoutSeconds: int option
+      CallTimeoutSeconds: float option
+      ResetTimeoutSeconds: float option
    |}
    KnowYourCustomerServiceQueue: {|
       Name: string option
@@ -37,11 +37,11 @@ let config =
                |> Option.defaultValue 2,
 
                input.KnowYourCustomerServiceCircuitBreaker.CallTimeoutSeconds
-               |> Option.defaultValue 7
+               |> Option.defaultValue 7.
                |> TimeSpan.FromSeconds,
 
                input.KnowYourCustomerServiceCircuitBreaker.ResetTimeoutSeconds
-               |> Option.defaultValue 20
+               |> Option.defaultValue 20.
                |> TimeSpan.FromSeconds
             )
       KnowYourCustomerServiceQueue = {

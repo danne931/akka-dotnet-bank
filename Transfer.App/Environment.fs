@@ -15,8 +15,8 @@ type private TransferConfigInput = {
    MockDomesticTransferProcessor: {| Host: string option; Port: int |}
    DomesticTransferCircuitBreaker: {|
       MaxFailures: int option
-      CallTimeoutSeconds: int option
-      ResetTimeoutSeconds: int option
+      CallTimeoutSeconds: float option
+      ResetTimeoutSeconds: float option
    |}
    DomesticTransferQueue: {|
       Name: string option
@@ -69,11 +69,11 @@ let config =
                |> Option.defaultValue 2,
 
                input.DomesticTransferCircuitBreaker.CallTimeoutSeconds
-               |> Option.defaultValue 7
+               |> Option.defaultValue 7.
                |> TimeSpan.FromSeconds,
 
                input.DomesticTransferCircuitBreaker.ResetTimeoutSeconds
-               |> Option.defaultValue 20
+               |> Option.defaultValue 20.
                |> TimeSpan.FromSeconds
             )
       AutoTransferComputeThrottle = {
@@ -83,7 +83,7 @@ let config =
             input.AutoTransferComputeThrottle.Burst |> Option.defaultValue 100
          Duration =
             input.AutoTransferComputeThrottle.Seconds
-            |> Option.defaultValue 10
+            |> Option.defaultValue 10.
             |> TimeSpan.FromSeconds
       }
       Queue = {

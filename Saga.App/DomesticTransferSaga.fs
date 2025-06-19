@@ -65,16 +65,16 @@ type Activity =
          | WaitForTransferServiceComplete ->
             Some(
                if Env.isProd then
-                  TimeSpan.FromHours 4
+                  TimeSpan.FromHours 4.
                else
-                  TimeSpan.FromMinutes 1
+                  TimeSpan.FromMinutes 1.
             )
          | TransferServiceAck
-         | SendTransferInitiatedNotification -> Some(TimeSpan.FromMinutes 4)
+         | SendTransferInitiatedNotification -> Some(TimeSpan.FromMinutes 4.)
          | ReserveSenderFunds
          | ReleaseSenderReservedFunds
          | DeductSenderFunds
-         | ScheduleTransfer -> Some(TimeSpan.FromSeconds 5)
+         | ScheduleTransfer -> Some(TimeSpan.FromSeconds 5.)
 
 type DomesticTransferSaga = {
    StartEvent: DomesticTransferSagaStartEvent

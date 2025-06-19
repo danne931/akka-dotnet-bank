@@ -65,13 +65,13 @@ type Activity =
          | NotifyCardNetworkOfRejectedPurchase
          | WaitForSupportTeamToResolvePartnerBankSync -> None
          | SendPurchaseNotification
-         | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4)
+         | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4.)
          | NotifyCardNetworkOfConfirmedPurchase
          | DeductFromEmployeeCard
          | ReserveAccountFunds
          | AcquireCardFailureAcknowledgement
          | AcquireAccountFailureAcknowledgement
-         | SettlePurchase -> Some(TimeSpan.FromSeconds 4)
+         | SettlePurchase -> Some(TimeSpan.FromSeconds 4.)
 
 type PurchaseSaga = {
    PurchaseInfo: PurchaseInfo
@@ -582,7 +582,7 @@ let onEventPersisted
 // TODO: Notify card network which issued the debit request to our bank.
 let cardNetworkConfirmPurchase (info: PurchaseInfo) = async {
    if false then
-      do! Async.Sleep(System.TimeSpan.FromMinutes(12))
+      do! Async.Sleep(System.TimeSpan.FromMinutes(12.))
 
    // TODO: HTTP to card network
 

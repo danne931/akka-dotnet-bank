@@ -79,10 +79,10 @@ type Activity =
          | NotifyPayerOfPaymentSent
          | NotifyPayerOfRequest
          | NotifyPayeeOfDecline
-         | NotifyPayeeOfPaymentDeposit -> Some(TimeSpan.FromMinutes 4)
+         | NotifyPayeeOfPaymentDeposit -> Some(TimeSpan.FromMinutes 4.)
          | DepositToPayeeAccount
          | ReleasePayerAccountReservedFunds
-         | SettlePayment -> Some(TimeSpan.FromSeconds 5)
+         | SettlePayment -> Some(TimeSpan.FromSeconds 5.)
 
 type PlatformPaymentSaga = {
    StartEvent: PlatformPaymentSagaStartEvent

@@ -57,9 +57,9 @@ type Activity =
          match x with
          | StartBilling
          | WaitForBillingStatementPersisted -> None
-         | ProcessBillingStatement -> Some(TimeSpan.FromSeconds 10)
-         | ProcessMaintenanceFee -> Some(TimeSpan.FromSeconds 10)
-         | SendBillingEmail -> Some(TimeSpan.FromMinutes 4)
+         | ProcessBillingStatement -> Some(TimeSpan.FromSeconds 10.)
+         | ProcessMaintenanceFee -> Some(TimeSpan.FromSeconds 10.)
+         | SendBillingEmail -> Some(TimeSpan.FromMinutes 4.)
 
 type BillingSaga = {
    CorrelationId: CorrelationId

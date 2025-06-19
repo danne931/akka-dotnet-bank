@@ -110,7 +110,7 @@ module AkkaInfra =
                      conf.RequiredContactPointsNr
 
                   opts.ContactPointDiscovery.StableMargin <-
-                     TimeSpan.FromSeconds 5),
+                     TimeSpan.FromSeconds 5.),
                autoStart = true
             )
             .WithKubernetesDiscovery(conf.PodLabelSelector)

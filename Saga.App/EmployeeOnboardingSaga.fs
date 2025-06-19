@@ -74,12 +74,12 @@ type Activity =
          | RestoreEmployeeAccess
          | WaitForAccessApproval
          | WaitForInviteConfirmation -> None
-         | CreateCardViaThirdPartyProvider -> Some(TimeSpan.FromMinutes 2)
+         | CreateCardViaThirdPartyProvider -> Some(TimeSpan.FromMinutes 2.)
          | SendEmployeeInviteNotification
          | SendEmployeeOnboardingFailNotification ->
-            Some(TimeSpan.FromMinutes 4)
+            Some(TimeSpan.FromMinutes 4.)
          | RequestAccessApproval
-         | AssociateCardWithEmployee -> Some(TimeSpan.FromSeconds 5)
+         | AssociateCardWithEmployee -> Some(TimeSpan.FromSeconds 5.)
 
 type EmployeeOnboardingSaga = {
    EmployeeId: EmployeeId

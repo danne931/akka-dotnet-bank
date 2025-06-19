@@ -52,10 +52,10 @@ type Activity =
       member x.InactivityTimeout =
          match x with
          | InitializeCard -> None
-         | CreateCardViaThirdPartyProvider -> Some(TimeSpan.FromMinutes 2)
+         | CreateCardViaThirdPartyProvider -> Some(TimeSpan.FromMinutes 2.)
          | SendCardSetupSuccessNotification
-         | SendCardSetupFailNotification -> Some(TimeSpan.FromMinutes 4)
-         | LinkProviderCardId -> Some(TimeSpan.FromSeconds 5)
+         | SendCardSetupFailNotification -> Some(TimeSpan.FromMinutes 4.)
+         | LinkProviderCardId -> Some(TimeSpan.FromSeconds 5.)
 
 type CardSetupSaga = {
    CardId: CardId
