@@ -8,7 +8,6 @@ open Akka.Hosting
 open Akkling
 open Akka.Streams
 open Akkling.Streams
-open Akkling.Cluster.Sharding
 
 open BillingStatement
 open BillingSqlMapper
@@ -42,7 +41,7 @@ let initQueueSource
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryAfter: TimeSpan)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    (billingStatementActorRef: IActorRef<obj>)
    =
    let flow, bulkWriteRef =
@@ -66,7 +65,7 @@ let initQueueSource
                      BillingSagaEvent.BillingStatementPersisted
                      |> AppSaga.Message.billing s.OrgId s.CorrelationId
 
-                  getSagaRef s.CorrelationId <! msg
+                  getSagaRef () <! msg
       }
 
    let source =
@@ -82,7 +81,7 @@ let actorProps
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    =
    let rec init (ctx: Actor<obj>) = actor {
       let! msg = ctx.Receive()
@@ -93,7 +92,7 @@ let actorProps
          | PreStart ->
             logInfo ctx "Prestart - Init BillingStatementActor Queue Source"
 
-            let (bulkWriteRef, queueSource) =
+            let bulkWriteRef, queueSource =
                initQueueSource
                   system
                   persistence
@@ -237,7 +236,7 @@ let start
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    : IActorRef<BillingStatementMessage>
    =
    spawn system ActorMetadata.billingStatement.Name

@@ -4,6 +4,7 @@ module OrgActor
 open Akka.Actor
 open Akka.Persistence
 open Akka.Persistence.Extras
+open Akka.Delivery
 open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
@@ -24,8 +25,9 @@ open EmployeeOnboardingSaga
 // Sends the ApprovableCommand to the appropriate Account or Employee actor
 // when the approval process is complete or no approval required.
 let private sendApprovedCommand
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (getEmployeeRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
+   (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
    (orgRef: IActorRef<OrgMessage>)
    (cmd: ApprovableCommand)
    =
@@ -33,29 +35,29 @@ let private sendApprovedCommand
    | ApprovableCommand.PerCommand c ->
       match c with
       | InviteEmployee cmd ->
-         let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
-
-         let cmd =
+         let msg =
             { cmd with Timestamp = DateTime.UtcNow }
             |> EmployeeCommand.ApproveAccess
+            |> EmployeeMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         employeeRef <! EmployeeMessage.StateChange cmd
+         getEmployeeRef () <! msg
       | UpdateEmployeeRole cmd ->
-         let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
-
-         let cmd =
+         let msg =
             { cmd with Timestamp = DateTime.UtcNow }
             |> EmployeeCommand.UpdateRole
+            |> EmployeeMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         employeeRef <! EmployeeMessage.StateChange cmd
+         getEmployeeRef () <! msg
       | UnlockCard cmd ->
-         let employeeRef = getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId)
-
-         let cmd =
+         let msg =
             { cmd with Timestamp = DateTime.UtcNow }
             |> EmployeeCommand.UnlockCard
+            |> EmployeeMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         employeeRef <! EmployeeMessage.StateChange cmd
+         getEmployeeRef () <! msg
       | ManageApprovalRule cmd ->
          let info = cmd.Data
 
@@ -79,32 +81,29 @@ let private sendApprovedCommand
    | ApprovableCommand.AmountBased c ->
       match c with
       | FulfillPlatformPayment cmd ->
-         let accountRef =
-            getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
-
-         let cmd =
+         let msg =
             { cmd with Timestamp = DateTime.UtcNow }
             |> AccountCommand.PlatformPayment
+            |> AccountMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         accountRef <! AccountMessage.StateChange cmd
+         getAccountRef () <! msg
       | DomesticTransfer cmd ->
-         let accountRef =
-            getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
-
-         let cmd =
+         let msg =
             { cmd with Timestamp = DateTime.UtcNow }
             |> AccountCommand.DomesticTransfer
+            |> AccountMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         accountRef <! AccountMessage.StateChange cmd
+         getAccountRef () <! msg
       | InternalTransferBetweenOrgs cmd ->
-         let accountRef =
-            getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
-
-         let cmd =
+         let msg =
             { cmd with Timestamp = DateTime.UtcNow }
             |> AccountCommand.InternalTransferBetweenOrgs
+            |> AccountMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         accountRef <! AccountMessage.StateChange cmd
+         getAccountRef () <! msg
 
 // Does the approvable command contribute to the OrgAccrualMetric daily tally?
 let private hasAccruableTransaction
@@ -175,9 +174,10 @@ let private terminateProgressAssociatedWithRule
       mailbox <! OrgMessage.StateChange cmd
 
 let onPersisted
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getEmployeeRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
+   (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
    (mailbox: Eventsourced<obj>)
    (previousState: OrgSnapshot)
    (state: OrgSnapshot)
@@ -192,13 +192,13 @@ let onPersisted
          OrgOnboardingSagaStartEvent.ApplicationSubmitted e
          |> AppSaga.Message.orgOnboardStart e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | OnboardingFinished e ->
       let msg =
          OrgOnboardingSagaEvent.OrgActivated
          |> AppSaga.Message.orgOnboard e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | CommandApprovalRuleConfigured e ->
       let newRuleConfig = e.Data.Rule
       let approversCnt = newRuleConfig.Approvers.Length
@@ -239,18 +239,16 @@ let onPersisted
             EmployeeOnboardingSagaEvent.AccessRequestPending
             |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
-         getSagaRef e.CorrelationId <! msg
+         getSagaRef () <! msg
       | _ -> ()
    | CommandApprovalProcessCompleted e -> sendApprovedCommand e.Data.Command
    | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
    | CommandApprovalDeclined e ->
       match e.Data.Command with
       | ApprovableCommand.PerCommand(InviteEmployee cmd) ->
-         let employeeId = EmployeeId.fromEntityId cmd.EntityId
-
          let msg =
             CancelInvitationCommand.create
-               (employeeId, e.OrgId)
+               (EmployeeId.fromEntityId cmd.EntityId, e.OrgId)
                e.InitiatedBy
                e.CorrelationId
                {
@@ -260,12 +258,10 @@ let onPersisted
                }
             |> EmployeeCommand.CancelInvitation
             |> EmployeeMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         (getEmployeeRef employeeId) <! msg
+         getEmployeeRef () <! msg
       | ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
-         let accountRef =
-            getAccountRef (ParentAccountId.fromEntityId cmd.EntityId)
-
          let msg =
             DeclinePlatformPaymentCommand.create e.InitiatedBy {
                RequestedPayment = cmd.Data.RequestedPayment
@@ -275,16 +271,20 @@ let onPersisted
             }
             |> AccountCommand.DeclinePlatformPayment
             |> AccountMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         accountRef <! msg
+         getAccountRef () <! msg
       | _ -> ()
    | _ -> ()
 
 let actorProps
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getEmployeeRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
+   (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
+   (guaranteedDeliveryConsumerControllerRef:
+      IActorRef<ConsumerController.IConsumerCommand<OrgMessage>>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -344,6 +344,14 @@ let actorProps
             | 0 -> return! effect <@> SaveSnapshot state
             | _ -> return! effect
          | :? SnapshotOffer as o -> return! loop <| Some(unbox o.Snapshot)
+         | :? ConsumerController.Delivery<OrgMessage> as msg ->
+            GuaranteedDelivery.ack msg
+
+            // Send message to parent actor (Persistence Supervisor)
+            // for message command to confirmed event persistence.
+            mailbox.Parent() <! msg.Message
+
+            return ignored ()
          | :? ConfirmableMessageEnvelope as envelope ->
             let unknownMsg msg =
                logError $"Unknown message in ConfirmableMessageEnvelope - {msg}"
@@ -376,9 +384,7 @@ let actorProps
 
                logError errMsg
                return unhandled ()
-            | OrgMessage.ApprovableRequest cmd when
-               org.Status = OrgStatus.Active
-               ->
+            | OrgMessage.ApprovableRequest cmd ->
                // If the command requires approval then initiate the command
                // approval workflow.  Otherwise, forward the command to the
                // appropriate account or employee actor for processing.
@@ -415,6 +421,15 @@ let actorProps
 
                      return! loop (Some state)
                   | _ -> ()
+            // Some messages are sent through traditional AtMostOnceDelivery via
+            // a reference to the cluster sharded entity ref rather than Akka.Delivery
+            // AtLeastOnceDelivery producer ref so will not hit the
+            // ConsumerController.Delivery match case above. Need to send message
+            // to parent actor (Persistence Supervisor) so the command gets wrapped in a
+            // ConfirmableMessageEnvelope for Akka.Persistence.Extras.Confirmation
+            | OrgMessage.StateChange _ ->
+               mailbox.Parent() <! msg
+               return ignored ()
          // Event replay on actor start
          | :? OrgEvent as e when mailbox.IsRecovering() ->
             return! loop <| Some(Org.applyEvent state e)
@@ -422,9 +437,20 @@ let actorProps
             PersistentActorEventHandler.handleEvent
                {
                   PersistentActorEventHandler.init with
+                     LifecyclePreStart =
+                        fun _ ->
+                           logDebug mailbox $"ORG PRESTART"
+
+                           // Start Guaranteed Delivery Consumer Controller
+                           guaranteedDeliveryConsumerControllerRef
+                           <! new ConsumerController.Start<OrgMessage>(
+                              untyped mailbox.Self
+                           )
+
+                           ignored ()
                      LifecyclePostStop =
                         fun _ ->
-                           logInfo mailbox $"ORG POSTSTOP {org.Name}"
+                           logDebug mailbox $"ORG POSTSTOP {org.Name}"
                            SaveSnapshot state
                }
                mailbox
@@ -438,6 +464,15 @@ let actorProps
 let get (sys: ActorSystem) (orgId: OrgId) : IEntityRef<OrgMessage> =
    getEntityRef sys ClusterMetadata.orgShardRegion (OrgId.get orgId)
 
+let getGuaranteedDeliveryProducerRef
+   (system: ActorSystem)
+   : IActorRef<GuaranteedDelivery.Message<OrgMessage>>
+   =
+   typed
+   <| Akka.Hosting.ActorRegistry
+      .For(system)
+      .Get<ActorUtil.ActorMetadata.OrgGuaranteedDeliveryProducerMarker>()
+
 let isPersistableMessage (msg: obj) =
    match msg with
    | :? OrgMessage as msg ->
@@ -450,15 +485,24 @@ let initProps
    (broadcaster: SignalRBroadcast)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
+   (getEmployeeRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
+   (guaranteedDeliveryConsumerControllerRef:
+      IActorRef<ConsumerController.IConsumerCommand<OrgMessage>>)
    =
    let childProps =
-      actorProps broadcaster getSagaRef getEmployeeRef getAccountRef
+      actorProps
+         broadcaster
+         getSagaRef
+         getEmployeeRef
+         getAccountRef
+         guaranteedDeliveryConsumerControllerRef
 
    persistenceSupervisor
       supervisorOpts
       isPersistableMessage
       childProps
       persistenceId
+      true

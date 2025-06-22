@@ -6,6 +6,7 @@ open Akka.Hosting
 open Akka.Cluster.Hosting
 open Akka.HealthCheck.Hosting
 open Akka.HealthCheck.Hosting.Web
+open Akkling
 open Serilog
 open System.Text.Json.Serialization
 open System
@@ -15,7 +16,9 @@ open Bank.UserSession.Middleware
 open Bank.UserSession.Routes
 open Bank.Org.Routes
 open Bank.Account.Routes
+open Bank.Org.Domain
 open Bank.Account.Domain
+open Bank.Employee.Domain
 open Bank.Transfer.Routes
 open Bank.Diagnostic.Routes
 open Bank.Transaction.Routes
@@ -65,6 +68,7 @@ builder.Services.AddAkka(
             [
                typedefof<AccountMessage>
                typedefof<Account>
+               typedefof<EmployeeMessage>
                typedefof<CircuitBreakerMessage>
                typedefof<CircuitBreakerState>
                typedefof<Email.EmailMessage>
@@ -115,7 +119,40 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.web)
          )
-         .WithActors(fun system _ ->
+         .WithActors(fun system registry ->
+            registry.Register<
+               ActorMetadata.OrgGuaranteedDeliveryProducerMarker
+             >(
+               GuaranteedDelivery.producer<OrgMessage> {
+                  System = system
+                  ShardRegion = registry.Get<ActorMetadata.OrgMarker>()
+                  ProducerName = "web-to-org-actor-proxy"
+               }
+               |> untyped
+            )
+
+            registry.Register<
+               ActorMetadata.AccountGuaranteedDeliveryProducerMarker
+             >(
+               GuaranteedDelivery.producer<AccountMessage> {
+                  System = system
+                  ShardRegion = registry.Get<ActorMetadata.AccountMarker>()
+                  ProducerName = "web-to-account-actor-proxy"
+               }
+               |> untyped
+            )
+
+            registry.Register<
+               ActorMetadata.EmployeeGuaranteedDeliveryProducerMarker
+             >(
+               GuaranteedDelivery.producer<EmployeeMessage> {
+                  System = system
+                  ShardRegion = registry.Get<ActorMetadata.EmployeeMarker>()
+                  ProducerName = "web-to-employee-actor-proxy"
+               }
+               |> untyped
+            )
+
             SignalRActor.start system signalRHub |> ignore)
       |> ignore
 
@@ -124,14 +161,14 @@ builder.Services.AddAkka(
 |> ignore
 
 builder.Services.AddEndpointsApiExplorer().AddSwaggerGen() |> ignore
-builder.Services.WithAkkaHealthCheck(HealthCheckType.All) |> ignore
+builder.Services.WithAkkaHealthCheck HealthCheckType.All |> ignore
 
 builder.Services
    .AddDistributedMemoryCache()
    .AddSession(fun opts ->
       opts.Cookie.IsEssential <- true
       opts.Cookie.HttpOnly <- true
-      opts.IdleTimeout <- TimeSpan.FromMinutes 30)
+      opts.IdleTimeout <- TimeSpan.FromMinutes 30.)
 |> ignore
 
 let app = builder.Build()
@@ -148,7 +185,7 @@ app
 if app.Environment.IsDevelopment() then
    app.UseSwagger().UseSwaggerUI() |> ignore
 
-app.MapHub<BankHub>(Constants.SIGNAL_R_HUB) |> ignore
+app.MapHub<BankHub> Constants.SIGNAL_R_HUB |> ignore
 
 // Available at endpoint: /healthz/akka
 // Changing the default ResponseWriter to JsonResponseWriter

@@ -4,6 +4,7 @@ module AccountActor
 open Akka.Actor
 open Akka.Persistence
 open Akka.Persistence.Extras
+open Akka.Delivery
 open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
@@ -41,13 +42,16 @@ let private canProduceAutoTransfer =
 let private onValidationError
    (broadcaster: SignalRBroadcast)
    mailbox
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    (cmd: AccountCommand)
    (err: Err)
    =
    logWarning
       mailbox
       $"Validation fail %s{string err} for command %s{cmd.GetType().Name}"
+
+   let orgId = cmd.Envelope.OrgId
+   let corrId = cmd.Envelope.CorrelationId
 
    let isNoop, fail =
       match err with
@@ -56,88 +60,72 @@ let private onValidationError
          | AccountNotReadyToActivate -> true, None
          | AccountNotActive accountName ->
             match cmd with
-            | AccountCommand.Debit cmd ->
+            | AccountCommand.Debit _ ->
                false,
                Some(
-                  cmd.CorrelationId,
                   PurchaseAccountFailReason.AccountNotActive accountName
                   |> PurchaseSagaEvent.PurchaseRejectedByAccount
-                  |> AppSaga.Message.purchase cmd.OrgId cmd.CorrelationId
+                  |> AppSaga.Message.purchase orgId corrId
                )
             | AccountCommand.DomesticTransfer cmd when
                cmd.Data.OriginatedFromSchedule
                ->
                false,
                Some(
-                  cmd.CorrelationId,
                   DomesticTransferFailReason.SenderAccountNotActive
                   |> DomesticTransferSagaEvent.SenderUnableToReserveFunds
-                  |> AppSaga.Message.domesticTransfer
-                        cmd.OrgId
-                        cmd.CorrelationId
+                  |> AppSaga.Message.domesticTransfer orgId corrId
                )
             | AccountCommand.InternalTransferBetweenOrgs cmd when
                cmd.Data.OriginatedFromSchedule
                ->
                false,
                Some(
-                  cmd.CorrelationId,
                   InternalTransferFailReason.AccountClosed
                   |> PlatformTransferSagaEvent.SenderUnableToReserveFunds
-                  |> AppSaga.Message.platformTransfer
-                        cmd.OrgId
-                        cmd.CorrelationId
+                  |> AppSaga.Message.platformTransfer orgId corrId
                )
-            | AccountCommand.DepositTransferBetweenOrgs cmd ->
+            | AccountCommand.DepositTransferBetweenOrgs _ ->
                false,
                Some(
-                  cmd.CorrelationId,
                   InternalTransferFailReason.AccountClosed
                   |> PlatformTransferSagaEvent.RecipientUnableToDepositFunds
-                  |> AppSaga.Message.platformTransfer
-                        cmd.OrgId
-                        cmd.CorrelationId
+                  |> AppSaga.Message.platformTransfer orgId corrId
                )
-            | AccountCommand.PlatformPayment cmd ->
+            | AccountCommand.PlatformPayment _ ->
                false,
                Some(
-                  cmd.CorrelationId,
                   PlatformPaymentFailReason.AccountClosed
                   |> PlatformPaymentSagaEvent.PayerAccountUnableToReserveFunds
-                  |> AppSaga.Message.platformPayment cmd.OrgId cmd.CorrelationId
+                  |> AppSaga.Message.platformPayment orgId corrId
                )
             | AccountCommand.DepositPlatformPayment cmd ->
                false,
                Some(
-                  cmd.CorrelationId,
                   (PlatformPaymentFailReason.AccountClosed,
                    cmd.Data.PaymentMethod)
                   |> PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds
-                  |> AppSaga.Message.platformPayment cmd.OrgId cmd.CorrelationId
+                  |> AppSaga.Message.platformPayment orgId corrId
                )
             | _ -> false, None
          | InsufficientBalance(balance, accountName) ->
             match cmd with
-            | AccountCommand.Debit cmd ->
+            | AccountCommand.Debit _ ->
                false,
                Some(
-                  cmd.CorrelationId,
                   PurchaseAccountFailReason.InsufficientAccountFunds(
                      balance,
                      accountName
                   )
                   |> PurchaseSagaEvent.PurchaseRejectedByAccount
-                  |> AppSaga.Message.purchase cmd.OrgId cmd.CorrelationId
+                  |> AppSaga.Message.purchase orgId corrId
                )
-            | AccountCommand.DomesticTransfer cmd ->
+            | AccountCommand.DomesticTransfer _ ->
                false,
                Some(
-                  cmd.CorrelationId,
                   DomesticTransferFailReason.SenderAccountInsufficientFunds
                   |> DomesticTransferSagaEvent.SenderUnableToReserveFunds
-                  |> AppSaga.Message.domesticTransfer
-                        cmd.OrgId
-                        cmd.CorrelationId
+                  |> AppSaga.Message.domesticTransfer orgId corrId
                )
             | _ -> false, None
          | _ -> false, None
@@ -146,18 +134,14 @@ let private onValidationError
    if isNoop then
       logDebug mailbox $"AccountTransferActor NOOP msg {err}"
    else
-      broadcaster.accountEventError
-         cmd.Envelope.OrgId
-         cmd.AccountId
-         cmd.Envelope.CorrelationId
-         err
+      broadcaster.accountEventError orgId cmd.AccountId corrId err
 
-      fail |> Option.iter (fun (corrId, msg) -> getSagaRef corrId <! msg)
+      fail |> Option.iter (fun msg -> getSagaRef () <! msg)
 
 let onPersisted
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    (getRetryableTransfers:
       AccountId -> Task<Result<DomesticTransfer list option, Err>>)
    (mailbox: Eventsourced<obj>)
@@ -175,7 +159,7 @@ let onPersisted
          OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount
          |> AppSaga.Message.orgOnboard e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.CreatedVirtualAccount e ->
       let msg =
          EmailMessage.create
@@ -196,37 +180,37 @@ let onPersisted
          |> PurchaseSagaEvent.AccountReservedFunds
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.DebitSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettled
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.DebitFailed e ->
       let msg =
          PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.MaintenanceFeeDebited e ->
       let msg =
          BillingSagaEvent.MaintenanceFeeProcessed
          |> AppSaga.Message.billing e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.MaintenanceFeeSkipped e ->
       let msg =
          BillingSagaEvent.MaintenanceFeeProcessed
          |> AppSaga.Message.billing e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.PlatformPaymentRequested e ->
       let msg =
          PlatformPaymentSagaStartEvent.PaymentRequested e
          |> AppSaga.Message.platformPaymentStart e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.PlatformPaymentPending e ->
       let msg =
          PlatformPaymentSagaEvent.PayerAccountReservedFunds(
@@ -235,38 +219,38 @@ let onPersisted
          )
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.PlatformPaymentDeposited e ->
       let msg =
          partnerBankAccountLink
          |> PlatformPaymentSagaEvent.PayeeAccountDepositedFunds
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.PlatformPaymentDeclined e ->
       let msg =
          PlatformPaymentSagaEvent.PaymentRequestDeclined
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.PlatformPaymentCancelled e ->
       let msg =
          PlatformPaymentSagaEvent.PaymentRequestCancelled
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.PlatformPaymentSettled e ->
       let msg =
          PlatformPaymentSagaEvent.PaymentSettled
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.PlatformPaymentFailed e ->
       let msg =
          PlatformPaymentSagaEvent.PayerAccountReleasedReservedFunds
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    (*
    | AccountEvent.ThirdPartyPaymentRequested e ->
       // TODO: Send email requesting payment
@@ -278,7 +262,7 @@ let onPersisted
             |> PlatformTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 
-         getSagaRef e.CorrelationId <! msg
+         getSagaRef () <! msg
       else
          let msg =
             PlatformTransferSagaStartEvent.SenderReservedFunds(
@@ -287,57 +271,57 @@ let onPersisted
             )
             |> AppSaga.Message.platformTransferStart e.OrgId e.CorrelationId
 
-         getSagaRef e.CorrelationId <! msg
+         getSagaRef () <! msg
    | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
       let msg =
          PlatformTransferSagaStartEvent.ScheduleTransferRequest e
          |> AppSaga.Message.platformTransferStart e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       let msg =
          partnerBankAccountLink
          |> PlatformTransferSagaEvent.RecipientDepositedFunds
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.InternalTransferBetweenOrgsSettled e ->
       let msg =
          PlatformTransferSagaEvent.TransferSettled
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.DomesticTransferScheduled e ->
       let msg =
          DomesticTransferSagaStartEvent.ScheduleTransferRequest e
          |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.DomesticTransferPending e ->
       if e.Data.FromSchedule then
          let msg =
             DomesticTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
 
-         getSagaRef e.CorrelationId <! msg
+         getSagaRef () <! msg
       else
          let msg =
             DomesticTransferSagaStartEvent.SenderReservedFunds e
             |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
-         getSagaRef e.CorrelationId <! msg
+         getSagaRef () <! msg
    | AccountEvent.DomesticTransferFailed e ->
       let msg =
          DomesticTransferSagaEvent.SenderReleasedReservedFunds
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.DomesticTransferSettled e ->
       let msg =
          DomesticTransferSagaEvent.SenderDeductedFunds
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaRef () <! msg
    | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient e) ->
       // Retries domestic transfers which failed due to the mock third party
       // transfer service regarding the Recipient of the Transfer as having
@@ -442,10 +426,12 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getAccountClosureRef: ActorSystem -> IActorRef<AccountClosureMessage>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
       AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (guaranteedDeliveryConsumerControllerRef:
+      IActorRef<ConsumerController.IConsumerCommand<AccountMessage>>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -482,9 +468,19 @@ let actorProps
 
             return! loop <| Some state
          | :? SnapshotOffer as o -> return! loop <| Some(unbox o.Snapshot)
+         | :? ConsumerController.Delivery<AccountMessage> as msg ->
+            GuaranteedDelivery.ack msg
+
+            // Send message to parent actor (Persistence Supervisor)
+            // for message command to confirmed event persistence.
+            mailbox.Parent() <! msg.Message
+
+            return ignored ()
          | :? ConfirmableMessageEnvelope as envelope ->
-            let unknownMsg msg =
-               logError $"Unknown message in ConfirmableMessageEnvelope - {msg}"
+            let unhandledMsg msg =
+               logError
+                  $"Unhandled message in ConfirmableMessageEnvelope - {msg}"
+
                unhandled ()
 
             let confirmPersist = confirmPersist mailbox envelope.ConfirmationId
@@ -506,21 +502,20 @@ let actorProps
                            state
                   | Ok(evt, state) ->
                      return! persistEvent logError confirmPersist evt state
-               | msg -> return unknownMsg msg
-            | msg -> return unknownMsg msg
+               | msg -> return unhandledMsg msg
+            | msg -> return unhandledMsg msg
          | :? AccountMessage as msg ->
             match msg with
             | AccountMessage.GetAccount -> mailbox.Sender() <! stateOpt
             | AccountMessage.GetVirtualAccount accountId ->
                let account =
-                  stateOpt |> Option.bind (_.VirtualAccounts.TryFind(accountId))
+                  stateOpt |> Option.bind _.VirtualAccounts.TryFind(accountId)
 
                mailbox.Sender() <! account
             | AccountMessage.ProcessBillingStatement(corrId, billingPeriod) ->
                if state.Status <> ParentAccountStatus.Active then
                   logError
-                     $"Attempt to process billing statement for inactive account
-                     {state.Status} {mailbox.Pid}"
+                     $"Attempt to process billing statement for inactive account {state.Status}"
                else
                   let msg =
                      BillingSagaEvent.BillingStatementProcessing {
@@ -529,7 +524,7 @@ let actorProps
                      }
                      |> AppSaga.Message.billing state.OrgId corrId
 
-                  getSagaRef corrId <! msg
+                  getSagaRef () <! msg
 
                   let billing = {
                      OrgId = state.OrgId
@@ -578,7 +573,7 @@ let actorProps
                      mailbox
                      $"Retrying {transfers.Length} transfers upon recipient edit"
 
-                  for (transfer: DomesticTransfer) in transfers do
+                  for transfer: DomesticTransfer in transfers do
                      let corrId = TransferId.toCorrelationId transfer.TransferId
 
                      let evt =
@@ -591,11 +586,10 @@ let actorProps
                            corrId
                            evt
 
-                     getSagaRef corrId <! msg
+                     getSagaRef () <! msg
 
                return ignored ()
-            | _ -> unhandled ()
-         (*
+            (*
             | AccountMessage.Delete ->
                let state =
                   Some {
@@ -605,6 +599,16 @@ let actorProps
 
                return! loop state <@> DeleteMessages Int64.MaxValue
             *)
+            // Some messages are sent through traditional AtMostOnceDelivery via
+            // a reference to the cluster sharded entity ref rather than Akka.Delivery
+            // AtLeastOnceDelivery producer ref so will not hit the
+            // ConsumerController.Delivery match case above. Need to send message
+            // to parent actor (Persistence Supervisor) so the command gets wrapped in a
+            // ConfirmableMessageEnvelope for Akka.Persistence.Extras.Confirmation
+            | AccountMessage.StateChange _ ->
+               mailbox.Parent() <! msg
+               return ignored ()
+            | _ -> return unhandled ()
          // Event replay on actor start
          | :? AccountEvent as e when mailbox.IsRecovering() ->
             return! loop <| Some(ParentAccount.applyEvent state e)
@@ -621,10 +625,20 @@ let actorProps
                            else
                               ignored ()
                      *)
+                     LifecyclePreStart =
+                        fun _ ->
+                           logDebug mailbox $"ACCOUNT PRESTART"
+
+                           // Start Guaranteed Delivery Consumer Controller
+                           guaranteedDeliveryConsumerControllerRef
+                           <! new ConsumerController.Start<AccountMessage>(
+                              untyped mailbox.Self
+                           )
+
+                           ignored ()
                      LifecyclePostStop =
                         fun _ ->
-                           logInfo mailbox $"ACCOUNT POSTSTOP {mailbox.Pid}"
-
+                           logDebug mailbox $"ACCOUNT POSTSTOP"
                            ignored ()
                }
                mailbox
@@ -645,6 +659,15 @@ let get
       ClusterMetadata.accountShardRegion
       (ParentAccountId.get parentAccountId)
 
+let getGuaranteedDeliveryProducerRef
+   (system: ActorSystem)
+   : IActorRef<GuaranteedDelivery.Message<AccountMessage>>
+   =
+   typed
+   <| Akka.Hosting.ActorRegistry
+      .For(system)
+      .Get<ActorUtil.ActorMetadata.AccountGuaranteedDeliveryProducerMarker>()
+
 let isPersistableMessage (msg: obj) =
    match msg with
    | :? AccountMessage as msg ->
@@ -657,24 +680,28 @@ let initProps
    (broadcaster: SignalRBroadcast)
    (supervisorOpts: PersistenceSupervisorOptions)
    (persistenceId: string)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
-   (getAccountClosureActor: ActorSystem -> IActorRef<AccountClosureMessage>)
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
       AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
+   (getAccountClosureActor: ActorSystem -> IActorRef<AccountClosureMessage>)
+   (guaranteedDeliveryConsumerControllerRef:
+      IActorRef<ConsumerController.IConsumerCommand<AccountMessage>>)
    =
    let childProps =
       actorProps
          broadcaster
          getEmailActor
          getAccountClosureActor
-         getSagaRef
          getBillingStatementActor
          getDomesticTransfersRetryableUponRecipientEdit
+         getSagaRef
+         guaranteedDeliveryConsumerControllerRef
 
    persistenceSupervisor
       supervisorOpts
       isPersistableMessage
       childProps
       persistenceId
+      true

@@ -67,14 +67,16 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
             $"API-based command processing not allowed for {cmd}"
          ]
 
-   let! res = validation |> Result.mapError Err.ValidationError
+   let! envelope = validation |> Result.mapError Err.ValidationError
 
-   let actorRef =
-      EmployeeActor.get system (EmployeeId.fromEntityId res.EntityId)
+   let msg =
+      GuaranteedDelivery.message
+         (EntityId.get envelope.EntityId)
+         (EmployeeMessage.StateChange command)
 
-   actorRef <! EmployeeMessage.StateChange command
+   EmployeeActor.getGuaranteedDeliveryProducerRef system <! msg
 
-   return res
+   return envelope
 }
 
 let getEmployee (id: EmployeeId) =

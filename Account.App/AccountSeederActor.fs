@@ -296,11 +296,11 @@ let enableUpdatePreventionTriggers () =
       "ALTER TABLE organization_event ENABLE TRIGGER prevent_update;", []
    ]
 
-let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
+let createOrgs (orgRef: IActorRef<GuaranteedDelivery.Message<OrgMessage>>) =
    let orgs = myOrg :: otherOrgs
 
    for org in orgs do
-      let cmd =
+      let msg =
          {
             SubmitOrgOnboardingApplicationCommand.create {
                LegalBusinessName = org.BusinessName
@@ -317,16 +317,18 @@ let createOrgs (getOrgRef: OrgId -> IEntityRef<OrgMessage>) =
                Timestamp = DateTime.UtcNow.AddMonths -4
          }
          |> OrgCommand.SubmitOnboardingApplication
+         |> OrgMessage.StateChange
+         |> GuaranteedDelivery.message (OrgId.get org.OrgId)
 
-      (getOrgRef org.OrgId) <! OrgMessage.StateChange cmd
+      orgRef <! msg
 
 // Enable other orgs using the platform to be discoverable for
 // InternalTransferBetweenOrgs.
 let enableOrgSocialTransferDiscovery
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
+   (orgRef: IActorRef<GuaranteedDelivery.Message<OrgMessage>>)
    =
    for org in otherOrgs do
-      let cmd =
+      let msg =
          ConfigureFeatureFlagCommand.create org.OrgId Initiator.System {
             Config = {
                SocialTransferDiscoveryPrimaryAccountId =
@@ -334,8 +336,10 @@ let enableOrgSocialTransferDiscovery
             }
          }
          |> OrgCommand.ConfigureFeatureFlag
+         |> OrgMessage.StateChange
+         |> GuaranteedDelivery.message (OrgId.get org.OrgId)
 
-      (getOrgRef org.OrgId) <! OrgMessage.StateChange cmd
+      orgRef <! msg
 
 // NOTE:
 // Initial employee purchase requests are configured with timestamps
@@ -761,7 +765,7 @@ let mockEmployeesPendingInviteConfirmation =
    })
 
 let seedPayments
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
    =
    task {
       let buffer = DateTime.UtcNow.AddDays(-2)
@@ -795,14 +799,16 @@ let seedPayments
       ]
 
       for _, request in requestsFromDemoAccount do
+         let entityId =
+            ParentAccountId.get request.Data.BaseInfo.Payee.ParentAccountId
+
          let msg =
             request
             |> AccountCommand.RequestPlatformPayment
             |> AccountMessage.StateChange
+            |> GuaranteedDelivery.message entityId
 
-         let payee = request.Data.BaseInfo.Payee
-
-         (getAccountRef payee.ParentAccountId) <! msg
+         accountRef <! msg
 
       do! Async.Sleep 2000
 
@@ -824,7 +830,7 @@ let seedPayments
                         request
                         |> RequestPlatformPaymentCommand.toEvent
                         |> Result.toValueOption
-                        |> fun p -> p.Value.Data.Expiration
+                        |> _.Value.Data.Expiration
                      BaseInfo = info
                   }
                   PaymentMethod = PaymentMethod.Platform payer.PrimaryAccountId
@@ -833,8 +839,11 @@ let seedPayments
          }
          |> AccountCommand.PlatformPayment
          |> AccountMessage.StateChange
+         |> GuaranteedDelivery.message (
+            ParentAccountId.get payer.ParentAccountId
+         )
 
-      (getAccountRef payer.ParentAccountId) <! msg
+      accountRef <! msg
 
       // Payment requests from other orgs to main demo org
       for payee in paymentRequesters do
@@ -869,12 +878,15 @@ let seedPayments
             cmd
             |> AccountCommand.RequestPlatformPayment
             |> AccountMessage.StateChange
+            |> GuaranteedDelivery.message (
+               ParentAccountId.get payee.ParentAccountId
+            )
 
-         (getAccountRef payee.ParentAccountId) <! msg
+         accountRef <! msg
    }
 
 let configureAutoTransferRules
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
    (timestamp: DateTime)
    =
    // Set up percent distribution rule for demo account
@@ -934,8 +946,9 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
+      |> GuaranteedDelivery.message (ParentAccountId.get sender.ParentAccountId)
 
-   (getAccountRef sender.ParentAccountId) <! msg
+   accountRef <! msg
 
    // Set up zero balance rule for demo account
    // ----------------------------------------
@@ -971,8 +984,9 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
+      |> GuaranteedDelivery.message (ParentAccountId.get sender.ParentAccountId)
 
-   (getAccountRef sender.ParentAccountId) <! msg
+   accountRef <! msg
 
    // Set up target balance rule for demo savings account
    // ----------------------------------------
@@ -1023,8 +1037,9 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
+      |> GuaranteedDelivery.message (ParentAccountId.get target.ParentAccountId)
 
-   (getAccountRef target.ParentAccountId) <! msg
+   accountRef <! msg
 
    // Create auto transfer rules for other orgs
    // ---------------------------------------
@@ -1064,13 +1079,16 @@ let configureAutoTransferRules
          }
          |> AccountCommand.ConfigureAutoTransferRule
          |> AccountMessage.StateChange
+         |> GuaranteedDelivery.message (
+            ParentAccountId.get sender.ParentAccountId
+         )
 
-      (getAccountRef sender.ParentAccountId) <! msg
+      accountRef <! msg
 
    socialTransferCandidates |> List.iter initZeroBalanceRule
 
 let seedAccountOwnerActions
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
    (timestamp: DateTime)
    (account: Account)
    =
@@ -1101,15 +1119,14 @@ let seedAccountOwnerActions
       |> ParentAccountCommand.RegisterDomesticTransferRecipient
       |> AccountCommand.ParentAccount
       |> AccountMessage.StateChange
+      |> GuaranteedDelivery.message (ParentAccountId.get myOrg.ParentAccountId)
 
-   getAccountRef myOrg.ParentAccountId <! msg
-
-   let accountRef = getAccountRef myOrg.ParentAccountId
+   accountRef <! msg
 
    for month in [ 1..3 ] do
       let timestamp =
          if month = 3 then
-            timestamp.AddMonths(month).AddDays(-2)
+            timestamp.AddMonths(month).AddDays -2
          else
             timestamp.AddMonths month
 
@@ -1120,7 +1137,7 @@ let seedAccountOwnerActions
             {
                OriginatedFromSchedule = false
                ScheduledDateSeedOverride = Some timestamp
-               Amount = 30_000m + (randomAmount 1000 7000)
+               Amount = 30_000m + randomAmount 1000 7000
                Recipient = domesticRecipient
                Sender = {
                   Name = account.Name
@@ -1139,6 +1156,9 @@ let seedAccountOwnerActions
          transferCmd
          |> AccountCommand.DomesticTransfer
          |> AccountMessage.StateChange
+         |> GuaranteedDelivery.message (
+            ParentAccountId.get myOrg.ParentAccountId
+         )
 
       accountRef <! msg
 
@@ -1169,6 +1189,9 @@ let seedAccountOwnerActions
                }
                |> AccountCommand.DepositCash
                |> AccountMessage.StateChange
+               |> GuaranteedDelivery.message (
+                  ParentAccountId.get myOrg.ParentAccountId
+               )
 
             accountRef <! msg
 
@@ -1207,8 +1230,11 @@ let seedAccountOwnerActions
                }
                |> AccountCommand.InternalTransferBetweenOrgs
                |> AccountMessage.StateChange
+               |> GuaranteedDelivery.message (
+                  ParentAccountId.get sender.ParentAccountId
+               )
 
-            (getAccountRef sender.ParentAccountId) <! msg
+            accountRef <! msg
 
             let timestamp = timestamp.AddDays(float (maxDays - 1))
 
@@ -1245,8 +1271,11 @@ let seedAccountOwnerActions
                }
                |> AccountCommand.InternalTransferBetweenOrgs
                |> AccountMessage.StateChange
+               |> GuaranteedDelivery.message (
+                  ParentAccountId.get myOrg.ParentAccountId
+               )
 
-            (getAccountRef myOrg.ParentAccountId) <! msg
+            accountRef <! msg
 
             let msg =
                {
@@ -1275,13 +1304,16 @@ let seedAccountOwnerActions
                }
                |> AccountCommand.InternalTransfer
                |> AccountMessage.StateChange
+               |> GuaranteedDelivery.message (
+                  ParentAccountId.get myOrg.ParentAccountId
+               )
 
-            (getAccountRef myOrg.ParentAccountId) <! msg
+            accountRef <! msg
 
 let seedEmployeeActions
    (card: Card)
    (employee: Employee)
-   (employeeRef: IEntityRef<EmployeeMessage>)
+   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
    (timestamp: DateTime)
    =
    let purchaseMerchants = [
@@ -1337,7 +1369,7 @@ let seedEmployeeActions
                Some(DateTime.DaysInMonth(timestamp.Year, timestamp.Month) - 1)
 
          let purchaseDate =
-            match (month = 3 && purchaseNum > maxPurchases - 1), maxDays with
+            match month = 3 && purchaseNum > maxPurchases - 1, maxDays with
             | false, Some days -> timestamp.AddDays(float (randomAmount 0 days))
             | false, None -> timestamp
             | true, _ -> DateTime.UtcNow
@@ -1375,10 +1407,11 @@ let seedEmployeeActions
             purchaseCmd
             |> EmployeeCommand.Purchase
             |> EmployeeMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get purchaseCmd.EntityId)
 
          employeeRef <! msg
 
-let createAccountOwners getEmployeeRef =
+let createAccountOwners employeeRef =
    let createAccountOwnerCmd (business: OrgSetup) =
       let date = DateTime.Today
       let startOfMonth = DateTime(date.Year, date.Month, 1).ToUniversalTime()
@@ -1399,24 +1432,21 @@ let createAccountOwners getEmployeeRef =
    let accountOwnerCmds = mockAccountOwnerCmd :: otherAccountOwners
 
    for cmd in accountOwnerCmds do
-      let employeeId = cmd.Data.EmployeeId
-
       let createMsg =
          cmd
          |> EmployeeCommand.CreateAccountOwner
          |> EmployeeMessage.StateChange
+         |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-      getEmployeeRef employeeId <! createMsg
+      employeeRef <! createMsg
 
    accountOwnerCmds
 
 let confirmAccountOwnerInvites
-   getEmployeeRef
+   employeeRef
    (accountOwnerCmds: Command<CreateAccountOwnerInput> list)
    =
    for cmd in accountOwnerCmds do
-      let employeeId = cmd.Data.EmployeeId
-
       let confirmInviteCmd =
          ConfirmInvitationCommand.create
             cmd.InitiatedBy
@@ -1429,30 +1459,33 @@ let confirmAccountOwnerInvites
             }
          |> EmployeeCommand.ConfirmInvitation
          |> EmployeeMessage.StateChange
+         |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-      getEmployeeRef employeeId <! confirmInviteCmd
+      employeeRef <! confirmInviteCmd
 
 let createEmployees
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
    =
    for employeeCreateCmd in mockEmployeesPendingInviteConfirmation do
       let msg =
          employeeCreateCmd
          |> EmployeeCommand.CreateEmployee
          |> EmployeeMessage.StateChange
+         |> GuaranteedDelivery.message (EntityId.get employeeCreateCmd.EntityId)
 
-      getEmployeeRef (EmployeeId.fromEntityId employeeCreateCmd.EntityId) <! msg
+      employeeRef <! msg
 
    for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
       let msg =
          employeeCreateCmd
          |> EmployeeCommand.CreateEmployee
          |> EmployeeMessage.StateChange
+         |> GuaranteedDelivery.message (EmployeeId.get employeeId)
 
-      getEmployeeRef employeeId <! msg
+      employeeRef <! msg
 
 let confirmEmployeeInvites
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
    =
    for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
       let confirmInviteCmd = {
@@ -1472,11 +1505,12 @@ let confirmEmployeeInvites
          confirmInviteCmd
          |> EmployeeCommand.ConfirmInvitation
          |> EmployeeMessage.StateChange
+         |> GuaranteedDelivery.message (EmployeeId.get employeeId)
 
-      getEmployeeRef employeeId <! msg
+      employeeRef <! msg
 
 let createEmployeeCards
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
    =
    let accountOwnerTravelCardCreateCmd, accountOwnerBusinessCardCreateCmd =
       mockAccountOwnerCards
@@ -1489,9 +1523,13 @@ let createEmployeeCards
       @ employeeCardCreateCmds
 
    for cmd in cardCreateCmds do
-      let msg = cmd |> EmployeeCommand.CreateCard |> EmployeeMessage.StateChange
+      let msg =
+         cmd
+         |> EmployeeCommand.CreateCard
+         |> EmployeeMessage.StateChange
+         |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-      getEmployeeRef (EmployeeId.fromEntityId cmd.EntityId) <! msg
+      employeeRef <! msg
 
    {|
       AccountOwnerTravelCard = accountOwnerTravelCardCreateCmd
@@ -1516,14 +1554,15 @@ let getEmployeeCardPair
 
 let seedAccountTransactions
    (mailbox: Actor<AccountSeederMessage>)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
+   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
+   (getAccountEntityRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (getEmployeeEntityRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (command: CreateVirtualAccountCommand)
    =
    task {
       let accountId = command.Data.AccountId
       let compositeId = command.Data.ParentAccountId, command.OrgId
-      let accountRef = getAccountRef command.Data.ParentAccountId
 
       let timestamp = command.Timestamp.AddHours 2
 
@@ -1540,24 +1579,27 @@ let seedAccountTransactions
             }
             |> AccountCommand.DepositCash
             |> AccountMessage.StateChange
+            |> GuaranteedDelivery.message (EntityId.get command.EntityId)
 
          accountRef <! msg
       | None -> ()
 
       if accountId = myOrg.OpsAccountId then
-         createEmployees getEmployeeRef
+         createEmployees employeeRef
          do! Task.Delay 5000
-         confirmEmployeeInvites getEmployeeRef
+         confirmEmployeeInvites employeeRef
          do! Task.Delay 10_000
-         let cardCreateCmds = createEmployeeCards getEmployeeRef
+         let cardCreateCmds = createEmployeeCards employeeRef
          do! Task.Delay 10_000
 
          let businessCardCreateCmd = cardCreateCmds.AccountOwnerBusinessCard
          let timestamp = businessCardCreateCmd.Timestamp
 
-         configureAutoTransferRules getAccountRef timestamp
+         configureAutoTransferRules accountRef timestamp
 
-         let! account = accountRef <? AccountMessage.GetVirtualAccount accountId
+         let! account =
+            getAccountEntityRef command.Data.ParentAccountId
+            <? AccountMessage.GetVirtualAccount accountId
 
          match account with
          | None ->
@@ -1566,15 +1608,15 @@ let seedAccountTransactions
             logError
                mailbox
                $"Can not proceed with account owner actions - eId: {accountOwnerId}"
-         | Some account ->
-            seedAccountOwnerActions getAccountRef timestamp account
+         | Some account -> seedAccountOwnerActions accountRef timestamp account
 
          for cmd in
             cardCreateCmds.AccountOwnerTravelCard :: cardCreateCmds.Employee do
             let employeeId = EmployeeId.fromEntityId cmd.EntityId
             let cardId = cmd.Data.CardId
-            let employeeRef = getEmployeeRef employeeId
-            let! employeeCardPairOpt = getEmployeeCardPair employeeRef cardId
+
+            let! employeeCardPairOpt =
+               getEmployeeCardPair (getEmployeeEntityRef employeeId) cardId
 
             match employeeCardPairOpt with
             | None ->
@@ -1584,7 +1626,7 @@ let seedAccountTransactions
             | Some(employee, card) ->
                seedEmployeeActions card employee employeeRef timestamp
 
-         do! seedPayments getAccountRef
+         do! seedPayments accountRef
    }
 
 // Creates a new Map consisting of initial state of accounts to create
@@ -1638,9 +1680,13 @@ let private initState = {
 }
 
 let actorProps
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (getOrgRef: unit -> IActorRef<GuaranteedDelivery.Message<OrgMessage>>)
+   (getAccountGuaranteedDeliveryRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
+   (getEmployeeGuaranteedDeliveryRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
+   (getAccountEntityRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (getEmployeeEntityRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    =
    let handler (ctx: Actor<AccountSeederMessage>) =
       let logInfo = logInfo ctx
@@ -1669,15 +1715,18 @@ let actorProps
                   logInfo "Seed postgres with accounts"
                   do! disableUpdatePreventionTriggers ()
 
-                  createOrgs getOrgRef
+                  createOrgs (getOrgRef ())
 
                   do! Task.Delay 10_000
 
-                  let accountOwnerCmds = createAccountOwners getEmployeeRef
+                  let accountOwnerCmds =
+                     createAccountOwners (getEmployeeGuaranteedDeliveryRef ())
 
                   do! Task.Delay 5_000
 
-                  confirmAccountOwnerInvites getEmployeeRef accountOwnerCmds
+                  confirmAccountOwnerInvites
+                     (getEmployeeGuaranteedDeliveryRef ())
+                     accountOwnerCmds
 
                   do! Task.Delay 5_000
 
@@ -1687,14 +1736,15 @@ let actorProps
                         state.AccountsToCreate
 
                   for command in remaining.Values do
-                     let accountRef = getAccountRef command.Data.ParentAccountId
-
                      let msg =
                         command
                         |> AccountCommand.CreateVirtualAccount
                         |> AccountMessage.StateChange
+                        |> GuaranteedDelivery.message (
+                           ParentAccountId.get command.Data.ParentAccountId
+                        )
 
-                     accountRef <! msg
+                     getAccountGuaranteedDeliveryRef () <! msg
 
                   scheduleVerification ctx 5.
 
@@ -1715,8 +1765,10 @@ let actorProps
                do!
                   seedAccountTransactions
                      ctx
-                     getAccountRef
-                     getEmployeeRef
+                     (getAccountGuaranteedDeliveryRef ())
+                     (getEmployeeGuaranteedDeliveryRef ())
+                     getAccountEntityRef
+                     getEmployeeEntityRef
                      state.AccountsToCreate[acct.AccountId]
 
                ()
@@ -1730,7 +1782,7 @@ let actorProps
             if verified.Length = state.AccountsToCreate.Count then
                logInfo "Finished seeding accounts"
 
-               enableOrgSocialTransferDiscovery getOrgRef
+               enableOrgSocialTransferDiscovery (getOrgRef ())
 
                logInfo "Enabled social transfer discovery"
 

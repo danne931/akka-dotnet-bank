@@ -21,7 +21,7 @@ type Message = | WakeUpIfUnfinishedBusiness
 
 let actorProps
    (system: ActorSystem)
-   (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaActor: unit -> IActorRef<AppSaga.AppSagaMessage>)
    (getTimedOutSagas: unit -> Async<Result<Option<CorrelationId list>, Err>>)
    (throttle: StreamThrottle)
    =
@@ -59,8 +59,10 @@ let actorProps
                throttle.Count
                throttle.Duration
          |> Source.runForEach mat (fun sagaId ->
-            let actorRef = getSagaActor sagaId
-            actorRef <! SagaMessage.CheckForRemainingWork)
+            getSagaActor ()
+            <! GuaranteedDelivery.message
+                  (CorrelationId.get sagaId)
+                  SagaMessage.CheckForRemainingWork)
 
       return ignored ()
    }
@@ -95,7 +97,7 @@ let getSleepingSagas () = asyncResultOption {
 
 let initProps
    (system: ActorSystem)
-   (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaActor: unit -> IActorRef<AppSaga.AppSagaMessage>)
    =
    actorProps
       system

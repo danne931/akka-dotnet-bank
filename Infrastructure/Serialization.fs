@@ -137,7 +137,7 @@ type private EmployeeShardEnvelope = {
 type private AppSagaShardEnvelope = {
    EntityId: string
    ShardId: string
-   Message: AppSaga.AppSagaMessage
+   Message: SagaMessage<AppSaga.StartEvent, AppSaga.Event>
 }
 
 type BankSerializer(system: ExtendedActorSystem) =
@@ -168,7 +168,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | EmployeeMessage.Event _ -> "EmployeeEvent"
          | _ -> "EmployeeMessage"
       | :? SagaAlarmClockActor.Message -> "SagaAlarmClockMessage"
-      | :? AppSaga.AppSagaMessage -> "AppSagaMessage"
+      | :? SagaMessage<AppSaga.StartEvent, AppSaga.Event> -> "AppSagaMessage"
       | :? AppSaga.AppSagaPersistableEvent -> "AppSagaEvent"
       | :? AppSaga.Saga -> "AppSagaSnapshot"
       | :? AccountLoadTestTypes.AccountLoadTestMessage ->
@@ -197,7 +197,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | :? OrgMessage -> "OrgShardEnvelope"
          | :? AccountMessage -> "AccountShardEnvelope"
          | :? EmployeeMessage -> "EmployeeShardEnvelope"
-         | :? AppSaga.AppSagaMessage -> "AppSagaShardEnvelope"
+         | :? SagaMessage<AppSaga.StartEvent, AppSaga.Event> ->
+            "AppSagaShardEnvelope"
          | _ -> raise <| NotImplementedException()
       | :? Email.EmailMessage -> "EmailMessage"
       | _ -> raise <| NotImplementedException()
@@ -221,7 +222,7 @@ type BankSerializer(system: ExtendedActorSystem) =
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | :? EmployeeMessage ->
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
-         | :? AppSaga.AppSagaMessage ->
+         | :? SagaMessage<AppSaga.StartEvent, AppSaga.Event> ->
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | _ -> raise <| NotImplementedException()
       // AccountEvent, EmployeeEvent, & OrgEvent messages to be persisted
@@ -289,7 +290,7 @@ type BankSerializer(system: ExtendedActorSystem) =
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | msg ->
             JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
-      | :? AppSaga.AppSagaMessage as msg ->
+      | :? SagaMessage<AppSaga.StartEvent, AppSaga.Event> as msg ->
          JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       // Saga event persistence
       | :? AppSaga.AppSagaPersistableEvent
@@ -368,7 +369,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AccountEventList" -> typeof<AccountEvent list>
          | "AccountMessage" -> typeof<AccountMessage>
          | "AccountShardEnvelope" -> typeof<AccountShardEnvelope>
-         | "AppSagaMessage" -> typeof<AppSaga.AppSagaMessage>
+         | "AppSagaMessage" ->
+            typeof<SagaMessage<AppSaga.StartEvent, AppSaga.Event>>
          | "AppSagaEvent" -> typeof<AppSaga.AppSagaPersistableEvent>
          | "AppSagaShardEnvelope" -> typeof<AppSagaShardEnvelope>
          | "AppSagaSnapshot" -> typeof<AppSaga.Saga>

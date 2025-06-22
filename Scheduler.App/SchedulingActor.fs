@@ -20,7 +20,7 @@ open Bank.Scheduler
 
 let actorProps
    (quartzPersistentActorRef: IActorRef)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    =
    let handler (ctx: Actor<SchedulerMessage>) = actor {
       let logInfo = logInfo ctx
@@ -235,11 +235,9 @@ let actorProps
 
          let msg =
             PlatformTransferSaga.PlatformTransferSagaEvent.ScheduledJobCreated
-            |> AppSaga.Event.PlatformTransfer
-            |> SagaEvent.create orgId correlationId
-            |> SagaMessage.Event
+            |> AppSaga.Message.platformTransfer orgId correlationId
 
-         getSagaRef correlationId <! msg
+         getSagaRef () <! msg
 
          return ignored ()
       | ScheduleDomesticTransfer transfer ->
@@ -279,9 +277,7 @@ let actorProps
                      CorrelationId = correlationId
                      SagaMessage =
                         DomesticTransferSaga.DomesticTransferSagaEvent.ScheduledJobExecuted
-                        |> AppSaga.Event.DomesticTransfer
-                        |> SagaEvent.create orgId correlationId
-                        |> SagaMessage.Event
+                        |> AppSaga.Message.domesticTransfer orgId correlationId
                   |}
                },
                trigger
@@ -291,11 +287,9 @@ let actorProps
 
          let msg =
             DomesticTransferSaga.DomesticTransferSagaEvent.ScheduledJobCreated
-            |> AppSaga.Event.DomesticTransfer
-            |> SagaEvent.create orgId correlationId
-            |> SagaMessage.Event
+            |> AppSaga.Message.domesticTransfer orgId correlationId
 
-         getSagaRef correlationId <! msg
+         getSagaRef () <! msg
 
          return ignored ()
    }

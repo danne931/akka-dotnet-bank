@@ -5,10 +5,11 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Akka" Version="1.5.43" />
-    <PackageVersion Include="Akka.Cluster" Version="1.5.43" />
+    <PackageVersion Include="Akka" Version="1.5.44" />
+    <PackageVersion Include="Akka.Cluster" Version="1.5.44" />
+    <PackageVersion Include="Akka.Cluster.Sharding" Version="1.5.44" />
     <PackageVersion Include="Akka.Cluster.Hosting" Version="1.5.42" />
-    <PackageVersion Include="Akka.DependencyInjection" Version="1.5.43" />
+    <PackageVersion Include="Akka.DependencyInjection" Version="1.5.44" />
     <PackageVersion Include="Akka.Discovery.KubernetesApi" Version="1.5.42" />
     <PackageVersion Include="Akka.HealthCheck.Hosting.Web" Version="1.5.37" />
     <PackageVersion Include="Akka.Hosting" Version="1.5.42" />

@@ -70,7 +70,7 @@ type CardExpiration = { Month: int; Year: int }
 
 module CardExpiration =
    let create () : CardExpiration =
-      let exp = DateTime.Now.AddYears(3)
+      let exp = DateTime.Now.AddYears 3
       { Month = exp.Month; Year = exp.Year }
 
 type Card = {
@@ -89,6 +89,11 @@ type Card = {
 
    member x.IsExpired() =
       DateTime(x.Expiration.Year, x.Expiration.Month, 1) <= DateTime.UtcNow
+
+   member x.IsPending =
+      match x.Status with
+      | CardStatus.Pending -> true
+      | _ -> false
 
    member x.IsFrozen =
       match x.Status with

@@ -138,7 +138,7 @@ let actorProps (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>) =
             | CheckProgress _ when state.Progress <> InProgress -> ignored ()
             | CheckProgress check ->
                logInfo $"Progress check: {check}"
-               let time = TimeSpan.FromSeconds 30
+               let time = TimeSpan.FromSeconds 30.
 
                let maxChecks = 3
 
@@ -179,7 +179,7 @@ let actorProps (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>) =
                   ref <! Stub.depositMessage accountId
                   ref <! Stub.depositMessage accountId
 
-               mailbox.Schedule (TimeSpan.FromMinutes 1) mailbox.Self
+               mailbox.Schedule (TimeSpan.FromMinutes 1.) mailbox.Self
                <| CheckProgress {
                   RemainingAccountTests = state.RemainingCount
                   NumberOfProgressChecks = 0

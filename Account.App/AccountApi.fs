@@ -83,10 +83,12 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
 
    let! envelope = validation |> Result.mapError Err.ValidationError
 
-   let ref =
-      AccountActor.get system (ParentAccountId.fromEntityId envelope.EntityId)
+   let msg =
+      GuaranteedDelivery.message
+         (EntityId.get envelope.EntityId)
+         (AccountMessage.StateChange command)
 
-   ref <! AccountMessage.StateChange command
+   AccountActor.getGuaranteedDeliveryProducerRef system <! msg
 
    return envelope
 }

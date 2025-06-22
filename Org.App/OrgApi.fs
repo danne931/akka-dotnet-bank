@@ -47,10 +47,16 @@ let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
          ]
          |> Error
 
-   let! res = validation |> Result.mapError Err.ValidationError
-   let ref = OrgActor.get system res.OrgId
-   ref <! OrgMessage.StateChange command
-   return res
+   let! envelope = validation |> Result.mapError Err.ValidationError
+
+   let msg =
+      GuaranteedDelivery.message
+         (EntityId.get envelope.EntityId)
+         (OrgMessage.StateChange command)
+
+   OrgActor.getGuaranteedDeliveryProducerRef system <! msg
+
+   return envelope
 }
 
 type private OrgDBResult =

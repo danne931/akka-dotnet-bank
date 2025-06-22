@@ -39,7 +39,7 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (networkRequest:
       PartnerBankServiceMessage -> Task<Result<PartnerBankResponse, Err>>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -59,7 +59,6 @@ let actorProps
                let metadata = queueMessage.Metadata
                let corrId = metadata.CorrelationId
                let orgId = metadata.OrgId
-               let txnSagaRef = getSagaRef corrId
 
                match queueMessage, response with
                | PartnerBankServiceMessage.LinkAccount req,
@@ -69,7 +68,7 @@ let actorProps
                      |> OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse
                      |> AppSaga.Message.orgOnboard orgId corrId
 
-                  txnSagaRef <! msg
+                  getSagaRef () <! msg
                | PartnerBankServiceMessage.Purchase req,
                  PartnerBankResponse.Purchase res ->
                   let msg =
@@ -77,7 +76,7 @@ let actorProps
                      |> PurchaseSagaEvent.PartnerBankSyncResponse
                      |> AppSaga.Message.purchase orgId corrId
 
-                  txnSagaRef <! msg
+                  getSagaRef () <! msg
                | PartnerBankServiceMessage.TransferBetweenOrganizations req,
                  PartnerBankResponse.TransferBetweenOrganizations res ->
                   let msg =
@@ -91,7 +90,7 @@ let actorProps
                         |> PlatformPaymentSagaEvent.PartnerBankSyncResponse
                         |> AppSaga.Message.platformPayment orgId corrId
 
-                  txnSagaRef <! msg
+                  getSagaRef () <! msg
                | _ -> logError mailbox "Partner Bank Sync: Mixed req/res."
 
                response)
@@ -148,7 +147,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps

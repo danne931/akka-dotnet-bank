@@ -3,7 +3,6 @@ module CardIssuerServiceActor
 open System
 open System.Threading.Tasks
 open Akkling
-open Akkling.Cluster.Sharding
 open Akka.Actor
 open Akkling.Streams
 open Akka.Streams.Amqp.RabbitMq
@@ -53,7 +52,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (networkRequest: CardIssuerMessage -> Task<Result<CardIssuerResponse, Err>>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts = {
@@ -64,11 +63,10 @@ let actorProps
       queueMessageToActionRequest = fun _ msg -> Task.FromResult(Some msg)
       onSuccessFlow =
          Flow.map
-            (fun (mailbox, (queueMessage: CardIssuerMessage), response) ->
+            (fun (mailbox, queueMessage: CardIssuerMessage, response) ->
                let metadata = queueMessage.Metadata
                let corrId = metadata.CorrelationId
                let orgId = metadata.OrgId
-               let sagaRef = getSagaRef corrId
 
                match queueMessage, response with
                | CardIssuerMessage.CreateCard req,
@@ -80,14 +78,14 @@ let actorProps
                         |> CardSetupSagaEvent.CardCreateResponse
                         |> AppSaga.Message.cardSetup orgId corrId
 
-                     sagaRef <! msg
+                     getSagaRef () <! msg
                   | SagaReplyTo.EmployeeOnboard ->
                      let onboardingMsg =
                         Ok res.ProviderCardId
                         |> EmployeeOnboardingSagaEvent.CardCreateResponse
                         |> AppSaga.Message.employeeOnboard orgId corrId
 
-                     sagaRef <! onboardingMsg
+                     getSagaRef () <! onboardingMsg
 
                response)
             Flow.id
@@ -107,7 +105,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps

@@ -6,7 +6,6 @@ open Akka.Hosting
 open Akka.Streams
 open Akkling.Streams
 open Akkling
-open Akkling.Cluster.Sharding
 open System
 
 open BillingStatement
@@ -43,7 +42,7 @@ let getBillingCycleReadyAccounts () =
 let private fanOutBillingCycleMessage
    (ctx: Actor<_>)
    (throttle: StreamThrottle)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    =
    task {
       let mat = ctx.System.Materializer()
@@ -87,14 +86,14 @@ let private fanOutBillingCycleMessage
                   CorrelationId = corrId
                }
 
-            getSagaRef corrId <! msg)
+            getSagaRef () <! msg)
 
       return BillingCycleMessage.BillingCycleFinished
    }
 
 let actorProps
    (throttle: StreamThrottle)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    =
    let handler (ctx: Actor<BillingCycleMessage>) =
       function

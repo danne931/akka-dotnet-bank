@@ -4,14 +4,13 @@ module SagaActor
 open Akka.Actor
 open Akka.Persistence
 open Akka.Persistence.Extras
+open Akka.Delivery
 open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
 open System
 
-open Lib.SharedTypes
 open Lib.Types
-open ActorUtil
 open Lib.Saga
 
 type SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga> = {
@@ -29,18 +28,26 @@ type SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga> = {
 
 let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
    (sagaPassivateIdleEntityAfter: TimeSpan)
+   (guaranteedDeliveryConsumerControllerRef:
+      Option<
+         IActorRef<
+            ConsumerController.IConsumerCommand<
+               SagaMessage<'SagaStartEvent, 'SagaEvent>
+             >
+          >
+       >)
    (sagaHandler: SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent>)
    =
    let persistableStartEvent =
-      SagaPersistableEvent<'SagaStartEvent, 'SagaEvent>.StartEvent
+      SagaPersistableEvent<'SagaStartEvent, 'SagaEvent>.StartEvent >> box
 
    let persistableEvent =
-      SagaPersistableEvent<'SagaStartEvent, 'SagaEvent>.Event
+      SagaPersistableEvent<'SagaStartEvent, 'SagaEvent>.Event >> box
 
    let handler (ctx: Eventsourced<obj>) =
-      let logWarning msg = logWarning ctx $"{msg} {ctx.Pid}"
-      let logError msg = logError ctx $"{msg} {ctx.Pid}"
-      let logDebug msg = logDebug ctx $"{msg} {ctx.Pid}"
+      let logWarning msg = logWarning ctx $"{msg}"
+      let logError msg = logError ctx $"{msg}"
+      let logDebug msg = logDebug ctx $"{msg}"
 
       let mutable workCheckTimer: ICancelable option = None
 
@@ -80,9 +87,19 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
 
                return! loop (Some updatedState)
          | :? SnapshotOffer as o -> return! loop (unbox o.Snapshot)
+         | :? ConsumerController.Delivery<
+            SagaMessage<'SagaStartEvent, 'SagaEvent>
+            > as msg ->
+            GuaranteedDelivery.ack msg
+
+            // Send message to parent actor (Persistence Supervisor)
+            // for message command to confirmed event persistence.
+            ctx.Parent() <! msg.Message
          | :? ConfirmableMessageEnvelope as envelope ->
-            let unknownMsg msg =
-               logError $"Unknown message in ConfirmableMessageEnvelope - {msg}"
+            let unhandledMsg msg =
+               logError
+                  $"Unhandled message in ConfirmableMessageEnvelope - {msg}"
+
                unhandled ()
 
             match envelope.Message with
@@ -106,7 +123,7 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                         return ignored ()
                      | Ok _ ->
                         return!
-                           confirmPersist
+                           ActorUtil.confirmPersist
                               ctx
                               envelope.ConfirmationId
                               (persistableStartEvent startEvent)
@@ -127,12 +144,12 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                         return ignored ()
                      | Ok _ ->
                         return!
-                           confirmPersist
+                           ActorUtil.confirmPersist
                               ctx
                               envelope.ConfirmationId
                               (persistableEvent evt)
-               | _ -> return unknownMsg (box msg)
-            | msg -> return unknownMsg msg
+               | other -> unhandledMsg other
+            | other -> unhandledMsg other
          | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
             match msg with
             | SagaMessage.GetSaga ->
@@ -153,7 +170,6 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                            saga.SagaId
                            (sagaHandler.getResetInProgressActivitiesEvent saga)
                         |> persistableEvent
-                        |> box
                      )
                   | None -> ignored ()
             | SagaMessage.CheckForRemainingWork ->
@@ -187,7 +203,6 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                               saga.SagaId
                               (sagaHandler.getEvaluateRemainingWorkEvent saga)
                            |> persistableEvent
-                           |> box
                         )
                      | Some timeout when timeout < sagaPassivateIdleEntityAfter ->
                         logDebug "No remaining saga work at this time"
@@ -201,6 +216,23 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                         // wait for the SagaAlarmClockActor to wake the
                         // actor back up to check for remaining work.
                         passivate ()
+            // Some messages are sent through traditional AtMostOnceDelivery via
+            // a reference to the cluster sharded entity ref rather than Akka.Delivery
+            // AtLeastOnceDelivery producer ref so will not hit the
+            // ConsumerController.Delivery match case above so need to send message
+            // to parent actor (Persistence Supervisor) so the command gets wrapped in a
+            // ConfirmableMessageEnvelope for Akka.Persistence.Extras.Confirmation/
+            | SagaMessage.Start _
+            | SagaMessage.Event _ ->
+               if guaranteedDeliveryConsumerControllerRef.IsSome then
+                  logError
+                     "Expects saga message to be delivered in GuaranteedDelivery.Message envelope."
+
+                  unhandled ()
+               else
+                  ctx.Parent() <! msg
+                  return ignored ()
+
          // Event replay on actor start
          | :? SagaPersistableEvent<'SagaStartEvent, 'SagaEvent> as e when
             ctx.IsRecovering()
@@ -221,12 +253,24 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
 
                return! loop (Some updatedState)
          | msg ->
-            PersistentActorEventHandler.handleEvent
+            ActorUtil.PersistentActorEventHandler.handleEvent
                {
-                  PersistentActorEventHandler.init with
+                  ActorUtil.PersistentActorEventHandler.init with
                      LifecyclePreStart =
                         fun _ ->
-                           setWorkCheckTimer (TimeSpan.FromSeconds 10)
+                           setWorkCheckTimer (TimeSpan.FromSeconds 10.)
+
+                           let startConsumerCtrlMsg =
+                              new ConsumerController.Start<
+                                 SagaMessage<'SagaStartEvent, 'SagaEvent>
+                               >(
+                                 untyped ctx.Self
+                              )
+
+                           guaranteedDeliveryConsumerControllerRef
+                           |> Option.iter (fun aref ->
+                              aref <! startConsumerCtrlMsg)
+
                            ignored ()
                      LifecyclePostStop =
                         fun _ ->
@@ -244,21 +288,11 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
 
    propsPersist handler
 
-let get<'SagaStartEvent, 'SagaEvent>
-   (sys: ActorSystem)
-   (correlationId: CorrelationId)
-   : IEntityRef<SagaMessage<'SagaStartEvent, 'SagaEvent>>
-   =
-   getEntityRef
-      sys
-      ClusterMetadata.sagaShardRegion
-      (CorrelationId.get correlationId)
-
 let isPersistableMessage<'SagaStartEvent, 'SagaEvent> (msg: obj) =
    match msg with
    | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
       match msg with
-      | SagaMessage.Start _ -> true
+      | SagaMessage.Start _
       | SagaMessage.Event _ -> true
       | _ -> false
    | _ -> false
@@ -267,10 +301,22 @@ let initProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
    (supervisorOpts: PersistenceSupervisorOptions)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
+   (guaranteedDeliveryConsumerControllerRef:
+      Option<
+         IActorRef<
+            ConsumerController.IConsumerCommand<
+               SagaMessage<'SagaStartEvent, 'SagaEvent>
+             >
+          >
+       >)
    (sagaHandler: SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent>)
    =
-   persistenceSupervisor
+   ActorUtil.persistenceSupervisor
       supervisorOpts
       isPersistableMessage<'SagaStartEvent, 'SagaEvent>
-      (actorProps sagaPassivateIdleEntityAfter sagaHandler)
+      (actorProps
+         sagaPassivateIdleEntityAfter
+         guaranteedDeliveryConsumerControllerRef
+         sagaHandler)
       persistenceId
+      guaranteedDeliveryConsumerControllerRef.IsSome

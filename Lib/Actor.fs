@@ -133,6 +133,8 @@ module ActorMetadata =
 
    type OrgReadModelSyncMarker() = class end
 
+   type OrgGuaranteedDeliveryProducerMarker() = class end
+
    /// Singleton consumes partner bank messages off RabbitMq
    type PartnerBankServiceMarker() = class end
 
@@ -184,17 +186,23 @@ module ActorMetadata =
 
    type SagaMarker() = class end
 
+   type SagaGuaranteedDeliveryProducerMarker() = class end
+
    type SagaReadModelSyncMarker() = class end
 
    type SagaAlarmClockMarker() = class end
 
    type AccountMarker() = class end
 
+   type AccountGuaranteedDeliveryProducerMarker() = class end
+
    type AccountReadModelSyncMarker() = class end
 
    type SchedulingMarker() = class end
 
    type EmployeeMarker() = class end
+
+   type EmployeeGuaranteedDeliveryProducerMarker() = class end
 
    type EmployeeReadModelSyncMarker() = class end
 
@@ -546,6 +554,27 @@ let supervisorProps
          SupervisionStrategy = Some strategy
    }
 
+/// If using a PersistenceSupervisor between a
+/// AtLeastOnceDelivery ShardingConsumerController and a sharded
+/// entity actor we must explicitly forward the Passivate message
+/// to the parent ShardingConsumerController for
+/// passivation to work.
+type PersistenceSupervisorCompatibleWithGuaranteedDelivery
+   (
+      childProps: Props,
+      persistenceId: string,
+      config: PersistenceSupervisionConfig,
+      strategy: SupervisorStrategy
+   ) =
+   inherit PersistenceSupervisor(childProps, persistenceId, config, strategy)
+
+   override _.Receive(message: obj) =
+      match message with
+      | :? Akka.Cluster.Sharding.Passivate as passivate ->
+         PersistenceSupervisor.Context.Parent.Forward passivate
+         true
+      | _ -> base.Receive message
+
 /// <summary>
 /// Create PersistenceSupervisor props to ensure
 /// failed Persist calls are retried and messages received
@@ -559,6 +588,7 @@ let persistenceSupervisor
    (isPersistableMessage: obj -> bool)
    (childProps: Props<_>)
    (persistenceId: string)
+   (compatibleWithGuaranteedDelivery: bool)
    =
    let config =
       PersistenceSupervisionConfig(
@@ -569,16 +599,25 @@ let persistenceSupervisor
          maxBackoff = opts.MaxBackoff
       )
 
-   Props.Create(fun () ->
-      PersistenceSupervisor(
-         childProps.ToProps(),
-         persistenceId,
-         config,
-         strategy =
-            SupervisorStrategy.StoppingStrategy.WithMaxNrOfRetries(
-               opts.MaxNrOfRetries
-            )
-      ))
+   let strategy =
+      SupervisorStrategy.StoppingStrategy.WithMaxNrOfRetries opts.MaxNrOfRetries
+
+   if compatibleWithGuaranteedDelivery then
+      Props.Create(fun () ->
+         new PersistenceSupervisorCompatibleWithGuaranteedDelivery(
+            childProps.ToProps(),
+            persistenceId,
+            config,
+            strategy = strategy
+         ))
+   else
+      Props.Create(fun () ->
+         new PersistenceSupervisor(
+            childProps.ToProps(),
+            persistenceId,
+            config,
+            strategy = strategy
+         ))
 
 /// <summary>
 /// Persist with ack sent to PersistenceSupervisor parent actor.
@@ -586,5 +625,5 @@ let persistenceSupervisor
 let confirmPersist (ctx: Eventsourced<_>) (confirmationId: int64) (evt: obj) =
    evt
    |> Persist
-   |> Effects.andThen (fun _ ->
+   |> Effects.andThen (fun () ->
       ctx.Parent() <! Confirmation(confirmationId, ctx.Pid))

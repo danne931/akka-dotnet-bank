@@ -74,7 +74,7 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (networkRequest:
       KYCMessage -> Task<Result<KYCServiceVerificationResponse, Err>>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -94,13 +94,12 @@ let actorProps
                match queueMessage with
                | KYCMessage.VerifyApplication submission ->
                   let corrId = submission.CorrelationId
-                  let txnSagaRef = getSagaRef corrId
 
                   let msg =
                      OrgOnboardingSagaEvent.KYCResponse(Ok())
                      |> AppSaga.Message.orgOnboard submission.OrgId corrId
 
-                  txnSagaRef <! msg
+                  getSagaRef () <! msg
 
                   response)
             Flow.id
@@ -147,7 +146,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps

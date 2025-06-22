@@ -10,6 +10,7 @@
     <Compile Include="TCP.fs" />
     <Compile Include="Postgres.fs" />
     <Compile Include="Actor.fs" />
+    <Compile Include="AtLeastOnceDeliveryActor.fs" />
     <Compile Include="Queue.fs" />
     <Compile Include="BulkWriteStreamFlow.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
@@ -20,6 +21,7 @@
   <ItemGroup>
     <PackageReference Include="Akka.Hosting" />
     <PackageReference Include="Akka.Cluster" />
+    <PackageReference Include="Akka.Cluster.Sharding" />
     <PackageReference Include="Akka.Persistence.Sql" />
     <PackageReference Include="Akka.Persistence.Extras" />
     <PackageReference Include="Akka.Streams.Amqp.RabbitMq" />

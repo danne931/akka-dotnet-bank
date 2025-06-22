@@ -149,7 +149,7 @@ builder.Services.AddAkka(
                let typedProps =
                   SchedulingActor.actorProps
                   <| registry.Get<QuartzPersistentActor>()
-                  <| AppSaga.getEntityRef system
+                  <| fun () -> AppSaga.getGuaranteedDeliveryProducerRef system
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.scheduling)

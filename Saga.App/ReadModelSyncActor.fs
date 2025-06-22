@@ -62,7 +62,9 @@ let upsertReadModels
    pgTransaction query
 
 let initProps
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaRef:
+      CorrelationId
+         -> IEntityRef<SagaMessage<AppSaga.StartEvent, AppSaga.Event>>)
    (chunking: StreamChunking)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
@@ -72,9 +74,9 @@ let initProps
          GetAggregateIdFromEvent = _.CorrelationId >> CorrelationId.get
          GetAggregate =
             fun correlationId -> task {
-               let aref = getSagaRef (CorrelationId correlationId)
-
-               let! (opt: AppSaga.Saga option) = aref <? SagaMessage.GetSaga
+               let! (opt: AppSaga.Saga option) =
+                  getSagaRef (CorrelationId correlationId)
+                  <? SagaMessage.GetSaga
 
                return opt
             }
