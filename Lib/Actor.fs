@@ -620,10 +620,36 @@ let persistenceSupervisor
          ))
 
 /// <summary>
-/// Persist with ack sent to PersistenceSupervisor parent actor.
+/// Durable persist with ack sent to PersistenceSupervisor parent actor.
+/// A command arrives to the actor and we wish to persist the
+/// subsequent event.
 /// </summary>
-let confirmPersist (ctx: Eventsourced<_>) (confirmationId: int64) (evt: obj) =
+let confirmPersist (ctx: Eventsourced<obj>) (confirmationId: int64) (evt: obj) =
    evt
    |> Persist
    |> Effects.andThen (fun () ->
       ctx.Parent() <! Confirmation(confirmationId, ctx.Pid))
+
+/// <summary>
+/// Durable PersistAll with ack sent to PersistenceSupervisor parent actor.
+/// A command arrives to the actor and produces several events for
+/// that single command.  The group of events is persisted atomically.
+/// </summary>
+let confirmPersistAll
+   (ctx: Eventsourced<obj>)
+   (confirmationId: int64)
+   (evts: obj seq)
+   =
+   // NOTE:
+   // Confirmation is expected for the single command that arrived.
+   // Confirm once for the group of events we are persisting to
+   // avoid producing a persistent effect for each event in the list.
+   // Fixes warning log "Received confirmation for unknown event."
+   let mutable confirmed = false
+
+   evts
+   |> PersistAll
+   |> Effects.andThen (fun () ->
+      if not confirmed then
+         confirmed <- true
+         ctx.Parent() <! Confirmation(confirmationId, ctx.Pid))

@@ -336,7 +336,7 @@ let onPersisted
 
 let persistInternalTransferWithinOrgEvent
    (logError: string -> unit)
-   (confirmPersist: AccountMessage -> PersistentEffect<obj>)
+   (confirmPersistAll: AccountMessage seq -> PersistentEffect<obj>)
    (transfer: BankEvent<InternalTransferWithinOrgDeducted>)
    (state: ParentAccountSnapshot)
    : Effect<obj>
@@ -375,28 +375,33 @@ let persistInternalTransferWithinOrgEvent
 
       match autoTransferStateTransitions with
       | Ok None ->
-         confirmPersist toConfirm
-         <@> Persist(AccountMessage.Event transferDepositEvt)
+         confirmPersistAll [
+            toConfirm
+            AccountMessage.Event transferDepositEvt
+         ]
       | Error(_, err) ->
          logError
             $"Will not persist auto transfers due to state transition error: {err}"
 
-         confirmPersist toConfirm
-         <@> Persist(AccountMessage.Event transferDepositEvt)
+         confirmPersistAll [
+            toConfirm
+            AccountMessage.Event transferDepositEvt
+         ]
       | Ok(Some(_, autoTransferEvts)) ->
          let evts =
-            List.map
-               (AccountMessage.Event >> box)
-               (transferDepositEvt :: autoTransferEvts)
+            toConfirm
+            :: List.map
+                  AccountMessage.Event
+                  (transferDepositEvt :: autoTransferEvts)
 
-         confirmPersist toConfirm <@> PersistAll evts
+         confirmPersistAll evts
 
 let persistEvent
    (logError: string -> unit)
-   (confirmPersist: AccountMessage -> PersistentEffect<obj>)
+   (confirmPersistAll: AccountMessage seq -> PersistentEffect<obj>)
    (evt: AccountEvent)
    (state: ParentAccountSnapshot)
-   : Effect<obj>
+   : PersistentEffect<obj>
    =
    let autoTransferStateTransitions =
       if canProduceAutoTransfer evt then
@@ -410,17 +415,16 @@ let persistEvent
    let toConfirm = AccountMessage.Event evt
 
    match autoTransferStateTransitions with
-   | None -> confirmPersist toConfirm
+   | None -> confirmPersistAll [ toConfirm ]
    | Some(Error(_, err)) ->
       logError
          $"Will not persist auto transfers due to state transition error: {err}"
 
-      confirmPersist toConfirm
+      confirmPersistAll [ toConfirm ]
    | Some(Ok(_, autoTransferEvts)) ->
-      let autoTransferEvts =
-         List.map (AccountMessage.Event >> box) autoTransferEvts
+      let evts = toConfirm :: List.map AccountMessage.Event autoTransferEvts
 
-      confirmPersist toConfirm <@> PersistAll autoTransferEvts
+      confirmPersistAll evts
 
 let actorProps
    (broadcaster: SignalRBroadcast)
@@ -483,7 +487,10 @@ let actorProps
 
                unhandled ()
 
-            let confirmPersist = confirmPersist mailbox envelope.ConfirmationId
+            let confirmPersistAll (evts: AccountMessage seq) =
+               evts
+               |> Seq.map box
+               |> confirmPersistAll mailbox envelope.ConfirmationId
 
             match envelope.Message with
             | :? AccountMessage as msg ->
@@ -497,11 +504,11 @@ let actorProps
                      return!
                         persistInternalTransferWithinOrgEvent
                            logError
-                           confirmPersist
+                           confirmPersistAll
                            transfer
                            state
                   | Ok(evt, state) ->
-                     return! persistEvent logError confirmPersist evt state
+                     return! persistEvent logError confirmPersistAll evt state
                | msg -> return unhandledMsg msg
             | msg -> return unhandledMsg msg
          | :? AccountMessage as msg ->
