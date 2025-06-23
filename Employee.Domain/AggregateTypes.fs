@@ -131,7 +131,6 @@ module EmployeeEnvelope =
 type EmployeeMessage =
    | GetEmployee
    | StateChange of EmployeeCommand
-   | Event of EmployeeEvent
    | Delete
 
 type Employee = {

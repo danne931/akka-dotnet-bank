@@ -193,7 +193,6 @@ type OrgMessage =
    | GetCommandApprovalDailyAccrualByInitiatedBy of InitiatedById
    | ApprovableRequest of ApprovableCommand
    | StateChange of OrgCommand
-   | Event of OrgEvent
 
 type KYCApplication = {
    OrgId: OrgId

@@ -30,14 +30,14 @@ open Bank.Scheduler
 
 type OrganizationEventPersistenceAdapter() =
    let envelopeFromJournal (entry: obj) : Envelope =
-      let (OrgMessage.Event evt) = unbox entry
+      let evt: OrgEvent = unbox entry
       let _, envelope = OrgEnvelope.unwrap evt
       envelope
 
    interface IEventAdapter with
-      member x.Manifest(evt: obj) = envelopeFromJournal(evt).EventName
+      member _.Manifest(evt: obj) = envelopeFromJournal(evt).EventName
 
-      member x.ToJournal(evt: obj) : obj =
+      member _.ToJournal(evt: obj) : obj =
          let envelope = envelopeFromJournal evt
 
          Tagged(
@@ -47,19 +47,19 @@ type OrganizationEventPersistenceAdapter() =
                .Add(envelope.EventName)
          )
 
-      member x.FromJournal(evt: obj, manifest: string) : IEventSequence =
-         EventSequence.Single(evt)
+      member _.FromJournal(evt: obj, manifest: string) : IEventSequence =
+         EventSequence.Single evt
 
 type AccountEventPersistenceAdapter() =
    let envelopeFromJournal (entry: obj) : Envelope =
-      let (AccountMessage.Event evt) = unbox entry
+      let evt: AccountEvent = unbox entry
       let _, envelope = AccountEnvelope.unwrap evt
       envelope
 
    interface IEventAdapter with
-      member x.Manifest(evt: obj) = envelopeFromJournal(evt).EventName
+      member _.Manifest(evt: obj) = envelopeFromJournal(evt).EventName
 
-      member x.ToJournal(evt: obj) : obj =
+      member _.ToJournal(evt: obj) : obj =
          let envelope = envelopeFromJournal evt
 
          Tagged(
@@ -69,19 +69,19 @@ type AccountEventPersistenceAdapter() =
                .Add(envelope.EventName)
          )
 
-      member x.FromJournal(evt: obj, manifest: string) : IEventSequence =
+      member _.FromJournal(evt: obj, manifest: string) : IEventSequence =
          EventSequence.Single(evt)
 
 type EmployeeEventPersistenceAdapter() =
    let envelopeFromJournal (entry: obj) : Envelope =
-      let (EmployeeMessage.Event evt) = unbox entry
+      let evt: EmployeeEvent = unbox entry
       let _, envelope = EmployeeEnvelope.unwrap evt
       envelope
 
    interface IEventAdapter with
-      member x.Manifest(evt: obj) = envelopeFromJournal(evt).EventName
+      member _.Manifest(evt: obj) = envelopeFromJournal(evt).EventName
 
-      member x.ToJournal(evt: obj) : obj =
+      member _.ToJournal(evt: obj) : obj =
          let envelope = envelopeFromJournal evt
 
          Tagged(
@@ -91,21 +91,21 @@ type EmployeeEventPersistenceAdapter() =
                .Add(envelope.EventName)
          )
 
-      member x.FromJournal(evt: obj, manifest: string) : IEventSequence =
-         EventSequence.Single(evt)
+      member _.FromJournal(evt: obj, manifest: string) : IEventSequence =
+         EventSequence.Single evt
 
 type SagaEventPersistenceAdapter() =
    let eventName (entry: obj) : string =
-      let (evt: AppSaga.AppSagaPersistableEvent) = unbox entry
+      let evt: AppSaga.AppSagaPersistableEvent = unbox entry
 
       match evt with
       | SagaPersistableEvent.StartEvent e -> e.Data.Name
       | SagaPersistableEvent.Event e -> e.Data.Name
 
    interface IEventAdapter with
-      member x.Manifest(evt: obj) = eventName evt
+      member _.Manifest(evt: obj) = eventName evt
 
-      member x.ToJournal(evt: obj) : obj =
+      member _.ToJournal(evt: obj) : obj =
          let evtName = eventName evt
 
          Tagged(
@@ -113,8 +113,8 @@ type SagaEventPersistenceAdapter() =
             Set.empty<string>.Add(Constants.AKKA_APP_SAGA_JOURNAL).Add(evtName)
          )
 
-      member x.FromJournal(evt: obj, manifest: string) : IEventSequence =
-         EventSequence.Single(evt)
+      member _.FromJournal(evt: obj, manifest: string) : IEventSequence =
+         EventSequence.Single evt
 
 type private OrgShardEnvelope = {
    EntityId: string
@@ -145,28 +145,24 @@ type BankSerializer(system: ExtendedActorSystem) =
 
    static member Name = "bank-serializer"
 
-   override x.Identifier = 931
+   override _.Identifier = 931
 
-   override x.Manifest(o: obj) =
+   override _.Manifest(o: obj) =
       match o with
       | :? ConfirmableMessageEnvelope -> "ConfirmableMessageEnvelope"
       | :? Lib.ReadModelSyncActor.State -> "ReadModelSyncState"
       | :? CommandApprovalDailyAccrual -> "CommandApprovalDailyAccrual"
       | :? OrgSnapshot -> "OrgSnapshot"
       | :? Option<Org> -> "OrgOption"
-      | :? OrgMessage as msg ->
-         match msg with
-         | OrgMessage.Event _ -> "OrgEvent"
-         | _ -> "OrgMessage"
+      | :? OrgEvent -> "OrgEvent"
+      | :? OrgMessage -> "OrgMessage"
       | :? KYCMessage -> "KYCMessage"
       | :? PartnerBankServiceMessage -> "PartnerBankServiceMessage"
       | :? CardIssuerMessage -> "CardIssuerServiceMessage"
       | :? EmployeeSnapshot -> "EmployeeSnapshot"
       | :? Option<Employee> -> "EmployeeOption"
-      | :? EmployeeMessage as msg ->
-         match msg with
-         | EmployeeMessage.Event _ -> "EmployeeEvent"
-         | _ -> "EmployeeMessage"
+      | :? EmployeeMessage -> "EmployeeMessage"
+      | :? EmployeeEvent -> "EmployeeEvent"
       | :? SagaAlarmClockActor.Message -> "SagaAlarmClockMessage"
       | :? SagaMessage<AppSaga.StartEvent, AppSaga.Event> -> "AppSagaMessage"
       | :? AppSaga.AppSagaPersistableEvent -> "AppSagaEvent"
@@ -181,10 +177,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? Option<Account> -> "AccountOption"
       | :? List<Account> -> "AccountList"
       | :? Map<AccountId, Account> -> "AccountMap"
-      | :? AccountMessage as msg ->
-         match msg with
-         | AccountMessage.Event _ -> "AccountEvent"
-         | _ -> "AccountMessage"
+      | :? AccountEvent -> "AccountEvent"
+      | :? AccountMessage -> "AccountMessage"
       | :? SignalRActor.Msg -> "SignalRMessage"
       | :? CircuitBreakerState -> "CircuitBreakerActorState"
       | :? CircuitBreakerEvent -> "CircuitBreakerEvent"
@@ -203,7 +197,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? Email.EmailMessage -> "EmailMessage"
       | _ -> raise <| NotImplementedException()
 
-   override x.ToBinary(o: obj) =
+   override _.ToBinary(o: obj) =
       match o with
       // Akka ShardRegionProxy defined in Akka.Hosting does not
       // recognize Akkling ShardEnvelope as Akka ShardingEnvelope
@@ -270,26 +264,22 @@ type BankSerializer(system: ExtendedActorSystem) =
       // AccountActor persistence snapshot.
       | :? ParentAccountSnapshot as o ->
          JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
+      // AccountEvent actor message replay
+      | :? AccountEvent as e ->
+         JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
       | :? AccountMessage as msg ->
-         match msg with
-         // AccountEvent actor message replay
-         | AccountMessage.Event e ->
-            JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
-         | msg ->
-            JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+         JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       // EmployeeMessage.GetEmployee response serialized for message sent
       // from employee cluster nodes to Web node.
       | :? Option<Employee>
       // EmployeeActor persistence snapshot.
       | :? EmployeeSnapshot as o ->
          JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
+      // EmployeeEvent actor message replay
+      | :? EmployeeEvent as e ->
+         JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
       | :? EmployeeMessage as msg ->
-         match msg with
-         // EmployeeEvent actor message replay
-         | EmployeeMessage.Event e ->
-            JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
-         | msg ->
-            JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+         JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       | :? SagaMessage<AppSaga.StartEvent, AppSaga.Event> as msg ->
          JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       // Saga event persistence
@@ -313,13 +303,11 @@ type BankSerializer(system: ExtendedActorSystem) =
       // OrgActor persistence snapshot.
       | :? OrgSnapshot as o ->
          JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
+      // OrgEvent actor message replay
+      | :? OrgEvent as e ->
+         JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
       | :? OrgMessage as msg ->
-         match msg with
-         // OrgEvent actor message replay
-         | OrgMessage.Event e ->
-            JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
-         | msg ->
-            JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+         JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       | _ -> raise <| NotImplementedException()
 
    (*
@@ -335,7 +323,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       dropped.  Other exceptions will tear down the TCP connection because it can
       be an indication of corrupt bytes from the underlying transport.
    *)
-   override x.FromBinary(bytes: byte[], manifest: string) : obj =
+   override _.FromBinary(bytes: byte[], manifest: string) : obj =
       let deserializeToType =
          match manifest with
          | "ConfirmableMessageEnvelope" -> typeof<ConfirmableMessageEnvelope>

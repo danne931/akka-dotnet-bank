@@ -20,7 +20,7 @@ open SignalRBroadcast
 
 let builder = Env.builder
 
-LogInfra.start builder
+LogInfra.start builder |> ignore
 
 builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
    let system = provider.GetRequiredService<ActorSystem>()
@@ -39,15 +39,15 @@ let journalOpts = AkkaInfra.getJournalOpts ()
 journalOpts.Adapters
    .AddEventAdapter<OrganizationEventPersistenceAdapter>(
       "org-v1",
-      [ typedefof<OrgMessage> ]
+      [ typedefof<OrgEvent> ]
    )
    .AddEventAdapter<AccountEventPersistenceAdapter>(
       "account-v1",
-      [ typedefof<AccountMessage> ]
+      [ typeof<AccountEvent> ]
    )
    .AddEventAdapter<EmployeeEventPersistenceAdapter>(
       "employee-v1",
-      [ typedefof<EmployeeMessage> ]
+      [ typedefof<EmployeeEvent> ]
    )
    .AddEventAdapter<SagaEventPersistenceAdapter>(
       "saga-v1",

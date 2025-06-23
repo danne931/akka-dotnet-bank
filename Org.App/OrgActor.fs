@@ -307,9 +307,7 @@ let actorProps
          let org = state.Info
 
          match msg with
-         | Persisted mailbox e ->
-            let (OrgMessage.Event evt) = unbox e
-
+         | Persisted mailbox (:? OrgEvent as evt) ->
             let previousState = state
             let state = Org.applyEvent state evt
 
@@ -369,7 +367,7 @@ let actorProps
                   let validation = Org.stateTransition state cmd
 
                   match validation with
-                  | Ok(evt, _) -> return! confirmPersist (OrgMessage.Event evt)
+                  | Ok(evt, _) -> return! confirmPersist evt
                   | Error err -> handleValidationError org.OrgId cmd err
                | msg -> return unknownMsg msg
             | msg -> return unknownMsg msg

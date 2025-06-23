@@ -615,7 +615,6 @@ type AccountMessage =
    | GetAccount
    | GetVirtualAccount of AccountId
    | StateChange of AccountCommand
-   | Event of AccountEvent
    | AutoTransferCompute of AutomaticTransfer.Frequency * AccountId
    | ProcessBillingStatement of CorrelationId * BillingPeriod
    | DomesticTransfersRetryableUponRecipientEdit of

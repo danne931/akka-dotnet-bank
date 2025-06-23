@@ -208,8 +208,7 @@ let actorProps
             handleValidationError broadcaster mailbox getSagaRef employee
 
          match box msg with
-         | Persisted mailbox e ->
-            let (EmployeeMessage.Event evt) = unbox e
+         | Persisted mailbox (:? EmployeeEvent as evt) ->
             let state = Employee.applyEvent state evt
             let employee = state.Info
 
@@ -240,7 +239,7 @@ let actorProps
                         PersistenceSupervisor.confirmPersist
                            mailbox
                            envelope.ConfirmationId
-                           (EmployeeMessage.Event evt)
+                           evt
                   | Error err -> handleValidationError cmd err
                | msg ->
                   logError
@@ -270,7 +269,6 @@ let actorProps
             | EmployeeMessage.StateChange _ ->
                mailbox.Parent() <! msg
                return ignored ()
-            | _ -> return unhandled ()
          // Event replay on actor start
          | :? EmployeeEvent as e when mailbox.IsRecovering() ->
             return! loop <| Some(Employee.applyEvent state e)
