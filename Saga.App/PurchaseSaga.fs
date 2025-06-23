@@ -367,21 +367,17 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type PersistenceHandlerDependencies = {
-   getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
+type PersistenceStartHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
-   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
-   cardNetworkConfirmPurchase: PurchaseInfo -> Async<PurchaseSagaEvent>
    cardNetworkRejectPurchase:
       PurchaseInfo -> PurchaseFailReason -> Async<PurchaseSagaEvent>
    sendMessageToSelf: PurchaseInfo -> Async<PurchaseSagaEvent> -> unit
 }
-
 // Purchase Saga is started by either a PurchaseRejectedByCard event
 // or a DeductedCardFunds coming from the Employee actor.
 let onStartEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (dep: PersistenceStartHandlerDependencies)
    (evt: PurchaseSagaStartEvent)
    =
    match evt with
@@ -413,6 +409,17 @@ let onStartEventPersisted
       // debit request and wait for approval before
       // sending a response to issuing card network.
       dep.getAccountRef info.ParentAccountId <! msg
+
+type PersistenceHandlerDependencies = {
+   getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
+   getEmailRef: unit -> IActorRef<EmailMessage>
+   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
+   cardNetworkConfirmPurchase: PurchaseInfo -> Async<PurchaseSagaEvent>
+   cardNetworkRejectPurchase:
+      PurchaseInfo -> PurchaseFailReason -> Async<PurchaseSagaEvent>
+   sendMessageToSelf: PurchaseInfo -> Async<PurchaseSagaEvent> -> unit
+}
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)

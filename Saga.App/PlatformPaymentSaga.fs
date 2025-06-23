@@ -375,15 +375,6 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type PersistenceHandlerDependencies = {
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
-   refundPaymentToThirdParty:
-      PlatformPaymentBaseInfo -> ThirdPartyPaymentMethod -> Async<Event>
-   sendMessageToSelf: PlatformPaymentBaseInfo -> Async<Event> -> unit
-}
-
 let notifyPayerOfPaymentRequest emailRef (payment: PlatformPaymentBaseInfo) =
    let msg =
       EmailMessage.create
@@ -398,12 +389,21 @@ let notifyPayerOfPaymentRequest emailRef (payment: PlatformPaymentBaseInfo) =
    emailRef <! msg
 
 let onStartEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (getEmailRef: unit -> IActorRef<EmailMessage>)
    (evt: StartEvent)
    =
    match evt with
    | StartEvent.PaymentRequested e ->
-      notifyPayerOfPaymentRequest (dep.getEmailRef ()) e.Data.BaseInfo
+      notifyPayerOfPaymentRequest (getEmailRef ()) e.Data.BaseInfo
+
+type PersistenceHandlerDependencies = {
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
+   getEmailRef: unit -> IActorRef<EmailMessage>
+   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
+   refundPaymentToThirdParty:
+      PlatformPaymentBaseInfo -> ThirdPartyPaymentMethod -> Async<Event>
+   sendMessageToSelf: PlatformPaymentBaseInfo -> Async<Event> -> unit
+}
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)

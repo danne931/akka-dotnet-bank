@@ -328,19 +328,15 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type PersistenceHandlerDependencies = {
-   getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getOrgRef: OrgId -> IEntityRef<OrgMessage>
+type PersistenceStartHandlerDependencies = {
    getEmailRef: unit -> IActorRef<EmailMessage>
    getKYCServiceRef: unit -> IActorRef<KYCMessage>
-   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
 }
 
 // Org onboarding saga is started by a submitted application
 // event coming from the Org actor.
 let onStartEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (dep: PersistenceStartHandlerDependencies)
    (evt: OrgOnboardingSagaStartEvent)
    =
    match evt with
@@ -365,6 +361,14 @@ let onStartEventPersisted
          CorrelationId = evt.CorrelationId
          Application = info
       }
+
+type PersistenceHandlerDependencies = {
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
+   getOrgRef: OrgId -> IEntityRef<OrgMessage>
+   getEmailRef: unit -> IActorRef<EmailMessage>
+   getKYCServiceRef: unit -> IActorRef<KYCMessage>
+   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
+}
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)

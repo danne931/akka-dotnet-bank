@@ -220,14 +220,8 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type PersistenceHandlerDependencies = {
-   getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>
-}
-
 let onStartEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>)
    (evt: CardSetupSagaStartEvent)
    =
    let request = {
@@ -240,7 +234,13 @@ let onStartEventPersisted
       }
    }
 
-   dep.getCardIssuerServiceRef () <! CardIssuerMessage.CreateCard request
+   getCardIssuerServiceRef () <! CardIssuerMessage.CreateCard request
+
+type PersistenceHandlerDependencies = {
+   getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
+   getEmailRef: unit -> IActorRef<EmailMessage>
+   getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>
+}
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)

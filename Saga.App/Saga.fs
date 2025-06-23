@@ -635,12 +635,6 @@ let sagaHandler
          fun mailbox evt state ->
             let getEmailRef () = getEmailRef mailbox.System
 
-            let getPartnerBankServiceRef () =
-               getPartnerBankServiceRef mailbox.System
-
-            let getCardIssuerServiceRef () =
-               getCardIssuerServiceRef mailbox.System
-
             let notHandled () =
                logError
                   mailbox
@@ -648,114 +642,84 @@ let sagaHandler
 
             match evt with
             | StartEvent.OrgOnboarding e ->
-               let deps: OrgOnboardingSaga.PersistenceHandlerDependencies = {
-                  getOrgRef = getOrgRef
-                  getEmployeeRef = getEmployeeRef
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  getKYCServiceRef = fun () -> getKYCServiceRef mailbox.System
-                  getPartnerBankServiceRef = getPartnerBankServiceRef
-               }
-
-               match state with
-               | Saga.OrgOnboarding _ ->
-                  OrgOnboardingSaga.onStartEventPersisted deps e
-               | _ -> notHandled ()
+               if state.IsOrgOnboarding then
+                  OrgOnboardingSaga.onStartEventPersisted
+                     {
+                        getEmailRef = getEmailRef
+                        getKYCServiceRef =
+                           fun () -> getKYCServiceRef mailbox.System
+                     }
+                     e
+               else
+                  notHandled ()
             | StartEvent.EmployeeOnboarding e ->
-               let deps: EmployeeOnboardingSaga.PersistenceHandlerDependencies = {
-                  getOrgRef = getOrgRef
-                  getEmployeeRef = getEmployeeRef
-                  getEmailRef = getEmailRef
-                  getCardIssuerServiceRef = getCardIssuerServiceRef
-               }
-
-               match state with
-               | Saga.EmployeeOnboarding _ ->
-                  EmployeeOnboardingSaga.onStartEventPersisted deps e
-               | _ -> notHandled ()
+               if state.IsEmployeeOnboarding then
+                  EmployeeOnboardingSaga.onStartEventPersisted
+                     {
+                        getOrgRef = getOrgRef
+                        getEmailRef = getEmailRef
+                     }
+                     e
+               else
+                  notHandled ()
             | StartEvent.CardSetup e ->
-               let deps: CardSetupSaga.PersistenceHandlerDependencies = {
-                  getEmployeeRef = getEmployeeRef
-                  getEmailRef = getEmailRef
-                  getCardIssuerServiceRef = getCardIssuerServiceRef
-               }
-
-               match state with
-               | Saga.CardSetup _ -> CardSetupSaga.onStartEventPersisted deps e
-               | _ -> notHandled ()
+               if state.IsCardSetup then
+                  CardSetupSaga.onStartEventPersisted
+                     (fun () -> getCardIssuerServiceRef mailbox.System)
+                     e
+               else
+                  notHandled ()
             | StartEvent.DomesticTransfer evt ->
-               match state with
-               | Saga.DomesticTransfer _ ->
+               if state.IsDomesticTransfer then
                   DomesticTransferSaga.onStartEventPersisted
                      (fun () -> getDomesticTransferRef mailbox.System)
                      evt
-               | _ -> notHandled ()
+               else
+                  notHandled ()
             | StartEvent.PlatformTransfer evt ->
-               match state with
-               | Saga.PlatformTransfer _ ->
+               if state.IsPlatformTransfer then
                   PlatformTransferSaga.onStartEventPersisted getAccountRef evt
-               | _ -> notHandled ()
+               else
+                  notHandled ()
             | StartEvent.PlatformPayment evt ->
-               let deps: PlatformPaymentSaga.PersistenceHandlerDependencies = {
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  getPartnerBankServiceRef = getPartnerBankServiceRef
-                  refundPaymentToThirdParty =
-                     PlatformPaymentSaga.refundPaymentToThirdParty
-                  sendMessageToSelf =
-                     fun payment asyncEvt ->
-                        let orgId = payment.Payee.OrgId
-                        let corrId = PaymentId.toCorrelationId payment.Id
-
-                        let asyncMsg =
-                           asyncEvt
-                           |> Async.map (Message.platformPayment orgId corrId)
-                           |> Async.map _.Message
-
-                        mailbox.Parent() <!| asyncMsg
-               }
-
-               match state with
-               | Saga.PlatformPayment _ ->
-                  PlatformPaymentSaga.onStartEventPersisted deps evt
-               | _ -> notHandled ()
+               if state.IsPlatformPayment then
+                  PlatformPaymentSaga.onStartEventPersisted getEmailRef evt
+               else
+                  notHandled ()
             | StartEvent.Billing e ->
-               let deps: BillingSaga.PersistenceHandlerDependencies = {
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-               }
-
-               match state with
-               | Saga.Billing _ -> BillingSaga.onStartEventPersisted deps e
-               | _ -> notHandled ()
+               if state.IsBilling then
+                  BillingSaga.onStartEventPersisted
+                     {
+                        getAccountRef = getAccountRef
+                        getEmailRef = getEmailRef
+                     }
+                     e
+               else
+                  notHandled ()
             | StartEvent.Purchase e ->
-               let purchaseDeps: PurchaseSaga.PersistenceHandlerDependencies = {
-                  getEmployeeRef = getEmployeeRef
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  getPartnerBankServiceRef = getPartnerBankServiceRef
-                  cardNetworkConfirmPurchase =
-                     PurchaseSaga.cardNetworkConfirmPurchase
-                  cardNetworkRejectPurchase =
-                     PurchaseSaga.cardNetworkRejectPurchase
-                  sendMessageToSelf =
-                     fun purchase asyncEvt ->
-                        let asyncMsg =
-                           asyncEvt
-                           |> Async.map (
-                              Message.purchase
-                                 purchase.OrgId
-                                 purchase.CorrelationId
-                           )
-                           |> Async.map _.Message
+               if state.IsPurchase then
+                  PurchaseSaga.onStartEventPersisted
+                     {
+                        getAccountRef = getAccountRef
+                        getEmailRef = getEmailRef
+                        cardNetworkRejectPurchase =
+                           PurchaseSaga.cardNetworkRejectPurchase
+                        sendMessageToSelf =
+                           fun purchase asyncEvt ->
+                              let asyncMsg =
+                                 asyncEvt
+                                 |> Async.map (
+                                    Message.purchase
+                                       purchase.OrgId
+                                       purchase.CorrelationId
+                                 )
+                                 |> Async.map _.Message
 
-                        mailbox.Parent() <!| asyncMsg
-               }
-
-               match state with
-               | Saga.Purchase _ ->
-                  PurchaseSaga.onStartEventPersisted purchaseDeps e
-               | _ -> notHandled ()
+                              mailbox.Parent() <!| asyncMsg
+                     }
+                     e
+               else
+                  notHandled ()
       onEventPersisted =
          fun mailbox evt priorState state ->
             let getEmailRef () = getEmailRef mailbox.System
@@ -774,32 +738,32 @@ let sagaHandler
 
             match evt with
             | Event.OrgOnboarding e ->
-               let deps: OrgOnboardingSaga.PersistenceHandlerDependencies = {
-                  getOrgRef = getOrgRef
-                  getEmployeeRef = getEmployeeRef
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  getKYCServiceRef = fun () -> getKYCServiceRef mailbox.System
-                  getPartnerBankServiceRef = getPartnerBankServiceRef
-               }
-
                match priorState, state with
                | Saga.OrgOnboarding priorState, Saga.OrgOnboarding state ->
-                  OrgOnboardingSaga.onEventPersisted deps priorState state e
+                  OrgOnboardingSaga.onEventPersisted
+                     {
+                        getOrgRef = getOrgRef
+                        getAccountRef = getAccountRef
+                        getEmailRef = getEmailRef
+                        getKYCServiceRef =
+                           fun () -> getKYCServiceRef mailbox.System
+                        getPartnerBankServiceRef = getPartnerBankServiceRef
+                     }
+                     priorState
+                     state
+                     e
                | _ -> notHandled ()
             | Event.EmployeeOnboarding e ->
-               let deps: EmployeeOnboardingSaga.PersistenceHandlerDependencies = {
-                  getOrgRef = getOrgRef
-                  getEmployeeRef = getEmployeeRef
-                  getEmailRef = getEmailRef
-                  getCardIssuerServiceRef = getCardIssuerServiceRef
-               }
-
                match priorState, state with
                | Saga.EmployeeOnboarding priorState,
                  Saga.EmployeeOnboarding state ->
                   EmployeeOnboardingSaga.onEventPersisted
-                     deps
+                     {
+                        getOrgRef = getOrgRef
+                        getEmployeeRef = getEmployeeRef
+                        getEmailRef = getEmailRef
+                        getCardIssuerServiceRef = getCardIssuerServiceRef
+                     }
                      priorState
                      state
                      e
