@@ -6,7 +6,6 @@ open Akka.Hosting
 open Akka.Streams
 open Akkling.Streams
 open Akkling
-open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
@@ -83,7 +82,7 @@ let getSleepingSagas () = asyncResultOption {
       $"""
       SELECT {Fields.id} FROM {table}
       WHERE
-         {Fields.status} IN ('InProgress', 'Compensating')
+         {Fields.status} IN ('Scheduled', 'InProgress', 'Compensating')
          AND {Fields.inactivityTimeout} IS NOT NULL
          -- Indicates some time, greater than the inactivity timeout, has
          -- elapsed since a saga action was invoked.  Time to wake the saga

@@ -24,8 +24,7 @@ type DomesticTransferSagaStartEvent =
 
 [<RequireQualifiedAccess>]
 type DomesticTransferSagaEvent =
-   | ScheduledJobCreated
-   | ScheduledJobExecuted
+   | ScheduledTransferActivated
    | SenderReservedFunds
    | SenderReleasedReservedFunds
    | TransferProcessorProgressUpdate of DomesticTransferThirdPartyUpdate
@@ -37,10 +36,9 @@ type DomesticTransferSagaEvent =
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
-[<RequireQualifiedAccess>]
+[<RequireQualifiedAccess; CustomEquality; NoComparison>]
 type Activity =
-   | ScheduleTransfer
-   | WaitForScheduledTransferExecution
+   | WaitForScheduledTransferActivation of TimeSpan
    | ReserveSenderFunds
    | ReleaseSenderReservedFunds
    | TransferServiceAck
@@ -52,7 +50,7 @@ type Activity =
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | WaitForScheduledTransferExecution
+         | WaitForScheduledTransferActivation _
          | WaitForDevelopmentTeamFix -> 0
          // Check every 4 hours, 6 times a day for 6 days.
          | WaitForTransferServiceComplete -> 36
@@ -60,7 +58,7 @@ type Activity =
 
       member x.InactivityTimeout =
          match x with
-         | WaitForScheduledTransferExecution
+         | WaitForScheduledTransferActivation time -> Some time
          | WaitForDevelopmentTeamFix -> None
          | WaitForTransferServiceComplete ->
             Some(
@@ -73,8 +71,21 @@ type Activity =
          | SendTransferInitiatedNotification -> Some(TimeSpan.FromMinutes 4.)
          | ReserveSenderFunds
          | ReleaseSenderReservedFunds
-         | DeductSenderFunds
-         | ScheduleTransfer -> Some(TimeSpan.FromSeconds 5.)
+         | DeductSenderFunds -> Some(TimeSpan.FromSeconds 5.)
+
+   // Custom equality check so we can, for example, check for completeness
+   // of WaitForScheduledTransferActivation without comparing the inner value.
+   // Ex: activityIsDone (Activity.WaitForScheduledTransferActivation TimeSpan.Zero)
+   override x.Equals compareTo =
+      match compareTo with
+      | :? Activity as compareTo -> x.GetHashCode() = compareTo.GetHashCode()
+      | _ -> false
+
+   override x.GetHashCode() =
+      match x with
+      | WaitForScheduledTransferActivation _ ->
+         hash "WaitForScheduledTransferActivation"
+      | _ -> hash (string x)
 
 type DomesticTransferSaga = {
    StartEvent: DomesticTransferSagaStartEvent
@@ -85,8 +96,7 @@ type DomesticTransferSaga = {
    ReasonForRetryServiceAck: DomesticTransferFailReason option
 } with
 
-   member x.OriginatedFromSchedule =
-      x.Events |> List.exists _.IsScheduledJobCreated
+   member x.OriginatedFromSchedule = x.StartEvent.IsScheduleTransferRequest
 
    member x.SenderDeductedFunds =
       x.LifeCycle.Completed |> List.exists _.Activity.IsDeductSenderFunds
@@ -142,8 +152,12 @@ let applyStartEvent
       TransferInfo = evt.Data.BaseInfo
       ReasonForRetryServiceAck = None
       LifeCycle =
+         let timeUntil = evt.Data.BaseInfo.ScheduledDate - DateTime.UtcNow
+
          SagaLifeCycle.empty
-         |> SagaLifeCycle.addActivity timestamp Activity.ScheduleTransfer
+         |> SagaLifeCycle.addActivity
+               timestamp
+               (Activity.WaitForScheduledTransferActivation timeUntil)
      }
 
 let applyEvent
@@ -162,18 +176,13 @@ let applyEvent
    }
 
    match evt with
-   | DomesticTransferSagaEvent.ScheduledJobCreated -> {
+   | DomesticTransferSagaEvent.ScheduledTransferActivated -> {
       saga with
          LifeCycle =
             saga.LifeCycle
-            |> finishActivity Activity.ScheduleTransfer
-            |> addActivity Activity.WaitForScheduledTransferExecution
-     }
-   | DomesticTransferSagaEvent.ScheduledJobExecuted -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.WaitForScheduledTransferExecution
+            |> finishActivity (
+               Activity.WaitForScheduledTransferActivation TimeSpan.Zero
+            )
             |> addActivity Activity.ReserveSenderFunds
          Status = DomesticTransferProgress.ProcessingSenderAccountDeduction
      }
@@ -318,10 +327,10 @@ let stateTransition
       match evt with
       | DomesticTransferSagaEvent.EvaluateRemainingWork
       | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> false
-      | DomesticTransferSagaEvent.ScheduledJobCreated ->
-         activityIsDone Activity.ScheduleTransfer
-      | DomesticTransferSagaEvent.ScheduledJobExecuted ->
-         activityIsDone Activity.WaitForScheduledTransferExecution
+      | DomesticTransferSagaEvent.ScheduledTransferActivated ->
+         activityIsDone (
+            Activity.WaitForScheduledTransferActivation TimeSpan.Zero
+         )
       | DomesticTransferSagaEvent.SenderReservedFunds ->
          activityIsDone Activity.ReserveSenderFunds
       | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
@@ -343,16 +352,8 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type PersistenceHandlerDependencies = {
-   getSchedulingRef: unit -> IActorRef<SchedulerMessage>
-   getDomesticTransferRef: unit -> IActorRef<ServiceMessage>
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   logError: string -> unit
-}
-
 let onStartEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (getDomesticTransferRef: unit -> IActorRef<ServiceMessage>)
    (evt: DomesticTransferSagaStartEvent)
    =
    match evt with
@@ -362,10 +363,18 @@ let onStartEventPersisted
       let msg =
          ServiceMessage.TransferRequest(ServiceAction.TransferAck, transfer)
 
-      dep.getDomesticTransferRef () <! msg
-   | DomesticTransferSagaStartEvent.ScheduleTransferRequest e ->
-      dep.getSchedulingRef ()
-      <! SchedulerMessage.ScheduleDomesticTransfer e.Data.BaseInfo
+      getDomesticTransferRef () <! msg
+   | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ -> ()
+
+type PersistenceHandlerDependencies = {
+   getSchedulingRef: unit -> IActorRef<SchedulerMessage>
+   getDomesticTransferRef: unit -> IActorRef<ServiceMessage>
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
+   getEmailRef: unit -> IActorRef<EmailMessage>
+   sendEventToSelf:
+      BaseDomesticTransferInfo -> DomesticTransferSagaEvent -> unit
+   logError: string -> unit
+}
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)
@@ -471,8 +480,7 @@ let onEventPersisted
       dep.getAccountRef info.Sender.ParentAccountId <! msg
 
    match evt with
-   | DomesticTransferSagaEvent.ScheduledJobCreated -> ()
-   | DomesticTransferSagaEvent.ScheduledJobExecuted ->
+   | DomesticTransferSagaEvent.ScheduledTransferActivated ->
       deductFromSenderAccount ()
    | DomesticTransferSagaEvent.SenderReservedFunds ->
       sendTransferToProcessorService ()
@@ -511,9 +519,6 @@ let onEventPersisted
    | DomesticTransferSagaEvent.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
-         | Activity.ScheduleTransfer ->
-            dep.getSchedulingRef ()
-            <! SchedulerMessage.ScheduleDomesticTransfer info
          | Activity.ReserveSenderFunds -> deductFromSenderAccount ()
          | Activity.TransferServiceAck -> sendTransferToProcessorService ()
          | Activity.SendTransferInitiatedNotification ->
@@ -525,5 +530,8 @@ let onEventPersisted
             | _ -> ()
          | Activity.WaitForTransferServiceComplete -> checkOnTransferProgress ()
          | Activity.DeductSenderFunds -> updateTransferAsComplete ()
-         | Activity.WaitForScheduledTransferExecution
+         | Activity.WaitForScheduledTransferActivation _ ->
+            dep.sendEventToSelf
+               currentState.TransferInfo
+               DomesticTransferSagaEvent.ScheduledTransferActivated
          | Activity.WaitForDevelopmentTeamFix -> ()

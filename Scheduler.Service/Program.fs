@@ -37,7 +37,7 @@ builder.Services
             EnvScheduler.config.Quartz.TablePrefix
          )
 
-         store.UsePostgres(Env.config.ConnectionStrings.PostgresAdoFormat)
+         store.UsePostgres Env.config.ConnectionStrings.PostgresAdoFormat
 
          store.UseNewtonsoftJsonSerializer()
 
@@ -92,8 +92,6 @@ builder.Services.AddAkka(
                typedefof<BillingCycleMessage>
                typedefof<AccountClosureMessage>
                typedefof<AutomaticTransfer.Message>
-               typedefof<AccountMessage>
-               typedefof<AppSaga.AppSagaMessage>
                typedefof<SagaAlarmClockActor.Message>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka
@@ -101,12 +99,12 @@ builder.Services.AddAkka(
                //       message extraction.
                typedefof<Akkling.Cluster.Sharding.ShardEnvelope>
             ],
-            fun system -> BankSerializer(system)
+            fun system -> BankSerializer system
          )
          .WithCustomSerializer(
             QuartzSerializer.Name,
             [ typedefof<obj> ],
-            (fun system -> QuartzSerializer(system))
+            (fun system -> QuartzSerializer system)
          )
          .WithShardRegionProxy<ActorMetadata.SagaMarker>(
             ClusterMetadata.sagaShardRegion.name,
@@ -145,11 +143,10 @@ builder.Services.AddAkka(
          )
          .WithSingleton<ActorMetadata.SchedulingMarker>(
             ActorMetadata.scheduling.Name,
-            (fun system registry _ ->
+            (fun _ registry _ ->
                let typedProps =
                   SchedulingActor.actorProps
                   <| registry.Get<QuartzPersistentActor>()
-                  <| fun () -> AppSaga.getGuaranteedDeliveryProducerRef system
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.scheduling)

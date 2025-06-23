@@ -9,7 +9,6 @@ open Lib.Saga
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Email
-open Bank.Scheduler
 open PartnerBank.Service.Domain
 
 [<RequireQualifiedAccess>]
@@ -28,8 +27,7 @@ type PlatformTransferSagaStartEvent =
 
 [<RequireQualifiedAccess>]
 type PlatformTransferSagaEvent =
-   | ScheduledJobCreated
-   | ScheduledJobExecuted
+   | ScheduledTransferActivated
    | SenderReservedFunds of PartnerBankAccountLink
    | SenderUnableToReserveFunds of InternalTransferFailReason
    | RecipientDepositedFunds of PartnerBankAccountLink
@@ -47,10 +45,9 @@ type PlatformTransferSagaEvent =
 type private StartEvent = PlatformTransferSagaStartEvent
 type private Event = PlatformTransferSagaEvent
 
-[<RequireQualifiedAccess>]
+[<RequireQualifiedAccess; CustomEquality; NoComparison>]
 type Activity =
-   | ScheduleTransfer
-   | WaitForScheduledTransferExecution
+   | WaitForScheduledTransferActivation of TimeSpan
    | ReserveSenderFunds
    | DepositToRecipientAccount
    | SyncToPartnerBank
@@ -64,7 +61,7 @@ type Activity =
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | WaitForScheduledTransferExecution
+         | WaitForScheduledTransferActivation _
          | WaitForSupportTeamToResolvePartnerBankSync -> 0
          | SyncToPartnerBank -> 4
          | _ -> 3
@@ -74,14 +71,27 @@ type Activity =
          | SendTransferNotification
          | SendTransferDepositNotification
          | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4.)
-         | ScheduleTransfer
          | ReserveSenderFunds
          | DepositToRecipientAccount
          | SettleTransfer
          | ReleaseSenderFunds
          | UndoRecipientDeposit -> Some(TimeSpan.FromSeconds 5.)
-         | WaitForScheduledTransferExecution
+         | WaitForScheduledTransferActivation time -> Some time
          | WaitForSupportTeamToResolvePartnerBankSync -> None
+
+   // Custom equality check so we can, for example, check for completeness
+   // of WaitForScheduledTransferActivation without comparing the inner value.
+   // Ex: activityIsDone (Activity.WaitForScheduledTransferActivation TimeSpan.Zero)
+   override x.Equals compareTo =
+      match compareTo with
+      | :? Activity as compareTo -> x.GetHashCode() = compareTo.GetHashCode()
+      | _ -> false
+
+   override x.GetHashCode() =
+      match x with
+      | WaitForScheduledTransferActivation _ ->
+         hash "WaitForScheduledTransferActivation"
+      | _ -> hash (string x)
 
 type PlatformTransferSaga = {
    StartEvent: PlatformTransferSagaStartEvent
@@ -155,8 +165,12 @@ let applyStartEvent
       PartnerBankSenderAccountLink = None
       PartnerBankRecipientAccountLink = None
       LifeCycle =
+         let timeUntil = e.Data.BaseInfo.ScheduledDate - DateTime.UtcNow
+
          SagaLifeCycle.empty
-         |> SagaLifeCycle.addActivity timestamp Activity.ScheduleTransfer
+         |> SagaLifeCycle.addActivity
+               timestamp
+               (Activity.WaitForScheduledTransferActivation timeUntil)
      }
 
 let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
@@ -171,19 +185,14 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
    }
 
    match evt with
-   | Event.ScheduledJobCreated -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.ScheduleTransfer
-            |> addActivity Activity.WaitForScheduledTransferExecution
-     }
-   | Event.ScheduledJobExecuted -> {
+   | Event.ScheduledTransferActivated -> {
       saga with
          Status = PlatformTransferSagaStatus.InProgress
          LifeCycle =
             saga.LifeCycle
-            |> finishActivity Activity.WaitForScheduledTransferExecution
+            |> finishActivity (
+               Activity.WaitForScheduledTransferActivation TimeSpan.Zero
+            )
             |> addActivity Activity.ReserveSenderFunds
      }
    | Event.SenderReservedFunds partnerBankSenderAccountLink -> {
@@ -327,10 +336,10 @@ let stateTransition
       match evt with
       | PlatformTransferSagaEvent.EvaluateRemainingWork
       | PlatformTransferSagaEvent.ResetInProgressActivityAttempts -> false
-      | PlatformTransferSagaEvent.ScheduledJobCreated ->
-         activityIsDone Activity.ScheduleTransfer
-      | PlatformTransferSagaEvent.ScheduledJobExecuted ->
-         activityIsDone Activity.WaitForScheduledTransferExecution
+      | PlatformTransferSagaEvent.ScheduledTransferActivated ->
+         activityIsDone (
+            Activity.WaitForScheduledTransferActivation TimeSpan.Zero
+         )
       | PlatformTransferSagaEvent.SenderReservedFunds _
       | PlatformTransferSagaEvent.SenderUnableToReserveFunds _ ->
          activityIsDone Activity.ReserveSenderFunds
@@ -362,16 +371,6 @@ let stateTransition
 type private TransferStartEvent = PlatformTransferSagaStartEvent
 type private TransferEvent = PlatformTransferSagaEvent
 
-let private scheduleTransferMessage =
-   SchedulerMessage.ScheduleInternalTransferBetweenOrgs
-
-type PersistenceHandlerDependencies = {
-   getSchedulingRef: unit -> IActorRef<SchedulerMessage>
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
-}
-
 let private depositTransfer
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (transfer: BaseInternalTransferInfo)
@@ -390,14 +389,21 @@ let private depositTransfer
    getAccountRef transfer.Recipient.ParentAccountId <! msg
 
 let onStartEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (evt: TransferStartEvent)
    =
    match evt with
    | TransferStartEvent.SenderReservedFunds(e, _) ->
-      depositTransfer dep.getAccountRef e.Data.BaseInfo
-   | TransferStartEvent.ScheduleTransferRequest e ->
-      dep.getSchedulingRef () <! scheduleTransferMessage e.Data.BaseInfo
+      depositTransfer getAccountRef e.Data.BaseInfo
+   | TransferStartEvent.ScheduleTransferRequest _ -> ()
+
+type PersistenceHandlerDependencies = {
+   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
+   getEmailRef: unit -> IActorRef<EmailMessage>
+   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
+   sendEventToSelf:
+      BaseInternalTransferInfo -> PlatformTransferSagaEvent -> unit
+}
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)
@@ -488,8 +494,7 @@ let onEventPersisted
       dep.getAccountRef transfer.Sender.ParentAccountId <! msg
 
    match evt with
-   | TransferEvent.ScheduledJobCreated -> ()
-   | TransferEvent.ScheduledJobExecuted -> reserveSenderFunds ()
+   | TransferEvent.ScheduledTransferActivated -> reserveSenderFunds ()
    | TransferEvent.SenderReservedFunds _ ->
       depositTransfer dep.getAccountRef transfer
    | TransferEvent.RecipientDepositedFunds _ ->
@@ -541,8 +546,6 @@ let onEventPersisted
    | TransferEvent.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
-         | Activity.ScheduleTransfer ->
-            dep.getSchedulingRef () <! scheduleTransferMessage transfer
          | Activity.ReserveSenderFunds -> reserveSenderFunds ()
          | Activity.DepositToRecipientAccount ->
             depositTransfer dep.getAccountRef transfer
@@ -567,8 +570,9 @@ let onEventPersisted
 
                dep.getAccountRef transfer.Sender.ParentAccountId <! msg
             | _ -> ()
+         | Activity.WaitForScheduledTransferActivation _ ->
+            dep.sendEventToSelf transfer Event.ScheduledTransferActivated
          | Activity.UndoRecipientDeposit
-         | Activity.WaitForScheduledTransferExecution
          | Activity.WaitForSupportTeamToResolvePartnerBankSync -> ()
          | Activity.SettleTransfer ->
             currentState.SettlementId |> Option.iter settleTransfer

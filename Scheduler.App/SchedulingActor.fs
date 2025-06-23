@@ -4,24 +4,16 @@ module SchedulingActor
 open Akka.Hosting
 open Akka.Actor
 open Akka.Quartz.Actor.Commands
-open Akka.Cluster.Sharding
-open Akkling.Cluster.Sharding
 open Akkling
 open Quartz
 
 open Bank.Account.Domain
-open Bank.Transfer.Domain
 open BillingStatement
 open ActorUtil
-open Lib.SharedTypes
 open Lib.Postgres
-open Lib.Saga
 open Bank.Scheduler
 
-let actorProps
-   (quartzPersistentActorRef: IActorRef)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
-   =
+let actorProps (quartzPersistentActorRef: IActorRef) =
    let handler (ctx: Actor<SchedulerMessage>) = actor {
       let logInfo = logInfo ctx
       let! msg = ctx.Receive()
@@ -80,7 +72,7 @@ let actorProps
                      AutomaticTransfer.Message.StartScheduledAutoTransfers
                         schedule
                },
-               (trigger schedule)
+               trigger schedule
             )
 
          let twiceMonthlyJob =
@@ -94,7 +86,7 @@ let actorProps
                      AutomaticTransfer.Message.StartScheduledAutoTransfers
                         schedule
                },
-               (trigger schedule)
+               trigger schedule
             )
 
          quartzPersistentActorRef.Tell(dailyJob, ActorRefs.Nobody)
@@ -173,7 +165,7 @@ let actorProps
                trigger
             )
 
-         quartzPersistentActorRef.Tell(job)
+         quartzPersistentActorRef.Tell job
          return ignored ()
       | TriggerBalanceHistoryCronJob ->
          logInfo "Balance history daily update triggered."
@@ -186,112 +178,6 @@ let actorProps
          | Error err ->
             logError ctx $"Daily balance history update error: {err}"
             return unhandled ()
-      | ScheduleInternalTransferBetweenOrgs transfer ->
-         let name = "InternalTransferBetweenOrgs"
-         let group = "Bank"
-
-         let transferId = transfer.TransferId
-         let correlationId = TransferId.toCorrelationId transferId
-         let orgId = transfer.Sender.OrgId
-
-         let builder =
-            TriggerBuilder
-               .Create()
-               .ForJob($"{name}Job-{transferId}", group)
-               .WithIdentity($"{name}Trigger-{transferId}", group)
-               .WithDescription("Schedule internal transfer")
-
-         let scheduledAt = transfer.ScheduledDate
-
-         logInfo
-            $"Scheduling internal transfer for {transferId} at {scheduledAt}."
-
-         let trigger = builder.StartAt(scheduledAt).Build()
-
-         let path =
-            ClusterSharding
-               .Get(ctx.System)
-               .ShardRegionProxy(ClusterMetadata.sagaShardRegion.name)
-               .Path
-
-         let job =
-            CreatePersistentJob(
-               path,
-               {
-                  Manifest = "SagaActorMessage"
-                  Message = {|
-                     CorrelationId = correlationId
-                     SagaMessage =
-                        PlatformTransferSaga.PlatformTransferSagaEvent.ScheduledJobExecuted
-                        |> AppSaga.Event.PlatformTransfer
-                        |> SagaEvent.create orgId correlationId
-                        |> SagaMessage.Event
-                  |}
-               },
-               trigger
-            )
-
-         quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
-
-         let msg =
-            PlatformTransferSaga.PlatformTransferSagaEvent.ScheduledJobCreated
-            |> AppSaga.Message.platformTransfer orgId correlationId
-
-         getSagaRef () <! msg
-
-         return ignored ()
-      | ScheduleDomesticTransfer transfer ->
-         let name = "DomesticTransfer"
-         let group = "Bank"
-
-         let transferId = transfer.TransferId
-         let correlationId = TransferId.toCorrelationId transferId
-         let orgId = transfer.Sender.OrgId
-
-         let builder =
-            TriggerBuilder
-               .Create()
-               .ForJob($"{name}Job-{transferId}", group)
-               .WithIdentity($"{name}Trigger-{transferId}", group)
-               .WithDescription("Schedule domestic transfer")
-
-         let scheduledAt = transfer.ScheduledDate
-
-         logInfo
-            $"Scheduling domestic transfer for {transferId} at {scheduledAt}."
-
-         let trigger = builder.StartAt(scheduledAt).Build()
-
-         let path =
-            ClusterSharding
-               .Get(ctx.System)
-               .ShardRegionProxy(ClusterMetadata.sagaShardRegion.name)
-               .Path
-
-         let job =
-            CreatePersistentJob(
-               path,
-               {
-                  Manifest = "SagaActorMessage"
-                  Message = {|
-                     CorrelationId = correlationId
-                     SagaMessage =
-                        DomesticTransferSaga.DomesticTransferSagaEvent.ScheduledJobExecuted
-                        |> AppSaga.Message.domesticTransfer orgId correlationId
-                  |}
-               },
-               trigger
-            )
-
-         quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
-
-         let msg =
-            DomesticTransferSaga.DomesticTransferSagaEvent.ScheduledJobCreated
-            |> AppSaga.Message.domesticTransfer orgId correlationId
-
-         getSagaRef () <! msg
-
-         return ignored ()
    }
 
    props handler

@@ -1,7 +1,5 @@
 namespace Bank.Scheduler
 
-open Bank.Account.Domain
-open Bank.Transfer.Domain
 open Lib.SharedTypes
 
 // NOTE:
@@ -17,7 +15,5 @@ type SchedulerMessage =
    | DeleteAccountsJobSchedule of AccountId list
    | BalanceHistoryCronJobSchedule
    | TriggerBalanceHistoryCronJob
-   | ScheduleInternalTransferBetweenOrgs of BaseInternalTransferInfo
-   | ScheduleDomesticTransfer of BaseDomesticTransferInfo
    | BalanceManagementCronJobSchedule
    | SagaAlarmClockCronJobSchedule

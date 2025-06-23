@@ -182,10 +182,8 @@ type Event =
             "PurchaseResetInProgressActivityAttempts"
       | Event.DomesticTransfer e ->
          match e with
-         | DomesticTransferSagaEvent.ScheduledJobCreated ->
-            "DomesticTransferScheduledJobCreated"
-         | DomesticTransferSagaEvent.ScheduledJobExecuted ->
-            "DomesticTransferScheduledJobExecuted"
+         | DomesticTransferSagaEvent.ScheduledTransferActivated ->
+            "DomesticTransferScheduledTransferActivated"
          | DomesticTransferSagaEvent.SenderReservedFunds ->
             "DomesticTransferSenderReservedFunds"
          | DomesticTransferSagaEvent.SenderReleasedReservedFunds ->
@@ -206,10 +204,8 @@ type Event =
             "DomesticTransferResetInProgressActivityAttempts"
       | Event.PlatformTransfer e ->
          match e with
-         | PlatformTransferSagaEvent.ScheduledJobCreated ->
-            "PlatformTransferScheduledJobCreated"
-         | PlatformTransferSagaEvent.ScheduledJobExecuted ->
-            "PlatformTransferScheduledJobExecuted"
+         | PlatformTransferSagaEvent.ScheduledTransferActivated ->
+            "PlatformTransferScheduledTransferActivated"
          | PlatformTransferSagaEvent.SenderReservedFunds _ ->
             "PlatformTransferSenderReservedFunds"
          | PlatformTransferSagaEvent.SenderUnableToReserveFunds _ ->
@@ -638,7 +634,6 @@ let sagaHandler
       onStartEventPersisted =
          fun mailbox evt state ->
             let getEmailRef () = getEmailRef mailbox.System
-            let getSchedulingRef () = getSchedulingRef mailbox.System
 
             let getPartnerBankServiceRef () =
                getPartnerBankServiceRef mailbox.System
@@ -689,30 +684,16 @@ let sagaHandler
                | Saga.CardSetup _ -> CardSetupSaga.onStartEventPersisted deps e
                | _ -> notHandled ()
             | StartEvent.DomesticTransfer evt ->
-               let deps: DomesticTransferSaga.PersistenceHandlerDependencies = {
-                  getSchedulingRef = getSchedulingRef
-                  getDomesticTransferRef =
-                     fun () -> getDomesticTransferRef mailbox.System
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  logError = logError mailbox
-               }
-
                match state with
                | Saga.DomesticTransfer _ ->
-                  DomesticTransferSaga.onStartEventPersisted deps evt
+                  DomesticTransferSaga.onStartEventPersisted
+                     (fun () -> getDomesticTransferRef mailbox.System)
+                     evt
                | _ -> notHandled ()
             | StartEvent.PlatformTransfer evt ->
-               let deps: PlatformTransferSaga.PersistenceHandlerDependencies = {
-                  getSchedulingRef = getSchedulingRef
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  getPartnerBankServiceRef = getPartnerBankServiceRef
-               }
-
                match state with
                | Saga.PlatformTransfer _ ->
-                  PlatformTransferSaga.onStartEventPersisted deps evt
+                  PlatformTransferSaga.onStartEventPersisted getAccountRef evt
                | _ -> notHandled ()
             | StartEvent.PlatformPayment evt ->
                let deps: PlatformPaymentSaga.PersistenceHandlerDependencies = {
@@ -870,6 +851,15 @@ let sagaHandler
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
                   logError = logError mailbox
+                  sendEventToSelf =
+                     fun transfer evt ->
+                        let msg =
+                           Message.domesticTransfer
+                              transfer.Sender.OrgId
+                              (TransferId.toCorrelationId transfer.TransferId)
+                              evt
+
+                        mailbox.Parent() <! msg.Message
                }
 
                match priorState, state with
@@ -882,10 +872,18 @@ let sagaHandler
                | _ -> notHandled ()
             | Event.PlatformTransfer evt ->
                let deps: PlatformTransferSaga.PersistenceHandlerDependencies = {
-                  getSchedulingRef = getSchedulingRef
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
                   getPartnerBankServiceRef = getPartnerBankServiceRef
+                  sendEventToSelf =
+                     fun transfer evt ->
+                        let msg =
+                           Message.platformTransfer
+                              transfer.Sender.OrgId
+                              (TransferId.toCorrelationId transfer.TransferId)
+                              evt
+
+                        mailbox.Parent() <! msg.Message
                }
 
                match priorState, state with
