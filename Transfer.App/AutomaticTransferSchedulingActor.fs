@@ -23,7 +23,7 @@ let actorProps
    (getOrgIds:
       CronSchedule
          -> Async<Result<(AccountId * ParentAccountId) list option, Err>>)
-   (throttle: StreamThrottle)
+   (throttle: StreamThrottleEnvConfig)
    =
    let mat = system.Materializer()
 
@@ -110,6 +110,6 @@ let getAccountsWithScheduledAutoTransfer (schedule: CronSchedule) = asyncResultO
 let initProps
    (system: ActorSystem)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (throttle: StreamThrottle)
+   (throttle: StreamThrottleEnvConfig)
    =
    actorProps system getAccountRef getAccountsWithScheduledAutoTransfer throttle

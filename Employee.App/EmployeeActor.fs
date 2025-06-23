@@ -237,7 +237,7 @@ let actorProps
                   match validation with
                   | Ok(evt, _) ->
                      return!
-                        confirmPersist
+                        PersistenceSupervisor.confirmPersist
                            mailbox
                            envelope.ConfirmationId
                            (EmployeeMessage.Event evt)
@@ -326,25 +326,23 @@ let getGuaranteedDeliveryProducerRef
       .For(system)
       .Get<ActorUtil.ActorMetadata.EmployeeGuaranteedDeliveryProducerMarker>()
 
-let isPersistableMessage (msg: obj) =
-   match msg with
-   | :? EmployeeMessage as msg ->
-      match msg with
-      | EmployeeMessage.StateChange _ -> true
-      | _ -> false
-   | _ -> false
-
 let initProps
-   (supervisorOpts: PersistenceSupervisorOptions)
+   (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (persistenceId: string)
    (broadcaster: SignalRBroadcast)
    (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    (consumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<EmployeeMessage>>)
    =
-   persistenceSupervisor
-      supervisorOpts
-      isPersistableMessage
-      (actorProps broadcaster getSagaRef consumerControllerRef)
-      persistenceId
-      true
+   let childProps = actorProps broadcaster getSagaRef consumerControllerRef
+
+   PersistenceSupervisor.create {
+      EnvConfig = supervisorEnvConfig
+      ChildProps = childProps.ToProps()
+      PersistenceId = persistenceId
+      CompatibleWithGuaranteedDelivery = true
+      IsPersistableMessage =
+         function
+         | :? EmployeeMessage as msg -> msg.IsStateChange
+         | _ -> false
+   }

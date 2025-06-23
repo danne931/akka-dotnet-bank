@@ -964,7 +964,7 @@ let initProps
    (getPartnerBankServiceRef:
       ActorSystem -> IActorRef<PartnerBankServiceMessage>)
    (getCardIssuerServiceRef: ActorSystem -> IActorRef<CardIssuerMessage>)
-   (supervisorOpts: PersistenceSupervisorOptions)
+   (persistenceSupervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
    (guaranteedDeliveryConsumerControllerRef:
@@ -975,7 +975,7 @@ let initProps
        >)
    =
    SagaActor.initProps<Saga, StartEvent, Event>
-      supervisorOpts
+      persistenceSupervisorEnvConfig
       sagaPassivateIdleEntityAfter
       persistenceId
       guaranteedDeliveryConsumerControllerRef

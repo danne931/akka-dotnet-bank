@@ -26,7 +26,7 @@ open Bank.Scheduler
 let deleteAccounts
    (system: ActorSystem)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (throttle: StreamThrottle)
+   (throttle: StreamThrottleEnvConfig)
    (accounts: Map<AccountId, Account>)
    =
    Source.ofSeq accounts.Values
@@ -46,7 +46,7 @@ let actorProps
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (deleteHistoricalRecords:
       AccountId list -> TaskResultOption<AccountNumber list, Err>)
-   (throttle: StreamThrottle)
+   (throttle: StreamThrottleEnvConfig)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let system = mailbox.System
@@ -163,7 +163,7 @@ let initProps
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
-   (throttle: StreamThrottle)
+   (throttle: StreamThrottleEnvConfig)
    =
    actorProps
       getAccountRef

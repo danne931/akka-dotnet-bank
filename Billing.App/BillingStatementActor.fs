@@ -38,7 +38,7 @@ let get (system: ActorSystem) : IActorRef<BillingStatementMessage> =
 let initQueueSource
    (system: ActorSystem)
    (persistence: BillingPersistence)
-   (chunking: StreamChunking)
+   (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryAfter: TimeSpan)
    (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
@@ -78,7 +78,7 @@ let initQueueSource
 let actorProps
    (system: ActorSystem)
    (persistence: BillingPersistence)
-   (chunking: StreamChunking)
+   (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
    (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
@@ -233,7 +233,7 @@ let private saveBillingStatements (items: BillingPersistable list) =
 
 let start
    (system: ActorSystem)
-   (chunking: StreamChunking)
+   (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
    (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)

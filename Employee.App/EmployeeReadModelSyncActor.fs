@@ -269,24 +269,22 @@ let upsertReadModels
 
 let initProps
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (chunking: StreamChunking)
+   (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
-   actorProps<Employee, EmployeeEvent> (
-      {
-         GetAggregateIdFromEvent =
-            EmployeeEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
-         GetAggregate =
-            fun employeeId -> task {
-               let aref = getEmployeeRef (EmployeeId employeeId)
-               let! (opt: Employee option) = aref <? EmployeeMessage.GetEmployee
-               return opt
-            }
-         Chunking = chunking
-         RestartSettings = restartSettings
-         RetryPersistenceAfter = retryPersistenceAfter
-         UpsertReadModels = upsertReadModels
-         EventJournalTag = Constants.AKKA_EMPLOYEE_JOURNAL
-      }
-   )
+   actorProps<Employee, EmployeeEvent> {
+      GetAggregateIdFromEvent =
+         EmployeeEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
+      GetAggregate =
+         fun employeeId -> task {
+            let aref = getEmployeeRef (EmployeeId employeeId)
+            let! (opt: Employee option) = aref <? EmployeeMessage.GetEmployee
+            return opt
+         }
+      Chunking = chunking
+      RestartSettings = restartSettings
+      RetryPersistenceAfter = retryPersistenceAfter
+      UpsertReadModels = upsertReadModels
+      EventJournalTag = Constants.AKKA_EMPLOYEE_JOURNAL
+   }

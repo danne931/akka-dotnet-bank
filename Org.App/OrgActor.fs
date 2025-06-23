@@ -357,7 +357,10 @@ let actorProps
                logError $"Unknown message in ConfirmableMessageEnvelope - {msg}"
                unhandled ()
 
-            let confirmPersist = confirmPersist mailbox envelope.ConfirmationId
+            let confirmPersist =
+               PersistenceSupervisor.confirmPersist
+                  mailbox
+                  envelope.ConfirmationId
 
             match envelope.Message with
             | :? OrgMessage as msg ->
@@ -473,17 +476,9 @@ let getGuaranteedDeliveryProducerRef
       .For(system)
       .Get<ActorUtil.ActorMetadata.OrgGuaranteedDeliveryProducerMarker>()
 
-let isPersistableMessage (msg: obj) =
-   match msg with
-   | :? OrgMessage as msg ->
-      match msg with
-      | OrgMessage.StateChange _ -> true
-      | _ -> false
-   | _ -> false
-
 let initProps
    (broadcaster: SignalRBroadcast)
-   (supervisorOpts: PersistenceSupervisorOptions)
+   (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (persistenceId: string)
    (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
    (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
@@ -500,9 +495,13 @@ let initProps
          getAccountRef
          guaranteedDeliveryConsumerControllerRef
 
-   persistenceSupervisor
-      supervisorOpts
-      isPersistableMessage
-      childProps
-      persistenceId
-      true
+   PersistenceSupervisor.create {
+      EnvConfig = supervisorEnvConfig
+      ChildProps = childProps.ToProps()
+      PersistenceId = persistenceId
+      CompatibleWithGuaranteedDelivery = true
+      IsPersistableMessage =
+         function
+         | :? OrgMessage as msg -> msg.IsStateChange
+         | _ -> false
+   }

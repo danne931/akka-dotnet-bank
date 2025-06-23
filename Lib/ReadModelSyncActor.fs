@@ -23,7 +23,7 @@ type ReadModelSyncConfig<'TAggregate, 'TEvent> = {
    EventJournalTag: string
    GetAggregateIdFromEvent: 'TEvent -> Guid
    GetAggregate: Guid -> 'TAggregate option Task
-   Chunking: StreamChunking
+   Chunking: StreamChunkingEnvConfig
    RestartSettings: Akka.Streams.RestartSettings
    RetryPersistenceAfter: TimeSpan
    UpsertReadModels: ReadModelUpsert<'TAggregate, 'TEvent>
@@ -47,7 +47,7 @@ let initFailedWritesSource
 let initReadJournalSource
    (mailbox: Eventsourced<obj>)
    (state: State)
-   (chunking: StreamChunking)
+   (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (eventJournalTag: string)
    : Source<'TEvent list, Akka.NotUsed>

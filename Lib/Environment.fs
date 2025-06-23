@@ -8,7 +8,6 @@ open System.IO
 open FsConfig
 
 open Lib.Types
-open Lib.Time
 
 // Serve static files out of the UI/dist directory during development.
 // This dist directory is copied over to the default Web/wwwroot
@@ -168,7 +167,7 @@ let streamBackoffRestartSettingsFromInput
 type private BankConfigInput = {
    ConnectionStrings: Connection
    AkkaRemoting: {| Host: string option; Port: int |}
-   QueueConnection: QueueConnectionSettings
+   QueueConnection: QueueConnectionEnvConfig
    PetabridgeCmdRemoting: PetabridgeCmdRemoting
    ClusterStartupMethod: string
    ClusterDiscoveryStartup: ClusterDiscoveryStartup option
@@ -205,30 +204,30 @@ type private BankConfigInput = {
 type BankConfig = {
    ConnectionStrings: Connection
    AkkaPersistence: AkkaPersistence
-   QueueConnection: QueueConnectionSettings
+   QueueConnection: QueueConnectionEnvConfig
    AkkaSystemName: string
    AkkaRemoting: AkkaRemoting
    PetabridgeCmdRemoting: PetabridgeCmdRemoting
    ClusterStartupMethod: ClusterStartupMethod
    SerilogOutputFile: string
    AkkaHealthCheck: AkkaHealthCheck
-   BillingCycleFanoutThrottle: StreamThrottle
+   BillingCycleFanoutThrottle: StreamThrottleEnvConfig
    AccountCluster: AccountCluster
-   AccountActorSupervisor: PersistenceSupervisorOptions
-   AccountDeleteThrottle: StreamThrottle
-   AccountEventProjectionChunking: StreamChunking
+   AccountActorSupervisor: PersistenceSupervisorEnvConfig
+   AccountDeleteThrottle: StreamThrottleEnvConfig
+   AccountEventProjectionChunking: StreamChunkingEnvConfig
    AccountEventReadModelPersistenceBackoffRestart: Akka.Streams.RestartSettings
    AccountEventReadModelRetryPersistenceAfter: TimeSpan
-   BillingStatementPersistenceChunking: StreamChunking
+   BillingStatementPersistenceChunking: StreamChunkingEnvConfig
    BillingStatementPersistenceBackoffRestart: Akka.Streams.RestartSettings
    BillingStatementRetryPersistenceAfter: TimeSpan
-   CircuitBreakerActorSupervisor: BackoffSupervisorOptions
+   CircuitBreakerActorSupervisor: BackoffSupervisorEnvConfig
    QueueConsumerStreamBackoffRestart: Akka.Streams.RestartSettings
-   SleepingSagaThrottle: StreamThrottle
+   SleepingSagaThrottle: StreamThrottleEnvConfig
    SagaPassivateIdleEntityAfter: TimeSpan
    PartnerBankServiceCircuitBreaker:
       Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
-   PartnerBankServiceQueue: QueueSettings
+   PartnerBankServiceQueue: QueueEnvConfig
 }
 
 let config =

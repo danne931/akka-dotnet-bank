@@ -23,7 +23,7 @@ let actorProps
    (system: ActorSystem)
    (getSagaActor: unit -> IActorRef<AppSaga.AppSagaMessage>)
    (getTimedOutSagas: unit -> Async<Result<Option<CorrelationId list>, Err>>)
-   (throttle: StreamThrottle)
+   (throttle: StreamThrottleEnvConfig)
    =
    let mat = system.Materializer()
 

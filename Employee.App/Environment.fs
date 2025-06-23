@@ -23,7 +23,7 @@ type private Input = {
 type EmployeeConfig = {
    cardIssuerServiceCircuitBreaker:
       Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
-   CardIssuerServiceQueue: QueueSettings
+   CardIssuerServiceQueue: QueueEnvConfig
 }
 
 let config =

@@ -68,7 +68,7 @@ let protectedAction
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
@@ -142,7 +142,7 @@ let private networkRequestToKYCService (msg: KYCMessage) = taskResult {
 
 let initProps
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)

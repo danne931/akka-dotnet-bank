@@ -394,7 +394,7 @@ let getHistory (orgId: OrgId) (query: HistoryQuery) =
       ]
       |> List.choose id
       |> List.map (fun query -> "(" + query + ")")
-      |> String.concat (" UNION ALL ")
+      |> String.concat " UNION ALL "
 
    let query =
       $"""

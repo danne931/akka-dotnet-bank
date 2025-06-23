@@ -33,7 +33,7 @@ let protectedAction
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
@@ -55,7 +55,7 @@ let actorProps
       queueMessageToActionRequest = fun _ msg -> Task.FromResult(Some msg)
       onSuccessFlow =
          Flow.map
-            (fun (mailbox, (queueMessage: PartnerBankServiceMessage), response) ->
+            (fun (mailbox, queueMessage: PartnerBankServiceMessage, response) ->
                let metadata = queueMessage.Metadata
                let corrId = metadata.CorrelationId
                let orgId = metadata.OrgId
@@ -143,7 +143,7 @@ let private networkRequestToPartnerBankService
 
 let initProps
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)

@@ -12,6 +12,7 @@ open System
 
 open Lib.Types
 open Lib.Saga
+open ActorUtil
 
 type SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga> = {
    getEvaluateRemainingWorkEvent: 'Saga -> 'SagaEvent
@@ -123,7 +124,7 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                         return ignored ()
                      | Ok _ ->
                         return!
-                           ActorUtil.confirmPersist
+                           PersistenceSupervisor.confirmPersist
                               ctx
                               envelope.ConfirmationId
                               (persistableStartEvent startEvent)
@@ -144,7 +145,7 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                         return ignored ()
                      | Ok _ ->
                         return!
-                           ActorUtil.confirmPersist
+                           PersistenceSupervisor.confirmPersist
                               ctx
                               envelope.ConfirmationId
                               (persistableEvent evt)
@@ -253,9 +254,9 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
 
                return! loop (Some updatedState)
          | msg ->
-            ActorUtil.PersistentActorEventHandler.handleEvent
+            PersistentActorEventHandler.handleEvent
                {
-                  ActorUtil.PersistentActorEventHandler.init with
+                  PersistentActorEventHandler.init with
                      LifecyclePreStart =
                         fun _ ->
                            setWorkCheckTimer (TimeSpan.FromSeconds 10.)
@@ -288,17 +289,8 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
 
    propsPersist handler
 
-let isPersistableMessage<'SagaStartEvent, 'SagaEvent> (msg: obj) =
-   match msg with
-   | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
-      match msg with
-      | SagaMessage.Start _
-      | SagaMessage.Event _ -> true
-      | _ -> false
-   | _ -> false
-
 let initProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
-   (supervisorOpts: PersistenceSupervisorOptions)
+   (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
    (guaranteedDeliveryConsumerControllerRef:
@@ -311,12 +303,21 @@ let initProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
        >)
    (sagaHandler: SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent>)
    =
-   ActorUtil.persistenceSupervisor
-      supervisorOpts
-      isPersistableMessage<'SagaStartEvent, 'SagaEvent>
-      (actorProps
+   let childProps =
+      actorProps
          sagaPassivateIdleEntityAfter
          guaranteedDeliveryConsumerControllerRef
-         sagaHandler)
-      persistenceId
-      guaranteedDeliveryConsumerControllerRef.IsSome
+         sagaHandler
+
+   PersistenceSupervisor.create {
+      EnvConfig = supervisorEnvConfig
+      ChildProps = childProps.ToProps()
+      PersistenceId = persistenceId
+      CompatibleWithGuaranteedDelivery =
+         guaranteedDeliveryConsumerControllerRef.IsSome
+      IsPersistableMessage =
+         function
+         | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
+            msg.IsStart || msg.IsEvent
+         | _ -> false
+   }

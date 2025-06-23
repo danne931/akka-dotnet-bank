@@ -36,7 +36,7 @@ type NotificationsConfig = {
    EmailBearerToken: string option
    SupportEmail: string option
    circuitBreaker: Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
-   Queue: QueueSettings
+   Queue: QueueEnvConfig
    // If true, will pretend to send emails rather than hitting the email
    // third party API.
    MockSendingEmail: bool

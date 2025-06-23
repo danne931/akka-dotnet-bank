@@ -490,7 +490,9 @@ let actorProps
             let confirmPersistAll (evts: AccountMessage seq) =
                evts
                |> Seq.map box
-               |> confirmPersistAll mailbox envelope.ConfirmationId
+               |> PersistenceSupervisor.confirmPersistAll
+                     mailbox
+                     envelope.ConfirmationId
 
             match envelope.Message with
             | :? AccountMessage as msg ->
@@ -675,17 +677,9 @@ let getGuaranteedDeliveryProducerRef
       .For(system)
       .Get<ActorUtil.ActorMetadata.AccountGuaranteedDeliveryProducerMarker>()
 
-let isPersistableMessage (msg: obj) =
-   match msg with
-   | :? AccountMessage as msg ->
-      match msg with
-      | AccountMessage.StateChange _ -> true
-      | _ -> false
-   | _ -> false
-
 let initProps
    (broadcaster: SignalRBroadcast)
-   (supervisorOpts: PersistenceSupervisorOptions)
+   (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (persistenceId: string)
    (getBillingStatementActor: ActorSystem -> IActorRef<BillingStatementMessage>)
    (getDomesticTransfersRetryableUponRecipientEdit:
@@ -706,9 +700,13 @@ let initProps
          getSagaRef
          guaranteedDeliveryConsumerControllerRef
 
-   persistenceSupervisor
-      supervisorOpts
-      isPersistableMessage
-      childProps
-      persistenceId
-      true
+   PersistenceSupervisor.create {
+      EnvConfig = supervisorEnvConfig
+      ChildProps = childProps.ToProps()
+      PersistenceId = persistenceId
+      CompatibleWithGuaranteedDelivery = true
+      IsPersistableMessage =
+         function
+         | :? AccountMessage as msg -> msg.IsStateChange
+         | _ -> false
+   }

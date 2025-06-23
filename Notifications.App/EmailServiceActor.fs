@@ -266,7 +266,7 @@ let private mockSendEmail _ =
 
 let private createClient (bearerToken: string) =
    let client =
-      new HttpClient(BaseAddress = Uri(EnvNotifications.config.EmailServiceUri))
+      new HttpClient(BaseAddress = Uri EnvNotifications.config.EmailServiceUri)
 
    client.DefaultRequestHeaders.Authorization <-
       Headers.AuthenticationHeaderValue("Bearer", bearerToken)
@@ -396,7 +396,7 @@ let onSuccessfulServiceResponse
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
@@ -450,7 +450,7 @@ let initProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (bearerToken: string option)
    (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)

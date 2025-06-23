@@ -47,7 +47,7 @@ let protectedAction
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
@@ -101,7 +101,7 @@ let actorProps
 
 let initProps
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)

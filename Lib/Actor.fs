@@ -554,102 +554,110 @@ let supervisorProps
          SupervisionStrategy = Some strategy
    }
 
-/// If using a PersistenceSupervisor between a
-/// AtLeastOnceDelivery ShardingConsumerController and a sharded
-/// entity actor we must explicitly forward the Passivate message
-/// to the parent ShardingConsumerController for
-/// passivation to work.
-type PersistenceSupervisorCompatibleWithGuaranteedDelivery
-   (
-      childProps: Props,
-      persistenceId: string,
-      config: PersistenceSupervisionConfig,
-      strategy: SupervisorStrategy
-   ) =
-   inherit PersistenceSupervisor(childProps, persistenceId, config, strategy)
+module PersistenceSupervisor =
+   /// If using a PersistenceSupervisor between a
+   /// AtLeastOnceDelivery ShardingConsumerController and a sharded
+   /// entity actor we must explicitly forward the Passivate message
+   /// to the parent ShardingConsumerController for
+   /// passivation to work.
+   type PersistenceSupervisorCompatibleWithGuaranteedDelivery
+      (
+         childProps: Props,
+         persistenceId: string,
+         config: PersistenceSupervisionConfig,
+         strategy: SupervisorStrategy
+      ) =
+      inherit PersistenceSupervisor(childProps, persistenceId, config, strategy)
 
-   override _.Receive(message: obj) =
-      match message with
-      | :? Akka.Cluster.Sharding.Passivate as passivate ->
-         PersistenceSupervisor.Context.Parent.Forward passivate
-         true
-      | _ -> base.Receive message
+      override _.Receive(message: obj) =
+         match message with
+         | :? Akka.Cluster.Sharding.Passivate as passivate ->
+            PersistenceSupervisor.Context.Parent.Forward passivate
+            true
+         | _ -> base.Receive message
 
-/// <summary>
-/// Create PersistenceSupervisor props to ensure
-/// failed Persist calls are retried and messages received
-/// during backoff period are not lost.
-/// See https://devops.petabridge.com/articles/state-management/akkadotnet-persistence-failure-handling.html
-/// for info on why PersistenceSupervisor may be preferred over
-/// BackoffSupervisor in persistent actor scenarios.
-/// </summary>
-let persistenceSupervisor
-   (opts: PersistenceSupervisorOptions)
-   (isPersistableMessage: obj -> bool)
-   (childProps: Props<_>)
-   (persistenceId: string)
-   (compatibleWithGuaranteedDelivery: bool)
-   =
-   let config =
-      PersistenceSupervisionConfig(
-         isPersistableMessage,
-         (fun msg confirmationId ->
-            ConfirmableMessageEnvelope(confirmationId, "", msg)),
-         minBackoff = opts.MinBackoff,
-         maxBackoff = opts.MaxBackoff
-      )
+   type PersistenceSupervisorOptions = {
+      EnvConfig: PersistenceSupervisorEnvConfig
+      IsPersistableMessage: obj -> bool
+      ChildProps: Props
+      PersistenceId: string
+      CompatibleWithGuaranteedDelivery: bool
+   }
 
-   let strategy =
-      SupervisorStrategy.StoppingStrategy.WithMaxNrOfRetries opts.MaxNrOfRetries
+   /// <summary>
+   /// Create PersistenceSupervisor props to ensure
+   /// failed Persist calls are retried and messages received
+   /// during backoff period are not lost.
+   /// See https://devops.petabridge.com/articles/state-management/akkadotnet-persistence-failure-handling.html
+   /// for info on why PersistenceSupervisor may be preferred over
+   /// BackoffSupervisor in persistent actor scenarios.
+   /// </summary>
+   let create (opts: PersistenceSupervisorOptions) =
+      let config =
+         PersistenceSupervisionConfig(
+            opts.IsPersistableMessage,
+            (fun msg confirmationId ->
+               ConfirmableMessageEnvelope(confirmationId, "", msg)),
+            minBackoff = opts.EnvConfig.MinBackoff,
+            maxBackoff = opts.EnvConfig.MaxBackoff
+         )
 
-   if compatibleWithGuaranteedDelivery then
-      Props.Create(fun () ->
-         new PersistenceSupervisorCompatibleWithGuaranteedDelivery(
-            childProps.ToProps(),
-            persistenceId,
-            config,
-            strategy = strategy
-         ))
-   else
-      Props.Create(fun () ->
-         new PersistenceSupervisor(
-            childProps.ToProps(),
-            persistenceId,
-            config,
-            strategy = strategy
-         ))
+      let strategy =
+         SupervisorStrategy.StoppingStrategy.WithMaxNrOfRetries
+            opts.EnvConfig.MaxNrOfRetries
 
-/// <summary>
-/// Durable persist with ack sent to PersistenceSupervisor parent actor.
-/// A command arrives to the actor and we wish to persist the
-/// subsequent event.
-/// </summary>
-let confirmPersist (ctx: Eventsourced<obj>) (confirmationId: int64) (evt: obj) =
-   evt
-   |> Persist
-   |> Effects.andThen (fun () ->
-      ctx.Parent() <! Confirmation(confirmationId, ctx.Pid))
+      if opts.CompatibleWithGuaranteedDelivery then
+         Props.Create(fun () ->
+            new PersistenceSupervisorCompatibleWithGuaranteedDelivery(
+               opts.ChildProps,
+               opts.PersistenceId,
+               config,
+               strategy = strategy
+            ))
+      else
+         Props.Create(fun () ->
+            new PersistenceSupervisor(
+               opts.ChildProps,
+               opts.PersistenceId,
+               config,
+               strategy = strategy
+            ))
 
-/// <summary>
-/// Durable PersistAll with ack sent to PersistenceSupervisor parent actor.
-/// A command arrives to the actor and produces several events for
-/// that single command.  The group of events is persisted atomically.
-/// </summary>
-let confirmPersistAll
-   (ctx: Eventsourced<obj>)
-   (confirmationId: int64)
-   (evts: obj seq)
-   =
-   // NOTE:
-   // Confirmation is expected for the single command that arrived.
-   // Confirm once for the group of events we are persisting to
-   // avoid producing a persistent effect for each event in the list.
-   // Fixes warning log "Received confirmation for unknown event."
-   let mutable confirmed = false
-
-   evts
-   |> PersistAll
-   |> Effects.andThen (fun () ->
-      if not confirmed then
-         confirmed <- true
+   /// <summary>
+   /// Durable persist with ack sent to PersistenceSupervisor parent actor.
+   /// A command arrives to the actor and we wish to persist the
+   /// subsequent event.
+   /// </summary>
+   let confirmPersist
+      (ctx: Eventsourced<obj>)
+      (confirmationId: int64)
+      (evt: obj)
+      =
+      evt
+      |> Persist
+      |> Effects.andThen (fun () ->
          ctx.Parent() <! Confirmation(confirmationId, ctx.Pid))
+
+   /// <summary>
+   /// Durable PersistAll with ack sent to PersistenceSupervisor parent actor.
+   /// A command arrives to the actor and produces several events for
+   /// that single command.  The group of events is persisted atomically.
+   /// </summary>
+   let confirmPersistAll
+      (ctx: Eventsourced<obj>)
+      (confirmationId: int64)
+      (evts: obj seq)
+      =
+      // NOTE:
+      // Confirmation is expected for the single command that arrived.
+      // Confirm once for the group of events we are persisting to
+      // avoid producing a persistent effect for each event in the list.
+      // Fixes warning log "Received confirmation for unknown event."
+      let mutable confirmed = false
+
+      evts
+      |> PersistAll
+      |> Effects.andThen (fun () ->
+         if not confirmed then
+            confirmed <- true
+            ctx.Parent() <! Confirmation(confirmationId, ctx.Pid))

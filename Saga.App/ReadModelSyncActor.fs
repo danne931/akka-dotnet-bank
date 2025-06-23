@@ -65,7 +65,7 @@ let initProps
    (getSagaRef:
       CorrelationId
          -> IEntityRef<SagaMessage<AppSaga.StartEvent, AppSaga.Event>>)
-   (chunking: StreamChunking)
+   (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =

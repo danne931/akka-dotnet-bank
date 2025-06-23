@@ -2,15 +2,15 @@ module Lib.Types
 
 open System
 
-type StreamThrottle = {
+type StreamThrottleEnvConfig = {
    Count: int
    Burst: int
    Duration: TimeSpan
 }
 
-type StreamChunking = { Size: int; Duration: TimeSpan }
+type StreamChunkingEnvConfig = { Size: int; Duration: TimeSpan }
 
-type BackoffSupervisorOptions = {
+type BackoffSupervisorEnvConfig = {
    MinBackoff: TimeSpan
    MaxBackoff: TimeSpan
    RandomFactor: float
@@ -18,14 +18,14 @@ type BackoffSupervisorOptions = {
    ResetCounterAfter: TimeSpan
 }
 
-type PersistenceSupervisorOptions = {
+type PersistenceSupervisorEnvConfig = {
    MinBackoff: TimeSpan
    MaxBackoff: TimeSpan
    RandomFactor: float
    MaxNrOfRetries: int
 }
 
-type QueueConnectionSettings = {
+type QueueConnectionEnvConfig = {
    Host: string
    Port: int
    VirtualHost: string
@@ -33,4 +33,4 @@ type QueueConnectionSettings = {
    Password: string
 }
 
-type QueueSettings = { Name: string; MaxParallelism: int }
+type QueueEnvConfig = { Name: string; MaxParallelism: int }

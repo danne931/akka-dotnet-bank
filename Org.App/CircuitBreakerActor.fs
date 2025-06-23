@@ -100,7 +100,7 @@ let actorProps () =
 
    propsPersist handler
 
-let initProps (opts: BackoffSupervisorOptions) =
+let initProps (opts: BackoffSupervisorEnvConfig) =
    BackoffSupervisor.Props(
       Backoff
          .OnFailure(

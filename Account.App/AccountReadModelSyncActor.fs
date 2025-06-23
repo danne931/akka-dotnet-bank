@@ -1071,27 +1071,25 @@ let upsertReadModels
 
 let initProps
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (chunking: StreamChunking)
+   (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
-   actorProps<ParentAccountSnapshot, AccountEvent> (
-      {
-         GetAggregateIdFromEvent =
-            AccountEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
-         GetAggregate =
-            fun parentAccountId -> task {
-               let aref = getAccountRef (ParentAccountId parentAccountId)
+   actorProps<ParentAccountSnapshot, AccountEvent> {
+      GetAggregateIdFromEvent =
+         AccountEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
+      GetAggregate =
+         fun parentAccountId -> task {
+            let aref = getAccountRef (ParentAccountId parentAccountId)
 
-               let! (parentAccountOpt: ParentAccountSnapshot option) =
-                  aref <? AccountMessage.GetAccount
+            let! (parentAccountOpt: ParentAccountSnapshot option) =
+               aref <? AccountMessage.GetAccount
 
-               return parentAccountOpt
-            }
-         Chunking = chunking
-         RestartSettings = restartSettings
-         RetryPersistenceAfter = retryPersistenceAfter
-         UpsertReadModels = upsertReadModels
-         EventJournalTag = Constants.AKKA_ACCOUNT_JOURNAL
-      }
-   )
+            return parentAccountOpt
+         }
+      Chunking = chunking
+      RestartSettings = restartSettings
+      RetryPersistenceAfter = retryPersistenceAfter
+      UpsertReadModels = upsertReadModels
+      EventJournalTag = Constants.AKKA_ACCOUNT_JOURNAL
+   }

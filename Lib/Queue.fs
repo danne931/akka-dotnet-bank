@@ -15,7 +15,7 @@ open Lib.CircuitBreaker
 type QueueConnectionDetails = AmqpConnectionDetails
 
 let createConnection
-   (settings: QueueConnectionSettings)
+   (settings: QueueConnectionEnvConfig)
    : QueueConnectionDetails
    =
    QueueConnectionDetails
@@ -84,7 +84,7 @@ let private producerActorProps<'QueueMessage>
 let startProducer<'QueueMessage>
    (system: ActorSystem)
    (conn: QueueConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    : IActorRef<'QueueMessage>
    =
@@ -113,7 +113,7 @@ let private deserializeFromQueue<'QueueMessage>
    =
    try
       let serializer =
-         system.Serialization.FindSerializerForType(typeof<'QueueMessage>)
+         system.Serialization.FindSerializerForType typeof<'QueueMessage>
 
       let byteArr = msg.Message.Bytes.ToArray()
       serializer.FromBinary<'QueueMessage> byteArr |> Ok
@@ -141,7 +141,7 @@ type QueueConsumerOptions<'QueueMessage, 'ActionRequest, 'ActionResponse> = {
 
 let private initConsumerStream
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (opts: QueueConsumerOptions<'QueueMessage, 'ActionRequest, 'ActionResponse>)
@@ -182,7 +182,7 @@ let private initConsumerStream
                logError e.Message
                Akka.Streams.Supervision.Directive.Resume)
 
-      mailbox.System.Materializer(settings)
+      mailbox.System.Materializer settings
 
    source
    |> Source.viaMat (killSwitch.Flow()) Keep.none
@@ -278,7 +278,7 @@ type private CircuitBreakerMessage =
 /// 'ActionRequest with circuit breaker integration over the action invocation.
 let consumerActorProps
    (queueConnection: AmqpConnectionDetails)
-   (queueSettings: QueueSettings)
+   (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (opts: QueueConsumerOptions<'QueueMessage, 'ActionRequest, 'ActionResponse>)

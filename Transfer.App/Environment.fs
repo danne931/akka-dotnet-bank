@@ -29,8 +29,8 @@ type TransferConfig = {
    MockDomesticTransferProcessor: MockDomesticTransferProcessor
    domesticTransferCircuitBreaker:
       Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
-   AutoTransferComputeThrottle: StreamThrottle
-   Queue: QueueSettings
+   AutoTransferComputeThrottle: StreamThrottleEnvConfig
+   Queue: QueueEnvConfig
 }
 
 let private getMockDomesticTransferProcessorHost (host: string option) =

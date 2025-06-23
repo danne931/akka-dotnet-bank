@@ -23,7 +23,7 @@ type private Input = {
 type KnowYourCustomerConfig = {
    KnowYourCustomerServiceCircuitBreaker:
       Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
-   KnowYourCustomerServiceQueue: QueueSettings
+   KnowYourCustomerServiceQueue: QueueEnvConfig
 }
 
 let config =

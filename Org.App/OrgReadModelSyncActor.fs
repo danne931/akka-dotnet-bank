@@ -521,24 +521,22 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
 
 let initProps
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (chunking: StreamChunking)
+   (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
-   actorProps<Org, OrgEvent> (
-      {
-         GetAggregateIdFromEvent =
-            OrgEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
-         GetAggregate =
-            fun orgId -> task {
-               let aref = getOrgRef (OrgId orgId)
-               let! (opt: Org option) = aref <? OrgMessage.GetOrg
-               return opt
-            }
-         Chunking = chunking
-         RestartSettings = restartSettings
-         RetryPersistenceAfter = retryPersistenceAfter
-         UpsertReadModels = upsertReadModels
-         EventJournalTag = Constants.AKKA_ORG_JOURNAL
-      }
-   )
+   actorProps<Org, OrgEvent> {
+      GetAggregateIdFromEvent =
+         OrgEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
+      GetAggregate =
+         fun orgId -> task {
+            let aref = getOrgRef (OrgId orgId)
+            let! (opt: Org option) = aref <? OrgMessage.GetOrg
+            return opt
+         }
+      Chunking = chunking
+      RestartSettings = restartSettings
+      RetryPersistenceAfter = retryPersistenceAfter
+      UpsertReadModels = upsertReadModels
+      EventJournalTag = Constants.AKKA_ORG_JOURNAL
+   }
