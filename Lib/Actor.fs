@@ -180,6 +180,8 @@ module ActorMetadata =
 
    type AutoTransferSchedulingMarker() = class end
 
+   type ScheduledTransfersLowBalanceWarningMarker() = class end
+
    type BillingCycleMarker() = class end
 
    type BillingStatementMarker() = class end
@@ -314,6 +316,11 @@ module ActorMetadata =
    let autoTransferScheduling = {
       Name = "auto-transfer-scheduling"
       Route = "auto-transfer-scheduling"
+   }
+
+   let scheduledTransfersLowBalanceWarning = {
+      Name = "scheduled-transfers-low-balance-warning"
+      Route = "scheduled-transfers-low-balance-warning"
    }
 
    let billingCycle = {

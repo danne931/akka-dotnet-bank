@@ -18,6 +18,7 @@ open SignalRBroadcast
 open Lib.Types
 open DomesticTransferSaga
 open DomesticTransfer.Service.Domain
+open TransferMessages
 
 type private Message = DomesticTransferServiceMessage
 

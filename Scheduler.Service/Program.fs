@@ -91,7 +91,8 @@ builder.Services.AddAkka(
                typedefof<SchedulerMessage>
                typedefof<BillingCycleMessage>
                typedefof<AccountClosureMessage>
-               typedefof<AutomaticTransfer.Message>
+               typedefof<TransferMessages.AutoTransferMessage>
+               typedefof<TransferMessages.ScheduledTransfersLowBalanceMessage>
                typedefof<SagaAlarmClockActor.Message>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka
@@ -132,6 +133,12 @@ builder.Services.AddAkka(
             ActorMetadata.autoTransferScheduling.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
+         .WithSingletonProxy<
+            ActorMetadata.ScheduledTransfersLowBalanceWarningMarker
+           >(
+            ActorMetadata.scheduledTransfersLowBalanceWarning.Name,
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
+         )
          .WithSingleton<QuartzPersistentActor>(
             "QuartzPersistentActor",
             (fun _ _ resolver ->
@@ -168,6 +175,9 @@ builder.Services.AddAkka(
 
                schedulingActor
                <! SchedulerMessage.SagaAlarmClockCronJobSchedule
+
+               schedulingActor
+               <! SchedulerMessage.ScheduledTransfersLowBalanceCheck
             })
          )
       |> ignore

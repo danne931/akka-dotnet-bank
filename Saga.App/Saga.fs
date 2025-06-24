@@ -27,9 +27,7 @@ open Bank.Scheduler
 open BillingSaga
 open PartnerBank.Service.Domain
 open CardIssuer.Service.Domain
-
-type private DomesticTransferMessage =
-   DomesticTransfer.Service.Domain.DomesticTransferServiceMessage
+open TransferMessages
 
 [<RequireQualifiedAccess>]
 type StartEvent =
@@ -471,7 +469,8 @@ let sagaHandler
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
-   (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
+   (getDomesticTransferRef:
+      ActorSystem -> IActorRef<DomesticTransferServiceMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
    (getKYCServiceRef: ActorSystem -> IActorRef<KYCMessage>)
    (getPartnerBankServiceRef:
@@ -920,7 +919,8 @@ let initProps
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
-   (getDomesticTransferRef: ActorSystem -> IActorRef<DomesticTransferMessage>)
+   (getDomesticTransferRef:
+      ActorSystem -> IActorRef<DomesticTransferServiceMessage>)
    (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
    (getKYCServiceRef: ActorSystem -> IActorRef<KYCMessage>)
    (getPartnerBankServiceRef:

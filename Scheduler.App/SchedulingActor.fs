@@ -12,6 +12,8 @@ open BillingStatement
 open ActorUtil
 open Lib.Postgres
 open Bank.Scheduler
+open Bank.Transfer.Domain
+open TransferMessages
 
 let actorProps (quartzPersistentActorRef: IActorRef) =
    let handler (ctx: Actor<SchedulerMessage>) = actor {
@@ -69,8 +71,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
                {
                   Manifest = "BalanceManagementMessage"
                   Message =
-                     AutomaticTransfer.Message.StartScheduledAutoTransfers
-                        schedule
+                     AutoTransferMessage.StartScheduledAutoTransfers schedule
                },
                trigger schedule
             )
@@ -83,8 +84,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
                {
                   Manifest = "BalanceManagementMessage"
                   Message =
-                     AutomaticTransfer.Message.StartScheduledAutoTransfers
-                        schedule
+                     AutoTransferMessage.StartScheduledAutoTransfers schedule
                },
                trigger schedule
             )
@@ -144,6 +144,51 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
                   Manifest = "SagaAlarmClockActorMessage"
                   Message =
                      SagaAlarmClockActor.Message.WakeUpIfUnfinishedBusiness
+               },
+               trigger
+            )
+
+         quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
+         return ignored ()
+      | ScheduledTransfersLowBalanceCheck ->
+         logInfo
+            "Scheduling daily check for accounts with insufficient balance for scheduled transfers"
+
+         let name = "ScheduledTransfersLowBalance"
+         let group = "Bank"
+
+         let builder =
+            TriggerBuilder
+               .Create()
+               .ForJob($"{name}Job", group)
+               .WithIdentity($"{name}Trigger", group)
+               .WithDescription(
+                  "Daily check for accounts with insufficient balance to cover scheduled transfers"
+               )
+
+         let trigger =
+            if Env.isProd then
+               logInfo
+                  "Scheduling daily scheduled transfers low balance check at 10:00 AM"
+
+               builder.WithCronSchedule("0 0 10 * * ?").Build()
+            else
+               logInfo
+                  "Scheduling scheduled transfers low balance check every 10 minutes"
+
+               builder
+                  .WithSimpleSchedule(fun s ->
+                     s.WithIntervalInMinutes(10).RepeatForever() |> ignore)
+                  .Build()
+
+         let path = ActorMetadata.scheduledTransfersLowBalanceWarning.ProxyPath
+
+         let job =
+            CreatePersistentJob(
+               path,
+               {
+                  Manifest = "ScheduledTransfersLowBalanceMessage"
+                  Message = ScheduledTransfersLowBalanceMessage.Detect
                },
                trigger
             )

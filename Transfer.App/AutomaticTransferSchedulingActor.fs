@@ -16,6 +16,7 @@ open Lib.Types
 open Lib.Postgres
 open AccountSqlMapper
 open AutomaticTransfer
+open TransferMessages
 
 let actorProps
    (system: ActorSystem)
@@ -27,12 +28,9 @@ let actorProps
    =
    let mat = system.Materializer()
 
-   let handler (ctx: Actor<Message>) = actor {
+   let handler (ctx: Actor<AutoTransferMessage>) = actor {
       let! msg = ctx.Receive()
-
-      let schedule =
-         match msg with
-         | Message.StartScheduledAutoTransfers schedule -> schedule
+      let (AutoTransferMessage.StartScheduledAutoTransfers schedule) = msg
 
       logInfo
          ctx
@@ -75,7 +73,7 @@ let actorProps
 
    props handler
 
-let get (system: ActorSystem) : IActorRef<Message> =
+let get (system: ActorSystem) : IActorRef<AutoTransferMessage> =
    typed
    <| ActorRegistry
       .For(system)

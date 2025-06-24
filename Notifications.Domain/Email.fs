@@ -1,5 +1,6 @@
 module Email
 
+open System
 open Lib.SharedTypes
 open Bank.Employee.Domain
 open Bank.Account.Domain
@@ -67,6 +68,14 @@ type PurchaseFailEmailInfo = {
    Reason: PurchaseFailReason
 }
 
+type ScheduledTransferInsufficientBalanceWarning = {
+   SenderAccountName: string
+   AvailableBalance: decimal
+   ScheduledTransfersCount: int
+   ScheduledTransfersAmount: decimal
+   ImminentScheduledTransferDate: DateTime
+}
+
 [<RequireQualifiedAccess>]
 type EmailInfo =
    | OrgOnboardingApplicationSubmitted of OrgOnboardingEmailInfo
@@ -88,6 +97,8 @@ type EmailInfo =
    | PlatformPaymentPaid of PlatformPaymentEmailInfo
    | PlatformPaymentDeposited of PlatformPaymentEmailInfo
    | DomesticTransfer of DomesticTransferEmailInfo
+   | ScheduledTransferInsufficientBalanceWarning of
+      ScheduledTransferInsufficientBalanceWarning
    | ApplicationErrorRequiresSupport of error: string
    | EmployeeInvite of EmployeeInviteEmailInfo
    | EmployeeOnboardingFail of EmployeeOnboardingFailInfo

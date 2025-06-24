@@ -12,7 +12,6 @@ open Akkling.Cluster.Sharding
 open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Account.Domain
-open DomesticTransfer.Service.Domain
 open PartnerBank.Service.Domain
 open CardIssuer.Service.Domain
 open BillingStatement
@@ -21,6 +20,7 @@ open Lib.CircuitBreaker
 open CommandApproval
 open Lib.Saga
 open Bank.Scheduler
+open TransferMessages
 
 
 
@@ -167,6 +167,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? SagaMessage<AppSaga.StartEvent, AppSaga.Event> -> "AppSagaMessage"
       | :? AppSaga.AppSagaPersistableEvent -> "AppSagaEvent"
       | :? AppSaga.Saga -> "AppSagaSnapshot"
+      | :? ScheduledTransfersLowBalanceMessage ->
+         "ScheduledTransfersLowBalanceMessage"
       | :? AccountLoadTestTypes.AccountLoadTestMessage ->
          "AccountLoadTestMessage"
       | :? AccountSeederMessage -> "AccountSeederMessage"
@@ -185,7 +187,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? CircuitBreakerMessage -> "CircuitBreakerActorMessage"
       | :? BillingCycleMessage -> "BillingCycleActorMessage"
       | :? DomesticTransferServiceMessage -> "DomesticTransferActorMessage"
-      | :? AutomaticTransfer.Message -> "AutomaticTransferActorMessage"
+      | :? AutoTransferMessage -> "AutomaticTransferActorMessage"
       | :? ShardEnvelope as e ->
          match e.Message with
          | :? OrgMessage -> "OrgShardEnvelope"
@@ -236,7 +238,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // Messages from SchedulingActor to BillingCycleActor
       | :? BillingCycleMessage
       // Messages from SchedulingActor to AutomaticTransferSchedulingActor
-      | :? AutomaticTransfer.Message
+      | :? AutoTransferMessage
       // Ack/ProgressCheck messages from saga to to DomesticTransferActor
       | :? DomesticTransferServiceMessage
       // Messages from sharded account nodes to AccountClosureActor cluster
@@ -288,6 +290,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? AppSaga.Saga
       // Messages from SchedulingActor to Saga.App/SagaAlarmClockActor
       | :? SagaAlarmClockActor.Message
+      // Messages from SchedulingActor to ScheduledTransfersLowBalanceWarningActor
+      | :? ScheduledTransfersLowBalanceMessage
       // OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy response
       // serialized for message sent from org cluster nodes to web node
       | :? CommandApprovalDailyAccrual
@@ -363,12 +367,14 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AppSagaShardEnvelope" -> typeof<AppSagaShardEnvelope>
          | "AppSagaSnapshot" -> typeof<AppSaga.Saga>
          | "SagaAlarmClockMessage" -> typeof<SagaAlarmClockActor.Message>
+         | "ScheduledTransfersLowBalanceMessage" ->
+            typeof<ScheduledTransfersLowBalanceMessage>
          | "SignalRMessage" -> typeof<SignalRActor.Msg>
          | "CircuitBreakerEvent" -> typeof<CircuitBreakerEvent>
          | "CircuitBreakerActorMessage" -> typeof<CircuitBreakerMessage>
          | "CircuitBreakerActorState" -> typeof<CircuitBreakerState>
          | "BillingCycleActorMessage" -> typeof<BillingCycleMessage>
-         | "AutomaticTransferActorMessage" -> typeof<AutomaticTransfer.Message>
+         | "AutomaticTransferActorMessage" -> typeof<AutoTransferMessage>
          | "DomesticTransfer.Service.Domain+DomesticTransferServiceMessage, Transfer.Domain"
          | "DomesticTransferActorMessage" ->
             typeof<DomesticTransferServiceMessage>

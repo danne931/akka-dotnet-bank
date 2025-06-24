@@ -11,12 +11,12 @@ open Akkling
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open DomesticTransfer.Service.Domain
 open PartnerBank.Service.Domain
 open CardIssuer.Service.Domain
 open Bank.Infrastructure
 open ActorUtil
 open SignalRBroadcast
+open TransferMessages
 
 let builder = Env.builder
 
@@ -39,7 +39,7 @@ let journalOpts = AkkaInfra.getJournalOpts ()
 journalOpts.Adapters
    .AddEventAdapter<OrganizationEventPersistenceAdapter>(
       "org-v1",
-      [ typedefof<OrgEvent> ]
+      [ typeof<OrgEvent> ]
    )
    .AddEventAdapter<AccountEventPersistenceAdapter>(
       "account-v1",
@@ -47,7 +47,7 @@ journalOpts.Adapters
    )
    .AddEventAdapter<EmployeeEventPersistenceAdapter>(
       "employee-v1",
-      [ typedefof<EmployeeEvent> ]
+      [ typeof<EmployeeEvent> ]
    )
    .AddEventAdapter<SagaEventPersistenceAdapter>(
       "saga-v1",
@@ -286,6 +286,17 @@ builder.Services.AddAkka(
                      system
                      (AccountActor.get system)
                      EnvTransfer.config.AutoTransferComputeThrottle
+
+               typedProps.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
+         )
+         .WithSingleton<ActorMetadata.ScheduledTransfersLowBalanceWarningMarker>(
+            ActorMetadata.scheduledTransfersLowBalanceWarning.Name,
+            (fun system _ _ ->
+               let typedProps =
+                  ScheduledTransfersLowBalanceWarningActor.initProps
+                     system
+                     (fun () -> EmailServiceActor.getProducer system)
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)

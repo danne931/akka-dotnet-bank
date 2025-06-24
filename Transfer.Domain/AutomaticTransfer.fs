@@ -443,6 +443,3 @@ module CycleDetection =
 
          r.DestinationAccounts
          |> List.exists (fun d -> dfs r.Sender.AccountId d.Recipient.AccountId)
-
-[<RequireQualifiedAccess>]
-type Message = StartScheduledAutoTransfers of CronSchedule

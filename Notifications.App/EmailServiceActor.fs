@@ -227,6 +227,18 @@ let private emailPropsFromMessage
       Email = None
       Data = {| name = info.EmployeeName |}
      }
+   | EmailInfo.ScheduledTransferInsufficientBalanceWarning info -> {
+      OrgId = msg.OrgId
+      Event = "scheduled-transfer-low-balance-warning"
+      Email = None
+      Data = {|
+         senderAccountName = info.SenderAccountName
+         availableBalance = $"${info.AvailableBalance}"
+         scheduledTransfersCount = info.ScheduledTransfersCount
+         scheduledTransfersAmount = $"${info.ScheduledTransfersAmount}"
+         imminentScheduledTransferDate = info.ImminentScheduledTransferDate
+      |}
+     }
 
 let private sendEmail
    (client: HttpClient)

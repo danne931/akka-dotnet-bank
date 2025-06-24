@@ -1,7 +1,5 @@
 module DomesticTransfer.Service.Domain
 
-open Bank.Transfer.Domain
-
 [<RequireQualifiedAccess>]
 type DomesticTransferServiceAction =
    | TransferAck
@@ -28,7 +26,3 @@ type DomesticTransferServiceResponse = {
    Reason: string
    TransactionId: string
 }
-
-[<RequireQualifiedAccess>]
-type DomesticTransferServiceMessage =
-   | TransferRequest of DomesticTransferServiceAction * DomesticTransfer

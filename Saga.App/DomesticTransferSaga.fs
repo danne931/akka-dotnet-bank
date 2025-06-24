@@ -10,9 +10,9 @@ open Bank.Transfer.Domain
 open Email
 open Lib.Saga
 open Bank.Scheduler
+open TransferMessages
 
-type private ServiceMessage =
-   DomesticTransfer.Service.Domain.DomesticTransferServiceMessage
+type private ServiceMessage = DomesticTransferServiceMessage
 
 type private ServiceAction =
    DomesticTransfer.Service.Domain.DomesticTransferServiceAction

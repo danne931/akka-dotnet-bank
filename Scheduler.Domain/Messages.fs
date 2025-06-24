@@ -17,3 +17,4 @@ type SchedulerMessage =
    | TriggerBalanceHistoryCronJob
    | BalanceManagementCronJobSchedule
    | SagaAlarmClockCronJobSchedule
+   | ScheduledTransfersLowBalanceCheck

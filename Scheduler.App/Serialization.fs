@@ -10,6 +10,7 @@ open Lib.SharedTypes
 open Bank.Account.Domain
 open BillingStatement
 open Bank.Scheduler
+open TransferMessages
 
 // NOTE:
 // Using a QuartzMessageEnvelope type for messages serialized with
@@ -45,7 +46,12 @@ type private QuartzBillingMessageEnvelope = {
 
 type private QuartzBalanceManagementMessageEnvelope = {
    Manifest: string
-   Message: AutomaticTransfer.Message
+   Message: AutoTransferMessage
+}
+
+type private QuartzScheduledTransfersLowBalanceMessageEnvelope = {
+   Manifest: string
+   Message: ScheduledTransfersLowBalanceMessage
 }
 
 type private QuartzAccountClosureMessageEnvelope = {
@@ -150,30 +156,19 @@ type QuartzSerializer(system: ExtendedActorSystem) =
          }
 
          msg
-      | "SagaActorMessage" ->
+      | "SagaAlarmClockActorMessage" ->
          let deseri =
-            JsonSerializer.Deserialize<QuartzSagaMessageEnvelope>(
+            JsonSerializer.Deserialize<QuartzSagaAlarmClockMessageEnvelope>(
                bytes,
                Serialization.jsonOptions
             )
 
-         let entityId = string deseri.Message.CorrelationId
-
-         let msg: Akkling.Cluster.Sharding.ShardEnvelope = {
-            ShardId =
-               ActorUtil
-                  .ClusterMetadata
-                  .sagaShardRegion
-                  .messageExtractor
-                  .ShardId(entityId)
-            EntityId = entityId
-            Message = deseri.Message.SagaMessage
-         }
-
-         msg
-      | "SagaAlarmClockActorMessage" ->
+         deseri.Message
+      | "ScheduledTransfersLowBalanceMessage" ->
          let deseri =
-            JsonSerializer.Deserialize<QuartzSagaAlarmClockMessageEnvelope>(
+            JsonSerializer.Deserialize<
+               QuartzScheduledTransfersLowBalanceMessageEnvelope
+             >(
                bytes,
                Serialization.jsonOptions
             )
