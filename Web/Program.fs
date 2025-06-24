@@ -31,7 +31,7 @@ open Lib.CircuitBreaker
 
 let builder = Env.builder
 
-LogInfra.start builder
+LogInfra.start builder |> ignore
 
 // Endpoint serialization
 builder.Services.ConfigureHttpJsonOptions(fun opts ->

@@ -133,7 +133,6 @@ let sqlParamsFromEmployee (employee: Employee) : (string * SqlValue) list = [
    "status", EmployeeSqlWriter.status employee.Status
    "statusDetail", EmployeeSqlWriter.statusDetail employee.Status
    "role", EmployeeSqlWriter.role employee.Role
-   "cards", EmployeeSqlWriter.cards employee.Cards
    "inviteToken", EmployeeSqlWriter.inviteTokenFromStatus employee.Status
    "inviteExpiration",
    EmployeeSqlWriter.inviteExpirationFromStatus employee.Status
@@ -164,7 +163,6 @@ let upsertReadModels
           {EmployeeFields.email},
           {EmployeeFields.firstName},
           {EmployeeFields.lastName},
-          {EmployeeFields.cards},
           {EmployeeFields.status},
           {EmployeeFields.statusDetail},
           {EmployeeFields.inviteToken},
@@ -177,7 +175,6 @@ let upsertReadModels
           @email,
           @firstName,
           @lastName,
-          @cards,
           @status::{EmployeeTypeCast.status},
           @statusDetail,
           @inviteToken,
@@ -187,7 +184,6 @@ let upsertReadModels
       DO UPDATE SET
          {EmployeeFields.status} = @status::{EmployeeTypeCast.status},
          {EmployeeFields.statusDetail} = @statusDetail,
-         {EmployeeFields.cards} = @cards,
          {EmployeeFields.role} = @role::{EmployeeTypeCast.role},
          {EmployeeFields.inviteToken} = @inviteToken,
          {EmployeeFields.inviteExpiration} = @inviteExpiration,

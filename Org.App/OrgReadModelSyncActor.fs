@@ -343,10 +343,8 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
           @employerIdentificationNumber)
       ON CONFLICT ({OrgFields.orgId})
       DO UPDATE SET
-         {OrgFields.parentAccountId} = @parentAccountId,
          {OrgFields.status} = @status::{OrgTypeCast.status},
-         {OrgFields.statusDetail} = @statusDetail,
-         {OrgFields.adminTeamEmail} = @adminTeamEmail;
+         {OrgFields.statusDetail} = @statusDetail;
       """,
       orgSqlParams
 

@@ -18,21 +18,61 @@ module Writer = EmployeeSqlMapper.EmployeeSqlWriter
 module Typecast = EmployeeSqlMapper.EmployeeTypeCast
 let table = EmployeeSqlMapper.table
 
-let searchEmployees (orgId: OrgId) (searchQuery: string) =
-   pgQuery<Employee>
+let searchEmployees (orgId: OrgId) (searchQuery: string) = taskResultOption {
+   let query =
       $$"""
-      SELECT * FROM {{table}}
-      WHERE
-         {{Fields.orgId}} = @orgId
-         AND {{Fields.searchQuery}} %> @query
-      ORDER BY {{Fields.searchQuery}} <-> @query DESC
-      LIMIT 10
+      WITH top_employees AS (
+         SELECT * FROM {{table}}
+         WHERE
+            {{Fields.orgId}} = @orgId
+            AND {{Fields.searchQuery}} %> @query
+         ORDER BY {{Fields.searchQuery}} <-> @query DESC
+         LIMIT 10
+      )
+      SELECT
+         e.*,
+         c.{{CardSqlMapper.CardFields.cardId}},
+         c.{{CardSqlMapper.CardFields.accountId}},
+         c.{{CardSqlMapper.CardFields.cardType}},
+         c.{{CardSqlMapper.CardFields.isVirtual}},
+         c.{{CardSqlMapper.CardFields.statusDetail}},
+         c.{{CardSqlMapper.CardFields.expYear}},
+         c.{{CardSqlMapper.CardFields.expMonth}},
+         c.{{CardSqlMapper.CardFields.lastPurchaseAt}},
+         c.{{CardSqlMapper.CardFields.cardNumberLast4}},
+         c.{{CardSqlMapper.CardFields.cardNickname}},
+         c.{{CardSqlMapper.CardFields.dailyPurchaseLimit}},
+         c.{{CardSqlMapper.CardFields.monthlyPurchaseLimit}}
+      FROM top_employees e
+      LEFT JOIN {{CardSqlMapper.table}} c USING({{Fields.employeeId}})
       """
-      (Some [
-         "orgId", Writer.orgId orgId
-         "query", Writer.searchQuery searchQuery
-      ])
-      Reader.employee
+
+   let! result =
+      pgQuery<Employee * (Card option)>
+         query
+         (Some [
+            "orgId", Writer.orgId orgId
+            "query", Writer.searchQuery searchQuery
+         ])
+         (fun read ->
+            Reader.employee read,
+            read.uuidOrNone CardSqlMapper.CardFields.cardId
+            |> Option.map (fun _ -> CardSqlMapper.CardSqlReader.card read))
+
+   return
+      result
+      |> List.groupBy (fst >> _.EmployeeId)
+      |> List.map (fun (_, employeesAndCards) ->
+         let cards =
+            employeesAndCards
+            |> List.choose snd
+            |> List.map (fun c -> c.CardId, c)
+            |> Map.ofList
+
+         let employee = fst employeesAndCards.Head
+
+         { employee with Cards = cards })
+}
 
 let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult {
    let validation =

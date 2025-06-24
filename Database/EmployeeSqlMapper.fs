@@ -19,7 +19,6 @@ module EmployeeFields =
    let email = "email"
    let firstName = "first_name"
    let lastName = "last_name"
-   let cards = "cards"
    let status = "status"
    let statusDetail = "status_detail"
    let searchQuery = "search_query"
@@ -42,10 +41,6 @@ module EmployeeSqlReader =
    let firstName (read: RowReader) = read.string EmployeeFields.firstName
    let lastName (read: RowReader) = read.string EmployeeFields.lastName
    let searchQuery (read: RowReader) = read.text EmployeeFields.searchQuery
-
-   let cards (read: RowReader) =
-      read.text EmployeeFields.cards
-      |> Serialization.deserializeUnsafe<Card list>
 
    let inviteToken (read: RowReader) : InviteToken option =
       let token = read.uuidOrNone EmployeeFields.inviteToken
@@ -70,7 +65,7 @@ module EmployeeSqlReader =
       Email = email read
       FirstName = firstName read
       LastName = lastName read
-      Cards = cards read |> List.map (fun o -> o.CardId, o) |> Map.ofList
+      Cards = Map.empty
       Status = statusDetail read
       AuthProviderUserId = authProviderUserId read
    }
@@ -91,9 +86,6 @@ module EmployeeSqlWriter =
    let firstName = Sql.string
    let lastName = Sql.string
    let searchQuery = Sql.text
-
-   let cards (cards: Map<CardId, Card>) =
-      cards.Values |> Seq.toList |> Serialization.serialize |> Sql.jsonb
 
    let status (status: EmployeeStatus) = status |> string |> Sql.string
 

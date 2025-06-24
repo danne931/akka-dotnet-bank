@@ -366,7 +366,6 @@ CREATE TABLE employee (
    role employee_role NOT NULL,
    status employee_status NOT NULL,
    status_detail JSONB NOT NULL,
-   cards JSONB NOT NULL,
    invite_token UUID,
    invite_expiration TIMESTAMPTZ,
    auth_provider_user_id UUID,
@@ -1474,7 +1473,6 @@ INSERT INTO employee (
    role,
    status,
    status_detail,
-   cards,
    org_id
 )
 VALUES (
@@ -1489,7 +1487,6 @@ VALUES (
    'Admin',
    'Active',
    '"Active"'::jsonb,
-   '{}'::jsonb,
    (SELECT org_id FROM organization WHERE org_name = 'system')
 );
 
