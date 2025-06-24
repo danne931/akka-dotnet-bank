@@ -375,7 +375,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "CircuitBreakerActorState" -> typeof<CircuitBreakerState>
          | "BillingCycleActorMessage" -> typeof<BillingCycleMessage>
          | "AutomaticTransferActorMessage" -> typeof<AutoTransferMessage>
-         | "DomesticTransfer.Service.Domain+DomesticTransferServiceMessage, Transfer.Domain"
+         | "TransferMessages+DomesticTransferServiceMessage, Transfer.Domain"
          | "DomesticTransferActorMessage" ->
             typeof<DomesticTransferServiceMessage>
          | "AccountClosureActorMessage" -> typeof<AccountClosureMessage>
