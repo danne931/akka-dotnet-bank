@@ -236,7 +236,7 @@ module Fields = CardSqlMapper.CardFields
 module Reader = CardSqlMapper.CardSqlReader
 module Writer = CardSqlMapper.CardSqlWriter
 
-let getCards (orgId: OrgId) (query: CardQuery) =
+let getCards (orgId: OrgId) (query: CardQuery) = taskResultOption {
    let table = CardSqlMapper.table
    let employeeTable = EmployeeSqlMapper.table
 
@@ -322,10 +322,30 @@ let getCards (orgId: OrgId) (query: CardQuery) =
         WHERE {where}
         ORDER BY {table}.{Fields.lastPurchaseAt} desc"
 
-   pgQuery<CardWithMetrics> query (Some queryParams) (fun read -> {
-      Card = Reader.card read
-      DailyPurchaseAccrued = read.decimalOrNone "dpa" |> Option.defaultValue 0m
-      MonthlyPurchaseAccrued =
-         read.decimalOrNone "mpa" |> Option.defaultValue 0m
-      Employee = Reader.employee read
-   })
+   let! cardsWithMetrics =
+      pgQuery<CardWithMetrics> query (Some queryParams) (fun read -> {
+         Card = Reader.card read
+         DailyPurchaseAccrued =
+            read.decimalOrNone "dpa" |> Option.defaultValue 0m
+         MonthlyPurchaseAccrued =
+            read.decimalOrNone "mpa" |> Option.defaultValue 0m
+         Employee = Reader.employee read
+      })
+
+   let cardsGroupedByEmployeeId =
+      cardsWithMetrics
+      |> List.groupBy _.Employee.EmployeeId
+      |> List.map (fun (emId, cards) ->
+         emId, cards |> List.map (fun x -> x.Card.CardId, x.Card) |> Map.ofList)
+      |> Map.ofList
+
+   return
+      cardsWithMetrics
+      |> List.map (fun c -> {
+         c with
+            Employee = {
+               c.Employee with
+                  Cards = cardsGroupedByEmployeeId[c.Employee.EmployeeId]
+            }
+      })
+}

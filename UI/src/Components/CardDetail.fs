@@ -134,7 +134,7 @@ let update
          let title =
             $"{lockOrUnlock} {msg.Card.Display} for {msg.Employee.Name}"
 
-         if (not msg.WillLock) && msg.UnlockRequiresApproval.IsSome then
+         if not msg.WillLock && msg.UnlockRequiresApproval.IsSome then
             $"Request approval to {title}"
          else
             $"This will {title}"
@@ -311,7 +311,10 @@ let CardDetailComponent
       InitiatedBy = userSession.AsInitiator
       Employee = card.Employee
       Card = card.Card
-      WillLock = true
+      WillLock =
+         match card.Card.Status with
+         | CardStatus.Active _ -> true
+         | _ -> false
       UserSession = userSession
       UnlockRequiresApproval =
          CommandApprovalRule.commandTypeRequiresApproval
@@ -427,11 +430,7 @@ let CardDetailComponent
                   )
                ]
                attr.onClick (fun _ ->
-                  dispatch
-                  <| Msg.ShowCardLockConfirmation {
-                     lockCardMsg with
-                        WillLock = false
-                  })
+                  dispatch <| Msg.ShowCardLockConfirmation lockCardMsg)
             ]
          | CardStatus.Pending -> ()
          | CardStatus.Closed -> ()
