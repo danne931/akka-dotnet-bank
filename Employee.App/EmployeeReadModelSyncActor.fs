@@ -253,6 +253,7 @@ let upsertReadModels
       ON CONFLICT ({CardFields.cardId})
       DO UPDATE SET
          {CardFields.status} = @status::{CardTypeCast.status},
+         {CardFields.statusDetail} = @statusDetail,
          {CardFields.dailyPurchaseLimit} = @dailyPurchaseLimit,
          {CardFields.monthlyPurchaseLimit} = @monthlyPurchaseLimit,
          {CardFields.lastPurchaseAt} = @lastPurchaseAt,
