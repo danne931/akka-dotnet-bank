@@ -512,7 +512,7 @@ let onEventPersisted
          |> AccountCommand.SettlePlatformPayment
          |> AccountMessage.StateChange
 
-      dep.getAccountRef payment.Payee.ParentAccountId <! msg
+      dep.getAccountRef payment.Payer.ParentAccountId <! msg
 
    match evt with
    | Event.PaymentRequestCancelled -> ()

@@ -136,7 +136,10 @@ type AccountCommand =
          | PaymentMethod.Platform accountId -> accountId
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | DepositPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
-      | SettlePlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
+      | SettlePlatformPayment cmd ->
+         match cmd.Data.PaymentMethod with
+         | PaymentMethod.Platform accountId -> accountId
+         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | FailPlatformPayment cmd ->
          match cmd.Data.PaymentMethod with
          | PaymentMethod.Platform accountId -> accountId
