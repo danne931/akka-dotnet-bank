@@ -23,7 +23,8 @@ module AccountFields =
    let currency = "currency"
    let status = "status"
    let balance = "balance"
-   let pendingDeductions = "pending_deductions"
+   let pendingDeductionsMoney = "pending_deductions_money"
+   let pendingDeductionsCount = "pending_deductions_count"
    let autoTransferRule = "auto_transfer_rule"
    let autoTransferRuleFrequency = "auto_transfer_rule_frequency"
 
@@ -57,8 +58,10 @@ module AccountSqlReader =
 
    let balance (read: RowReader) = read.decimal AccountFields.balance
 
-   let pendingDeductions (read: RowReader) =
-      read.decimal AccountFields.pendingDeductions
+   let pendingDeductions (read: RowReader) : PendingDeductions = {
+      Count = read.int AccountFields.pendingDeductionsCount
+      Money = read.decimal AccountFields.pendingDeductionsMoney
+   }
 
    let autoTransferRule (read: RowReader) : AutomaticTransferConfig option =
       read.textOrNone AccountFields.autoTransferRule
@@ -93,7 +96,13 @@ module AccountSqlWriter =
    let depository (dep: AccountDepository) = dep |> string |> Sql.string
    let name = Sql.string
    let balance = Sql.money
-   let pendingDeductions = Sql.money
+
+   let pendingDeductionsMoney (deductions: PendingDeductions) =
+      Sql.money deductions.Money
+
+   let pendingDeductionsCount (deductions: PendingDeductions) =
+      Sql.int deductions.Count
+
    let currency (currency: Currency) = Sql.string <| string currency
    let status (status: AccountStatus) = status |> string |> Sql.string
 

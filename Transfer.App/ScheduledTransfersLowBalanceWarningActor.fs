@@ -84,7 +84,7 @@ let get (system: ActorSystem) : IActorRef<ScheduledTransfersLowBalanceMessage> =
 // transfers is greater than the available balance in an associated account.
 let getAccountsWithInsufficientBalanceToCoverScheduledTransfers () = asyncResultOption {
    let availableBalance =
-      $"a.{AccountFields.balance} - a.{AccountFields.pendingDeductions}"
+      $"a.{AccountFields.balance} - a.{AccountFields.pendingDeductionsMoney}"
 
    let transferAmount = $"t.{TransferFields.amount}"
    let scheduledAt = $"t.{TransferFields.scheduledAt}"

@@ -702,8 +702,10 @@ let sqlParamsFromAccount (account: Account) : (string * SqlValue) list = [
    "name", AccountSqlWriter.name account.Name
    "depository", AccountSqlWriter.depository account.Depository
    "balance", AccountSqlWriter.balance account.Balance
-   "pendingDeductions",
-   AccountSqlWriter.pendingDeductions account.PendingDeductions
+   "pendingDeductionsMoney",
+   AccountSqlWriter.pendingDeductionsMoney account.PendingDeductions
+   "pendingDeductionsCount",
+   AccountSqlWriter.pendingDeductionsCount account.PendingDeductions
    "currency", AccountSqlWriter.currency account.Currency
    "status", AccountSqlWriter.status account.Status
    "autoTransferRule",
@@ -794,7 +796,8 @@ let upsertReadModels
           {AccountFields.name},
           {AccountFields.depository},
           {AccountFields.balance},
-          {AccountFields.pendingDeductions},
+          {AccountFields.pendingDeductionsMoney},
+          {AccountFields.pendingDeductionsCount},
           {AccountFields.currency},
           {AccountFields.status},
           {AccountFields.autoTransferRule},
@@ -808,7 +811,8 @@ let upsertReadModels
           @name,
           @depository::{AccountTypeCast.depository},
           @balance,
-          @pendingDeductions,
+          @pendingDeductionsMoney,
+          @pendingDeductionsCount,
           @currency,
           @status::{AccountTypeCast.status},
           @autoTransferRule,
@@ -816,7 +820,8 @@ let upsertReadModels
       ON CONFLICT ({AccountFields.accountId})
       DO UPDATE SET
          {AccountFields.balance} = @balance,
-         {AccountFields.pendingDeductions} = @pendingDeductions,
+         {AccountFields.pendingDeductionsMoney} = @pendingDeductionsMoney,
+         {AccountFields.pendingDeductionsCount} = @pendingDeductionsCount,
          {AccountFields.status} = @status::{AccountTypeCast.status},
          {AccountFields.autoTransferRule} = @autoTransferRule,
          {AccountFields.autoTransferRuleFrequency} = @autoTransferRuleFrequency::{AccountTypeCast.autoTransferRuleFrequency};

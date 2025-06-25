@@ -493,7 +493,7 @@ type Account = {
    Currency: Currency
    Status: AccountStatus
    Balance: decimal
-   PendingDeductions: decimal
+   PendingDeductions: PendingDeductions
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
    AutoTransferRule: AutomaticTransferConfig option
@@ -502,6 +502,8 @@ type Account = {
    member x.CompositeId = x.AccountId, x.ParentAccountId, x.OrgId
 
    member x.FullName = $"{x.Name} **{x.AccountNumber.Last4}"
+
+   member x.AvailableBalance = x.Balance - x.PendingDeductions.Money
 
    member private x.autoTransferManagement
       (computedTransferFromRule:
@@ -536,7 +538,7 @@ type Account = {
       Currency = Currency.USD
       Status = AccountStatus.InitialEmptyState
       Balance = 0m
-      PendingDeductions = 0m
+      PendingDeductions = PendingDeductions.Zero
       AccountNumber = AccountNumber.Empty
       RoutingNumber = RoutingNumber.Empty
       AutoTransferRule = None
@@ -577,9 +579,6 @@ type ParentAccountSnapshot = {
       x.Events |> List.filter (fun evt -> evt.AccountId = accountId)
 
    member x.Balance = x.VirtualAccounts.Values |> Seq.sumBy _.Balance
-
-   member x.PendingDeductions =
-      x.VirtualAccounts.Values |> Seq.sumBy _.PendingDeductions
 
    member x.PrimaryVirtualAccountCompositeId =
       x.PrimaryVirtualAccountId, x.ParentAccountId, x.OrgId

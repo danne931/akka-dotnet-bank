@@ -108,6 +108,23 @@ module MoneyFlow =
          | "out" -> Some MoneyFlow.Out
          | _ -> None
 
+type PendingDeductions = {
+   Count: int
+   Money: decimal
+} with
+
+   static member Zero = { Count = 0; Money = 0m }
+
+   member x.Add(amount: decimal) = {
+      Count = x.Count + 1
+      Money = x.Money + amount
+   }
+
+   member x.Remove(amount: decimal) = {
+      Count = max (x.Count - 1) 0
+      Money = max (x.Money - amount) 0m
+   }
+
 type PurchaseInfo = {
    OrgId: OrgId
    ParentAccountId: ParentAccountId
