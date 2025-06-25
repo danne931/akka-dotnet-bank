@@ -321,7 +321,7 @@ let transactionUIFriendly
       |> Option.defaultValue recipientFromEvt.FullName
 
    let accountName accountId =
-      org.AccountProfiles.TryFind(accountId)
+      org.AccountProfiles.TryFind accountId
       |> Option.map (fun a -> a.Account.FullName)
       |> Option.defaultValue "Account"
 
@@ -344,6 +344,7 @@ let transactionUIFriendly
             Info = $"Deposited money into {recipientAccount}."
             MoneyFlow =
                match txn.Status with
+               | TransactionStatus.Scheduled
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.In
                | TransactionStatus.Failed -> None
@@ -380,6 +381,7 @@ let transactionUIFriendly
             Info = $"Purchase from {merchant} with card {card} ({accountName})"
             MoneyFlow =
                match txn.Status with
+               | TransactionStatus.Scheduled
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
@@ -412,18 +414,20 @@ let transactionUIFriendly
          |> List.tryPick (function
             | History.Account accountHistory ->
                match accountHistory.Event with
+               | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
+                  Some e.Data.BaseInfo
                | AccountEvent.InternalTransferBetweenOrgsPending e ->
-                  let i = e.Data.BaseInfo
-
-                  let sender =
-                     if e.OrgId = org.Org.OrgId then
-                        accountName i.Sender.AccountId
-                     else
-                        i.Sender.Name
-
-                  Some(sender, i.Recipient.Name)
+                  Some e.Data.BaseInfo
                | _ -> None
             | _ -> None)
+         |> Option.map (fun info ->
+            let sender =
+               if info.Sender.OrgId = org.Org.OrgId then
+                  accountName info.Sender.AccountId
+               else
+                  info.Sender.Name
+
+            sender, info.Recipient.Name)
          |> Option.defaultValue ("Unknown", "Unknown")
 
       {
@@ -433,6 +437,7 @@ let transactionUIFriendly
             MoneyFlow =
                match txn.Status with
                | TransactionStatus.Complete
+               | TransactionStatus.Scheduled
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
             Source = sender
@@ -444,16 +449,15 @@ let transactionUIFriendly
          |> List.tryPick (function
             | History.Account accountHistory ->
                match accountHistory.Event with
-               | AccountEvent.DomesticTransferPending e ->
-                  let i = e.Data.BaseInfo
-
-                  Some(
-                     i.Sender.Name,
-                     domesticRecipientName i.Recipient,
-                     string i.Recipient.PaymentNetwork
-                  )
+               | AccountEvent.DomesticTransferScheduled e ->
+                  Some e.Data.BaseInfo
+               | AccountEvent.DomesticTransferPending e -> Some e.Data.BaseInfo
                | _ -> None
             | _ -> None)
+         |> Option.map (fun info ->
+            info.Sender.Name,
+            domesticRecipientName info.Recipient,
+            string info.Recipient.PaymentNetwork)
          |> Option.defaultValue ("Unknown", "Unknown", "Unknown")
 
       {
@@ -464,6 +468,7 @@ let transactionUIFriendly
             MoneyFlow =
                match txn.Status with
                | TransactionStatus.Complete
+               | TransactionStatus.Scheduled
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
             Source = sender
@@ -515,6 +520,7 @@ let transactionUIFriendly
             Info = $"Payment from {sender} to {recipient}"
             MoneyFlow =
                match txn.Status with
+               | TransactionStatus.Scheduled
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> moneyFlow
                | TransactionStatus.Failed -> None

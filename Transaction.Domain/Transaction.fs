@@ -46,12 +46,14 @@ type History =
 
 [<RequireQualifiedAccess>]
 type TransactionStatus =
+   | Scheduled
    | InProgress
    | Complete
    | Failed
 
    member x.Display =
       match x with
+      | TransactionStatus.Scheduled -> "Scheduled"
       | TransactionStatus.Complete -> "Complete"
       | TransactionStatus.InProgress -> "In Progress"
       | TransactionStatus.Failed -> "Failed"
@@ -155,6 +157,12 @@ let transactionInfoFromHistory
             TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
+      | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
+         Some(
+            TransactionType.InternalTransferBetweenOrgs,
+            TransactionStatus.Scheduled,
+            e.Data.BaseInfo.Amount
+         )
       | AccountEvent.InternalTransferBetweenOrgsPending e ->
          Some(
             TransactionType.InternalTransferBetweenOrgs,
@@ -217,6 +225,12 @@ let transactionInfoFromHistory
          )
       | AccountEvent.DebitFailed e ->
          Some(TransactionType.Purchase, TransactionStatus.Failed, e.Data.Amount)
+      | AccountEvent.DomesticTransferScheduled e ->
+         Some(
+            TransactionType.DomesticTransfer,
+            TransactionStatus.Scheduled,
+            e.Data.BaseInfo.Amount
+         )
       | AccountEvent.DomesticTransferPending e ->
          Some(
             TransactionType.DomesticTransfer,

@@ -40,9 +40,11 @@ let filtersToOriginatingEventNames
               typeof<InternalAutomatedTransferDeducted>.Name
              ]
            | AccountEventGroupFilter.InternalTransferBetweenOrgs -> [
+              typeof<InternalTransferBetweenOrgsScheduled>.Name
               typeof<InternalTransferBetweenOrgsPending>.Name
              ]
            | AccountEventGroupFilter.DomesticTransfer -> [
+              typeof<DomesticTransferScheduled>.Name
               typeof<DomesticTransferPending>.Name
              ]
            | AccountEventGroupFilter.PlatformPayment -> [

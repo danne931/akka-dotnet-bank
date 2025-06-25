@@ -383,6 +383,7 @@ let renderTableRow
 
       match txn.Status with
       | TransactionStatus.Complete -> ()
+      | TransactionStatus.Scheduled
       | TransactionStatus.InProgress -> attr.classes [ "warning" ]
       | TransactionStatus.Failed -> attr.classes [ "error" ]
 
@@ -563,8 +564,10 @@ let transactions
       | AccountEvent.DepositedCash _
       | AccountEvent.DebitPending _
       | AccountEvent.InternalTransferWithinOrgDeducted _
+      | AccountEvent.InternalTransferBetweenOrgsScheduled _
       | AccountEvent.InternalTransferBetweenOrgsPending _
       | AccountEvent.InternalAutomatedTransferDeducted _
+      | AccountEvent.DomesticTransferScheduled _
       | AccountEvent.DomesticTransferPending _
       | AccountEvent.PlatformPaymentPending _
       | AccountEvent.PlatformPaymentDeposited _ -> true
