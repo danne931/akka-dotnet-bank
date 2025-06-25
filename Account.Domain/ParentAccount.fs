@@ -73,7 +73,7 @@ module TransferLimits =
       (scheduledDate: DateTime)
       =
       DateTime.isToday scheduledDate
-      && (dailyPlatformTransferAccrued evts) + amount > DailyPlatformLimit
+      && dailyPlatformTransferAccrued evts + amount > DailyPlatformLimit
 
    let exceedsDailyDomesticTransferLimit
       (evts: AccountEvent list)
@@ -81,7 +81,7 @@ module TransferLimits =
       (scheduledDate: DateTime)
       =
       DateTime.isToday scheduledDate
-      && (dailyDomesticTransferAccrued evts) + amount > DailyDomesticLimit
+      && dailyDomesticTransferAccrued evts + amount > DailyDomesticLimit
 
 let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
    let updated =
@@ -290,7 +290,7 @@ let private virtualAccountTransition
    (state: ParentAccountSnapshot)
    =
    Account.stateTransition account cmd
-   |> Result.map (fun (evt, _) -> (evt, (applyEvent state evt)))
+   |> Result.map (fun (evt, _) -> evt, applyEvent state evt)
 
 let validatePlatformTransferLimit amount timestamp (evt, state) =
    if
@@ -334,7 +334,7 @@ module private StateTransition =
       |> Result.mapError ValidationError
       |> Result.map (fun evt ->
          let evt = AccountEvent.ParentAccount(eventTransform evt)
-         (evt, applyEvent state evt))
+         evt, applyEvent state evt)
 
    let registerDomesticTransferRecipient
       (state: ParentAccountSnapshot)
@@ -492,7 +492,7 @@ let computeAutoTransferStateTransitions
             account.AutoTransfersTwiceMonthly
 
       let transferOutCommands =
-         transfers |> List.map (InternalAutoTransferCommand.create)
+         transfers |> List.map InternalAutoTransferCommand.create
 
       let transferDepositCommands =
          transferOutCommands

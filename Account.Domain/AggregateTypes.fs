@@ -247,7 +247,10 @@ type AccountEvent =
          | PaymentMethod.Platform accountId -> accountId
          | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | PlatformPaymentDeposited evt -> evt.Data.BaseInfo.Payee.AccountId
-      | PlatformPaymentSettled evt -> evt.Data.BaseInfo.Payee.AccountId
+      | PlatformPaymentSettled evt ->
+         match evt.Data.PaymentMethod with
+         | PaymentMethod.Platform accountId -> accountId
+         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | PlatformPaymentFailed evt ->
          match evt.Data.PaymentMethod with
          | PaymentMethod.Platform accountId -> accountId
