@@ -501,9 +501,6 @@ let upsertTransactionNote (transactionId: TransactionId) (note: string) =
 
 let getCategories () =
    pgQuery<TransactionCategory>
-      "SELECT category_id, name FROM category"
+      $"SELECT * FROM {PurchaseCategorySqlMapper.table}"
       None
-      (fun read -> {
-         Id = read.int "category_id"
-         Name = read.string "name"
-      })
+      PurchaseCategorySqlMapper.Reader.category
