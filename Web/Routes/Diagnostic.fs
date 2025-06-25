@@ -23,9 +23,14 @@ let startDiagnosticRoutes (app: WebApplication) =
          Func<ActorSystem, Guid, Task<IResult>>(fun sys id ->
             let ref = AccountActor.get sys (ParentAccountId id)
 
-            ref.Ask(AccountMessage.GetAccount, Some(TimeSpan.FromSeconds 3.))
-            |> Async.toTask
-            |> RouteUtil.unwrapTaskOption)
+            let askTask: ParentAccountSnapshot option Task =
+               ref.Ask(
+                  AccountMessage.GetAccount,
+                  Some(TimeSpan.FromSeconds 3.)
+               )
+               |> Async.toTask
+
+            RouteUtil.unwrapTaskOption askTask)
       )
       .RBAC(Permissions.Diagnostic)
    |> ignore

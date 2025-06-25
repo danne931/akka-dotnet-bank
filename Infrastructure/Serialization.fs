@@ -176,6 +176,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? AccountClosureMessage -> "AccountClosureActorMessage"
       | :? List<AccountEvent> -> "AccountEventList"
       | :? ParentAccountSnapshot -> "ParentAccountSnapshot"
+      | :? Option<ParentAccountSnapshot> -> "ParentAccountSnapshotOption"
       | :? Option<Account> -> "AccountOption"
       | :? List<Account> -> "AccountList"
       | :? Map<AccountId, Account> -> "AccountMap"
@@ -247,8 +248,9 @@ type BankSerializer(system: ExtendedActorSystem) =
       // AccountMessage.GetEvents response serialized for message sent
       // from account cluster nodes to Web node.
       | :? List<AccountEvent>
-      // AccountMessage.GetAccount response serialized for message sent
-      // from account cluster nodes to Web node.
+      // AccountMessage.GetAccount response serialized for message sent from
+      // account cluster nodes to AccountReadModelSync or Web node diagnostic route.
+      | :? Option<ParentAccountSnapshot>
       | :? Option<Account>
       // AccountClosureActor persistence snapshot.
       | :? Map<AccountId, Account>
@@ -354,6 +356,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "EmployeeMessage" -> typeof<EmployeeMessage>
          | "EmployeeShardEnvelope" -> typeof<EmployeeShardEnvelope>
          | "ParentAccountSnapshot" -> typeof<ParentAccountSnapshot>
+         | "ParentAccountSnapshotOption" ->
+            typeof<Option<ParentAccountSnapshot>>
          | "AccountOption" -> typeof<Account option>
          | "AccountMap" -> typeof<Map<AccountId, Account>>
          | "AccountList" -> typeof<Account list>

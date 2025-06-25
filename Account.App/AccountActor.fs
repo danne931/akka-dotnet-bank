@@ -494,7 +494,15 @@ let actorProps
             | msg -> return unhandledMsg msg
          | :? AccountMessage as msg ->
             match msg with
-            | AccountMessage.GetAccount -> mailbox.Sender() <! stateOpt
+            | AccountMessage.GetAccount ->
+               let stateOpt =
+                  stateOpt
+                  |> Option.map (fun pa -> {
+                     pa with
+                        Events = pa.Events |> List.truncate 5
+                  })
+
+               mailbox.Sender() <! stateOpt
             | AccountMessage.GetVirtualAccount accountId ->
                let account =
                   stateOpt |> Option.bind _.VirtualAccounts.TryFind(accountId)
