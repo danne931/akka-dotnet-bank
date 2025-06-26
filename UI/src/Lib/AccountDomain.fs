@@ -358,21 +358,29 @@ let transactionUIFriendly
             | History.Account accountHistory ->
                match accountHistory.Event with
                | AccountEvent.DebitPending e ->
-                  let em = e.Data.EmployeePurchaseReference
-
-                  let merchant =
-                     getMerchant e.Data.Merchant merchants
-                     |> Option.bind _.Alias
-                     |> Option.defaultValue e.Data.Merchant
-
                   Some(
-                     em.EmployeeName,
-                     $"{em.CardNickname} **{em.EmployeeCardNumberLast4}",
-                     merchant,
-                     accountName e.Data.AccountId
+                     e.Data.EmployeePurchaseReference,
+                     e.Data.Merchant,
+                     e.Data.AccountId
+                  )
+               | AccountEvent.DebitSettled e ->
+                  Some(
+                     e.Data.EmployeePurchaseReference,
+                     e.Data.Merchant,
+                     e.Data.AccountId
                   )
                | _ -> None
             | _ -> None)
+         |> Option.map (fun (em, merchant, accountId) ->
+            let merchant =
+               getMerchant merchant merchants
+               |> Option.bind _.Alias
+               |> Option.defaultValue merchant
+
+            em.EmployeeName,
+            $"{em.CardNickname} **{em.EmployeeCardNumberLast4}",
+            merchant,
+            accountName accountId)
          |> Option.defaultValue ("Unknown", "Unknown", "Unknown", "Unknown")
 
       {

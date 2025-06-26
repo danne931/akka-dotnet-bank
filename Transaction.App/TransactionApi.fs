@@ -31,7 +31,7 @@ let filtersToOriginatingEventNames
       (fun acc e ->
          acc
          @ match e with
-           | AccountEventGroupFilter.Purchase -> [ typeof<DebitPending>.Name ]
+           | AccountEventGroupFilter.Purchase -> [ typeof<DebitSettled>.Name ]
            | AccountEventGroupFilter.Deposit -> [ typeof<DepositedCash>.Name ]
            | AccountEventGroupFilter.InternalTransferWithinOrg -> [
               typeof<InternalTransferWithinOrgDeducted>.Name

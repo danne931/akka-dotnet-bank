@@ -130,10 +130,22 @@ let transactionInfoFromHistory
          |> Option.map (fun (txnType, txnStatus) -> txnType, txnStatus, amount))
    | History.Employee employeeHistory ->
       match employeeHistory.Event with
-      | EmployeeEvent.PurchaseSettled e ->
+      | EmployeeEvent.PurchasePending e ->
          Some(
             TransactionType.Purchase,
             TransactionStatus.InProgress,
+            e.Data.Info.Amount
+         )
+      | EmployeeEvent.PurchaseSettled e ->
+         Some(
+            TransactionType.Purchase,
+            TransactionStatus.Complete,
+            e.Data.Info.Amount
+         )
+      | EmployeeEvent.PurchaseFailed e ->
+         Some(
+            TransactionType.Purchase,
+            TransactionStatus.Failed,
             e.Data.Info.Amount
          )
       | EmployeeEvent.PurchaseRefunded e ->
