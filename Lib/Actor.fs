@@ -641,7 +641,7 @@ module PersistenceSupervisor =
       (evt: obj)
       =
       evt
-      |> Persist
+      |> PersistentEffect.Persist
       |> Effects.andThen (fun () ->
          ctx.Parent() <! Confirmation(confirmationId, ctx.Pid))
 
@@ -663,7 +663,7 @@ module PersistenceSupervisor =
       let mutable confirmed = false
 
       evts
-      |> PersistAll
+      |> PersistentEffect.PersistAll
       |> Effects.andThen (fun () ->
          if not confirmed then
             confirmed <- true

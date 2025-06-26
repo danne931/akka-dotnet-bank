@@ -209,6 +209,7 @@ let actorProps
             handleValidationError broadcaster mailbox getSagaRef employee
 
          match box msg with
+         | Deferred mailbox (:? EmployeeEvent as evt)
          | Persisted mailbox (:? EmployeeEvent as evt) ->
             let state = Employee.applyEvent state evt
             let employee = state.Info
@@ -261,6 +262,24 @@ let actorProps
                }
 
                return! loop (Some newState) <@> DeleteMessages Int64.MaxValue
+            // NOTE: Perceived optimization:
+            // Persisting PurchaseSettled is essential but probably no need to
+            // persist the PurchasePending event as long as SaveSnapshot,
+            // invoked below, is called in case the actor restarts. Without
+            // SaveSnapshot in the LifecyclePostStop hook below, the actor would
+            // restart and potentially lose the latest value for
+            // EmployeeSnapshot.PendingPurchaseDeductions since it would not be
+            // able to derive the latest value from the persisted events during
+            // event reply on actor start.
+            //
+            // With PersistentEffect.Defer, PurchaseIntent command will invoke
+            // the persistence handler to start the PurchaseSaga and record the
+            // PendingPurchaseDeductions on EmployeeSnapshot. It will do so
+            // without saving it as an event in the event journal.
+            | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent _ as cmd) ->
+               match Employee.stateTransition state cmd with
+               | Ok(evt, _) -> return! PersistentEffect.Defer [ evt ]
+               | Error err -> handleValidationError cmd err
             // Some messages are sent through traditional AtMostOnceDelivery via
             // a reference to the cluster sharded entity ref rather than Akka.Delivery
             // AtLeastOnceDelivery producer ref so will not hit the
@@ -288,6 +307,10 @@ let actorProps
                            )
 
                            ignored ()
+                     LifecyclePostStop =
+                        fun _ ->
+                           logDebug mailbox $"EMPLOYEE POSTSTOP"
+                           SaveSnapshot state
                      DeleteMessagesSuccess =
                         fun _ ->
                            if
@@ -342,6 +365,13 @@ let initProps
       CompatibleWithGuaranteedDelivery = true
       IsPersistableMessage =
          function
-         | :? EmployeeMessage as msg -> msg.IsStateChange
+         | :? EmployeeMessage as msg ->
+            match msg with
+            // PurchaseIntent will invoke persistence handler without persisting
+            // the event, via PersistentEffect.Defer.
+            | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent _) ->
+               false
+            | EmployeeMessage.StateChange _ -> true
+            | _ -> false
          | _ -> false
    }

@@ -430,6 +430,7 @@ let actorProps
             onValidationError broadcaster mailbox getSagaRef
 
          match msg with
+         | Deferred mailbox (:? AccountEvent as evt)
          | Persisted mailbox (:? AccountEvent as evt) ->
             let state = ParentAccount.applyEvent state evt
 
@@ -593,6 +594,24 @@ let actorProps
 
                return! loop state <@> DeleteMessages Int64.MaxValue
             *)
+            // NOTE: Perceived optimization:
+            // Persisting DebitSettled is essential but probably no need to
+            // persist the DebitPending event as long as SaveSnapshot,
+            // invoked below, is called in case the actor restarts. Without
+            // SaveSnapshot in the LifecyclePostStop hook below, the actor would
+            // restart and potentially lose the latest value for
+            // ParentAccountSnapshot.PendingDeductions since it would not be
+            // able to derive the latest value from the persisted events during
+            // event reply on actor start.
+            //
+            // With PersistentEffect.Defer, Debit command will invoke the
+            // persistence handler to record the PendingDeductions on
+            // ParentAccountSnapshot and interact with PurchaseSaga. It will
+            // do so without saving it as an event in the event journal.
+            | AccountMessage.StateChange(AccountCommand.Debit _ as cmd) ->
+               match ParentAccount.stateTransition state cmd with
+               | Ok(evt, _) -> return! PersistentEffect.Defer [ evt ]
+               | Error err -> onValidationError cmd err
             // Some messages are sent through traditional AtMostOnceDelivery via
             // a reference to the cluster sharded entity ref rather than Akka.Delivery
             // AtLeastOnceDelivery producer ref so will not hit the
@@ -633,7 +652,7 @@ let actorProps
                      LifecyclePostStop =
                         fun _ ->
                            logDebug mailbox $"ACCOUNT POSTSTOP"
-                           ignored ()
+                           SaveSnapshot state
                }
                mailbox
                msg
@@ -692,6 +711,12 @@ let initProps
       CompatibleWithGuaranteedDelivery = true
       IsPersistableMessage =
          function
-         | :? AccountMessage as msg -> msg.IsStateChange
+         | :? AccountMessage as msg ->
+            match msg with
+            // Debit intent will invoke persistence handler without persisting
+            // the event, via PersistentEffect.Defer.
+            | AccountMessage.StateChange(AccountCommand.Debit _) -> false
+            | AccountMessage.StateChange _ -> true
+            | _ -> false
          | _ -> false
    }
