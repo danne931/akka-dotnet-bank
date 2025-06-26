@@ -142,6 +142,7 @@ type PurchaseInfo = {
    Reference: string option
    // Represents ID of transaction coming from simulated card network.
    CardNetworkTransactionId: Guid
+   CardNickname: string option
 }
 
 [<RequireQualifiedAccess>]

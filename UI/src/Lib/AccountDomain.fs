@@ -367,7 +367,7 @@ let transactionUIFriendly
 
                   Some(
                      em.EmployeeName,
-                     $"**{em.EmployeeCardNumberLast4}",
+                     $"{em.CardNickname} **{em.EmployeeCardNumberLast4}",
                      merchant,
                      accountName e.Data.AccountId
                   )
@@ -385,7 +385,7 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
-            Source = $"{accountName} via {employee} **{card}"
+            Source = $"{accountName} via {employee}'s card {card}"
             Destination = merchant
       }
    | TransactionType.InternalTransferWithinOrg ->

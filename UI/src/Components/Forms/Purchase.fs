@@ -67,6 +67,7 @@ let form
             EmployeeEmail = employee.Email
             CardId = selectedCardId
             CardNumberLast4 = card.CardNumberLast4
+            CardNickname = card.CardNickname
             AccountId = account.AccountId
             Amount = amount
             Merchant = merchant

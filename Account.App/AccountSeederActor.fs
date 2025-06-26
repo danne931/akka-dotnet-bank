@@ -1399,6 +1399,7 @@ let seedEmployeeActions
                   purchaseMerchants[rnd.Next(0, purchaseMerchants.Length)]
                Reference = None
                CardNetworkTransactionId = Guid.NewGuid()
+               CardNickname = card.CardNickname
             } with
                Timestamp = purchaseDate
          }

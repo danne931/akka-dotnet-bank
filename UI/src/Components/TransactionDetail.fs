@@ -352,9 +352,11 @@ let renderTransactionInfo
                      | History.Employee employeeHistory ->
                         match employeeHistory.Event with
                         | EmployeeEvent.PurchaseApplied e ->
+                           let info = e.Data.Info
+
                            Html.p
                               $"Purchase requested by {employeeHistory.EmployeeName}'s 
-                              card **{e.Data.Info.CardNumberLast4}"
+                              card {info.CardNickname} **{info.CardNumberLast4}"
                         | EmployeeEvent.PurchaseRefunded e ->
                            Html.p
                               $"Purchase refunded to card due to {e.Data.Reason}"

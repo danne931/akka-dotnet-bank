@@ -109,32 +109,37 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
    }
 
    match txn.Event with
-   | EmployeeEvent.PurchaseApplied e -> {
-      props with
-         Name = "Purchase Applied to Card"
-         Info =
-            $"Purchase requested by {txn.EmployeeName} at {e.Data.Info.Merchant} with card {e.Data.Info.CardNumberLast4}"
-         Amount = Some <| Money.format e.Data.Info.Amount
-     }
+   | EmployeeEvent.PurchaseApplied e ->
+      let info = e.Data.Info
+
+      {
+         props with
+            Name = "Purchase Applied to Card"
+            Info =
+               $"Purchase requested by {txn.EmployeeName} at {info.Merchant} with card {info.CardNickname} **{info.CardNumberLast4}"
+            Amount = Some <| Money.format info.Amount
+      }
    | EmployeeEvent.PurchaseFailed e ->
-      let card = $"**{e.Data.Info.CardNumberLast4}"
+      let info = e.Data.Info
+      let card = $"{info.CardNickname} **{info.CardNumberLast4}"
 
       {
          props with
             Name = "Purchase Failed"
             Info =
-               $"Failed purchase for {txn.EmployeeName} {card} at {e.Data.Info.Merchant} due to {e.Data.Reason}"
-            Amount = Some <| Money.format e.Data.Info.Amount
+               $"Failed purchase for {txn.EmployeeName}'s card {card} at {info.Merchant} due to {e.Data.Reason}"
+            Amount = Some <| Money.format info.Amount
       }
    | EmployeeEvent.PurchaseRefunded e ->
-      let card = $"**{e.Data.Info.CardNumberLast4}"
+      let info = e.Data.Info
+      let card = $"{info.CardNickname} **{info.CardNumberLast4}"
 
       {
          props with
             Name = "Purchase Refunded to Card"
             Info =
-               $"Refunded purchase for {txn.EmployeeName} {card} at {e.Data.Info.Merchant} due to {e.Data.Reason}"
-            Amount = Some <| Money.format e.Data.Info.Amount
+               $"Refunded purchase for {txn.EmployeeName}'s card {card} at {info.Merchant} due to {e.Data.Reason}"
+            Amount = Some <| Money.format info.Amount
       }
    | EmployeeEvent.CreatedEmployee e -> {
       props with
@@ -270,8 +275,8 @@ let accountHistoryUIFriendly
          Amount = Some <| Money.format evt.Data.Amount
      }
    | DebitPending evt ->
-      let card =
-         $"**{evt.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
+      let em = evt.Data.EmployeePurchaseReference
+      let card = $"{em.CardNickname} **{em.EmployeeCardNumberLast4}"
 
       {
          props with
@@ -281,8 +286,8 @@ let accountHistoryUIFriendly
             Amount = Some <| Money.format evt.Data.Amount
       }
    | DebitSettled evt ->
-      let card =
-         $"**{evt.Data.EmployeePurchaseReference.EmployeeCardNumberLast4}"
+      let em = evt.Data.EmployeePurchaseReference
+      let card = $"{em.CardNickname} **{em.EmployeeCardNumberLast4}"
 
       {
          props with

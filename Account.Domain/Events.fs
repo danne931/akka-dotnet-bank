@@ -40,6 +40,7 @@ type EmployeePurchaseReference = {
    EmployeeCardNumberLast4: string
    EmployeeId: EmployeeId
    CardId: CardId
+   CardNickname: string option
 }
 
 type DebitPending = {

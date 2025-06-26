@@ -172,6 +172,7 @@ module DebitCommand =
                EmployeeCardNumberLast4 = info.CardNumberLast4
                EmployeeId = InitiatedById.toEmployeeId info.InitiatedBy.Id
                CardId = info.CardId
+               CardNickname = info.CardNickname
             }
          }
 
@@ -212,6 +213,7 @@ module FailDebitCommand =
                EmployeeId = purchaseInfo.EmployeeId
                EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
                CardId = purchaseInfo.CardId
+               CardNickname = purchaseInfo.CardNickname
             }
             Merchant = purchaseInfo.Merchant
             Amount = purchaseInfo.Amount
@@ -255,6 +257,7 @@ module RefundDebitCommand =
                EmployeeId = purchaseInfo.EmployeeId
                EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
                CardId = purchaseInfo.CardId
+               CardNickname = purchaseInfo.CardNickname
             }
             Merchant = purchaseInfo.Merchant
             Amount = purchaseInfo.Amount
@@ -346,6 +349,7 @@ module SettleDebitCommand =
                EmployeeId = purchaseInfo.EmployeeId
                EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
                CardId = purchaseInfo.CardId
+               CardNickname = purchaseInfo.CardNickname
             }
             Merchant = purchaseInfo.Merchant
             Amount = purchaseInfo.Amount
