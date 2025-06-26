@@ -1382,7 +1382,7 @@ let seedEmployeeActions
          let correlationId = CorrelationId(Guid.NewGuid())
 
          let purchaseCmd = {
-            PurchaseCommand.create {
+            PurchaseIntentCommand.create {
                CorrelationId = correlationId
                OrgId = employee.OrgId
                EmployeeId = employee.EmployeeId
@@ -1406,7 +1406,7 @@ let seedEmployeeActions
 
          let msg =
             purchaseCmd
-            |> EmployeeCommand.Purchase
+            |> EmployeeCommand.PurchaseIntent
             |> EmployeeMessage.StateChange
             |> GuaranteedDelivery.message (EntityId.get purchaseCmd.EntityId)
 

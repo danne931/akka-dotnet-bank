@@ -603,3 +603,20 @@ type PositiveAmount =
 
    static member (*)(PositiveAmount amt1, PositiveAmount amt2) =
       PositiveAmount(amt1 * amt2)
+
+type PendingDeductions = {
+   Count: int
+   Money: decimal
+} with
+
+   static member Zero = { Count = 0; Money = 0m }
+
+   member x.Add(amount: decimal) = {
+      Count = x.Count + 1
+      Money = x.Money + amount
+   }
+
+   member x.Remove(amount: decimal) = {
+      Count = max (x.Count - 1) 0
+      Money = max (x.Money - amount) 0m
+   }

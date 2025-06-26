@@ -183,7 +183,7 @@ let onPersisted
       getSagaRef () <! msg
    | AccountEvent.DebitSettled e ->
       let msg =
-         PurchaseSagaEvent.PurchaseSettled
+         PurchaseSagaEvent.PurchaseSettledWithAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef () <! msg

@@ -129,9 +129,9 @@ let employeeEventFilterNames
               typeof<AccessRestored>.Name
              ]
            | EmployeeEventGroupFilter.Purchase -> [
-              typeof<PurchaseApplied>.Name
-              typeof<PurchaseFailed>.Name
-              typeof<PurchaseRefunded>.Name
+              typeof<CardPurchaseSettled>.Name
+              typeof<CardPurchaseFailed>.Name
+              typeof<CardPurchaseRefunded>.Name
              ]
            | EmployeeEventGroupFilter.CreatedCard -> [
               typeof<CreatedCard>.Name

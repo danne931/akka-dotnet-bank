@@ -113,7 +113,7 @@ let sqlParamReducer
    | EmployeeEvent.CreatedCard e -> cardReducer e.EntityId e.Data.Card.CardId
    | EmployeeEvent.ThirdPartyProviderCardLinked e ->
       cardReducer e.EntityId e.Data.CardId
-   | EmployeeEvent.PurchaseApplied e ->
+   | EmployeeEvent.PurchaseSettled e ->
       cardReducer e.EntityId e.Data.Info.CardId
    | EmployeeEvent.LockedCard e -> cardReducer e.EntityId e.Data.CardId
    | EmployeeEvent.UnlockedCard e -> cardReducer e.EntityId e.Data.CardId

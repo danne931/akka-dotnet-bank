@@ -98,7 +98,7 @@ let form
          |> EmployeeCommand.CreateEmployee
          |> FormCommand.Employee
 
-      Msg.Submit(FormEntity.Employee Employee.empty, cmd, Started)
+      Msg.Submit(FormEntity.Employee Employee.Empty, cmd, Started)
 
    let roleField = employeeRoleSelect onRoleSelect
 

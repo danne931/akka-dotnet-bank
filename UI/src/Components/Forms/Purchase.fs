@@ -54,7 +54,7 @@ let form
 
    let onSubmit amount merchant =
       let cmd =
-         PurchaseCommand.create {
+         PurchaseIntentCommand.create {
             CorrelationId = CorrelationId(Guid.NewGuid())
             InitiatedBy = {
                Id = InitiatedById employee.EmployeeId
@@ -77,7 +77,7 @@ let form
             // simulated card network.
             CardNetworkTransactionId = Guid.NewGuid()
          }
-         |> EmployeeCommand.Purchase
+         |> EmployeeCommand.PurchaseIntent
          |> FormCommand.Employee
 
       Msg.Submit(FormEntity.Employee employee, cmd, Started)

@@ -40,22 +40,19 @@ let private handleValidationError
 
    let hasPurchaseFail =
       match cmd, err with
-      | EmployeeCommand.Purchase cmd, EmployeeStateTransitionError e ->
+      | EmployeeCommand.PurchaseIntent cmd, EmployeeStateTransitionError e ->
          match e with
-         | CardNotFound -> Some(cmd.Data, PurchaseCardFailReason.CardNotFound)
-         | CardExpired -> Some(cmd.Data, PurchaseCardFailReason.CardExpired)
-         | CardLocked -> Some(cmd.Data, PurchaseCardFailReason.CardLocked)
+         | CardNotFound -> Some PurchaseCardFailReason.CardNotFound
+         | CardExpired -> Some PurchaseCardFailReason.CardExpired
+         | CardLocked -> Some PurchaseCardFailReason.CardLocked
          | ExceededDailyDebit(limit, accrued) ->
-            Some(
-               cmd.Data,
-               PurchaseCardFailReason.ExceededDailyCardLimit(limit, accrued)
-            )
+            PurchaseCardFailReason.ExceededDailyCardLimit(limit, accrued)
+            |> Some
          | ExceededMonthlyDebit(limit, accrued) ->
-            Some(
-               cmd.Data,
-               PurchaseCardFailReason.ExceededMonthlyCardLimit(limit, accrued)
-            )
+            PurchaseCardFailReason.ExceededMonthlyCardLimit(limit, accrued)
+            |> Some
          | _ -> None
+         |> Option.map (fun err -> cmd.Data, err)
       | _ -> None
 
    match hasPurchaseFail with
@@ -172,10 +169,16 @@ let private onPersist
          |> AppSaga.Message.cardSetup e.OrgId e.CorrelationId
 
       getSagaRef () <! msg
-   | EmployeeEvent.PurchaseApplied e ->
+   | EmployeeEvent.PurchasePending e ->
       let msg =
-         PurchaseSagaStartEvent.DeductedCardFunds e.Data.Info
+         PurchaseSagaStartEvent.PurchaseIntent e.Data.Info
          |> AppSaga.Message.purchaseStart e.OrgId e.CorrelationId
+
+      getSagaRef () <! msg
+   | EmployeeEvent.PurchaseSettled e ->
+      let msg =
+         PurchaseSagaEvent.PurchaseSettledWithCard
+         |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
       getSagaRef () <! msg
    | EmployeeEvent.PurchaseFailed e ->
@@ -198,9 +201,7 @@ let actorProps
       let rec loop (stateOpt: EmployeeSnapshot option) = actor {
          let! msg = mailbox.Receive()
 
-         let state =
-            stateOpt
-            |> Option.defaultValue { Info = Employee.empty; Events = [] }
+         let state = stateOpt |> Option.defaultValue EmployeeSnapshot.Empty
 
          let employee = state.Info
 

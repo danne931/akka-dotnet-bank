@@ -25,7 +25,7 @@ let private postJson (command: EmployeeCommand) =
       match command with
       | EmployeeCommand.CreateEmployee cmd ->
          Serialization.serialize cmd, EmployeePath.Base
-      | EmployeeCommand.Purchase cmd ->
+      | EmployeeCommand.PurchaseIntent cmd ->
          Serialization.serialize cmd, CardPath.Purchase
       | EmployeeCommand.LimitDailyDebits cmd ->
          Serialization.serialize cmd, CardPath.DailyPurchaseLimit
@@ -124,7 +124,7 @@ let submitCommand
       // This same validation occurs on the server when an actor is
       // processing a command.
       let! evt, newState =
-         Employee.stateTransition { Info = employee; Events = [] } command
+         Employee.stateTransition EmployeeSnapshot.Empty command
 
       let! res = postJson command
       let code = res.statusCode

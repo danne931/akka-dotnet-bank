@@ -109,14 +109,24 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
    }
 
    match txn.Event with
-   | EmployeeEvent.PurchaseApplied e ->
+   | EmployeeEvent.PurchasePending e ->
       let info = e.Data.Info
 
       {
          props with
-            Name = "Purchase Applied to Card"
+            Name = "Purchase Pending"
             Info =
-               $"Purchase requested by {txn.EmployeeName} at {info.Merchant} with card {info.CardNickname} **{info.CardNumberLast4}"
+               $"Purchase processing at {info.Merchant} with card {info.CardNickname} **{info.CardNumberLast4}"
+            Amount = Some <| Money.format info.Amount
+      }
+   | EmployeeEvent.PurchaseSettled e ->
+      let info = e.Data.Info
+
+      {
+         props with
+            Name = "Purchase Settled"
+            Info =
+               $"Purchase by {txn.EmployeeName} at {info.Merchant} deducted from card {info.CardNickname} **{info.CardNumberLast4}"
             Amount = Some <| Money.format info.Amount
       }
    | EmployeeEvent.PurchaseFailed e ->
@@ -723,7 +733,7 @@ let private matchesEmployeeEventFilter
       | _ -> false
    | EmployeeEventGroupFilter.Purchase ->
       match event with
-      | EmployeeEvent.PurchaseApplied _
+      | EmployeeEvent.PurchaseSettled _
       | EmployeeEvent.PurchaseFailed _
       | EmployeeEvent.PurchaseRefunded _ -> true
       | _ -> false

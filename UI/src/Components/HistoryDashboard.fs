@@ -136,7 +136,7 @@ let renderTableRow (org: OrgWithAccountProfiles) (history: History) =
          let _, envelope = EmployeeEnvelope.unwrap h.Event
 
          match h.Event with
-         | EmployeeEvent.PurchaseApplied _ ->
+         | EmployeeEvent.PurchaseSettled _ ->
             Some(TransactionId envelope.CorrelationId)
          | _ -> None
       | History.ParentAccount _

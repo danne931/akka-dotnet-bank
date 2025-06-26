@@ -19,7 +19,7 @@ type PurchaseSagaStatus =
 
 [<RequireQualifiedAccess>]
 type PurchaseSagaStartEvent =
-   | DeductedCardFunds of PurchaseInfo
+   | PurchaseIntent of PurchaseInfo
    | PurchaseRejectedByCard of PurchaseInfo * PurchaseCardFailReason
 
 [<RequireQualifiedAccess>]
@@ -33,7 +33,8 @@ type PurchaseSagaEvent =
       Result<string, string>
    | CardNetworkResponse of Result<string, string>
    | PartnerBankSyncResponse of Result<SettlementId, string>
-   | PurchaseSettled
+   | PurchaseSettledWithAccount
+   | PurchaseSettledWithCard
    | PurchaseNotificationSent
    | SupportTeamResolvedPartnerBankSync
    | EvaluateRemainingWork
@@ -41,12 +42,13 @@ type PurchaseSagaEvent =
 
 [<RequireQualifiedAccess>]
 type Activity =
-   | DeductFromEmployeeCard
+   | ReserveEmployeeCardFunds
    | ReserveAccountFunds
    | NotifyCardNetworkOfRejectedPurchase
    | NotifyCardNetworkOfConfirmedPurchase
    | SyncToPartnerBank
-   | SettlePurchase
+   | SettlePurchaseWithAccount
+   | SettlePurchaseWithCard
    | SendPurchaseNotification
    | AcquireCardFailureAcknowledgement
    | AcquireAccountFailureAcknowledgement
@@ -56,22 +58,24 @@ type Activity =
       member x.MaxAttempts =
          match x with
          | WaitForSupportTeamToResolvePartnerBankSync -> 0
+         | ReserveEmployeeCardFunds -> 1
          | NotifyCardNetworkOfConfirmedPurchase -> 2
          | SyncToPartnerBank -> 4
          | _ -> 3
 
       member x.InactivityTimeout =
          match x with
+         | ReserveEmployeeCardFunds
          | NotifyCardNetworkOfRejectedPurchase
          | WaitForSupportTeamToResolvePartnerBankSync -> None
          | SendPurchaseNotification
          | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4.)
          | NotifyCardNetworkOfConfirmedPurchase
-         | DeductFromEmployeeCard
          | ReserveAccountFunds
          | AcquireCardFailureAcknowledgement
          | AcquireAccountFailureAcknowledgement
-         | SettlePurchase -> Some(TimeSpan.FromSeconds 4.)
+         | SettlePurchaseWithAccount
+         | SettlePurchaseWithCard -> Some(TimeSpan.FromSeconds 4.)
 
 type PurchaseSaga = {
    PurchaseInfo: PurchaseInfo
@@ -83,11 +87,18 @@ type PurchaseSaga = {
    PartnerBankAccountLink: PartnerBankAccountLink option
 } with
 
-   member x.DeductedFromEmployeeCard =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsDeductFromEmployeeCard
+   member x.ReservedEmployeeCardFunds =
+      x.LifeCycle.Completed |> List.exists _.Activity.IsReserveEmployeeCardFunds
 
-   member x.DeductedFromAccount =
+   member x.ReservedAccountFunds =
       x.LifeCycle.Completed |> List.exists _.Activity.IsReserveAccountFunds
+
+   member x.SettledWithAccount =
+      x.LifeCycle.Completed
+      |> List.exists _.Activity.IsSettlePurchaseWithAccount
+
+   member x.SettledWithCard =
+      x.LifeCycle.Completed |> List.exists _.Activity.IsSettlePurchaseWithCard
 
    member x.RequiresCardFailureAcknowledgement =
       x.LifeCycle.InProgress
@@ -114,7 +125,7 @@ let applyStartEvent
    : PurchaseSaga
    =
    match start with
-   | PurchaseSagaStartEvent.DeductedCardFunds info -> {
+   | PurchaseSagaStartEvent.PurchaseIntent info -> {
       PurchaseInfo = info
       StartEvent = start
       Events = []
@@ -128,9 +139,10 @@ let applyStartEvent
                {
                   Start = timestamp
                   End = Some timestamp
-                  Activity = Activity.DeductFromEmployeeCard
+                  Activity = Activity.ReserveEmployeeCardFunds
                   MaxAttempts =
-                     (Activity.DeductFromEmployeeCard :> IActivity).MaxAttempts
+                     (Activity.ReserveEmployeeCardFunds :> IActivity)
+                        .MaxAttempts
                   Attempts = 1
                }
             ]
@@ -209,13 +221,13 @@ let applyEvent
             let life = failActivity activity saga.LifeCycle
 
             let life =
-               if saga.DeductedFromEmployeeCard then
+               if saga.ReservedEmployeeCardFunds then
                   addActivity Activity.AcquireCardFailureAcknowledgement life
                else
                   life
 
             let life =
-               if saga.DeductedFromAccount then
+               if saga.ReservedAccountFunds then
                   addActivity Activity.AcquireAccountFailureAcknowledgement life
                else
                   life
@@ -262,13 +274,20 @@ let applyEvent
             LifeCycle =
                saga.LifeCycle
                |> finishActivity activity
-               |> addActivity Activity.SettlePurchase
+               |> addActivity Activity.SettlePurchaseWithAccount
         }
-   | PurchaseSagaEvent.PurchaseSettled -> {
+   | PurchaseSagaEvent.PurchaseSettledWithAccount -> {
       saga with
          LifeCycle =
             saga.LifeCycle
-            |> finishActivity Activity.SettlePurchase
+            |> finishActivity Activity.SettlePurchaseWithAccount
+            |> addActivity Activity.SettlePurchaseWithCard
+     }
+   | PurchaseSagaEvent.PurchaseSettledWithCard -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.SettlePurchaseWithCard
             |> addActivity Activity.SendPurchaseNotification
      }
    | PurchaseSagaEvent.PurchaseNotificationSent -> {
@@ -357,8 +376,10 @@ let stateTransition
          activityIsDone Activity.NotifyCardNetworkOfConfirmedPurchase
       | PurchaseSagaEvent.PartnerBankSyncResponse _ ->
          activityIsDone Activity.SyncToPartnerBank
-      | PurchaseSagaEvent.PurchaseSettled ->
-         activityIsDone Activity.SettlePurchase
+      | PurchaseSagaEvent.PurchaseSettledWithAccount ->
+         activityIsDone Activity.SettlePurchaseWithAccount
+      | PurchaseSagaEvent.PurchaseSettledWithCard ->
+         activityIsDone Activity.SettlePurchaseWithCard
 
    if saga.Status = PurchaseSagaStatus.Completed then
       Error SagaStateTransitionError.HasAlreadyCompleted
@@ -374,8 +395,8 @@ type PersistenceStartHandlerDependencies = {
       PurchaseInfo -> PurchaseFailReason -> Async<PurchaseSagaEvent>
    sendMessageToSelf: PurchaseInfo -> Async<PurchaseSagaEvent> -> unit
 }
-// Purchase Saga is started by either a PurchaseRejectedByCard event
-// or a DeductedCardFunds coming from the Employee actor.
+// Purchase Saga is started by either a PurchaseRejectedByCard event,
+// or a PurchasePending event coming from the Employee actor.
 let onStartEventPersisted
    (dep: PersistenceStartHandlerDependencies)
    (evt: PurchaseSagaStartEvent)
@@ -399,7 +420,7 @@ let onStartEventPersisted
       dep.sendMessageToSelf
          purchaseInfo
          (dep.cardNetworkRejectPurchase purchaseInfo reason)
-   | PurchaseSagaStartEvent.DeductedCardFunds info ->
+   | PurchaseSagaStartEvent.PurchaseIntent info ->
       let msg =
          DebitCommand.fromPurchase info
          |> AccountCommand.Debit
@@ -431,9 +452,7 @@ let onEventPersisted
 
    let acquireCardFailureAcknowledgement reason =
       let msg =
-         FailPurchaseCommand.create
-            (purchaseInfo.EmployeeId, purchaseInfo.OrgId)
-            { Reason = reason; Info = purchaseInfo }
+         FailPurchaseCommand.create { Info = purchaseInfo; Reason = reason }
          |> EmployeeCommand.FailPurchase
          |> EmployeeMessage.StateChange
 
@@ -467,12 +486,10 @@ let onEventPersisted
          OrgId = purchaseInfo.OrgId
          CorrelationId = purchaseInfo.CorrelationId
          Info =
-            EmailInfo.PurchaseFailed(
-               {
-                  Email = purchaseInfo.EmployeeEmail
-                  Reason = reason
-               }
-            )
+            EmailInfo.PurchaseFailed {
+               Email = purchaseInfo.EmployeeEmail
+               Reason = reason
+            }
       }
 
       dep.getEmailRef () <! emailMsg
@@ -502,13 +519,24 @@ let onEventPersisted
 
          dep.getPartnerBankServiceRef () <! msg)
 
-   let settlePurchase settlementId =
+   let settlePurchaseWithAccount settlementId =
       let msg =
          SettleDebitCommand.fromPurchase purchaseInfo settlementId
          |> AccountCommand.SettleDebit
          |> AccountMessage.StateChange
 
       dep.getAccountRef purchaseInfo.ParentAccountId <! msg
+
+   let settlePurchaseWithCard settlementId =
+      let msg =
+         SettlePurchaseWithCardCommand.create {
+            Info = purchaseInfo
+            SettlementId = settlementId
+         }
+         |> EmployeeCommand.SettlePurchase
+         |> EmployeeMessage.StateChange
+
+      dep.getEmployeeRef purchaseInfo.EmployeeId <! msg
 
    match evt with
    | PurchaseSagaEvent.AccountReservedFunds _ -> cardNetworkConfirmPurchase ()
@@ -532,7 +560,7 @@ let onEventPersisted
                acquireAccountFailureAcknowledgement reason
    | PurchaseSagaEvent.PartnerBankSyncResponse res ->
       match res with
-      | Ok settlementId -> settlePurchase settlementId
+      | Ok settlementId -> settlePurchaseWithAccount settlementId
       | Error reason ->
          if
             previousState.LifeCycle.ActivityHasRemainingAttempts
@@ -555,17 +583,19 @@ let onEventPersisted
       // Support team resolved dispute with partner bank so
       // reattempt syncing transaction to partner bank.
       syncToPartnerBank ()
+   | PurchaseSagaEvent.PurchaseSettledWithAccount ->
+      updatedState.SyncedToPartnerBank |> Option.iter settlePurchaseWithCard
+   | PurchaseSagaEvent.PurchaseSettledWithCard -> sendPurchaseEmail ()
    | PurchaseSagaEvent.PurchaseNotificationSent
    | PurchaseSagaEvent.ResetInProgressActivityAttempts
    | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount
    | PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard -> ()
-   | PurchaseSagaEvent.PurchaseSettled -> sendPurchaseEmail ()
    | PurchaseSagaEvent.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
+         | Activity.ReserveEmployeeCardFunds
          | Activity.NotifyCardNetworkOfRejectedPurchase
-         | Activity.WaitForSupportTeamToResolvePartnerBankSync
-         | Activity.DeductFromEmployeeCard -> ()
+         | Activity.WaitForSupportTeamToResolvePartnerBankSync -> ()
          | Activity.ReserveAccountFunds ->
             let msg =
                DebitCommand.fromPurchase purchaseInfo
@@ -573,11 +603,15 @@ let onEventPersisted
                |> AccountMessage.StateChange
 
             dep.getAccountRef purchaseInfo.ParentAccountId <! msg
+         | Activity.SettlePurchaseWithCard ->
+            updatedState.SyncedToPartnerBank
+            |> Option.iter settlePurchaseWithCard
          | Activity.NotifyCardNetworkOfConfirmedPurchase ->
             cardNetworkConfirmPurchase ()
          | Activity.SyncToPartnerBank -> syncToPartnerBank ()
-         | Activity.SettlePurchase ->
-            updatedState.SyncedToPartnerBank |> Option.iter settlePurchase
+         | Activity.SettlePurchaseWithAccount ->
+            updatedState.SyncedToPartnerBank
+            |> Option.iter settlePurchaseWithAccount
          | Activity.SendPurchaseNotification -> sendPurchaseEmail ()
          | Activity.AcquireCardFailureAcknowledgement ->
             updatedState.FailReason
@@ -589,7 +623,7 @@ let onEventPersisted
 // TODO: Notify card network which issued the debit request to our bank.
 let cardNetworkConfirmPurchase (info: PurchaseInfo) = async {
    if false then
-      do! Async.Sleep(System.TimeSpan.FromMinutes(12.))
+      do! Async.Sleep(TimeSpan.FromMinutes(12.))
 
    // TODO: HTTP to card network
 

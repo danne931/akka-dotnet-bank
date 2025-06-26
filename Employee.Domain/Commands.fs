@@ -243,22 +243,20 @@ module LinkThirdPartyProviderCardCommand =
          }
       |> Ok
 
-type PurchaseCommand = Command<PurchaseInfo>
+type PurchaseIntentCommand = Command<PurchaseInfo>
 
-module PurchaseCommand =
+module PurchaseIntentCommand =
    let create (data: PurchaseInfo) =
       Command.create
-         (data.InitiatedBy.Id
-          |> InitiatedById.toEmployeeId
-          |> EmployeeId.toEntityId)
+         (data.InitiatedBy.Id |> InitiatedById.get |> EntityId)
          data.OrgId
          data.CorrelationId
          data.InitiatedBy
          data
 
    let toEvent
-      (cmd: PurchaseCommand)
-      : ValidationResult<BankEvent<PurchaseApplied>>
+      (cmd: PurchaseIntentCommand)
+      : ValidationResult<BankEvent<CardPurchasePending>>
       =
       validate {
          let input = cmd.Data
@@ -267,44 +265,61 @@ module PurchaseCommand =
          let! _ = merchantValidator input.Merchant
 
          return
-            BankEvent.create2<PurchaseInfo, PurchaseApplied> cmd {
+            BankEvent.create2<PurchaseInfo, CardPurchasePending> cmd {
                Info = cmd.Data
             }
       }
 
-type FailPurchaseCommand = Command<PurchaseFailed>
+type SettlePurchaseWithCardCommand = Command<CardPurchaseSettled>
+
+module SettlePurchaseWithCardCommand =
+   let create (data: CardPurchaseSettled) =
+      Command.create
+         (data.Info.InitiatedBy.Id |> InitiatedById.get |> EntityId)
+         data.Info.OrgId
+         data.Info.CorrelationId
+         data.Info.InitiatedBy
+         data
+
+   let toEvent
+      (cmd: SettlePurchaseWithCardCommand)
+      : ValidationResult<BankEvent<CardPurchaseSettled>>
+      =
+      BankEvent.create<CardPurchaseSettled> cmd |> Ok
+
+type FailPurchaseCommand = Command<CardPurchaseFailed>
 
 module FailPurchaseCommand =
-   let create (employeeId: EmployeeId, orgId: OrgId) (data: PurchaseFailed) =
+   let create (data: CardPurchaseFailed) =
       Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
+         (data.Info.InitiatedBy.Id |> InitiatedById.get |> EntityId)
+         data.Info.OrgId
          data.Info.CorrelationId
          data.Info.InitiatedBy
          data
 
    let toEvent
       (cmd: FailPurchaseCommand)
-      : ValidationResult<BankEvent<PurchaseFailed>>
+      : ValidationResult<BankEvent<CardPurchaseFailed>>
       =
-      BankEvent.create<PurchaseFailed> cmd |> Ok
+      BankEvent.create<CardPurchaseFailed> cmd |> Ok
 
-type RefundPurchaseCommand = Command<PurchaseRefunded>
+type RefundPurchaseCommand = Command<CardPurchaseRefunded>
 
 module RefundPurchaseCommand =
-   let create (employeeId: EmployeeId, orgId: OrgId) (data: PurchaseRefunded) =
+   let create (data: CardPurchaseRefunded) =
       Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
+         (data.Info.InitiatedBy.Id |> InitiatedById.get |> EntityId)
+         data.Info.OrgId
          data.Info.CorrelationId
          data.Info.InitiatedBy
          data
 
    let toEvent
       (cmd: RefundPurchaseCommand)
-      : ValidationResult<BankEvent<PurchaseRefunded>>
+      : ValidationResult<BankEvent<CardPurchaseRefunded>>
       =
-      BankEvent.create<PurchaseRefunded> cmd |> Ok
+      BankEvent.create<CardPurchaseRefunded> cmd |> Ok
 
 type LimitDailyDebitsCommand = Command<DailyDebitLimitUpdated>
 

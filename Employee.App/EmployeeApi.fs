@@ -81,8 +81,8 @@ let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult
          CreateEmployeeCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.CreateCard cmd ->
          CreateCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.Purchase cmd ->
-         PurchaseCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
+      | EmployeeCommand.PurchaseIntent cmd ->
+         PurchaseIntentCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.LimitDailyDebits cmd ->
          LimitDailyDebitsCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
       | EmployeeCommand.LimitMonthlyDebits cmd ->

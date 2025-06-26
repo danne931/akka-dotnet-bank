@@ -43,14 +43,19 @@ type ThirdPartyProviderCardLinked = {
    CardNumberLast4: string
 }
 
-type PurchaseApplied = { Info: PurchaseInfo }
+type CardPurchasePending = { Info: PurchaseInfo }
 
-type PurchaseFailed = {
+type CardPurchaseSettled = {
+   Info: PurchaseInfo
+   SettlementId: SettlementId
+}
+
+type CardPurchaseFailed = {
    Info: PurchaseInfo
    Reason: PurchaseFailReason
 }
 
-type PurchaseRefunded = {
+type CardPurchaseRefunded = {
    Info: PurchaseInfo
    Reason: PurchaseRefundReason
 }

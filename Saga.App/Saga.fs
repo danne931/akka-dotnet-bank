@@ -57,8 +57,7 @@ type StartEvent =
       | CardSetup _ -> "CardSetupStart"
       | Purchase e ->
          match e with
-         | PurchaseSagaStartEvent.DeductedCardFunds _ ->
-            "PurchaseDeductedCardFunds"
+         | PurchaseSagaStartEvent.PurchaseIntent _ -> "PurchaseIntent"
          | PurchaseSagaStartEvent.PurchaseRejectedByCard _ ->
             "PurchaseRejectedByCard"
       | DomesticTransfer e ->
@@ -159,7 +158,10 @@ type Event =
          | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
             "PurchaseRejectedCardNetworkResponse"
          | PurchaseSagaEvent.CardNetworkResponse _ -> "CardNetworkResponse"
-         | PurchaseSagaEvent.PurchaseSettled -> "PurchaseSettled"
+         | PurchaseSagaEvent.PurchaseSettledWithAccount ->
+            "PurchaseSettledWithAccount"
+         | PurchaseSagaEvent.PurchaseSettledWithCard ->
+            "PurchaseSettledWithCard"
          | PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard ->
             "PurchaseFailureAcknowledgedByCard"
          | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount ->

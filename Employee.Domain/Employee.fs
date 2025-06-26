@@ -17,7 +17,7 @@ let private purchaseAccrued
    List.fold
       (fun acc evt ->
          match evt with
-         | PurchaseApplied e ->
+         | PurchaseSettled e ->
             let e = e.Data.Info
 
             if e.CardId = cardId && satisfiesDate e.Date then
@@ -115,7 +115,7 @@ let applyEvent
                   em.Cards
 
         }
-      | PurchaseApplied e -> {
+      | PurchaseSettled e -> {
          em with
             Cards =
                Map.change
@@ -127,8 +127,9 @@ let applyEvent
                   em.Cards
 
         }
-      | PurchaseRefunded _ -> em
+      | PurchasePending _ -> em
       | PurchaseFailed _ -> em
+      | PurchaseRefunded _ -> em
       | DailyDebitLimitUpdated e -> {
          em with
             Cards =
@@ -238,9 +239,20 @@ let applyEvent
                   }
         }
 
+   let updatedPendingDeductions =
+      match evt with
+      | PurchasePending e ->
+         state.PendingPurchaseDeductions.Add e.Data.Info.Amount
+      | PurchaseSettled e ->
+         state.PendingPurchaseDeductions.Remove e.Data.Info.Amount
+      | PurchaseFailed e ->
+         state.PendingPurchaseDeductions.Remove e.Data.Info.Amount
+      | _ -> state.PendingPurchaseDeductions
+
    {
       Info = updatedEmployee
       Events = evt :: state.Events
+      PendingPurchaseDeductions = updatedPendingDeductions
    }
 
 module private StateTransition =
@@ -324,7 +336,7 @@ module private StateTransition =
       else
          map UnlockedCard state (UnlockCardCommand.toEvent cmd)
 
-   let purchase (state: EmployeeSnapshot) (cmd: PurchaseCommand) =
+   let purchaseIntent (state: EmployeeSnapshot) (cmd: PurchaseIntentCommand) =
       let em = state.Info
       let info = cmd.Data
 
@@ -334,8 +346,13 @@ module private StateTransition =
          match Map.tryFind info.CardId em.Cards with
          | None -> transitionErr CardNotFound
          | Some card ->
-            let dpa = dailyPurchaseAccrued state.Events card.CardId
-            let mpa = monthlyPurchaseAccrued state.Events card.CardId
+            let dpa =
+               dailyPurchaseAccrued state.Events card.CardId
+               + state.PendingPurchaseDeductions.Money
+
+            let mpa =
+               monthlyPurchaseAccrued state.Events card.CardId
+               + state.PendingPurchaseDeductions.Money
 
             if card.IsPending then
                transitionErr CardPending
@@ -355,7 +372,13 @@ module private StateTransition =
                transitionErr
                <| ExceededMonthlyDebit(card.DailyPurchaseLimit, dpa)
             else
-               map PurchaseApplied state (PurchaseCommand.toEvent cmd)
+               map PurchasePending state (PurchaseIntentCommand.toEvent cmd)
+
+   let settlePurchase
+      (state: EmployeeSnapshot)
+      (cmd: SettlePurchaseWithCardCommand)
+      =
+      map PurchaseSettled state (SettlePurchaseWithCardCommand.toEvent cmd)
 
    let failPurchase (state: EmployeeSnapshot) (cmd: FailPurchaseCommand) =
       map PurchaseFailed state (FailPurchaseCommand.toEvent cmd)
@@ -449,7 +472,10 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
    | EmployeeCommand.CreateCard cmd -> StateTransition.createCard state cmd
    | EmployeeCommand.LinkThirdPartyProviderCard cmd ->
       StateTransition.linkThirdPartyProviderCard state cmd
-   | EmployeeCommand.Purchase cmd -> StateTransition.purchase state cmd
+   | EmployeeCommand.PurchaseIntent cmd ->
+      StateTransition.purchaseIntent state cmd
+   | EmployeeCommand.SettlePurchase cmd ->
+      StateTransition.settlePurchase state cmd
    | EmployeeCommand.FailPurchase cmd -> StateTransition.failPurchase state cmd
    | EmployeeCommand.RefundPurchase cmd ->
       StateTransition.refundPurchase state cmd
@@ -472,15 +498,3 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
       StateTransition.approveAccess state cmd
    | EmployeeCommand.RestoreAccess cmd ->
       StateTransition.restoreAccess state cmd
-
-let empty: Employee = {
-   EmployeeId = EmployeeId System.Guid.Empty
-   OrgId = OrgId System.Guid.Empty
-   Role = Role.Scholar
-   Email = Email.empty
-   FirstName = ""
-   LastName = ""
-   Status = EmployeeStatus.InitialEmptyState
-   Cards = Map.empty
-   AuthProviderUserId = None
-}

@@ -10,7 +10,8 @@ type EmployeeCommand =
    | CreateEmployee of CreateEmployeeCommand
    | CreateCard of CreateCardCommand
    | LinkThirdPartyProviderCard of LinkThirdPartyProviderCardCommand
-   | Purchase of PurchaseCommand
+   | PurchaseIntent of PurchaseIntentCommand
+   | SettlePurchase of SettlePurchaseWithCardCommand
    | FailPurchase of FailPurchaseCommand
    | RefundPurchase of RefundPurchaseCommand
    | LimitDailyDebits of LimitDailyDebitsCommand
@@ -31,7 +32,8 @@ type EmployeeCommand =
       | CreateEmployee cmd -> Command.envelope cmd
       | CreateCard cmd -> Command.envelope cmd
       | LinkThirdPartyProviderCard cmd -> Command.envelope cmd
-      | Purchase cmd -> Command.envelope cmd
+      | PurchaseIntent cmd -> Command.envelope cmd
+      | SettlePurchase cmd -> Command.envelope cmd
       | FailPurchase cmd -> Command.envelope cmd
       | RefundPurchase cmd -> Command.envelope cmd
       | LimitDailyDebits cmd -> Command.envelope cmd
@@ -51,9 +53,10 @@ type EmployeeEvent =
    | CreatedEmployee of BankEvent<CreatedEmployee>
    | CreatedCard of BankEvent<CreatedCard>
    | ThirdPartyProviderCardLinked of BankEvent<ThirdPartyProviderCardLinked>
-   | PurchaseApplied of BankEvent<PurchaseApplied>
-   | PurchaseFailed of BankEvent<PurchaseFailed>
-   | PurchaseRefunded of BankEvent<PurchaseRefunded>
+   | PurchasePending of BankEvent<CardPurchasePending>
+   | PurchaseSettled of BankEvent<CardPurchaseSettled>
+   | PurchaseFailed of BankEvent<CardPurchaseFailed>
+   | PurchaseRefunded of BankEvent<CardPurchaseRefunded>
    | DailyDebitLimitUpdated of BankEvent<DailyDebitLimitUpdated>
    | MonthlyDebitLimitUpdated of BankEvent<MonthlyDebitLimitUpdated>
    | LockedCard of BankEvent<LockedCard>
@@ -87,9 +90,10 @@ module EmployeeEnvelope =
       | :? BankEvent<CreatedCard> as evt -> CreatedCard evt
       | :? BankEvent<ThirdPartyProviderCardLinked> as evt ->
          ThirdPartyProviderCardLinked evt
-      | :? BankEvent<PurchaseApplied> as evt -> PurchaseApplied evt
-      | :? BankEvent<PurchaseFailed> as evt -> PurchaseFailed evt
-      | :? BankEvent<PurchaseRefunded> as evt -> PurchaseRefunded evt
+      | :? BankEvent<CardPurchasePending> as evt -> PurchasePending evt
+      | :? BankEvent<CardPurchaseSettled> as evt -> PurchaseSettled evt
+      | :? BankEvent<CardPurchaseFailed> as evt -> PurchaseFailed evt
+      | :? BankEvent<CardPurchaseRefunded> as evt -> PurchaseRefunded evt
       | :? BankEvent<DailyDebitLimitUpdated> as evt ->
          DailyDebitLimitUpdated evt
       | :? BankEvent<MonthlyDebitLimitUpdated> as evt ->
@@ -112,7 +116,8 @@ module EmployeeEnvelope =
       | CreatedEmployee evt -> wrap evt, get evt
       | CreatedCard evt -> wrap evt, get evt
       | ThirdPartyProviderCardLinked evt -> wrap evt, get evt
-      | PurchaseApplied evt -> wrap evt, get evt
+      | PurchasePending evt -> wrap evt, get evt
+      | PurchaseSettled evt -> wrap evt, get evt
       | PurchaseFailed evt -> wrap evt, get evt
       | PurchaseRefunded evt -> wrap evt, get evt
       | DailyDebitLimitUpdated evt -> wrap evt, get evt
@@ -160,10 +165,29 @@ type Employee = {
       |> Seq.exists (fun card ->
          not (card.IsExpired()) && card.Status <> CardStatus.Closed)
 
+   static member Empty = {
+      EmployeeId = EmployeeId System.Guid.Empty
+      OrgId = OrgId System.Guid.Empty
+      Role = Role.Scholar
+      Email = Email.empty
+      FirstName = ""
+      LastName = ""
+      Status = EmployeeStatus.InitialEmptyState
+      Cards = Map.empty
+      AuthProviderUserId = None
+   }
+
 type EmployeeSnapshot = {
    Info: Employee
    Events: EmployeeEvent list
-}
+   PendingPurchaseDeductions: PendingDeductions
+} with
+
+   static member Empty = {
+      Info = Employee.Empty
+      Events = []
+      PendingPurchaseDeductions = PendingDeductions.Zero
+   }
 
 type CardWithMetrics = {
    Card: Card
