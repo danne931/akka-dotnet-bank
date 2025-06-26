@@ -63,7 +63,7 @@ let networkQueryFromCardBrowserQuery (query: CardBrowserQuery) : CardQuery = {
 }
 
 let getEmployee (orgId: OrgId) (employeeId: EmployeeId) : Async<EmployeeMaybe> = async {
-   let! (code, responseText) =
+   let! code, responseText =
       Http.get (RoutePaths.EmployeePath.getEmployee orgId employeeId)
 
    if code = 404 then
@@ -76,7 +76,7 @@ let getEmployee (orgId: OrgId) (employeeId: EmployeeId) : Async<EmployeeMaybe> =
 }
 
 let private getEmployeesWithPath (path: string) : Async<EmployeesMaybe> = async {
-   let! (code, responseText) = Http.get path
+   let! code, responseText = Http.get path
 
    if code = 404 then
       return Ok None
@@ -123,8 +123,12 @@ let submitCommand
       // to the current state (Err.EmployeeStateTransitionError).
       // This same validation occurs on the server when an actor is
       // processing a command.
-      let! evt, newState =
-         Employee.stateTransition EmployeeSnapshot.Empty command
+      let snapshot = {
+         EmployeeSnapshot.Empty with
+            Info = employee
+      }
+
+      let! evt, newState = Employee.stateTransition snapshot command
 
       let! res = postJson command
       let code = res.statusCode

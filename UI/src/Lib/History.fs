@@ -267,7 +267,7 @@ let accountHistoryUIFriendly
       |> Option.defaultValue recipientFromEvt.FullName
 
    let accountName =
-      org.AccountProfiles.TryFind(history.Event.AccountId)
+      org.AccountProfiles.TryFind history.Event.AccountId
       |> Option.map (fun a -> a.Account.Name)
       |> Option.defaultValue "Account"
 
@@ -297,12 +297,12 @@ let accountHistoryUIFriendly
       }
    | DebitSettled evt ->
       let em = evt.Data.EmployeePurchaseReference
-      let card = $"{em.CardNickname} **{em.EmployeeCardNumberLast4}"
 
       {
          props with
             Name = "Purchase Settled"
-            Info = $"Settled purchase from {evt.Data.Merchant} with card {card}"
+            Info =
+               $"Purchase by {em.EmployeeName} at {evt.Data.Merchant} deducted from account {accountName} "
             Amount = Some <| Money.format evt.Data.Amount
             MoneyFlow = Some MoneyFlow.Out
       }

@@ -80,12 +80,10 @@ let applyEvent
          Status =
             match e.Data.OrgRequiresEmployeeInviteApproval with
             | Some ruleId ->
-               EmployeeStatus.PendingInviteApproval(
-                  {
-                     RuleId = ruleId
-                     ProgressId = CommandApprovalProgressId e.CorrelationId
-                  }
-               )
+               EmployeeStatus.PendingInviteApproval {
+                  RuleId = ruleId
+                  ProgressId = CommandApprovalProgressId e.CorrelationId
+               }
             | None ->
                EmployeeStatus.PendingInviteConfirmation {
                   Token = e.Data.InviteToken
@@ -268,7 +266,7 @@ module private StateTransition =
       |> Result.mapError ValidationError
       |> Result.map (fun evt ->
          let evt = eventTransform evt
-         (evt, applyEvent state evt))
+         evt, applyEvent state evt)
 
    let createAccountOwner
       (state: EmployeeSnapshot)
