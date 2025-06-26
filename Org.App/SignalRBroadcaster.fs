@@ -25,24 +25,20 @@ let init (system: ActorSystem) : SignalRBroadcast =
       parentAccountEventPersisted =
          fun event ->
             let msg =
-               SignalRActor.Msg.ParentAccountEventPersisted(
-                  {
-                     Date = DateTime.UtcNow
-                     EventPersisted = event
-                  }
-               )
+               SignalRActor.Msg.ParentAccountEventPersisted {
+                  Date = DateTime.UtcNow
+                  EventPersisted = event
+               }
 
             sendToSignalR msg
       accountEventPersisted =
          fun event account ->
             let msg =
-               SignalRActor.Msg.AccountEventPersisted(
-                  {
-                     Date = DateTime.UtcNow
-                     EventPersisted = event
-                     Account = account
-                  }
-               )
+               SignalRActor.Msg.AccountEventPersisted {
+                  Date = DateTime.UtcNow
+                  EventPersisted = event
+                  Account = account
+               }
 
             sendToSignalR msg
 
@@ -60,26 +56,22 @@ let init (system: ActorSystem) : SignalRBroadcast =
       employeeEventPersisted =
          fun event employee ->
             let msg =
-               SignalRActor.Msg.EmployeeEventPersisted(
-                  {
-                     Date = DateTime.UtcNow
-                     EventPersisted = event
-                     Employee = employee
-                  }
-               )
+               SignalRActor.Msg.EmployeeEventPersisted {
+                  Date = DateTime.UtcNow
+                  EventPersisted = event
+                  Employee = employee
+               }
 
             sendToSignalR msg
 
       orgEventPersisted =
          fun event org ->
             let msg =
-               SignalRActor.Msg.OrgEventPersisted(
-                  {
-                     Date = DateTime.UtcNow
-                     EventPersisted = event
-                     Org = org
-                  }
-               )
+               SignalRActor.Msg.OrgEventPersisted {
+                  Date = DateTime.UtcNow
+                  EventPersisted = event
+                  Org = org
+               }
 
             sendToSignalR msg
 

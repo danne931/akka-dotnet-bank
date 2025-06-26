@@ -296,7 +296,7 @@ let AutomaticBalanceManagementDashboardComponent
 
                            attr.children [
                               Html.b account.FullName
-                              Html.small (Money.format account.Balance)
+                              Html.small (Money.format account.AvailableBalance)
                            ]
                         ]
                      ]

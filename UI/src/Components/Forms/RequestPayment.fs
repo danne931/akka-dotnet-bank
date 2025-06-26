@@ -104,7 +104,7 @@ let formPlatformPayment
       payeeDestinationAccounts
       |> Map.toList
       |> List.map (fun (accountId, a) ->
-         string accountId, $"{a.Name} ({Money.format a.Balance})")
+         string accountId, $"{a.Name} ({Money.format a.AvailableBalance})")
       |> List.sortBy snd
 
    let fieldPayeeAccountSelect =

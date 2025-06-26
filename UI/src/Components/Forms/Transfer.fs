@@ -52,8 +52,8 @@ let amountField (account: Account) =
          amountValidatorFromString "Transfer amount"
          >> validationErrorsHumanFriendly
          >> Result.bind (fun amt ->
-            if account.Balance - amt < 0m then
-               Result.Error $"Insufficient Balance ${account.Balance}"
+            if account.AvailableBalance - amt < 0m then
+               Result.Error $"Insufficient Balance ${account.AvailableBalance}"
             else
                Ok amt)
       Value = _.Amount

@@ -62,12 +62,26 @@ let renderAccounts (orgCtx: OrgProvider.State) =
 
       match orgCtx with
       | Deferred.Resolved(Ok(Some org)) ->
-         classyNode Html.div [ "org-summary" ] [
-            Html.small "Balance across all accounts: "
+         classyNode Html.div [ "org-summary"; "grid" ] [
+            Html.div [
+               Html.small "Available balance across all accounts: "
 
-            Html.h2 [
-               attr.classes [ "balance" ]
-               attr.text (Money.format org.Balance)
+               Html.h3 [
+                  attr.classes [ "balance" ]
+                  attr.text (Money.format org.AvailableBalance)
+               ]
+            ]
+
+            Html.div [
+               Html.small "Pending Deductions: "
+
+               Html.div [
+                  Html.h3 [
+                     attr.classes [ "pending-deductions"; "debit" ]
+                     attr.text (Money.format org.PendingDeductions.Money)
+                  ]
+                  Html.small $"({org.PendingDeductions.Count} transactions)"
+               ]
             ]
          ]
 
@@ -78,7 +92,7 @@ let renderAccounts (orgCtx: OrgProvider.State) =
                      Html.p account.Name
                      Html.h5 [
                         attr.style [ style.margin 0 ]
-                        attr.text (Money.format account.Balance)
+                        attr.text (Money.format account.AvailableBalance)
                      ]
                   ]
 

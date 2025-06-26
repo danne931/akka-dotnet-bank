@@ -512,7 +512,8 @@ type Account = {
             -> AutoTransferDerivedFromRule list option)
       : AutoTransferDerivedFromRule list =
       x.AutoTransferRule
-      |> Option.bind (fun conf -> computedTransferFromRule conf.Info x.Balance)
+      |> Option.bind (fun conf ->
+         computedTransferFromRule conf.Info x.AvailableBalance)
       |> Option.defaultValue []
 
    member x.AutoTransfersPerTransaction =

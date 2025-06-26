@@ -229,8 +229,9 @@ module private StateTransition =
    let maintenanceFee (account: Account) (cmd: MaintenanceFeeCommand) =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.Balance - cmd.Data.Amount < 0m then
-         transitionErr <| InsufficientBalance(account.Balance, account.FullName)
+      elif account.AvailableBalance - cmd.Data.Amount < 0m then
+         transitionErr
+         <| InsufficientBalance(account.AvailableBalance, account.FullName)
       else
          map MaintenanceFeeDebited account (MaintenanceFeeCommand.toEvent cmd)
 

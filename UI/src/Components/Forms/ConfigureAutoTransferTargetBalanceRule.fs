@@ -245,7 +245,7 @@ let renderCalculationDisplay (target: Account) (rule: TargetBalanceRule) =
    let targetName = rule.TargetAccount.Name
    let partnerName = rule.ManagingPartnerAccount.Name
    let targetBalance = PositiveAmount.get rule.TargetAccountBalance
-   let currentBalance = target.Balance
+   let currentBalance = target.AvailableBalance
 
    React.fragment [
       Html.small (Frequency.Schedule CronSchedule.Daily).Display

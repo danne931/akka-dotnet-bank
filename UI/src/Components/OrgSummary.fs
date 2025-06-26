@@ -32,6 +32,9 @@ let private rotatingMetrics = [
    RotatingMetric.MonthlyPaymentPaid
 ]
 
+let private renderMoneyOut amount =
+   Html.p [ attr.classes [ "debit" ]; attr.text (Money.formatShort amount) ]
+
 [<ReactComponent>]
 let OrgSummaryComponent (org: OrgWithAccountProfiles) =
    let isFading, setFading = React.useState false
@@ -123,7 +126,7 @@ let OrgSummaryComponent (org: OrgWithAccountProfiles) =
             let metric = rotatingMetrics |> List.item metricInd
 
             metricInd <-
-               if metricInd = (rotatingMetrics.Length - 1) then
+               if metricInd = rotatingMetrics.Length - 1 then
                   0
                else
                   metricInd + 1
@@ -149,15 +152,20 @@ let OrgSummaryComponent (org: OrgWithAccountProfiles) =
 
       attr.children [
          Html.div [
-            Html.b [
-               attr.style [ style.color "var(--primary)" ]
-               attr.text org.Org.Name
+            Html.p "Balance: "
+            Html.ins [ attr.text (Money.format org.AvailableBalance) ]
+         ]
+
+         Html.div [
+            Html.div [
+               Html.p "Pending Deductions: "
+               Html.p [
+                  attr.classes [ "debit" ]
+                  attr.text (Money.format org.PendingDeductions.Money)
+               ]
             ]
 
-            Html.div [
-               Html.p "Balance: "
-               Html.ins [ attr.text (Money.format org.Balance) ]
-            ]
+            Html.small $"({org.PendingDeductions.Count} transactions)"
          ]
 
          Html.div [
@@ -168,83 +176,40 @@ let OrgSummaryComponent (org: OrgWithAccountProfiles) =
                match rotatingMetric with
                | RotatingMetric.DailyInternalTransferWithinOrg ->
                   Html.p "Daily Internal Transfer Within Org: "
-
-                  Html.ins [
-                     attr.text (
-                        Money.formatShort metrics.DailyInternalTransferWithinOrg
-                     )
-                  ]
+                  renderMoneyOut metrics.DailyInternalTransferWithinOrg
                | RotatingMetric.DailyInternalTransferBetweenOrgs ->
                   Html.p "Daily Internal Transfer Between Orgs: "
-
-                  Html.ins [
-                     attr.text (
-                        Money.formatShort
-                           metrics.DailyInternalTransferBetweenOrgs
-                     )
-                  ]
+                  renderMoneyOut metrics.DailyInternalTransferBetweenOrgs
                | RotatingMetric.DailyDomesticTransfer ->
                   Html.p "Daily Domestic Transfer: "
-
-                  Html.ins [
-                     attr.text (Money.formatShort metrics.DailyDomesticTransfer)
-                  ]
+                  renderMoneyOut metrics.DailyDomesticTransfer
                | RotatingMetric.DailyPaymentPaid ->
                   Html.p "Daily Payments Paid: "
-
-                  Html.ins [
-                     attr.text (Money.formatShort metrics.DailyPaymentPaid)
-                  ]
+                  renderMoneyOut metrics.DailyPaymentPaid
                | RotatingMetric.DailyPurchaseAccrued ->
                   Html.p "Daily Purchase: "
-
-                  Html.ins [
-                     attr.text (Money.formatShort metrics.DailyPurchase)
-                  ]
+                  renderMoneyOut metrics.DailyPurchase
                | RotatingMetric.MonthlyInternalTransferWithinOrg ->
                   Html.p "Monthly Internal Transfer Within Org: "
-
-                  Html.ins [
-                     attr.text (
-                        Money.formatShort
-                           metrics.MonthlyInternalTransferWithinOrg
-                     )
-                  ]
+                  renderMoneyOut metrics.MonthlyInternalTransferWithinOrg
                | RotatingMetric.MonthlyInternalTransferBetweenOrgs ->
                   Html.p "Monthly Internal Transfer Between Orgs: "
-
-                  Html.ins [
-                     attr.text (
-                        Money.formatShort
-                           metrics.MonthlyInternalTransferWithinOrg
-                     )
-                  ]
+                  renderMoneyOut metrics.MonthlyInternalTransferBetweenOrgs
                | RotatingMetric.MonthlyDomesticTransfer ->
                   Html.p "Monthly Domestic Transfer: "
-
-                  Html.ins [
-                     attr.text (
-                        Money.formatShort metrics.MonthlyDomesticTransfer
-                     )
-                  ]
+                  renderMoneyOut metrics.MonthlyDomesticTransfer
                | RotatingMetric.MonthlyPurchaseAccrued ->
                   Html.p "Monthly Purchase: "
-
-                  Html.ins [
-                     attr.text (Money.formatShort metrics.MonthlyPurchase)
-                  ]
+                  renderMoneyOut metrics.MonthlyPurchase
                | RotatingMetric.MonthlyPaymentPaid ->
                   Html.p "Monthly Payments Paid: "
-
-                  Html.ins [
-                     attr.text (Money.formatShort metrics.DailyPaymentPaid)
-                  ]
+                  renderMoneyOut metrics.MonthlyPaymentPaid
             ]
          ]
 
          match monthlyMoneyFlow with
          | Deferred.Resolved(Ok(Some analytics)) ->
-            Html.div [
+            classyNode Html.div [ "analytics" ] [
                AnalyticsDashboard.render3MonthTimeSeriesChart
                   flow
                   analytics.TimeSeries

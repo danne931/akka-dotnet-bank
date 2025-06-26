@@ -24,7 +24,8 @@ let accountSelect
          Options =
             [
                for a in accounts.Values ->
-                  string a.AccountId, $"{a.Name} ({Money.format a.Balance})"
+                  string a.AccountId,
+                  $"{a.Name} ({Money.format a.AvailableBalance})"
             ]
             |> List.sortBy snd
       }

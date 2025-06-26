@@ -27,7 +27,8 @@ let accountSelectOptions filter (accounts: Map<AccountId, Account>) =
    |> Map.toList
    |> List.filter (snd >> filter)
    |> List.map (fun (acctId, profile) ->
-      string acctId, $"{profile.Name} ({Money.format profile.Balance})")
+      string acctId,
+      $"{profile.Name} ({Money.format profile.AvailableBalance})")
    |> List.sortBy snd
 
 let accountParser

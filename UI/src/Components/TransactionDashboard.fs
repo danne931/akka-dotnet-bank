@@ -149,7 +149,7 @@ let update msg state =
    | RefreshTransactions query ->
       let state = { state with Query = query }
       handlePaginationMsg state Reset
-   | ViewTransaction(txnId) ->
+   | ViewTransaction txnId ->
       let path =
          Routes.TransactionsUrl.queryPath {
             Routes.IndexUrl.transactionBrowserQuery () with

@@ -401,8 +401,8 @@ let render3MonthTimeSeriesChart
    =
    let dataKey, color =
       match flow with
-      | MoneyFlow.In -> (_.AmountIn >> string), "url(#moneyIn)"
-      | MoneyFlow.Out -> (_.AmountOut >> string), "url(#moneyOut)"
+      | MoneyFlow.In -> _.AmountIn >> string, "url(#moneyIn)"
+      | MoneyFlow.Out -> _.AmountOut >> string, "url(#moneyOut)"
 
    Recharts.barChart [
       barChart.width dimensions.Width

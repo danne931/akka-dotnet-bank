@@ -156,6 +156,21 @@ type OrgWithAccountProfiles = {
       x.Accounts
       |> Map.filter (fun _ a -> a.Depository = AccountDepository.Checking)
 
+   member x.AvailableBalance = x.Accounts.Values |> Seq.sumBy _.AvailableBalance
+
+   member x.PendingDeductions =
+      Seq.fold
+         (fun (acc: PendingDeductions) account ->
+            if account.PendingDeductions.Count > 0 then
+               {
+                  Money = acc.Money + account.PendingDeductions.Money
+                  Count = acc.Count + account.PendingDeductions.Count
+               }
+            else
+               acc)
+         PendingDeductions.Zero
+         x.Accounts.Values
+
    member x.Metrics: AccountMetrics =
       Seq.fold
          (fun acc profile -> {

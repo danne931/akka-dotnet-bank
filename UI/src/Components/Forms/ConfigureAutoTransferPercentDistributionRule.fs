@@ -236,7 +236,7 @@ let renderCalculationDisplay (target: Account) (r: PercentDistributionRule.T) =
       Html.small "Estimated 1st transfer"
       Html.hr []
 
-      match PositiveAmount.create target.Balance with
+      match PositiveAmount.create target.AvailableBalance with
       | Error _ ->
          Html.p
             $"Balance of {targetName} is too low for distribution,
