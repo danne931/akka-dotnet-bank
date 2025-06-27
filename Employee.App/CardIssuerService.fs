@@ -6,6 +6,7 @@ open Akkling
 open Akka.Actor
 open Akkling.Streams
 open Akka.Streams.Amqp.RabbitMq
+open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Bank.Employee.Domain
@@ -52,7 +53,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (networkRequest: CardIssuerMessage -> Task<Result<CardIssuerResponse, Err>>)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts = {
@@ -78,14 +79,14 @@ let actorProps
                         |> CardSetupSagaEvent.CardCreateResponse
                         |> AppSaga.Message.cardSetup orgId corrId
 
-                     getSagaRef () <! msg
+                     getSagaRef corrId <! msg
                   | SagaReplyTo.EmployeeOnboard ->
                      let onboardingMsg =
                         Ok res.ProviderCardId
                         |> EmployeeOnboardingSagaEvent.CardCreateResponse
                         |> AppSaga.Message.employeeOnboard orgId corrId
 
-                     getSagaRef () <! onboardingMsg
+                     getSagaRef corrId <! onboardingMsg
 
                response)
             Flow.id
@@ -105,7 +106,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps

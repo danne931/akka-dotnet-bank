@@ -39,7 +39,7 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (networkRequest:
       PartnerBankServiceMessage -> Task<Result<PartnerBankResponse, Err>>)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -68,7 +68,7 @@ let actorProps
                      |> OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse
                      |> AppSaga.Message.orgOnboard orgId corrId
 
-                  getSagaRef () <! msg
+                  getSagaRef corrId <! msg
                | PartnerBankServiceMessage.Purchase req,
                  PartnerBankResponse.Purchase res ->
                   let msg =
@@ -76,7 +76,7 @@ let actorProps
                      |> PurchaseSagaEvent.PartnerBankSyncResponse
                      |> AppSaga.Message.purchase orgId corrId
 
-                  getSagaRef () <! msg
+                  getSagaRef corrId <! msg
                | PartnerBankServiceMessage.TransferBetweenOrganizations req,
                  PartnerBankResponse.TransferBetweenOrganizations res ->
                   let msg =
@@ -90,7 +90,7 @@ let actorProps
                         |> PlatformPaymentSagaEvent.PartnerBankSyncResponse
                         |> AppSaga.Message.platformPayment orgId corrId
 
-                  getSagaRef () <! msg
+                  getSagaRef corrId <! msg
                | _ -> logError mailbox "Partner Bank Sync: Mixed req/res."
 
                response)
@@ -147,7 +147,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps

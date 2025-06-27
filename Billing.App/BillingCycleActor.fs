@@ -42,7 +42,8 @@ let getBillingCycleReadyAccounts () =
 let private fanOutBillingCycleMessage
    (ctx: Actor<_>)
    (throttle: StreamThrottleEnvConfig)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
    =
    task {
       let mat = ctx.System.Materializer()
@@ -93,7 +94,8 @@ let private fanOutBillingCycleMessage
 
 let actorProps
    (throttle: StreamThrottleEnvConfig)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
    =
    let handler (ctx: Actor<BillingCycleMessage>) =
       function

@@ -6,6 +6,7 @@ open Akka.Hosting
 open Akka.Streams
 open Akkling.Streams
 open Akkling
+open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
@@ -20,7 +21,7 @@ type Message = | WakeUpIfUnfinishedBusiness
 
 let actorProps
    (system: ActorSystem)
-   (getSagaActor: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (getTimedOutSagas: unit -> Async<Result<Option<CorrelationId list>, Err>>)
    (throttle: StreamThrottleEnvConfig)
    =
@@ -58,10 +59,7 @@ let actorProps
                throttle.Count
                throttle.Duration
          |> Source.runForEach mat (fun sagaId ->
-            getSagaActor ()
-            <! GuaranteedDelivery.message
-                  (CorrelationId.get sagaId)
-                  SagaMessage.CheckForRemainingWork)
+            getSagaActor sagaId <! SagaMessage.CheckForRemainingWork)
 
       return ignored ()
    }
@@ -96,7 +94,7 @@ let getSleepingSagas () = asyncResultOption {
 
 let initProps
    (system: ActorSystem)
-   (getSagaActor: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
    actorProps
       system

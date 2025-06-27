@@ -225,15 +225,8 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             // ConfirmableMessageEnvelope for Akka.Persistence.Extras.Confirmation/
             | SagaMessage.Start _
             | SagaMessage.Event _ ->
-               if guaranteedDeliveryConsumerControllerRef.IsSome then
-                  logError
-                     "Expects saga message to be delivered in GuaranteedDelivery.Message envelope."
-
-                  unhandled ()
-               else
-                  ctx.Parent() <! msg
-                  return ignored ()
-
+               ctx.Parent() <! msg
+               return ignored ()
          // Event replay on actor start
          | :? SagaPersistableEvent<'SagaStartEvent, 'SagaEvent> as e when
             ctx.IsRecovering()

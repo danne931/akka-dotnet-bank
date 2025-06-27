@@ -119,6 +119,7 @@ builder.Services.AddAkka(
                         //       account env var here.
                         Env.config.AccountActorSupervisor
                         persistenceId
+                        (AppSaga.getEntityRef system)
                         (fun () ->
                            AppSaga.getGuaranteedDeliveryProducerRef system)
                         (fun () ->
@@ -148,6 +149,7 @@ builder.Services.AddAkka(
                         persistenceId
                         BillingStatementActor.get
                         Bank.Transfer.Api.getDomesticTransfersRetryableUponRecipientCorrection
+                        (AppSaga.getEntityRef system)
                         (fun () ->
                            AppSaga.getGuaranteedDeliveryProducerRef system)
                         EmailServiceActor.getProducer
@@ -173,6 +175,7 @@ builder.Services.AddAkka(
                         Env.config.AccountActorSupervisor
                         persistenceId
                         (provider.GetRequiredService<SignalRBroadcast>())
+                        (AppSaga.getEntityRef system)
                         (fun () ->
                            AppSaga.getGuaranteedDeliveryProducerRef system)
                         (typed controllerRef))),
@@ -184,9 +187,7 @@ builder.Services.AddAkka(
             (fun persistenceId ->
                let system = provider.GetRequiredService<ActorSystem>()
 
-               GuaranteedDelivery.consumer<
-                  Lib.Saga.SagaMessage<AppSaga.StartEvent, AppSaga.Event>
-                >
+               GuaranteedDelivery.consumer<AppSaga.AppSagaMessage>
                   system
                   (fun controllerRef ->
                      AppSaga.initProps
@@ -224,7 +225,7 @@ builder.Services.AddAkka(
                   Env.config.QueueConsumerStreamBackoffRestart
                   (EnvOrg.config.KnowYourCustomerServiceCircuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
-                  (fun () -> AppSaga.getGuaranteedDeliveryProducerRef system)
+                  (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.org)
          )
@@ -241,7 +242,7 @@ builder.Services.AddAkka(
                   Env.config.QueueConsumerStreamBackoffRestart
                   (Env.config.PartnerBankServiceCircuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
-                  (fun () -> AppSaga.getGuaranteedDeliveryProducerRef system)
+                  (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -254,15 +255,16 @@ builder.Services.AddAkka(
                   Env.config.QueueConsumerStreamBackoffRestart
                   (EnvEmployee.config.cardIssuerServiceCircuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
-                  (fun () -> AppSaga.getGuaranteedDeliveryProducerRef system)
+                  (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.employee)
          )
          .WithSingleton<ActorMetadata.SagaAlarmClockMarker>(
             ActorMetadata.sagaAlarmClock.Name,
             (fun system _ _ ->
-               SagaAlarmClockActor.initProps system (fun () ->
-                  AppSaga.getGuaranteedDeliveryProducerRef system)
+               SagaAlarmClockActor.initProps
+                  system
+                  (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
          )
@@ -431,7 +433,7 @@ builder.Services.AddAkka(
                   EnvNotifications.config.Queue
                   Env.config.QueueConsumerStreamBackoffRestart
                   EnvNotifications.config.EmailBearerToken
-                  (fun () -> AppSaga.getGuaranteedDeliveryProducerRef system)
+                  (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -457,7 +459,7 @@ builder.Services.AddAkka(
                   Env.config.QueueConsumerStreamBackoffRestart
                   (EnvTransfer.config.domesticTransferCircuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
-                  (fun () -> AppSaga.getGuaranteedDeliveryProducerRef system)
+                  (AppSaga.getEntityRef system)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -533,14 +535,11 @@ builder.Services.AddAkka(
             registry.Register<
                ActorMetadata.SagaGuaranteedDeliveryProducerMarker
              >(
-               GuaranteedDelivery.producer<
-                  Lib.Saga.SagaMessage<AppSaga.StartEvent, AppSaga.Event>
-                >
-                  {
-                     System = system
-                     ShardRegion = registry.Get<ActorMetadata.SagaMarker>()
-                     ProducerName = "bank-to-saga-actor"
-                  }
+               GuaranteedDelivery.producer<AppSaga.AppSagaMessage> {
+                  System = system
+                  ShardRegion = registry.Get<ActorMetadata.SagaMarker>()
+                  ProducerName = "bank-to-saga-actor"
+               }
                |> untyped
             )
 

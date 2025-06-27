@@ -388,23 +388,36 @@ type Saga =
 
 type AppSagaPersistableEvent = SagaPersistableEvent<StartEvent, Event>
 
-type AppSagaMessage = GuaranteedDelivery.Message<SagaMessage<StartEvent, Event>>
+type AppSagaMessage = SagaMessage<StartEvent, Event>
 
 module Message =
+   // NOTE:
+   // Saga start messages are sent with AtLeastOnceDelivery using Akka's GuaranteedDelivery module.
+   // It is up to the consumer to decide whether they want to include the extra overhead cost for
+   // non-start messages.
+   //
+   // For non-start messages to saga actors it is likely not necessary to use GuaranteedDelivery
+   // as Lib/Saga/SagaActor.fs will reattempt activities for which it does not receive a response before
+   // the Saga activity's inactivity timeout.
    let private startMessage
       orgId
       corrId
       (startEvent: StartEvent)
-      : AppSagaMessage
+      : GuaranteedDelivery.Message<AppSagaMessage>
       =
       SagaEvent.create orgId corrId startEvent
       |> SagaMessage.Start
       |> GuaranteedDelivery.message (CorrelationId.get corrId)
 
    let private message orgId corrId (evt: Event) : AppSagaMessage =
-      SagaEvent.create orgId corrId evt
-      |> SagaMessage.Event
-      |> GuaranteedDelivery.message (CorrelationId.get corrId)
+      SagaEvent.create orgId corrId evt |> SagaMessage.Event
+
+   let guaranteedDelivery
+      corrId
+      (msg: AppSagaMessage)
+      : GuaranteedDelivery.Message<AppSagaMessage>
+      =
+      GuaranteedDelivery.message (CorrelationId.get corrId) msg
 
    let orgOnboardStart orgId corrId (evt: OrgOnboardingSagaStartEvent) =
       startMessage orgId corrId (StartEvent.OrgOnboarding evt)
@@ -714,7 +727,6 @@ let sagaHandler
                                        purchase.OrgId
                                        purchase.CorrelationId
                                  )
-                                 |> Async.map _.Message
 
                               mailbox.Parent() <!| asyncMsg
                      }
@@ -799,7 +811,6 @@ let sagaHandler
                                  purchase.OrgId
                                  purchase.CorrelationId
                            )
-                           |> Async.map _.Message
 
                         mailbox.Parent() <!| asyncMsg
                }
@@ -824,7 +835,7 @@ let sagaHandler
                               (TransferId.toCorrelationId transfer.TransferId)
                               evt
 
-                        mailbox.Parent() <! msg.Message
+                        mailbox.Parent() <! msg
                }
 
                match priorState, state with
@@ -848,7 +859,7 @@ let sagaHandler
                               (TransferId.toCorrelationId transfer.TransferId)
                               evt
 
-                        mailbox.Parent() <! msg.Message
+                        mailbox.Parent() <! msg
                }
 
                match priorState, state with
@@ -874,7 +885,6 @@ let sagaHandler
                         let asyncMsg =
                            asyncEvt
                            |> Async.map (Message.platformPayment orgId corrId)
-                           |> Async.map _.Message
 
                         mailbox.Parent() <!| asyncMsg
                }
@@ -899,7 +909,7 @@ let sagaHandler
 let getEntityRef
    (sys: ActorSystem)
    (correlationId: CorrelationId)
-   : IEntityRef<SagaMessage<StartEvent, Event>>
+   : IEntityRef<AppSagaMessage>
    =
    ActorUtil.getEntityRef
       sys
@@ -909,7 +919,7 @@ let getEntityRef
 /// Send a message to a cluster sharded saga actor with AtLeastOnceDelivery
 let getGuaranteedDeliveryProducerRef
    (system: ActorSystem)
-   : IActorRef<AppSagaMessage>
+   : IActorRef<GuaranteedDelivery.Message<AppSagaMessage>>
    =
    typed
    <| Akka.Hosting.ActorRegistry
@@ -932,11 +942,7 @@ let initProps
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
    (guaranteedDeliveryConsumerControllerRef:
-      Option<
-         IActorRef<
-            ConsumerController.IConsumerCommand<SagaMessage<StartEvent, Event>>
-          >
-       >)
+      Option<IActorRef<ConsumerController.IConsumerCommand<AppSagaMessage>>>)
    =
    SagaActor.initProps<Saga, StartEvent, Event>
       persistenceSupervisorEnvConfig

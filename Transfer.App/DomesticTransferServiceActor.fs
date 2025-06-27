@@ -8,6 +8,7 @@ open Akkling
 open Akkling.Streams
 open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
+open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Lib.ActivePatterns
@@ -76,7 +77,7 @@ let private networkRecipient
 
 // Notify account actor of DomesticTransfer Progress, Completed, or Failed.
 let onSuccessfulServiceResponse
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (txn: DomesticTransfer)
    (res: DomesticTransferServiceResponse)
    =
@@ -95,7 +96,7 @@ let onSuccessfulServiceResponse
       DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress
       |> AppSaga.Message.domesticTransfer orgId corrId
 
-   getSagaRef () <! msg
+   getSagaRef corrId <! msg
 
 let protectedAction
    (networkRequest: NetworkRequest)
@@ -135,7 +136,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (networkRequest: NetworkRequest)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -205,7 +206,7 @@ let initProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps

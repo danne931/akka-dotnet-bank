@@ -41,7 +41,8 @@ let initQueueSource
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryAfter: TimeSpan)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
    (billingStatementActorRef: IActorRef<obj>)
    =
    let flow, bulkWriteRef =
@@ -64,6 +65,7 @@ let initQueueSource
                   let msg =
                      BillingSagaEvent.BillingStatementPersisted
                      |> AppSaga.Message.billing s.OrgId s.CorrelationId
+                     |> AppSaga.Message.guaranteedDelivery s.CorrelationId
 
                   getSagaRef () <! msg
       }
@@ -81,7 +83,8 @@ let actorProps
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
    =
    let rec init (ctx: Actor<obj>) = actor {
       let! msg = ctx.Receive()
@@ -236,7 +239,8 @@ let start
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
    : IActorRef<BillingStatementMessage>
    =
    spawn system ActorMetadata.billingStatement.Name

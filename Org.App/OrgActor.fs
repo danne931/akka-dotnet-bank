@@ -174,7 +174,9 @@ let private terminateProgressAssociatedWithRule
       mailbox <! OrgMessage.StateChange cmd
 
 let onPersisted
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaGuaranteedDeliveryRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
    (getEmployeeRef:
       unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
    (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
@@ -192,13 +194,13 @@ let onPersisted
          OrgOnboardingSagaStartEvent.ApplicationSubmitted e
          |> AppSaga.Message.orgOnboardStart e.OrgId e.CorrelationId
 
-      getSagaRef () <! msg
+      getSagaGuaranteedDeliveryRef () <! msg
    | OnboardingFinished e ->
       let msg =
          OrgOnboardingSagaEvent.OrgActivated
          |> AppSaga.Message.orgOnboard e.OrgId e.CorrelationId
 
-      getSagaRef () <! msg
+      getSagaRef e.CorrelationId <! msg
    | CommandApprovalRuleConfigured e ->
       let newRuleConfig = e.Data.Rule
       let approversCnt = newRuleConfig.Approvers.Length
@@ -239,7 +241,7 @@ let onPersisted
             EmployeeOnboardingSagaEvent.AccessRequestPending
             |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
-         getSagaRef () <! msg
+         getSagaRef e.CorrelationId <! msg
       | _ -> ()
    | CommandApprovalProcessCompleted e -> sendApprovedCommand e.Data.Command
    | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
@@ -279,7 +281,9 @@ let onPersisted
 
 let actorProps
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaGuaranteedDeliveryRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
    (getEmployeeRef:
       unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
    (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
@@ -315,6 +319,7 @@ let actorProps
 
             onPersisted
                getSagaRef
+               getSagaGuaranteedDeliveryRef
                getEmployeeRef
                getAccountRef
                mailbox
@@ -478,7 +483,9 @@ let initProps
    (broadcaster: SignalRBroadcast)
    (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (persistenceId: string)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (getSagaGuaranteedDeliveryRef:
+      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
    (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
    (getEmployeeRef:
       unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
@@ -489,6 +496,7 @@ let initProps
       actorProps
          broadcaster
          getSagaRef
+         getSagaGuaranteedDeliveryRef
          getEmployeeRef
          getAccountRef
          guaranteedDeliveryConsumerControllerRef

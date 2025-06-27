@@ -5,6 +5,7 @@ open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
 open Akkling
 open Akkling.Streams
+open Akkling.Cluster.Sharding
 open System
 open System.Net.Http
 open System.Net.Http.Json
@@ -325,7 +326,7 @@ let private queueMessageToActionRequest
    }
 
 let onSuccessfulServiceResponse
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (mailbox: Actor<_>)
    (msg: EmailMessage)
    =
@@ -404,7 +405,7 @@ let onSuccessfulServiceResponse
          |> Some
       | _ -> None
 
-   txnSagaMessage |> Option.iter (fun msg -> getSagaRef () <! msg)
+   txnSagaMessage |> Option.iter (fun msg -> getSagaRef corrId <! msg)
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
@@ -413,7 +414,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (getTeamEmailForOrg: OrgId -> Task<Result<Email option, Err>>)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (sendEmail: EmailRequest.T -> TaskResult<HttpResponseMessage, Err>)
    : Props<obj>
    =
@@ -465,7 +466,7 @@ let initProps
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (bearerToken: string option)
-   (getSagaRef: unit -> IActorRef<AppSaga.AppSagaMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
    let client = bearerToken |> Option.map createClient
 
