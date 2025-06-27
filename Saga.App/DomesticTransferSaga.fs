@@ -113,6 +113,10 @@ type DomesticTransferSaga = {
       x.LifeCycle.InProgress
       |> List.exists _.Activity.IsWaitForDevelopmentTeamFix
 
+   member x.IsTransferSchedulingAwaitingActivation =
+      x.LifeCycle.InProgress
+      |> List.exists _.Activity.IsWaitForScheduledTransferActivation
+
 let applyStartEvent
    (start: DomesticTransferSagaStartEvent)
    (timestamp: DateTime)
@@ -296,13 +300,19 @@ let applyEvent
          LifeCycle =
             finishActivity Activity.ReleaseSenderReservedFunds saga.LifeCycle
      }
-   | DomesticTransferSagaEvent.EvaluateRemainingWork -> {
-      saga with
-         LifeCycle =
-            SagaLifeCycle.retryActivitiesAfterInactivity
-               timestamp
-               saga.LifeCycle
-     }
+   | DomesticTransferSagaEvent.EvaluateRemainingWork ->
+      // No need to increment activity Attempts counter for activating
+      // a scheduled transfer.
+      if saga.IsTransferSchedulingAwaitingActivation then
+         saga
+      else
+         {
+            saga with
+               LifeCycle =
+                  SagaLifeCycle.retryActivitiesAfterInactivity
+                     timestamp
+                     saga.LifeCycle
+         }
    | DomesticTransferSagaEvent.ResetInProgressActivityAttempts -> {
       saga with
          LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle

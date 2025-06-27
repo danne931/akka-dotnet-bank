@@ -126,6 +126,10 @@ type PlatformTransferSaga = {
    member x.RequiresReleaseSenderFunds =
       x.LifeCycle.InProgress |> List.exists _.Activity.IsReleaseSenderFunds
 
+   member x.IsTransferSchedulingAwaitingActivation =
+      x.LifeCycle.InProgress
+      |> List.exists _.Activity.IsWaitForScheduledTransferActivation
+
 let applyStartEvent
    (evt: PlatformTransferSagaStartEvent)
    (timestamp: DateTime)
@@ -293,13 +297,19 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.UndoRecipientDeposit
      }
-   | Event.EvaluateRemainingWork -> {
-      saga with
-         LifeCycle =
-            SagaLifeCycle.retryActivitiesAfterInactivity
-               timestamp
-               saga.LifeCycle
-     }
+   | Event.EvaluateRemainingWork ->
+      // No need to increment activity Attempts counter for activating
+      // a scheduled transfer.
+      if saga.IsTransferSchedulingAwaitingActivation then
+         saga
+      else
+         {
+            saga with
+               LifeCycle =
+                  SagaLifeCycle.retryActivitiesAfterInactivity
+                     timestamp
+                     saga.LifeCycle
+         }
    | Event.ResetInProgressActivityAttempts -> {
       saga with
          LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
