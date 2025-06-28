@@ -239,27 +239,57 @@ let transactionQuery (query: TransactionQuery) =
       else
          None
 
+   let matchSelect =
+      $"{Fields.event}, {Fields.timestamp}, {Fields.correlationId}, {Fields.eventId}, {Fields.orgId}"
+
+   // NOTE:
+   // deduplicated CTE containing a window function to obtain the row number
+   // fixes a scenario where both TransferScheduled and TransferPending are
+   // considered events representing the start of a transaction, leading
+   // to duplicate history of events representing a transaction.
+   // (See filtersToOriginatingNames function above)
+   //
+   // A TransferScheduled may exist without a TransferPending and likewise a
+   // TransferPending may exist without a TransferScheduled. When one exists
+   // and not the other, deduplication is not necessary. However, if they both
+   // exist for a given CorrelationId then the query sees both of them as
+   // originating events to include for the matching result set. Then the cross
+   // join lateral gets the entire event history for each originating event by
+   // CorrelationId.  So in a scenario where you would expect an event history
+   // of 4 events for a transfer scheduled scenario:
+   // (TransferScheduled, TransferPending, TransferProgress, TransferComplete)
+   // you get a duplicate set with TransferPending as the originating event:
+   // (TransferPending, TransferScheduled, TransferProgress, TransferComplete)
+
    queryParams,
    $"""
+   WITH deduplicated AS (
+      SELECT
+         {matchSelect},
+         -- Generate row number so can deduplicate scenario where multiple
+         -- events are considered originating events of a transaction.
+         ROW_NUMBER() OVER (
+            PARTITION BY {Fields.correlationId}
+            ORDER BY {Fields.timestamp} ASC
+         ) as rowNumber
+      FROM {table}
+      WHERE {where}
+   ),
+   matching AS (
+      SELECT {matchSelect}
+      FROM deduplicated
+      {joinAncillaryTxnInfo |> Option.defaultValue ""}
+      WHERE rowNumber = 1  -- Selects the earliest (originating) event for each correlation_id
+      ORDER BY {Fields.timestamp} desc
+      LIMIT @limit
+   )
    SELECT
       events.event_aggregate,
       events.employee_name,
       events.{Fields.event},
       events.{Fields.correlationId},
       events.{Fields.timestamp}
-   FROM (
-      SELECT
-         {Fields.event},
-         {Fields.timestamp},
-         {Fields.correlationId},
-         {Fields.eventId},
-         {Fields.orgId}
-      FROM {table}
-      {joinAncillaryTxnInfo |> Option.defaultValue ""}
-      WHERE {where}
-      ORDER BY {Fields.timestamp} desc
-      LIMIT @limit
-   ) AS matching
+   FROM matching
    CROSS JOIN LATERAL (
       SELECT
          'account' as event_aggregate,
