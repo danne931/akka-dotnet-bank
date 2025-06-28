@@ -77,6 +77,7 @@ let private networkRecipient
 
 // Notify account actor of DomesticTransfer Progress, Completed, or Failed.
 let onSuccessfulServiceResponse
+   (logDebug: string -> unit)
    (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (txn: DomesticTransfer)
    (res: DomesticTransferServiceResponse)
@@ -84,7 +85,7 @@ let onSuccessfulServiceResponse
    let orgId = txn.Sender.OrgId
    let corrId = txn.TransferId |> TransferId.get |> CorrelationId
 
-   let progress =
+   let latestProgressUpdate =
       if res.Ok then
          progressFromResponse res
       else
@@ -92,11 +93,32 @@ let onSuccessfulServiceResponse
          |> failReasonFromError
          |> DomesticTransferThirdPartyUpdate.Failed
 
-   let msg =
-      DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress
-      |> AppSaga.Message.domesticTransfer orgId corrId
+   let newProgressToSave =
+      match txn.Status with
+      | DomesticTransferProgress.WaitingForTransferServiceAck ->
+         Some latestProgressUpdate
+      // Don't save a new progress update if there has been no change.
+      | DomesticTransferProgress.ThirdParty existingProgressUpdate when
+         existingProgressUpdate <> latestProgressUpdate
+         ->
+         Some latestProgressUpdate
+      | _ -> None
 
-   getSagaRef corrId <! msg
+   match newProgressToSave with
+   | Some progressUpdate ->
+      let msg =
+         progressUpdate
+         |> DomesticTransferSagaEvent.TransferProcessorProgressUpdate
+         |> AppSaga.Message.domesticTransfer orgId corrId
+
+      getSagaRef corrId <! msg
+   | _ ->
+      logDebug (
+         "No domestic transfer progress update will be saved."
+         + $" - Transfer ID ({txn.TransferId})"
+         + $" - Existing status ({txn.Status})"
+         + $" - Service status ({latestProgressUpdate})"
+      )
 
 let protectedAction
    (networkRequest: NetworkRequest)
@@ -154,8 +176,12 @@ let actorProps
          Flow.map
             (fun (mailbox, queueMessage, transferResponse) ->
                match queueMessage with
-               | Message.TransferRequest(action, txn) ->
-                  onSuccessfulServiceResponse getSagaRef txn transferResponse
+               | Message.TransferRequest(_, txn) ->
+                  onSuccessfulServiceResponse
+                     (logDebug mailbox)
+                     getSagaRef
+                     txn
+                     transferResponse
 
                   transferResponse)
             Flow.id

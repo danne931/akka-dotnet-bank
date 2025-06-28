@@ -104,7 +104,7 @@ let processRequest (req: Request) =
          inMemoryState.Add(res.TransactionId, (0, req))
          { res with Status = "ReceivedRequest" }
    elif req.Action = "ProgressCheck" then
-      if not <| inMemoryState.ContainsKey(res.TransactionId) then
+      if not <| inMemoryState.ContainsKey res.TransactionId then
          {
             res with
                Ok = false
@@ -121,7 +121,7 @@ let processRequest (req: Request) =
                   Status = "VerifyingAccountInfo"
             }
          else
-            inMemoryState.Remove(res.TransactionId) |> ignore
+            inMemoryState.Remove res.TransactionId |> ignore
             { res with Status = "Complete" }
    else
       {
@@ -145,7 +145,7 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
       let! msg = ctx.Receive()
 
       match msg with
-      | Received(data) ->
+      | Received data ->
          let req = data |> string |> JsonSerializer.Deserialize<Request>
          printfn "Received request %A" req
 
@@ -154,7 +154,7 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
          ctx.Sender() <! TcpMessage.Write(serializeResponse res)
          return! loop ()
       | Terminated(_, _, _)
-      | ConnectionClosed(_) ->
+      | ConnectionClosed _ ->
          printfn "<Disconnected>"
          return Stop
       | _ -> return Ignore
@@ -172,7 +172,7 @@ let port, ip =
 let endpoint = IPEndPoint(ip, port)
 
 let tcpConnectionListener ctx =
-   IO.Tcp(ctx) <! TcpMessage.Bind(untyped ctx.Self, endpoint, 100)
+   IO.Tcp ctx <! TcpMessage.Bind(untyped ctx.Self, endpoint, 100)
 
    let rec loop () = actor {
       let! (msg: obj) = ctx.Receive()

@@ -65,7 +65,6 @@ let update msg state =
    match msg with
    | GetTransactionInfo Started ->
       let getInfo = async {
-         do! Async.Sleep(3400)
          let! res = TransactionService.getTransactionInfo state.TransactionId
 
          return GetTransactionInfo(Finished res)
@@ -351,9 +350,9 @@ let renderTransactionInfo
                         | _ -> ()
                      | History.Employee employeeHistory ->
                         match employeeHistory.Event with
-                        | EmployeeEvent.PurchasePending e ->
+                        | EmployeeEvent.PurchasePending _ ->
                            Html.p "Purchase processing"
-                        | EmployeeEvent.PurchaseSettled e ->
+                        | EmployeeEvent.PurchaseSettled _ ->
                            Html.p "Deducted funds from card"
                         | EmployeeEvent.PurchaseRefunded e ->
                            Html.p
@@ -365,16 +364,16 @@ let renderTransactionInfo
                         match accountHistory.Event with
                         | AccountEvent.DomesticTransferPending e ->
                            Html.p
-                              $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
-                        | AccountEvent.DomesticTransferProgress e ->
-                           Html.p $"Progress Update: {e.Data.InProgressInfo}"
+                              $"Funds reserved from {e.Data.BaseInfo.Sender.Name}"
+                        | AccountEvent.DomesticTransferProgress _ ->
+                           Html.p $"Transfer service processing transfer"
                         | AccountEvent.DomesticTransferFailed e ->
                            Html.p $"Failed: {e.Data.Reason.Display}"
 
                            Html.p
                               $"Refunded account: {e.Data.BaseInfo.Sender.Name}"
                         | AccountEvent.DomesticTransferSettled _ ->
-                           Html.p "ACH transfer processor completed transfer"
+                           Html.p "Transfer service settled transfer"
                         | AccountEvent.DomesticTransferScheduled e ->
                            let date =
                               DateTime.dateUIFriendly
