@@ -136,7 +136,7 @@ let private onPersist
             }
 
          getSagaGuaranteedDeliveryRef () <! msg
-      | CardStatus.Active _ ->
+      | CardStatus.Active ->
          let msg =
             EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee
             |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
@@ -156,7 +156,6 @@ let private onPersist
                OrgId = e.OrgId
                EmployeeId = employee.EmployeeId
                CardId = CardId <| Guid.NewGuid()
-               ProviderCardId = None
                Virtual = true
                CardType = CardType.Debit
                InitiatedBy = e.InitiatedBy

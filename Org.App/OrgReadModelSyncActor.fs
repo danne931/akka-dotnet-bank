@@ -523,7 +523,8 @@ let initProps
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
-   actorProps<Org, OrgEvent> {
+   actorProps<Org, OrgEvent>
+   <| ReadModelSyncConfig.AggregateLookupMode {
       GetAggregateIdFromEvent =
          OrgEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
       GetAggregate =

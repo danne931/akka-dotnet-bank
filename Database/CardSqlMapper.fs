@@ -41,6 +41,13 @@ module CardSqlReader =
    let employeeId = EmployeeSqlReader.employeeId
    let accountId = AccountSqlReader.accountId
 
+   let thirdPartyProviderCardId
+      (read: RowReader)
+      : ThirdPartyProviderCardId option
+      =
+      read.uuidOrNone CardFields.thirdPartyProviderCardId
+      |> Option.map ThirdPartyProviderCardId
+
    let cardNumberLast4 (read: RowReader) =
       read.string CardFields.cardNumberLast4
 
@@ -84,20 +91,15 @@ module CardSqlReader =
          Month = expMonth read
          Year = expYear read
       }
+      ThirdPartyProviderCardId = thirdPartyProviderCardId read
       LastPurchaseAt = lastPurchaseAt read
    }
 
 module CardSqlWriter =
    let cardId (CardId id) = Sql.uuid id
 
-   let thirdPartyProviderCardId (status: CardStatus) =
-      let cardIdOpt =
-         match status with
-         | CardStatus.Active detail -> Some detail.ThirdPartyProviderCardId
-         | CardStatus.Frozen detail -> Some detail.ThirdPartyProviderCardId
-         | _ -> None
-
-      cardIdOpt |> Option.map ThirdPartyProviderCardId.get |> Sql.uuidOrNone
+   let thirdPartyProviderCardId (providerId: ThirdPartyProviderCardId option) =
+      providerId |> Option.map ThirdPartyProviderCardId.get |> Sql.uuidOrNone
 
    let orgId = OrgSqlWriter.orgId
    let employeeId = EmployeeSqlWriter.employeeId

@@ -1080,7 +1080,8 @@ let initProps
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
-   actorProps<ParentAccountSnapshot, AccountEvent> {
+   actorProps<ParentAccountSnapshot, AccountEvent>
+   <| ReadModelSyncConfig.AggregateLookupMode {
       GetAggregateIdFromEvent =
          AccountEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
       GetAggregate =

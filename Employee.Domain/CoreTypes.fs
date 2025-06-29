@@ -38,31 +38,22 @@ type CardType =
       | None -> failwith "Error attempting to cast string to CardType"
       | Some status -> status
 
-type ActiveCardDetail = {
-   ThirdPartyProviderCardId: ThirdPartyProviderCardId
-}
-
 [<RequireQualifiedAccess>]
 type CardFrozenReason =
    | UserRequested
    | SuspectedFraud
 
-type FrozenCardDetail = {
-   ThirdPartyProviderCardId: ThirdPartyProviderCardId
-   Reason: CardFrozenReason
-}
-
 [<RequireQualifiedAccess>]
 type CardStatus =
    | Pending
-   | Active of ActiveCardDetail
-   | Frozen of FrozenCardDetail
+   | Active
+   | Frozen of CardFrozenReason
    | Closed
 
    override x.ToString() =
       match x with
       | Pending -> "Pending"
-      | Active _ -> "Active"
+      | Active -> "Active"
       | Frozen _ -> "Frozen"
       | Closed -> "Closed"
 
@@ -85,6 +76,7 @@ type Card = {
    Expiration: CardExpiration
    CardId: CardId
    AccountId: AccountId
+   ThirdPartyProviderCardId: ThirdPartyProviderCardId option
 } with
 
    member x.IsExpired() =
@@ -97,7 +89,7 @@ type Card = {
 
    member x.IsFrozen =
       match x.Status with
-      | CardStatus.Frozen detail -> Some detail.Reason
+      | CardStatus.Frozen reason -> Some reason
       | _ -> None
 
    member x.Display =

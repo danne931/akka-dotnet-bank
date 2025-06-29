@@ -69,21 +69,19 @@ let initProps
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
-   actorProps<AppSaga.Saga, AppSaga.AppSagaPersistableEvent> (
-      {
-         GetAggregateIdFromEvent = _.CorrelationId >> CorrelationId.get
-         GetAggregate =
-            fun correlationId -> task {
-               let! (opt: AppSaga.Saga option) =
-                  getSagaRef (CorrelationId correlationId)
-                  <? SagaMessage.GetSaga
+   actorProps<AppSaga.Saga, AppSaga.AppSagaPersistableEvent>
+   <| ReadModelSyncConfig.AggregateLookupMode {
+      GetAggregateIdFromEvent = _.CorrelationId >> CorrelationId.get
+      GetAggregate =
+         fun correlationId -> task {
+            let! (opt: AppSaga.Saga option) =
+               getSagaRef (CorrelationId correlationId) <? SagaMessage.GetSaga
 
-               return opt
-            }
-         Chunking = chunking
-         RestartSettings = restartSettings
-         RetryPersistenceAfter = retryPersistenceAfter
-         UpsertReadModels = upsertReadModels
-         EventJournalTag = Constants.AKKA_APP_SAGA_JOURNAL
-      }
-   )
+            return opt
+         }
+      Chunking = chunking
+      RestartSettings = restartSettings
+      RetryPersistenceAfter = retryPersistenceAfter
+      UpsertReadModels = upsertReadModels
+      EventJournalTag = Constants.AKKA_APP_SAGA_JOURNAL
+   }

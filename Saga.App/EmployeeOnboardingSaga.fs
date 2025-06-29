@@ -504,7 +504,6 @@ let onEventPersisted
                OrgId = orgId
                EmployeeId = employeeId
                CardId = CardId <| Guid.NewGuid()
-               ProviderCardId = Some providerCardId
                Virtual = true
                CardType = CardType.Debit
                InitiatedBy = updatedState.InitiatedBy

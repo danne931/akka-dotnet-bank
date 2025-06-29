@@ -621,7 +621,6 @@ let mockAccountOwnerCards =
          OrgId = myOrg.OrgId
          AccountId = myOrg.OpsAccountId
          PersonName = $"{cmd.Data.FirstName} {cmd.Data.LastName}"
-         ProviderCardId = None
          CardNickname = Some "Travel"
          CardType = CardType.Debit
          Virtual = true
@@ -639,7 +638,6 @@ let mockAccountOwnerCards =
          OrgId = myOrg.OrgId
          AccountId = myOrg.OpsAccountId
          PersonName = $"{cmd.Data.FirstName} {cmd.Data.LastName}"
-         ProviderCardId = None
          CardNickname = Some "Office Supplies"
          CardType = CardType.Debit
          Virtual = true
@@ -713,7 +711,6 @@ let mockEmployees =
    let createCard (cmd: CreateEmployeeCommand) = {
       CreateCardCommand.create {
          CardId = Guid.NewGuid() |> CardId
-         ProviderCardId = None
          EmployeeId = EmployeeId.fromEntityId cmd.EntityId
          OrgId = myOrg.OrgId
          AccountId = myOrg.OpsAccountId
@@ -1491,7 +1488,11 @@ let confirmEmployeeInvites
    for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
       let confirmInviteCmd = {
          ConfirmInvitationCommand.create
-            employeeCreateCmd.InitiatedBy
+            {
+               Id = InitiatedById employeeId
+               Name =
+                  $"{employeeCreateCmd.Data.FirstName} {employeeCreateCmd.Data.LastName}"
+            }
             employeeCreateCmd.OrgId
             employeeCreateCmd.CorrelationId
             {

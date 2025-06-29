@@ -16,10 +16,30 @@ open Lib.Types
 open ActorUtil
 open Lib.BulkWriteStreamFlow
 
+type ReadModelUpsert<'TEvent> = 'TEvent list -> Result<int list, Err> Task
+
+/// If persisting an aggregate read model is necessary, use of
+/// this config expects the consumer to be able to update an
+/// aggregate by database update statements derived from events.
+type Config<'TEvent> = {
+   EventJournalTag: string
+   Chunking: StreamChunkingEnvConfig
+   RestartSettings: Akka.Streams.RestartSettings
+   RetryPersistenceAfter: TimeSpan
+   UpsertReadModels: ReadModelUpsert<'TEvent>
+}
+
 type ReadModelUpsert<'TAggregate, 'TEvent> =
    'TAggregate list * 'TEvent list -> Result<int list, Err> Task
 
-type ReadModelSyncConfig<'TAggregate, 'TEvent> = {
+/// Use of this config assumes an aggregate read model needs to
+/// be persisted but the consumer is unable to update an aggregate
+/// by deriving database update statements from events.
+/// The consumer must supply a GetAggregate function so ReadModelSync
+/// can fetch the latest aggregate state from the actor before
+/// passing both the aggregate and events to your UpsertReadModels
+/// implementation.
+type Config<'TAggregate, 'TEvent> = {
    EventJournalTag: string
    GetAggregateIdFromEvent: 'TEvent -> Guid
    GetAggregate: Guid -> 'TAggregate option Task
@@ -69,8 +89,55 @@ let initReadJournalSource
 
    RestartSource.OnFailuresWithBackoff((fun _ -> source), restartSettings)
 
-let startProjection<'TAggregate, 'TEvent>
-   (conf: ReadModelSyncConfig<'TAggregate, 'TEvent>)
+let startProjection<'TEvent>
+   (conf: Config<'TEvent>)
+   (mailbox: Eventsourced<obj>)
+   (state: State)
+   =
+   logInfo
+      mailbox
+      $"Start {conf.EventJournalTag} projection at offset {state.Offset.Value}."
+
+   let system = mailbox.System
+
+   let readJournalSource =
+      initReadJournalSource
+         mailbox
+         state
+         conf.Chunking
+         conf.RestartSettings
+         conf.EventJournalTag
+
+   let failedWritesSource, failedWritesRef = initFailedWritesSource system
+
+   let bulkWriteFlow, _ =
+      initBulkWriteFlow<'TEvent list> system conf.RestartSettings {
+         RetryAfter = conf.RetryPersistenceAfter
+         persist = Seq.collect id >> List.ofSeq >> conf.UpsertReadModels
+         // Feed failed upserts back into the stream
+         onRetry =
+            fun (props: ('TEvent list) seq) ->
+               for events in props do
+                  failedWritesRef <! events
+         onPersistOk =
+            fun _ response ->
+               logInfo
+                  mailbox
+                  $"Saved read models for journal {conf.EventJournalTag} {response}"
+      }
+
+   let flow =
+      Flow.id<'TEvent list, 'TEvent list>
+      |> Flow.map (fun events -> seq [ events ])
+      |> Flow.via bulkWriteFlow
+
+   readJournalSource
+   |> Source.merge failedWritesSource
+   |> Source.via flow
+   |> Source.runWith (system.Materializer()) Sink.ignore
+
+let startProjectionWithAggregateLookup<'TAggregate, 'TEvent>
+   (conf: Config<'TAggregate, 'TEvent>)
    (mailbox: Eventsourced<obj>)
    (state: State)
    =
@@ -120,7 +187,6 @@ let startProjection<'TAggregate, 'TEvent>
                   $"Saved aggregate read models for journal {conf.EventJournalTag} {response}"
       }
 
-
    let flow =
       Flow.id<'TEvent list, 'TAggregate * 'TEvent list>
       |> Flow.asyncMap 1000 (fun events -> async {
@@ -132,7 +198,7 @@ let startProjection<'TAggregate, 'TEvent>
 
                      match Map.tryFind aggId acc with
                      | None -> Map.add aggId [ evt ] acc
-                     | Some found ->
+                     | Some _ ->
                         Map.change
                            aggId
                            (Option.map (fun evts -> evt :: evts))
@@ -141,7 +207,7 @@ let startProjection<'TAggregate, 'TEvent>
             |> Map.toArray
             |> Array.map getAggregate
 
-         let! res = Task.WhenAll(distinctAggregateIds) |> Async.AwaitTask
+         let! res = Task.WhenAll distinctAggregateIds |> Async.AwaitTask
          return res |> Array.toSeq |> Seq.choose id
       })
       |> Flow.via bulkWriteFlow
@@ -151,6 +217,15 @@ let startProjection<'TAggregate, 'TEvent>
    |> Source.via flow
    |> Source.runWith (system.Materializer()) Sink.ignore
 
+[<RequireQualifiedAccess>]
+type ReadModelSyncConfig<'TAggregate, 'TEvent> =
+   | DefaultMode of Config<'TEvent>
+   | AggregateLookupMode of Config<'TAggregate, 'TEvent>
+
+   member x.EventJournalTag =
+      match x with
+      | DefaultMode conf -> conf.EventJournalTag
+      | AggregateLookupMode conf -> conf.EventJournalTag
 
 let actorProps<'TAggregate, 'TEvent>
    (conf: ReadModelSyncConfig<'TAggregate, 'TEvent>)
@@ -181,7 +256,15 @@ let actorProps<'TAggregate, 'TEvent>
                      PersistentActorEventHandler.init with
                         RecoveryCompleted =
                            fun mailbox ->
-                              startProjection conf mailbox state |> ignored
+                              match conf with
+                              | ReadModelSyncConfig.DefaultMode conf ->
+                                 startProjection conf mailbox state |> ignored
+                              | ReadModelSyncConfig.AggregateLookupMode conf ->
+                                 startProjectionWithAggregateLookup
+                                    conf
+                                    mailbox
+                                    state
+                                 |> ignored
                         LifecyclePostStop =
                            fun _ ->
                               logInfo
@@ -193,6 +276,6 @@ let actorProps<'TAggregate, 'TEvent>
                   msg
       }
 
-      loop { Offset = Query.Sequence(0L) }
+      loop { Offset = Query.Sequence 0L }
 
    propsPersist handler

@@ -9,12 +9,11 @@ open Lib.SharedTypes
 let private connString = Env.config.ConnectionStrings.Postgres
 
 type SqlParameter = string * SqlValue
-type SqlParameterList = SqlParameter list
-type SqlTransactionStatement = string * SqlParameterList list
+type SqlTransactionStatement = string * SqlParameter list list
 
 let pgQuerySingle<'t>
    (query: string)
-   (parameters: SqlParameterList option)
+   (parameters: SqlParameter list option)
    (mapper: RowReader -> 't)
    : Result<'t option, Err> Task
    =
@@ -34,7 +33,7 @@ let pgQuerySingle<'t>
 
 let pgQuery<'t>
    (query: string)
-   (parameters: SqlParameterList option)
+   (parameters: SqlParameter list option)
    (mapper: RowReader -> 't)
    : Result<'t list option, Err> Task
    =
@@ -49,7 +48,7 @@ let pgQuery<'t>
 
 let pgPersist
    (query: string)
-   (parameters: SqlParameterList)
+   (parameters: SqlParameter list)
    : Result<int, Err> Task
    =
    connString
@@ -72,7 +71,7 @@ let pgTransaction
 
 let pgProcedure
    (name: string)
-   (parameters: SqlParameterList option)
+   (parameters: SqlParameter list option)
    : Result<int, Err> Task
    =
    connString
@@ -82,3 +81,29 @@ let pgProcedure
    |> Sql.executeNonQueryAsync
    |> TaskResult.ofTask
    |> TaskResult.catch DatabaseError
+
+/// Used to ensure that expected parameters are present for an UPDATE statement.
+/// Otherwise, sets missing expected parameters to NULL.
+/// Typically used with update statements containing COALESCE, where a consumer
+/// provides a value for a few parameters to update, but not all, and expects
+/// to update columns for their provided parameters, while leaving other columns
+/// unchanged.
+/// Ex:
+///    UPDATE card
+///    SET
+///       status = COALESCE(@status::{CardTypeCast.status}, status),
+///       daily_purchase_limit = COALESCE(@dailyPurchaseLimit, daily_purchase_limit),
+///       last_purchase_at = COALESCE(@lastPurchaseAt, last_purchase_at)
+///    WHERE card_id = @cardId;
+let addCoalescableParamsForUpdate
+   (expectedParamNames: string list)
+   (providedParams: SqlParameter list)
+   =
+   let providedMap = Map.ofList providedParams
+
+   let missingParams =
+      expectedParamNames
+      |> List.filter (fun name -> not (Map.containsKey name providedMap))
+      |> List.map (fun name -> name, Sql.dbnull)
+
+   providedParams @ missingParams

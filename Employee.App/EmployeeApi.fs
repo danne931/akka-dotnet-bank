@@ -42,7 +42,8 @@ let searchEmployees (orgId: OrgId) (searchQuery: string) = taskResultOption {
          c.{{CardSqlMapper.CardFields.cardNumberLast4}},
          c.{{CardSqlMapper.CardFields.cardNickname}},
          c.{{CardSqlMapper.CardFields.dailyPurchaseLimit}},
-         c.{{CardSqlMapper.CardFields.monthlyPurchaseLimit}}
+         c.{{CardSqlMapper.CardFields.monthlyPurchaseLimit}},
+         c.{{CardSqlMapper.CardFields.thirdPartyProviderCardId}}
       FROM top_employees e
       LEFT JOIN {{CardSqlMapper.table}} c USING({{Fields.employeeId}})
       """
@@ -312,6 +313,7 @@ let getCards (orgId: OrgId) (query: CardQuery) = taskResultOption {
            {table}.{Fields.expYear},
            {table}.{Fields.expMonth},
            {table}.{Fields.lastPurchaseAt},
+           {table}.{Fields.thirdPartyProviderCardId},
            {mpaView}.amount_accrued as mpa,
            {dpaView}.amount_accrued as dpa,
            {employeeTable}.*

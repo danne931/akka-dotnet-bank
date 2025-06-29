@@ -349,7 +349,6 @@ builder.Services.AddAkka(
             (fun system _ _ ->
                let typedProps =
                   EmployeeReadModelSyncActor.initProps
-                     (EmployeeActor.get system)
                      // TODO: Create employee-specific Environment file & replace
                      //       account env var here.
                      Env.config.AccountEventProjectionChunking

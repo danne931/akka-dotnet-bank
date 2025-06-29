@@ -105,10 +105,8 @@ let applyEvent
                   e.Data.CardId
                   (Option.map (fun card -> {
                      card with
-                        Status =
-                           CardStatus.Active {
-                              ThirdPartyProviderCardId = e.Data.ProviderCardId
-                           }
+                        Status = CardStatus.Active
+                        ThirdPartyProviderCardId = Some e.Data.ProviderCardId
                   }))
                   em.Cards
 
@@ -120,7 +118,7 @@ let applyEvent
                   e.Data.Info.CardId
                   (Option.map (fun card -> {
                      card with
-                        LastPurchaseAt = Some DateTime.UtcNow
+                        LastPurchaseAt = Some e.Timestamp
                   }))
                   em.Cards
 
@@ -155,18 +153,11 @@ let applyEvent
             Cards =
                Map.change
                   e.Data.CardId
-                  (Option.map (fun card ->
-                     match card.Status with
-                     | CardStatus.Active detail -> {
-                        card with
-                           Status =
-                              CardStatus.Frozen {
-                                 Reason = CardFrozenReason.UserRequested
-                                 ThirdPartyProviderCardId =
-                                    detail.ThirdPartyProviderCardId
-                              }
-                       }
-                     | _ -> card))
+                  (Option.map (fun card -> {
+                     card with
+                        Status =
+                           CardStatus.Frozen CardFrozenReason.UserRequested
+                  }))
                   em.Cards
         }
       | UnlockedCard e -> {
@@ -174,17 +165,10 @@ let applyEvent
             Cards =
                Map.change
                   e.Data.CardId
-                  (Option.map (fun card ->
-                     match card.Status with
-                     | CardStatus.Frozen detail -> {
-                        card with
-                           Status =
-                              CardStatus.Active {
-                                 ThirdPartyProviderCardId =
-                                    detail.ThirdPartyProviderCardId
-                              }
-                       }
-                     | _ -> card))
+                  (Option.map (fun card -> {
+                     card with
+                        Status = CardStatus.Active
+                  }))
                   em.Cards
         }
       | UpdatedRole e -> { em with Role = e.Data.Role }
@@ -228,13 +212,10 @@ let applyEvent
       | AccessRestored e -> {
          em with
             Status =
-               match em.AuthProviderUserId with
-               | Some _ -> EmployeeStatus.Active
-               | None ->
-                  EmployeeStatus.PendingInviteConfirmation {
-                     Token = e.Data.InviteToken
-                     CorrelationId = e.CorrelationId
-                  }
+               EmployeeStatus.PendingInviteConfirmation {
+                  Token = e.Data.InviteToken
+                  CorrelationId = e.CorrelationId
+               }
         }
 
    let updatedPendingDeductions =

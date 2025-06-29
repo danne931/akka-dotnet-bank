@@ -143,7 +143,6 @@ type CreateCardInput = {
    OrgId: OrgId
    EmployeeId: EmployeeId
    CardId: CardId
-   ProviderCardId: ThirdPartyProviderCardId option
 }
 
 type CreateCardCommand = Command<CreateCardInput>
@@ -190,14 +189,11 @@ module CreateCardCommand =
                   CardNickname = input.CardNickname
                   CardId = cmd.Data.CardId
                   AccountId = cmd.Data.AccountId
+                  ThirdPartyProviderCardId = None
                   DailyPurchaseLimit = dailyPurchaseLimit
                   MonthlyPurchaseLimit = monthlyPurchaseLimit
                   Virtual = input.Virtual
-                  Status =
-                     match input.ProviderCardId with
-                     | Some id ->
-                        CardStatus.Active { ThirdPartyProviderCardId = id }
-                     | None -> CardStatus.Pending
+                  Status = CardStatus.Pending
                   CardType = input.CardType
                   Expiration = CardExpiration.create ()
                   LastPurchaseAt = None
