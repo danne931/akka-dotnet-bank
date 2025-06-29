@@ -321,7 +321,6 @@ builder.Services.AddAkka(
             (fun system _ _ ->
                let typedProps =
                   OrgReadModelSyncActor.initProps
-                     (OrgActor.get system)
                      // TODO: Create org-specific Environment file & replace
                      //       account env var here.
                      Env.config.AccountEventProjectionChunking

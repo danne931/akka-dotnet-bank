@@ -14,9 +14,11 @@ open OrganizationSqlMapper
 open OrganizationEventSqlMapper
 open CommandApproval
 
-type private SqlParams = (string * SqlValue) list list
+type private SqlParams = SqlParameter list list
 
 type SqlParamsDerivedFromOrgEvents = {
+   OrgCreate: SqlParams
+   OrgUpdate: SqlParams
    OrgEvent: SqlParams
    FeatureFlags: SqlParams
    CommandApprovalRuleConfigured: SqlParams
@@ -60,8 +62,35 @@ let sqlParamReducer
    }
 
    match evt with
-   | OrgEvent.OnboardingApplicationSubmitted _
-   | OrgEvent.OnboardingFinished _ -> acc
+   | OrgEvent.OnboardingApplicationSubmitted e ->
+      let qParams = [
+         "orgId", OrgSqlWriter.orgId e.OrgId
+         "parentAccountId", OrgSqlWriter.parentAccountId e.Data.ParentAccountId
+         "name", OrgSqlWriter.name e.Data.LegalBusinessName
+         "status", OrgSqlWriter.status OrgStatus.PendingOnboardingTasksFulfilled
+         "statusDetail",
+         OrgSqlWriter.statusDetail OrgStatus.PendingOnboardingTasksFulfilled
+         "adminTeamEmail", OrgSqlWriter.adminTeamEmail e.Data.AdminTeamEmail
+         "employerIdentificationNumber",
+         OrgSqlWriter.employerIdentificationNumber
+            e.Data.EmployerIdentificationNumber
+      ]
+
+      {
+         acc with
+            OrgCreate = qParams :: acc.OrgCreate
+      }
+   | OrgEvent.OnboardingFinished e ->
+      let qParams = [
+         "orgId", OrgSqlWriter.orgId e.OrgId
+         "status", OrgSqlWriter.status OrgStatus.Active
+         "statusDetail", OrgSqlWriter.statusDetail OrgStatus.Active
+      ]
+
+      {
+         acc with
+            OrgUpdate = qParams :: acc.OrgUpdate
+      }
    | OrgEvent.FeatureFlagConfigured e ->
       let features = e.Data.Config
 
@@ -293,24 +322,13 @@ let sqlParamReducer
             CommandApprovalTerminated = qParams :: acc.CommandApprovalTerminated
       }
 
-let sqlParamsFromOrg (org: Org) : (string * SqlValue) list = [
-   "orgId", OrgSqlWriter.orgId org.OrgId
-   "parentAccountId", OrgSqlWriter.parentAccountId org.ParentAccountId
-   "name", OrgSqlWriter.name org.Name
-   "status", OrgSqlWriter.status org.Status
-   "statusDetail", OrgSqlWriter.statusDetail org.Status
-   "adminTeamEmail", OrgSqlWriter.adminTeamEmail org.AdminTeamEmail
-   "employerIdentificationNumber",
-   OrgSqlWriter.employerIdentificationNumber org.EmployerIdentificationNumber
-]
-
-let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
-   let orgSqlParams = orgs |> List.map sqlParamsFromOrg
-
+let upsertReadModels (orgEvents: OrgEvent list) =
    let sqlParams =
       orgEvents
       |> List.sortByDescending (OrgEnvelope.unwrap >> snd >> _.Timestamp)
       |> List.fold sqlParamReducer {
+         OrgCreate = []
+         OrgUpdate = []
          OrgEvent = []
          FeatureFlags = []
          CommandApprovalRuleConfigured = []
@@ -342,11 +360,18 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
           @adminTeamEmail,
           @employerIdentificationNumber)
       ON CONFLICT ({OrgFields.orgId})
-      DO UPDATE SET
-         {OrgFields.status} = @status::{OrgTypeCast.status},
-         {OrgFields.statusDetail} = @statusDetail;
+      DO NOTHING;
       """,
-      orgSqlParams
+      sqlParams.OrgCreate
+
+      $"""
+      UPDATE {OrganizationSqlMapper.table}
+      SET
+         {OrgFields.status} = @status::{OrgTypeCast.status},
+         {OrgFields.statusDetail} = @statusDetail
+      WHERE {OrgFields.orgId} = @orgId;
+      """,
+      sqlParams.OrgUpdate
 
       $"""
       INSERT into {OrganizationEventSqlMapper.table}
@@ -518,21 +543,12 @@ let upsertReadModels (orgs: Org list, orgEvents: OrgEvent list) =
    pgTransaction query
 
 let initProps
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryPersistenceAfter: TimeSpan)
    =
    actorProps<Org, OrgEvent>
-   <| ReadModelSyncConfig.AggregateLookupMode {
-      GetAggregateIdFromEvent =
-         OrgEnvelope.unwrap >> snd >> _.EntityId >> EntityId.get
-      GetAggregate =
-         fun orgId -> task {
-            let aref = getOrgRef (OrgId orgId)
-            let! (opt: Org option) = aref <? OrgMessage.GetOrg
-            return opt
-         }
+   <| ReadModelSyncConfig.DefaultMode {
       Chunking = chunking
       RestartSettings = restartSettings
       RetryPersistenceAfter = retryPersistenceAfter
