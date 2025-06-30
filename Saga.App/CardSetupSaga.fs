@@ -228,10 +228,10 @@ let onStartEventPersisted
       CardHolderName = evt.EmployeeName
       CardType = evt.Event.Data.Card.CardType
       Metadata = {
-         ReplyTo = SagaReplyTo.CardSetup
          OrgId = evt.Event.OrgId
          CorrelationId = evt.Event.CorrelationId
       }
+      ReplyTo = SagaReplyTo.CardSetup
    }
 
    getCardIssuerServiceRef () <! CardIssuerMessage.CreateCard request
@@ -313,10 +313,10 @@ let onEventPersisted
                CardHolderName = updatedState.EmployeeName
                CardType = updatedState.CardType
                Metadata = {
-                  ReplyTo = SagaReplyTo.CardSetup
                   OrgId = orgId
                   CorrelationId = corrId
                }
+               ReplyTo = SagaReplyTo.CardSetup
             }
 
             dep.getCardIssuerServiceRef ()

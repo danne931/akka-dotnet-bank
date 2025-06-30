@@ -3,6 +3,7 @@ module Bank.Forms.FormContainer
 open Feliz
 open Feliz.UseElmish
 open Elmish
+open Elmish.SweetAlert
 open Fable.Form.Simple
 open Fable.Form.Simple.Pico
 open System
@@ -60,6 +61,7 @@ type State<'Values> = {
 
 type Msg<'Values> =
    | FormChanged of Form.View.Model<'Values>
+   | ShowSubmitConfirmation of confirmText: string * FormEntity * FormCommand
    | Submit of
       FormEntity *
       FormCommand *
@@ -105,6 +107,19 @@ let update
    =
    match msg with
    | FormChanged formModel -> { state with FormModel = formModel }, Cmd.none
+   | ShowSubmitConfirmation(confirmText, entity, command) ->
+      let confirm =
+         ConfirmAlert(
+            confirmText,
+            function
+            | ConfirmAlertResult.Confirmed ->
+               Msg.Submit(entity, command, Started)
+            | ConfirmAlertResult.Dismissed _ -> Msg.Noop
+         )
+            .Type(AlertType.Question)
+            .ShowCloseButton(true)
+
+      state, SweetAlert.Run confirm
    | GetAndSubmit(entityId, command) ->
       let getEntity = async {
          match entityId with

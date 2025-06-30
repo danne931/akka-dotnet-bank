@@ -532,10 +532,10 @@ let onEventPersisted
          CardHolderName = employeeName
          CardType = info.CardType
          Metadata = {
-            ReplyTo = SagaReplyTo.EmployeeOnboard
             OrgId = orgId
             CorrelationId = corrId
          }
+         ReplyTo = SagaReplyTo.EmployeeOnboard
       }
 
       dep.getCardIssuerServiceRef () <! CardIssuerMessage.CreateCard request

@@ -178,6 +178,7 @@ builder.Services.AddAkka(
                         (AppSaga.getEntityRef system)
                         (fun () ->
                            AppSaga.getGuaranteedDeliveryProducerRef system)
+                        (fun () -> CardIssuerServiceActor.getProducer system)
                         (typed controllerRef))),
             ClusterMetadata.employeeShardRegion.messageExtractor,
             ShardOptions(Role = ClusterMetadata.roles.employee)

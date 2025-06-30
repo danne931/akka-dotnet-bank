@@ -171,7 +171,19 @@ let applyEvent
                   }))
                   em.Cards
         }
-      | UpdatedRole e -> { em with Role = e.Data.Role }
+      | UpdatedRole e -> {
+         em with
+            Role = e.Data.Role
+            Cards =
+               match e.Data.Role with
+               | Role.Scholar ->
+                  em.Cards
+                  |> Map.map (fun _ card -> {
+                     card with
+                        Status = CardStatus.Closed
+                  })
+               | _ -> em.Cards
+        }
       | CardNicknamed e -> {
          em with
             Cards =

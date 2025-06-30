@@ -27,11 +27,20 @@ let private networkRequestToCardIssuerService
       match msg with
       | CardIssuerMessage.CreateCard req ->
          // TODO: HTTP request to the card issuer API
-         do! Task.Delay(TimeSpan.FromSeconds(1.3))
+         do! Task.Delay(TimeSpan.FromSeconds 1.3)
 
          return
             CardIssuerResponse.CreateCard {
                ProviderCardId = Guid.NewGuid() |> ThirdPartyProviderCardId
+            }
+      | CardIssuerMessage.CloseCard req ->
+         // TODO: HTTP request to the card issuer API
+         do! Task.Delay(TimeSpan.FromSeconds 3.3)
+
+         return
+            CardIssuerResponse.CloseCard {
+               Customer = null
+               ProviderCardId = req.ProviderCardId
             }
    }
 
@@ -72,7 +81,7 @@ let actorProps
                match queueMessage, response with
                | CardIssuerMessage.CreateCard req,
                  CardIssuerResponse.CreateCard res ->
-                  match req.Metadata.ReplyTo with
+                  match req.ReplyTo with
                   | SagaReplyTo.CardSetup ->
                      let msg =
                         Ok res.ProviderCardId
@@ -87,6 +96,13 @@ let actorProps
                         |> AppSaga.Message.employeeOnboard orgId corrId
 
                      getSagaRef corrId <! onboardingMsg
+               | CardIssuerMessage.CloseCard _,
+                 CardIssuerResponse.CloseCard res ->
+                  logDebug mailbox $"Card detached {res.ProviderCardId}"
+               | req, res ->
+                  logError
+                     mailbox
+                     $"Invalid request response in CardIssuerService {req} {res}"
 
                response)
             Flow.id

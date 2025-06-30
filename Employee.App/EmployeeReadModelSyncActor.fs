@@ -20,6 +20,7 @@ type SqlParamsDerivedFromEmployeeEvents = {
    EmployeeInviteUpdate: SqlParams
    CardCreate: SqlParams
    CardUpdate: SqlParams
+   CardsByEmployeeUpdate: SqlParams
    EmployeeEvent: SqlParams
 }
 
@@ -252,16 +253,33 @@ let sqlParamReducer
             CardUpdate = sqlParams :: acc.CardUpdate
       }
    | EmployeeEvent.UpdatedRole e ->
+      let employeeId = EmployeeId.fromEntityId e.EntityId
+
       let sqlParams = [
-         "employeeId",
-         EmployeeSqlWriter.employeeId (EmployeeId.fromEntityId e.EntityId)
+         "employeeId", EmployeeSqlWriter.employeeId employeeId
          "role", EmployeeSqlWriter.role e.Data.Role
       ]
 
-      {
+      let acc = {
          acc with
             EmployeeUpdate = sqlParams :: acc.EmployeeUpdate
       }
+
+      match e.Data.Role with
+      | Role.Scholar ->
+         let status = CardStatus.Closed
+
+         let cardParams = [
+            "employeeId", CardSqlWriter.employeeId employeeId
+            "status", CardSqlWriter.status status
+            "statusDetail", CardSqlWriter.statusDetail status
+         ]
+
+         {
+            acc with
+               CardsByEmployeeUpdate = cardParams :: acc.CardsByEmployeeUpdate
+         }
+      | _ -> acc
    | EmployeeEvent.InvitationTokenRefreshed e ->
       employeeInviteParamReducer
          acc
@@ -320,6 +338,7 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
          EmployeeEvent = []
          CardCreate = []
          CardUpdate = []
+         CardsByEmployeeUpdate = []
       }
 
    let query = [
@@ -477,6 +496,15 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
             "thirdPartyProviderCardId"
          ]
       )
+
+      $"""
+      UPDATE {CardSqlMapper.table}
+      SET
+         {CardFields.status} = @status::{CardTypeCast.status},
+         {CardFields.statusDetail} = @statusDetail
+      WHERE {CardFields.employeeId} = @employeeId;
+      """,
+      sqlParams.CardsByEmployeeUpdate
    ]
 
    pgTransaction query

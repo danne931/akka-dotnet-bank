@@ -66,7 +66,16 @@ let private form
          |> EmployeeCommand.UpdateRole
          |> FormCommand.Employee
 
-      Msg.Submit(FormEntity.Employee employee, cmd, Started)
+      let entity = FormEntity.Employee employee
+
+      match role with
+      | Role.Scholar ->
+         let msg =
+            $"All active cards will be closed for {employee.Name}. "
+            + "Are you sure you want change role to Scholar?"
+
+         Msg.ShowSubmitConfirmation(msg, entity, cmd)
+      | _ -> Msg.Submit(entity, cmd, Started)
 
    employeeRoleSelect onRoleSelect
    |> Form.andThen (fun role ->
