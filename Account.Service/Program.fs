@@ -335,7 +335,6 @@ builder.Services.AddAkka(
             (fun system _ _ ->
                let typedProps =
                   AccountReadModelSyncActor.initProps
-                     (AccountActor.get system)
                      Env.config.AccountEventProjectionChunking
                      Env.config.AccountEventReadModelPersistenceBackoffRestart
                      Env.config.AccountEventReadModelRetryPersistenceAfter
