@@ -1268,7 +1268,7 @@ BEGIN
    JOIN employee using(employee_id)
    WHERE
       employee_event.org_id = orgId
-      AND employee_event.name = 'PurchaseApplied'
+      AND employee_event.name = 'CardPurchaseSettled'
       AND employee_event.timestamp::date
          BETWEEN DATE_TRUNC('month', d)
          AND (DATE_TRUNC('month', d) + INTERVAL '1 month' - INTERVAL '1 day')
