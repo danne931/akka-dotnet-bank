@@ -10,8 +10,7 @@ open Bank.Employee.Domain
 open UIDomain.Employee
 open Lib.SharedTypes
 open AccountProfileForm
-open DailyPurchaseLimitForm
-open MonthlyPurchaseLimitForm
+open PurchaseLimitForm
 open Bank.Forms.FormContainer
 
 type Values = {

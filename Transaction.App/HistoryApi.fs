@@ -139,8 +139,7 @@ let employeeEventFilterNames
               typeof<RoleUpdated>.Name
              ]
            | EmployeeEventGroupFilter.PurchaseLimitUpdated -> [
-              typeof<DailyDebitLimitUpdated>.Name
-              typeof<MonthlyDebitLimitUpdated>.Name
+              typeof<ConfiguredRollingPurchaseLimit>.Name
              ])
       []
    |> List.toArray

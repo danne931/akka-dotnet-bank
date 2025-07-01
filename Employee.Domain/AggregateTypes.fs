@@ -14,8 +14,7 @@ type EmployeeCommand =
    | SettlePurchase of SettlePurchaseWithCardCommand
    | FailPurchase of FailPurchaseCommand
    | RefundPurchase of RefundPurchaseCommand
-   | LimitDailyDebits of LimitDailyDebitsCommand
-   | LimitMonthlyDebits of LimitMonthlyDebitsCommand
+   | ConfigureRollingPurchaseLimit of ConfigureRollingPurchaseLimitCommand
    | LockCard of LockCardCommand
    | UnlockCard of UnlockCardCommand
    | UpdateRole of UpdateRoleCommand
@@ -36,8 +35,7 @@ type EmployeeCommand =
       | SettlePurchase cmd -> Command.envelope cmd
       | FailPurchase cmd -> Command.envelope cmd
       | RefundPurchase cmd -> Command.envelope cmd
-      | LimitDailyDebits cmd -> Command.envelope cmd
-      | LimitMonthlyDebits cmd -> Command.envelope cmd
+      | ConfigureRollingPurchaseLimit cmd -> Command.envelope cmd
       | LockCard cmd -> Command.envelope cmd
       | UnlockCard cmd -> Command.envelope cmd
       | UpdateRole cmd -> Command.envelope cmd
@@ -57,8 +55,7 @@ type EmployeeEvent =
    | PurchaseSettled of BankEvent<CardPurchaseSettled>
    | PurchaseFailed of BankEvent<CardPurchaseFailed>
    | PurchaseRefunded of BankEvent<CardPurchaseRefunded>
-   | DailyDebitLimitUpdated of BankEvent<DailyDebitLimitUpdated>
-   | MonthlyDebitLimitUpdated of BankEvent<MonthlyDebitLimitUpdated>
+   | ConfiguredRollingPurchaseLimit of BankEvent<ConfiguredRollingPurchaseLimit>
    | LockedCard of BankEvent<LockedCard>
    | UnlockedCard of BankEvent<UnlockedCard>
    | UpdatedRole of BankEvent<RoleUpdated>
@@ -94,10 +91,8 @@ module EmployeeEnvelope =
       | :? BankEvent<CardPurchaseSettled> as evt -> PurchaseSettled evt
       | :? BankEvent<CardPurchaseFailed> as evt -> PurchaseFailed evt
       | :? BankEvent<CardPurchaseRefunded> as evt -> PurchaseRefunded evt
-      | :? BankEvent<DailyDebitLimitUpdated> as evt ->
-         DailyDebitLimitUpdated evt
-      | :? BankEvent<MonthlyDebitLimitUpdated> as evt ->
-         MonthlyDebitLimitUpdated evt
+      | :? BankEvent<ConfiguredRollingPurchaseLimit> as evt ->
+         ConfiguredRollingPurchaseLimit evt
       | :? BankEvent<LockedCard> as evt -> LockedCard evt
       | :? BankEvent<UnlockedCard> as evt -> UnlockedCard evt
       | :? BankEvent<RoleUpdated> as evt -> UpdatedRole evt
@@ -120,8 +115,7 @@ module EmployeeEnvelope =
       | PurchaseSettled evt -> wrap evt, get evt
       | PurchaseFailed evt -> wrap evt, get evt
       | PurchaseRefunded evt -> wrap evt, get evt
-      | DailyDebitLimitUpdated evt -> wrap evt, get evt
-      | MonthlyDebitLimitUpdated evt -> wrap evt, get evt
+      | ConfiguredRollingPurchaseLimit evt -> wrap evt, get evt
       | LockedCard evt -> wrap evt, get evt
       | UnlockedCard evt -> wrap evt, get evt
       | UpdatedRole evt -> wrap evt, get evt

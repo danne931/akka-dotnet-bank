@@ -204,18 +204,27 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
          Name = "Access Restored"
          Info = $"Employee access restored for {txn.EmployeeName}"
      }
-   | EmployeeEvent.DailyDebitLimitUpdated e -> {
-      props with
-         Name = "Daily Purchase Limit Updated"
-         Info =
-            $"Updated daily purchase limit from ${e.Data.PriorLimit} to ${e.Data.DebitLimit} for {txn.EmployeeName}'s card **{e.Data.CardNumberLast4}"
-     }
-   | EmployeeEvent.MonthlyDebitLimitUpdated e -> {
-      props with
-         Name = "Monthly Purchase Limit Updated"
-         Info =
-            $"Updated monthly purchase limit from ${e.Data.PriorLimit} to ${e.Data.DebitLimit} for {txn.EmployeeName}'s card **{e.Data.CardNumberLast4}"
-     }
+   | EmployeeEvent.ConfiguredRollingPurchaseLimit e ->
+      let o = e.Data
+
+      let daily =
+         if o.PriorDailyLimit <> o.DailyLimit then
+            $" Daily ({Money.format o.PriorDailyLimit} -> {Money.format o.DailyLimit})"
+         else
+            ""
+
+      let monthly =
+         if o.PriorMonthlyLimit <> o.MonthlyLimit then
+            $" Monthly ({Money.format o.PriorMonthlyLimit} -> {Money.format o.MonthlyLimit})"
+         else
+            ""
+
+      {
+         props with
+            Name = "Purchase Limits Updated"
+            Info =
+               $"Updated purchase limits {daily} {monthly} for {txn.EmployeeName}'s card **{o.CardNumberLast4}"
+      }
    | EmployeeEvent.CardNicknamed e -> {
       props with
          Name = "Card Nickname Updated"
@@ -747,8 +756,7 @@ let private matchesEmployeeEventFilter
       | _ -> false
    | EmployeeEventGroupFilter.PurchaseLimitUpdated ->
       match event with
-      | EmployeeEvent.DailyDebitLimitUpdated _
-      | EmployeeEvent.MonthlyDebitLimitUpdated _ -> true
+      | EmployeeEvent.ConfiguredRollingPurchaseLimit _ -> true
       | _ -> false
 
 /// Apply the selected filter logic to events arriving via SignalR.

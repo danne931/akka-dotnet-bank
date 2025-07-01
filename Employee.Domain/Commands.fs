@@ -317,13 +317,14 @@ module RefundPurchaseCommand =
       =
       BankEvent.create<CardPurchaseRefunded> cmd |> Ok
 
-type LimitDailyDebitsCommand = Command<DailyDebitLimitUpdated>
+type ConfigureRollingPurchaseLimitCommand =
+   Command<ConfiguredRollingPurchaseLimit>
 
-module LimitDailyDebitsCommand =
+module ConfigureRollingPurchaseLimitCommand =
    let create
       (employeeId: EmployeeId, orgId: OrgId)
       (initiatedBy: Initiator)
-      (data: DailyDebitLimitUpdated)
+      (data: ConfiguredRollingPurchaseLimit)
       =
       Command.create
          (EmployeeId.toEntityId employeeId)
@@ -333,44 +334,21 @@ module LimitDailyDebitsCommand =
          data
 
    let toEvent
-      (cmd: LimitDailyDebitsCommand)
-      : ValidationResult<BankEvent<DailyDebitLimitUpdated>>
+      (cmd: ConfigureRollingPurchaseLimitCommand)
+      : ValidationResult<BankEvent<ConfiguredRollingPurchaseLimit>>
       =
       validate {
          let! _ =
             Card.dailyPurchaseLimitValidator
                "Daily purchase limit"
-               cmd.Data.DebitLimit
+               cmd.Data.DailyLimit
 
-         return BankEvent.create<DailyDebitLimitUpdated> cmd
-      }
-
-type LimitMonthlyDebitsCommand = Command<MonthlyDebitLimitUpdated>
-
-module LimitMonthlyDebitsCommand =
-   let create
-      (employeeId: EmployeeId, orgId: OrgId)
-      (initiatedBy: Initiator)
-      (data: MonthlyDebitLimitUpdated)
-      =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         (CorrelationId.create ())
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: LimitMonthlyDebitsCommand)
-      : ValidationResult<BankEvent<MonthlyDebitLimitUpdated>>
-      =
-      validate {
-         let! _ =
+         and! _ =
             Card.monthlyPurchaseLimitValidator
                "Monthly purchase limit"
-               cmd.Data.DebitLimit
+               cmd.Data.MonthlyLimit
 
-         return BankEvent.create<MonthlyDebitLimitUpdated> cmd
+         return BankEvent.create<ConfiguredRollingPurchaseLimit> cmd
       }
 
 type LockCardCommand = Command<LockedCard>

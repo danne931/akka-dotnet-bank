@@ -220,22 +220,13 @@ let sqlParamReducer
          acc with
             CardUpdate = sqlParams :: acc.CardUpdate
       }
-   | EmployeeEvent.DailyDebitLimitUpdated e ->
+   | EmployeeEvent.ConfiguredRollingPurchaseLimit e ->
       let sqlParams = [
          "cardId", CardSqlWriter.cardId e.Data.CardId
          "dailyPurchaseLimit",
-         CardSqlWriter.dailyPurchaseLimit e.Data.DebitLimit
-      ]
-
-      {
-         acc with
-            CardUpdate = sqlParams :: acc.CardUpdate
-      }
-   | EmployeeEvent.MonthlyDebitLimitUpdated e ->
-      let sqlParams = [
-         "cardId", CardSqlWriter.cardId e.Data.CardId
+         CardSqlWriter.dailyPurchaseLimit e.Data.DailyLimit
          "monthlyPurchaseLimit",
-         CardSqlWriter.monthlyPurchaseLimit e.Data.DebitLimit
+         CardSqlWriter.monthlyPurchaseLimit e.Data.MonthlyLimit
       ]
 
       {

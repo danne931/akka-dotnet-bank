@@ -60,18 +60,13 @@ type CardPurchaseRefunded = {
    Reason: PurchaseRefundReason
 }
 
-type DailyDebitLimitUpdated = {
+type ConfiguredRollingPurchaseLimit = {
    CardId: CardId
    CardNumberLast4: string
-   PriorLimit: decimal
-   DebitLimit: decimal
-}
-
-type MonthlyDebitLimitUpdated = {
-   CardId: CardId
-   CardNumberLast4: string
-   PriorLimit: decimal
-   DebitLimit: decimal
+   PriorDailyLimit: decimal
+   PriorMonthlyLimit: decimal
+   DailyLimit: decimal
+   MonthlyLimit: decimal
 }
 
 type LockedCard = {

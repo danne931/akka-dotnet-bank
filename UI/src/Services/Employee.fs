@@ -27,10 +27,8 @@ let private postJson (command: EmployeeCommand) =
          Serialization.serialize cmd, EmployeePath.Base
       | EmployeeCommand.PurchaseIntent cmd ->
          Serialization.serialize cmd, CardPath.Purchase
-      | EmployeeCommand.LimitDailyDebits cmd ->
-         Serialization.serialize cmd, CardPath.DailyPurchaseLimit
-      | EmployeeCommand.LimitMonthlyDebits cmd ->
-         Serialization.serialize cmd, CardPath.MonthlyPurchaseLimit
+      | EmployeeCommand.ConfigureRollingPurchaseLimit cmd ->
+         Serialization.serialize cmd, CardPath.PurchaseLimit
       | EmployeeCommand.CreateCard cmd ->
          Serialization.serialize cmd, CardPath.Base
       | EmployeeCommand.LockCard cmd ->

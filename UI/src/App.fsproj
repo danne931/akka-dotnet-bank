@@ -57,8 +57,6 @@
     <Compile Include="Components/Forms/RequestPayment.fs" />
     <Compile Include="Components/Forms/FulfillPayment.fs" />
     <Compile Include="Components/Forms/RegisterTransferRecipient.fs" />
-    <Compile Include="Components/Forms/DailyDebitLimit.fs" />
-    <Compile Include="Components/Forms/MonthlyDebitLimit.fs" />
     <Compile Include="Components/Forms/PurchaseLimit.fs" />
     <Compile Include="Components/Forms/Purchase.fs" />
     <Compile Include="Components/Forms/Deposit.fs" />

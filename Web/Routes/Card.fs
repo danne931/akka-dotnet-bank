@@ -69,21 +69,12 @@ let startCardRoutes (app: WebApplication) =
 
    app
       .MapPost(
-         CardPath.DailyPurchaseLimit,
-         Func<ActorSystem, LimitDailyDebitsCommand, Task<IResult>>
+         CardPath.PurchaseLimit,
+         Func<ActorSystem, ConfigureRollingPurchaseLimitCommand, Task<IResult>>
             (fun sys cmd ->
-               processCommand sys (EmployeeCommand.LimitDailyDebits cmd)
-               |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.UpdatePurchaseLimit)
-   |> ignore
-
-   app
-      .MapPost(
-         CardPath.MonthlyPurchaseLimit,
-         Func<ActorSystem, LimitMonthlyDebitsCommand, Task<IResult>>
-            (fun sys cmd ->
-               processCommand sys (EmployeeCommand.LimitMonthlyDebits cmd)
+               processCommand
+                  sys
+                  (EmployeeCommand.ConfigureRollingPurchaseLimit cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.UpdatePurchaseLimit)

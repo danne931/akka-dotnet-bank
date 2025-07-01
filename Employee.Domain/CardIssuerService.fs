@@ -41,7 +41,7 @@ type CardCreateResponse = {
 }
 
 type CardCloseResponse = {
-   Customer: objnull
+   Customer: obj
    ProviderCardId: ThirdPartyProviderCardId
 }
 

@@ -11,8 +11,7 @@ open UIDomain.Employee
 open UIDomain.Org
 open Bank.Forms.FormContainer
 open Lib.SharedTypes
-open DailyPurchaseLimitForm
-open MonthlyPurchaseLimitForm
+open PurchaseLimitForm
 open AccountProfileForm
 open CommandApproval
 

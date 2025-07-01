@@ -16,16 +16,14 @@ open UIDomain.Employee
 open Bank.Employee.Domain
 open Lib.SharedTypes
 open Dropdown
-open Bank.Employee.Forms.DailyPurchaseLimitForm
-open Bank.Employee.Forms.MonthlyPurchaseLimitForm
+open Bank.Employee.Forms.PurchaseLimitForm
 open CommandApproval
 
 type State = {
    NicknamePersistence: Deferred<Result<EmployeeCommandReceipt, Err>>
    LockPersistence: Deferred<Result<EmployeeCommandReceipt, Err>>
    IsEditingNickname: bool
-   IsEditingDailyPurchaseLimit: bool
-   IsEditingMonthlyPurchaseLimit: bool
+   IsEditingPurchaseLimit: bool
 }
 
 type NicknameEditMsg = {
@@ -45,8 +43,7 @@ type CardLockMsg = {
 
 type Msg =
    | ToggleNicknameEdit
-   | ToggleDailyPurchaseLimitEdit
-   | ToggleMonthlyPurchaseLimitEdit
+   | TogglePurchaseLimitEdit
    | SaveNickname of
       NicknameEditMsg *
       AsyncOperationStatus<Result<EmployeeCommandReceipt, Err>>
@@ -61,8 +58,7 @@ let init () =
       NicknamePersistence = Deferred.Idle
       LockPersistence = Deferred.Idle
       IsEditingNickname = false
-      IsEditingDailyPurchaseLimit = false
-      IsEditingMonthlyPurchaseLimit = false
+      IsEditingPurchaseLimit = false
    },
    Cmd.none
 
@@ -79,19 +75,10 @@ let update
             IsEditingNickname = not state.IsEditingNickname
       },
       Cmd.none
-   | ToggleDailyPurchaseLimitEdit ->
+   | TogglePurchaseLimitEdit ->
       {
          state with
-            IsEditingDailyPurchaseLimit = not state.IsEditingDailyPurchaseLimit
-            IsEditingMonthlyPurchaseLimit = false
-      },
-      Cmd.none
-   | ToggleMonthlyPurchaseLimitEdit ->
-      {
-         state with
-            IsEditingMonthlyPurchaseLimit =
-               not state.IsEditingMonthlyPurchaseLimit
-            IsEditingDailyPurchaseLimit = false
+            IsEditingPurchaseLimit = not state.IsEditingPurchaseLimit
       },
       Cmd.none
    | SaveNickname(edit, Started) ->
@@ -200,8 +187,7 @@ let update
 
       {
          state with
-            IsEditingDailyPurchaseLimit = false
-            IsEditingMonthlyPurchaseLimit = false
+            IsEditingPurchaseLimit = false
             LockPersistence = Deferred.Idle
       },
       Cmd.none
@@ -313,7 +299,7 @@ let CardDetailComponent
       Card = card.Card
       WillLock =
          match card.Card.Status with
-         | CardStatus.Active _ -> true
+         | CardStatus.Active -> true
          | _ -> false
       UserSession = userSession
       UnlockRequiresApproval =
@@ -339,7 +325,7 @@ let CardDetailComponent
                | CardStatus.Frozen _
                | CardStatus.Closed -> "var(--del-color)"
                | CardStatus.Pending -> "var(--secondary)"
-               | CardStatus.Active _ -> "var(--primary)"
+               | CardStatus.Active -> "var(--primary)"
 
             attr.style [ style.color color ]
          ]
@@ -359,15 +345,6 @@ let CardDetailComponent
             |> string
             |> attr.value
          ]
-
-         if state.IsEditingDailyPurchaseLimit then
-            DailyPurchaseLimitFormComponent
-               userSession
-               (fun receipt ->
-                  onCardUpdate receipt
-                  dispatch Msg.ToggleDailyPurchaseLimitEdit)
-               card.Card
-               card.Employee
       ]
 
       classyNode Html.div [ "spending-container" ] [
@@ -381,20 +358,20 @@ let CardDetailComponent
             |> string
             |> attr.value
          ]
-
-         if state.IsEditingMonthlyPurchaseLimit then
-            MonthlyPurchaseLimitFormComponent
-               userSession
-               (fun receipt ->
-                  onCardUpdate receipt
-                  dispatch Msg.ToggleMonthlyPurchaseLimitEdit)
-               card.Card
-               card.Employee
       ]
+
+      if state.IsEditingPurchaseLimit then
+         PurchaseLimitFormComponent
+            userSession
+            (fun receipt ->
+               onCardUpdate receipt
+               dispatch Msg.TogglePurchaseLimitEdit)
+            card.Card
+            card.Employee
 
       classyNode Html.div [ "grid"; "card-detail-menu" ] [
          match card.Card.Status with
-         | CardStatus.Active _ ->
+         | CardStatus.Active ->
             Html.div [
                attr.role "button"
                attr.classes [ "outline" ]
@@ -469,16 +446,12 @@ let CardDetailComponent
                OnClick = fun _ -> dispatch Msg.ToggleNicknameEdit
                IsSelected = state.IsEditingNickname
             }
-            {
-               Text = "Edit Daily Purchase Limit"
-               OnClick = fun _ -> dispatch Msg.ToggleDailyPurchaseLimitEdit
-               IsSelected = state.IsEditingDailyPurchaseLimit
-            }
-            {
-               Text = "Edit Monthly Purchase Limit"
-               OnClick = fun _ -> dispatch Msg.ToggleMonthlyPurchaseLimitEdit
-               IsSelected = state.IsEditingMonthlyPurchaseLimit
-            }
+            if card.Card.Status = CardStatus.Active then
+               {
+                  Text = "Edit Purchase Limits"
+                  OnClick = fun _ -> dispatch Msg.TogglePurchaseLimitEdit
+                  IsSelected = state.IsEditingPurchaseLimit
+               }
          (*
             {
                Text = "Deactivate Card"

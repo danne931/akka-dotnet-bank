@@ -126,25 +126,15 @@ let applyEvent
       | PurchasePending _ -> em
       | PurchaseFailed _ -> em
       | PurchaseRefunded _ -> em
-      | DailyDebitLimitUpdated e -> {
+      | ConfiguredRollingPurchaseLimit e -> {
          em with
             Cards =
                Map.change
                   e.Data.CardId
                   (Option.map (fun card -> {
                      card with
-                        DailyPurchaseLimit = e.Data.DebitLimit
-                  }))
-                  em.Cards
-        }
-      | MonthlyDebitLimitUpdated e -> {
-         em with
-            Cards =
-               Map.change
-                  e.Data.CardId
-                  (Option.map (fun card -> {
-                     card with
-                        MonthlyPurchaseLimit = e.Data.DebitLimit
+                        DailyPurchaseLimit = e.Data.DailyLimit
+                        MonthlyPurchaseLimit = e.Data.MonthlyLimit
                   }))
                   em.Cards
         }
@@ -294,26 +284,17 @@ module private StateTransition =
             state
             (LinkThirdPartyProviderCardCommand.toEvent cmd)
 
-   let limitDailyDebits
+   let configureRollingPurchaseLimit
       (state: EmployeeSnapshot)
-      (cmd: LimitDailyDebitsCommand)
-      =
-      if state.Info.Status <> EmployeeStatus.Active then
-         transitionErr EmployeeNotActive
-      else
-         map DailyDebitLimitUpdated state (LimitDailyDebitsCommand.toEvent cmd)
-
-   let limitMonthlyDebits
-      (state: EmployeeSnapshot)
-      (cmd: LimitMonthlyDebitsCommand)
+      (cmd: ConfigureRollingPurchaseLimitCommand)
       =
       if state.Info.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotActive
       else
          map
-            MonthlyDebitLimitUpdated
+            ConfiguredRollingPurchaseLimit
             state
-            (LimitMonthlyDebitsCommand.toEvent cmd)
+            (ConfigureRollingPurchaseLimitCommand.toEvent cmd)
 
    let lockCard (state: EmployeeSnapshot) (cmd: LockCardCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
@@ -470,10 +451,8 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
    | EmployeeCommand.FailPurchase cmd -> StateTransition.failPurchase state cmd
    | EmployeeCommand.RefundPurchase cmd ->
       StateTransition.refundPurchase state cmd
-   | EmployeeCommand.LimitDailyDebits cmd ->
-      StateTransition.limitDailyDebits state cmd
-   | EmployeeCommand.LimitMonthlyDebits cmd ->
-      StateTransition.limitMonthlyDebits state cmd
+   | EmployeeCommand.ConfigureRollingPurchaseLimit cmd ->
+      StateTransition.configureRollingPurchaseLimit state cmd
    | EmployeeCommand.LockCard cmd -> StateTransition.lockCard state cmd
    | EmployeeCommand.UnlockCard cmd -> StateTransition.unlockCard state cmd
    | EmployeeCommand.UpdateRole cmd -> StateTransition.updateRole state cmd
