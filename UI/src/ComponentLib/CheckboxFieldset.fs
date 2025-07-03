@@ -12,7 +12,7 @@ let render
          OnChange: ('T list) option -> unit
       |})
    =
-   React.fragment [
+   Html.fieldSet [
       for opt in props.Options do
          Html.label [
             Html.input [

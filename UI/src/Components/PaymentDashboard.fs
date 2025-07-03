@@ -338,7 +338,7 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
                      attr.value 100
                ]
 
-               classyNode Html.figure [ "control-panel-and-table-container" ] [
+               Html.div [
                   match orgCtx, state.Payments with
                   | _, Resolved(Error _) ->
                      Html.small "Uh oh. Error getting payments."

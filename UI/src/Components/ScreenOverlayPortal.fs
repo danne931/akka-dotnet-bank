@@ -3,7 +3,6 @@ module ScreenOverlay
 
 open Feliz
 open Browser.Dom
-open Fable.Core.JsInterop
 
 open UIDomain.Employee
 
@@ -35,7 +34,7 @@ let manageVisibility (url: Routes.IndexUrl) =
          | _ -> None
       | Routes.IndexUrl.Transactions url ->
          match url with
-         | Routes.TransactionsUrl.TransactionsWithQuery(browserQuery) ->
+         | Routes.TransactionsUrl.TransactionsWithQuery browserQuery ->
             if
                browserQuery.Action.IsSome || browserQuery.Transaction.IsSome
             then
@@ -64,13 +63,10 @@ let manageVisibility (url: Routes.IndexUrl) =
       match overlay with
       | Some overlay ->
          overlayEl.classList.add "active"
-         document.body?style?overflow <- "hidden"
 
          let childGridEl = overlayEl.querySelector ".grid"
 
          match overlay with
          | OverlaySize.Wide -> childGridEl.classList.add "overlay-wide"
          | OverlaySize.Standard -> childGridEl.classList.remove "overlay-wide"
-      | None ->
-         overlayEl.classList.remove "active"
-         document.body?style?overflow <- "scroll"
+      | None -> overlayEl.classList.remove "active"

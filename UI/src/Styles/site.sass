@@ -12,16 +12,23 @@
 :where(input,select,textarea,fieldset,div)[aria-invalid=true] + small
   color: var(--del-color)
 
+progress
+  height: 0.3rem
 progress.invalid
   --progress-color: var(--del-color)
 small.invalid
   color: var(--del-color)
+
+.recharts-default-tooltip
+  background-color: rgba(0, 0, 0, .8) !important
+  border: none !important
 
 :root
   --form-element-active-border-color:var(--primary)
   --form-element-focus-color:var(--primary-focus)
   --switch-color:var(--primary-inverse)
   --switch-checked-background-color:var(--primary)
+  --background-color-rgb: 17, 25, 31
 
 [data-tooltip]:not(a, button, input)
   border-bottom: none
@@ -34,6 +41,9 @@ td
 tr:hover
   td[data-tooltip]:not(a, button, input)
     border-color: var(--primary)
+
+body
+  overflow: hidden
 
 nav [data-tooltip], footer [data-tooltip]
   border-bottom: none
@@ -216,16 +226,11 @@ footer
   text-align: center
   position: fixed
   bottom: 0
-  background: var(--card-background-color)
-  box-shadow: var(--card-box-shadow)
+  background: var(--background-color)
   padding: .5rem 0
   overflow: hidden
   &.grid
     grid-template-columns: 15% 33% 25% 10%
-
-  .analytics
-    a
-      font-size: .8rem
 
   .rotating-footer-metric
     opacity: 1
@@ -507,25 +512,19 @@ p[role='employee-tag']
       > small
         padding-right: 0.5rem
 
-.control-panel-and-table-container
-  position: relative
-  overflow: hidden
-  min-height: 30rem
-  .pagination
-    float: right
-
-.control-panel
-  padding: 1rem
+.control-panel-container
   position: sticky
   top: 0
-  margin-bottom: 4rem
+  background-color: var(--background-color)
+  padding-top: 0.5rem
+
+.control-panel
   > *
     display: inline
 
   button
-    float: left
     margin-right: .8rem
-    padding: .3rem .8rem
+    padding: .1rem .6rem
     width: auto
 
     &:last-child
@@ -547,13 +546,13 @@ button.filter-pill
   font-size: .8rem
   border-radius: 2rem
   box-shadow: 3px 3px 5px 2px rgba(0, 0, 0, 0.8)
-  padding: .4rem 0
+  padding: .2rem 0
 
   span
     padding: .8rem .5rem .8rem 1rem
 
   b
-    padding: .5rem .7rem
+    padding: .3rem .7rem
     background-color: black
     border-radius: 0 2rem 2rem 0
 
@@ -563,16 +562,16 @@ button.filter-pill
 
 a.pagination
   padding: 0 .4rem
+  float: right
 
 .filter-view
   position: absolute
-  top: 3.5rem
   background-color: black
   width: 100%
-  height: 100%
+  min-height: 100vh
   opacity: .9
   padding: 1.5rem 1rem
-  overflow: scroll
+  overflow: hidden
 
   aside
     ul
@@ -608,18 +607,21 @@ main
     margin: .5rem 0
 
 .app-shell
-  padding-left: 0
-  padding-bottom: 0
-
+  padding: 0
+  > .grid
+    grid-column-gap: 0
   .menu
     background: var(--card-background-color)
     box-shadow: var(--card-box-shadow)
-    min-height: 1000px
+    min-height: 100vh
 
     li
       border-left: solid transparent 0.1rem
       &.selected, &:hover
         border-color: var(--primary)
+  .active-page
+    overflow-y: scroll
+    height: 90vh
 
 .screen-overlay
   background-color: rgba(0, 0, 0, 0.7)
@@ -639,7 +641,8 @@ main
   >.overlay-wide
     grid-template-columns: auto 70%
   aside
-    background-color: var(--background-color)
+    background-color: rgba(var(--background-color-rgb), 0.8)
+    border-left: solid 1px var(--primary)
     display: flex
     height: 100%
     overflow: scroll

@@ -178,7 +178,7 @@ let renderPagination state dispatch =
 let renderControlPanel
    state
    dispatch
-   (org: OrgWithAccountProfiles)
+   (orgCtx: OrgProvider.State)
    (categories: Map<int, TransactionCategory>)
    (session: UserSession)
    =
@@ -225,21 +225,24 @@ let renderControlPanel
                   Some [| string TransactionFilterView.InitiatedBy |]
             |}
          | TransactionFilterView.Accounts ->
-            CheckboxFieldset.render {|
-               Options =
-                  org.Accounts.Values
-                  |> List.ofSeq
-                  |> List.map (fun a -> {
-                     Id = {
-                        AccountId = a.AccountId
+            match orgCtx with
+            | Deferred.Resolved(Ok(Some org)) ->
+               CheckboxFieldset.render {|
+                  Options =
+                     org.Accounts.Values
+                     |> List.ofSeq
+                     |> List.map (fun a -> {
+                        Id = {
+                           AccountId = a.AccountId
+                           Display = a.FullName
+                        }
                         Display = a.FullName
-                     }
-                     Display = a.FullName
-                  })
-               SelectedItems = query.Accounts
-               OnChange =
-                  TransactionFilter.Accounts >> Msg.UpdateFilter >> dispatch
-            |}
+                     })
+                  SelectedItems = query.Accounts
+                  OnChange =
+                     TransactionFilter.Accounts >> Msg.UpdateFilter >> dispatch
+               |}
+            | _ -> Html.progress []
          | TransactionFilterView.Cards ->
             EmployeeCardMultiSelectSearchComponent {|
                OrgId = session.OrgId
@@ -703,20 +706,17 @@ let TransactionDashboardComponent
             Html.section [
                Html.h4 "Transactions"
 
+               Html.progress [
+                  match txns with
+                  | Some(Deferred.Resolved _) -> attr.value 100
+                  | _ -> ()
+               ]
+
+               renderControlPanel state dispatch orgCtx categories session
+
                match orgCtx with
                | Deferred.Resolved(Ok(Some org)) ->
-                  Html.progress [
-                     attr.style [ style.marginBottom 5 ]
-                     attr.custom ("data-transactions-loader", "")
-
-                     match txns with
-                     | Some(Deferred.Resolved _) -> attr.value 100
-                     | _ -> ()
-                  ]
-
-                  classyNode Html.figure [ "control-panel-and-table-container" ] [
-                     renderControlPanel state dispatch org categories session
-
+                  Html.div [
                      match txns with
                      | Some(Resolved(Ok None)) ->
                         Html.p "No transactions found."
@@ -730,7 +730,7 @@ let TransactionDashboardComponent
                         renderPagination state dispatch
                      | _ -> ()
                   ]
-               | _ -> Html.progress []
+               | _ -> ()
             ]
 
             match orgCtx, Routes.IndexUrl.transactionBrowserQuery().Action with

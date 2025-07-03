@@ -280,103 +280,98 @@ let EmployeeDashboardComponent
                      attr.value 100
                ]
 
-               classyNode Html.figure [ "control-panel-and-table-container" ] [
-                  TableControlPanelComponent {|
-                     FilterViewOptions = [
-                        EmployeeFilterView.Employees, "Employees"
-                        EmployeeFilterView.Roles, "Employee Role"
+               TableControlPanelComponent {|
+                  FilterViewOptions = [
+                     EmployeeFilterView.Employees, "Employees"
+                     EmployeeFilterView.Roles, "Employee Role"
+                  ]
+                  RenderFilterViewOnSelect =
+                     function
+                     | EmployeeFilterView.Employees ->
+                        EmployeeMultiSelectSearchComponent {|
+                           OrgId = session.OrgId
+                           Selected = browserQuery.SelectedEmployees
+                           OnSelect =
+                              EmployeeFilter.Employees
+                              >> Msg.UpdateFilter
+                              >> dispatch
+                           Dependencies = None
+                        |}
+                     | EmployeeFilterView.Roles ->
+                        CheckboxFieldset.render {|
+                           Options =
+                              [ Role.Admin; Role.Scholar; Role.CardOnly ]
+                              |> List.map (fun o -> {
+                                 Id = o
+                                 Display = o.Display
+                              })
+                           SelectedItems = browserQuery.Roles
+                           OnChange =
+                              EmployeeFilter.Roles
+                              >> Msg.UpdateFilter
+                              >> dispatch
+                        |}
+                  FilterPills =
+                     [
+                        {
+                           View = EmployeeFilterView.Roles
+                           OnDelete =
+                              fun () ->
+                                 EmployeeFilter.Roles None
+                                 |> Msg.UpdateFilter
+                                 |> dispatch
+                           Content =
+                              state.Query.Roles
+                              |> Option.map EmployeeQuery.rolesToDisplay
+                        }
                      ]
-                     RenderFilterViewOnSelect =
-                        function
-                        | EmployeeFilterView.Employees ->
-                           EmployeeMultiSelectSearchComponent {|
-                              OrgId = session.OrgId
-                              Selected = browserQuery.SelectedEmployees
-                              OnSelect =
-                                 EmployeeFilter.Employees
-                                 >> Msg.UpdateFilter
-                                 >> dispatch
-                              Dependencies = None
-                           |}
-                        | EmployeeFilterView.Roles ->
-                           CheckboxFieldset.render {|
-                              Options =
-                                 [ Role.Admin; Role.Scholar; Role.CardOnly ]
-                                 |> List.map (fun o -> {
-                                    Id = o
-                                    Display = o.Display
-                                 })
-                              SelectedItems = browserQuery.Roles
-                              OnChange =
-                                 EmployeeFilter.Roles
-                                 >> Msg.UpdateFilter
-                                 >> dispatch
-                           |}
-                     FilterPills =
-                        [
-                           {
-                              View = EmployeeFilterView.Roles
-                              OnDelete =
-                                 fun () ->
-                                    EmployeeFilter.Roles None
-                                    |> Msg.UpdateFilter
-                                    |> dispatch
-                              Content =
-                                 state.Query.Roles
-                                 |> Option.map EmployeeQuery.rolesToDisplay
-                           }
-                        ]
-                        @ [
-                           match browserQuery.SelectedEmployees with
-                           | None -> ()
-                           | Some selected ->
-                              for employee in selected ->
-                                 {
-                                    View = EmployeeFilterView.Employees
-                                    OnDelete =
-                                       fun () ->
-                                          selected
-                                          |> List.filter (fun e ->
-                                             e.Id <> employee.Id)
-                                          |> fun es ->
-                                             (if es.IsEmpty then
-                                                 None
-                                              else
-                                                 Some es)
-                                             |> EmployeeFilter.Employees
-                                             |> Msg.UpdateFilter
-                                             |> dispatch
-                                    Content = Some employee.Name
-                                 }
-                        ]
-                     SubsequentChildren =
-                        Some [
-                           Html.button [
-                              attr.classes [ "create-employee" ]
-                              attr.children [
-                                 Fa.i [ Fa.Solid.UserPlus ] []
-                                 Html.span "Invite"
-                              ]
-
-                              attr.onClick (fun _ ->
-                                 Some EmployeeActionView.Create
-                                 |> actionNav
-                                 |> Router.navigate)
+                     @ [
+                        match browserQuery.SelectedEmployees with
+                        | None -> ()
+                        | Some selected ->
+                           for employee in selected ->
+                              {
+                                 View = EmployeeFilterView.Employees
+                                 OnDelete =
+                                    fun () ->
+                                       selected
+                                       |> List.filter (fun e ->
+                                          e.Id <> employee.Id)
+                                       |> fun es ->
+                                          (if es.IsEmpty then None else Some es)
+                                          |> EmployeeFilter.Employees
+                                          |> Msg.UpdateFilter
+                                          |> dispatch
+                                 Content = Some employee.Name
+                              }
+                     ]
+                  SubsequentChildren =
+                     Some [
+                        Html.button [
+                           attr.classes [ "create-employee" ]
+                           attr.children [
+                              Fa.i [ Fa.Solid.UserPlus ] []
+                              Html.span "Invite"
                            ]
-                        ]
-                  |}
 
-                  match orgCtx, employees with
-                  | _, Resolved(Error _) ->
-                     Html.small "Uh oh. Error getting employees."
-                  | _, Resolved(Ok None) -> Html.small "Uh oh. No employees."
-                  | Resolved(Ok(Some org)), Resolved(Ok(Some employees)) ->
-                     if employees.IsEmpty then
-                        Html.small "Uh oh. No employees."
-                     else
-                        renderTable org.Org employees selectedEmployeeId
-                  | _ -> ()
-               ]
+                           attr.onClick (fun _ ->
+                              Some EmployeeActionView.Create
+                              |> actionNav
+                              |> Router.navigate)
+                        ]
+                     ]
+               |}
+
+               match orgCtx, employees with
+               | _, Resolved(Error _) ->
+                  Html.small "Uh oh. Error getting employees."
+               | _, Resolved(Ok None) -> Html.small "Uh oh. No employees."
+               | Resolved(Ok(Some org)), Resolved(Ok(Some employees)) ->
+                  if employees.IsEmpty then
+                     Html.small "Uh oh. No employees."
+                  else
+                     renderTable org.Org employees selectedEmployeeId
+               | _ -> ()
             ]
 
             match url with

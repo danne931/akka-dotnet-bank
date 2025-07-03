@@ -255,139 +255,133 @@ let CardDashboardComponent (url: Routes.CardUrl) (session: UserSession) =
                      attr.value 100
                ]
 
-               classyNode Html.figure [ "control-panel-and-table-container" ] [
-                  TableControlPanelComponent {|
-                     FilterViewOptions = [
-                        CardFilterView.Employees, "Employees"
-                        CardFilterView.Amount, "Spending"
-                        CardFilterView.CreatedAt, "Date Created"
-                        CardFilterView.Accounts, "Accounts"
-                     ]
-                     RenderFilterViewOnSelect =
-                        function
-                        | CardFilterView.Employees ->
-                           EmployeeMultiSelectSearchComponent {|
-                              OrgId = session.OrgId
-                              Selected = browserQuery.SelectedEmployees
-                              OnSelect =
-                                 CardFilter.Employees
+               TableControlPanelComponent {|
+                  FilterViewOptions = [
+                     CardFilterView.Employees, "Employees"
+                     CardFilterView.Amount, "Spending"
+                     CardFilterView.CreatedAt, "Date Created"
+                     CardFilterView.Accounts, "Accounts"
+                  ]
+                  RenderFilterViewOnSelect =
+                     function
+                     | CardFilterView.Employees ->
+                        EmployeeMultiSelectSearchComponent {|
+                           OrgId = session.OrgId
+                           Selected = browserQuery.SelectedEmployees
+                           OnSelect =
+                              CardFilter.Employees
+                              >> Msg.UpdateFilter
+                              >> dispatch
+                           Dependencies = None
+                        |}
+                     | CardFilterView.Amount ->
+                        AmountFilter.AmountFilterComponent
+                           browserQuery.Amount
+                           (CardFilter.Amount >> Msg.UpdateFilter >> dispatch)
+                     | CardFilterView.CreatedAt ->
+                        DateFilter.DateFilterComponent
+                           browserQuery.CreatedAt
+                           (CardFilter.CreatedAt >> Msg.UpdateFilter >> dispatch)
+                     | CardFilterView.Accounts ->
+                        match orgCtx with
+                        | Deferred.Resolved(Ok(Some org)) ->
+                           CheckboxFieldset.render {|
+                              Options =
+                                 org.Accounts.Values
+                                 |> List.ofSeq
+                                 |> List.map (fun o -> {
+                                    Id = o.AccountId
+                                    Display =
+                                       $"{o.Name} ({Money.format o.AvailableBalance})"
+                                 })
+                              SelectedItems =
+                                 browserQuery.SelectedAccounts
+                                 |> Option.map (List.map _.Id)
+                              OnChange =
+                                 Option.map (fun accountIds ->
+                                    List.choose
+                                       (fun (accountId: AccountId) ->
+                                          org.Accounts
+                                          |> Map.tryFind accountId
+                                          |> Option.map (fun account -> {
+                                             Id = accountId
+                                             Name = account.Name
+                                          }))
+                                       accountIds)
+                                 >> CardFilter.Accounts
                                  >> Msg.UpdateFilter
                                  >> dispatch
-                              Dependencies = None
                            |}
-                        | CardFilterView.Amount ->
-                           AmountFilter.AmountFilterComponent
+                        | Deferred.Resolved(Ok None) ->
+                           Html.p "No account profiles."
+                        | _ -> Html.progress []
+                  FilterPills =
+                     [
+                        {
+                           View = CardFilterView.Accounts
+                           OnDelete =
+                              fun () ->
+                                 dispatch
+                                 <| Msg.UpdateFilter(CardFilter.Accounts None)
+                           Content =
+                              browserQuery.SelectedAccounts
+                              |> Option.map SelectedAccount.listToDisplay
+                        }
+                        {
+                           View = CardFilterView.CreatedAt
+                           OnDelete =
+                              fun () ->
+                                 CardFilter.CreatedAt None
+                                 |> Msg.UpdateFilter
+                                 |> dispatch
+                           Content =
+                              state.Query.CreatedAtDateRange
+                              |> Option.map DateFilter.dateRangeDisplay
+                        }
+                        {
+                           View = CardFilterView.Amount
+                           OnDelete =
+                              fun () ->
+                                 dispatch
+                                 <| Msg.UpdateFilter(CardFilter.Amount None)
+                           Content =
                               browserQuery.Amount
-                              (CardFilter.Amount >> Msg.UpdateFilter >> dispatch)
-                        | CardFilterView.CreatedAt ->
-                           DateFilter.DateFilterComponent
-                              browserQuery.CreatedAt
-                              (CardFilter.CreatedAt
-                               >> Msg.UpdateFilter
-                               >> dispatch)
-                        | CardFilterView.Accounts ->
-                           match orgCtx with
-                           | Deferred.Resolved(Ok(Some org)) ->
-                              CheckboxFieldset.render {|
-                                 Options =
-                                    org.Accounts.Values
-                                    |> List.ofSeq
-                                    |> List.map (fun o -> {
-                                       Id = o.AccountId
-                                       Display =
-                                          $"{o.Name} ({Money.format o.AvailableBalance})"
-                                    })
-                                 SelectedItems =
-                                    browserQuery.SelectedAccounts
-                                    |> Option.map (List.map _.Id)
-                                 OnChange =
-                                    Option.map (fun accountIds ->
-                                       List.choose
-                                          (fun (accountId: AccountId) ->
-                                             org.Accounts
-                                             |> Map.tryFind accountId
-                                             |> Option.map (fun account -> {
-                                                Id = accountId
-                                                Name = account.Name
-                                             }))
-                                          accountIds)
-                                    >> CardFilter.Accounts
-                                    >> Msg.UpdateFilter
-                                    >> dispatch
-                              |}
-                           | Deferred.Resolved(Ok None) ->
-                              Html.p "No account profiles."
-                           | _ -> Html.progress []
-                     FilterPills =
-                        [
-                           {
-                              View = CardFilterView.Accounts
-                              OnDelete =
-                                 fun () ->
-                                    dispatch
-                                    <| Msg.UpdateFilter(
-                                       CardFilter.Accounts None
-                                    )
-                              Content =
-                                 browserQuery.SelectedAccounts
-                                 |> Option.map SelectedAccount.listToDisplay
-                           }
-                           {
-                              View = CardFilterView.CreatedAt
-                              OnDelete =
-                                 fun () ->
-                                    CardFilter.CreatedAt None
-                                    |> Msg.UpdateFilter
-                                    |> dispatch
-                              Content =
-                                 state.Query.CreatedAtDateRange
-                                 |> Option.map DateFilter.dateRangeDisplay
-                           }
-                           {
-                              View = CardFilterView.Amount
-                              OnDelete =
-                                 fun () ->
-                                    dispatch
-                                    <| Msg.UpdateFilter(CardFilter.Amount None)
-                              Content =
-                                 browserQuery.Amount
-                                 |> Option.map AmountFilter.display
-                           }
-                        ]
-                        @ [
-                           match browserQuery.SelectedEmployees with
-                           | None -> ()
-                           | Some selected ->
-                              for employee in selected ->
-                                 {
-                                    View = CardFilterView.Employees
-                                    OnDelete =
-                                       fun () ->
-                                          selected
-                                          |> List.filter (fun e ->
-                                             e.Id <> employee.Id)
-                                          |> fun es ->
-                                             (if es.Length = 0 then
-                                                 None
-                                              else
-                                                 Some es)
-                                             |> CardFilter.Employees
-                                             |> Msg.UpdateFilter
-                                             |> dispatch
-                                    Content = Some employee.Name
-                                 }
-                        ]
-                     SubsequentChildren = None
-                  |}
+                              |> Option.map AmountFilter.display
+                        }
+                     ]
+                     @ [
+                        match browserQuery.SelectedEmployees with
+                        | None -> ()
+                        | Some selected ->
+                           for employee in selected ->
+                              {
+                                 View = CardFilterView.Employees
+                                 OnDelete =
+                                    fun () ->
+                                       selected
+                                       |> List.filter (fun e ->
+                                          e.Id <> employee.Id)
+                                       |> fun es ->
+                                          (if es.Length = 0 then
+                                              None
+                                           else
+                                              Some es)
+                                          |> CardFilter.Employees
+                                          |> Msg.UpdateFilter
+                                          |> dispatch
+                                 Content = Some employee.Name
+                              }
+                     ]
+                  SubsequentChildren = None
+               |}
 
-                  match state.Cards, orgCtx with
-                  | Resolved(Error err), _ ->
-                     Html.small "Uh oh. Error getting cards."
-                  | Resolved(Ok None), _ -> Html.small "No cards."
-                  | Resolved(Ok(Some cards)), Resolved(Ok(Some org)) ->
-                     renderTable cards org.Accounts selectedCardId
-                  | _ -> ()
-               ]
+               match state.Cards, orgCtx with
+               | Resolved(Error _), _ ->
+                  Html.small "Uh oh. Error getting cards."
+               | Resolved(Ok None), _ -> Html.small "No cards."
+               | Resolved(Ok(Some cards)), Resolved(Ok(Some org)) ->
+                  renderTable cards org.Accounts selectedCardId
+               | _ -> ()
             ]
 
             Html.aside [ CardActionMenu.render () ]

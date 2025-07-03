@@ -4,6 +4,7 @@ open Feliz
 open Feliz.UseElmish
 open Elmish
 open Feliz.Router
+open Fable.Core.JsInterop
 
 open Bank.Employee.Domain
 open Bank.Org.Domain
@@ -513,9 +514,9 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
                | _ -> ()
             ]
 
-            classyNode Html.figure [ "control-panel-and-table-container" ] [
-               renderTableControlPanel state dispatch session browserQuery
+            renderTableControlPanel state dispatch session browserQuery
 
+            Html.div [
                classyNode Html.div [ "history-table" ] [
                   match orgCtx, history with
                   | _, Some(Resolved(Error _)) ->
@@ -538,4 +539,12 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
             ]
          ]
       ]
+
+      match orgCtx with
+      | Deferred.Resolved(Ok(Some org)) ->
+         React.suspense (
+            [ React.lazy' ((fun () -> importDynamic "./OrgSummary"), org) ],
+            Html.progress []
+         )
+      | _ -> ()
    ]

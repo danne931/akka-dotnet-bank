@@ -88,19 +88,24 @@ let TransactionCategoryFilterComponent
 
       Html.small "Categories"
 
-      CheckboxFieldset.render {|
-         Options =
-            categories.Values
-            |> Seq.toList
-            |> List.map (fun cat -> { Id = cat.Id; Display = cat.Name })
-         SelectedItems =
-            category
-            |> Option.bind (function
-               | CategoryFilter.IsCategorized _ -> None
-               | CategoryFilter.CategoryIds ids -> Some ids)
-         OnChange =
-            fun ids ->
-               let ids = ids |> Option.map CategoryFilter.CategoryIds
-               onChange ids
-      |}
+      Html.div [
+         attr.style [ style.overflowY.scroll; style.custom ("height", "40%") ]
+         attr.children [
+            CheckboxFieldset.render {|
+               Options =
+                  categories.Values
+                  |> Seq.toList
+                  |> List.map (fun cat -> { Id = cat.Id; Display = cat.Name })
+               SelectedItems =
+                  category
+                  |> Option.bind (function
+                     | CategoryFilter.IsCategorized _ -> None
+                     | CategoryFilter.CategoryIds ids -> Some ids)
+               OnChange =
+                  fun ids ->
+                     let ids = ids |> Option.map CategoryFilter.CategoryIds
+                     onChange ids
+            |}
+         ]
+      ]
    ]

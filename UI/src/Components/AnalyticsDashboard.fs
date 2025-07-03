@@ -219,9 +219,9 @@ let private opts = {|
       Height = 400
    |}
    Color = {|
-      MoneyIn = "#388e3c"
-      MoneyOut = "#c62828"
-      Balance = "#fdd835"
+      MoneyIn = "var(--ins-color)"
+      MoneyOut = "var(--del-color)"
+      Balance = "var(--primary)"
    |}
    ChartMarginHorizontal = 30
    AmountInterval = 5
@@ -399,7 +399,7 @@ let render3MonthTimeSeriesChart
    (data: MoneyFlowMonthlyTimeSeries list)
    (dimensions: {| Height: int; Width: int |})
    =
-   let dataKey, color =
+   let dataKey, barFillColor =
       match flow with
       | MoneyFlow.In -> _.AmountIn >> string, "url(#moneyIn)"
       | MoneyFlow.Out -> _.AmountOut >> string, "url(#moneyOut)"
@@ -416,7 +416,17 @@ let render3MonthTimeSeriesChart
          ]
 
          Recharts.tooltip [
-            tooltip.position (150, -13)
+            tooltip.position (-85, -13)
+
+            tooltip.labelStyle [ style.color "var(--primary)" ]
+            tooltip.itemStyle [
+               style.color (
+                  match flow with
+                  | MoneyFlow.In -> "var(--ins-color)"
+                  | MoneyFlow.Out -> "var(--del-color)"
+               )
+            ]
+
             tooltip.formatter (fun value _ _ ->
                Money.formatShort (decimal value))
          ]
@@ -427,7 +437,7 @@ let render3MonthTimeSeriesChart
                DateTime.numberToDisplayMonth[d.Month.Month])
          ]
 
-         Recharts.bar [ bar.dataKey dataKey; bar.fill color ]
+         Recharts.bar [ bar.dataKey dataKey; bar.fill barFillColor ]
       ]
    ]
 

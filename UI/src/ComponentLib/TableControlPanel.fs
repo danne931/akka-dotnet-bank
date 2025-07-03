@@ -28,7 +28,7 @@ let TableControlPanelComponent
       | Some _ -> None
       |> setFilterView
 
-   React.fragment [
+   classyNode Html.div [ "control-panel-container" ] [
       classyNode Html.div [ "control-panel" ] [
          Html.button [
             attr.children [ Fa.i [ Fa.Solid.Filter ] []; Html.span "Filter" ]

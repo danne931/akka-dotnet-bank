@@ -45,7 +45,9 @@ let App () =
                                  session
                            ]
 
-                           Html.section [ activePage session ]
+                           classyNode Html.section [ "active-page" ] [
+                              activePage session
+                           ]
                         ]
                      ]
                   ]

@@ -2,7 +2,6 @@ module OrgSummary
 
 open Feliz
 open Fable.Core.JS
-open Feliz.Router
 
 open Bank.Org.Domain
 open Bank.Account.Domain
@@ -209,20 +208,10 @@ let OrgSummaryComponent (org: OrgWithAccountProfiles) =
 
          match monthlyMoneyFlow with
          | Deferred.Resolved(Ok(Some analytics)) ->
-            classyNode Html.div [ "analytics" ] [
-               AnalyticsDashboard.render3MonthTimeSeriesChart
-                  flow
-                  analytics.TimeSeries
-                  {| Height = 70; Width = 120 |}
-
-               Html.a [
-                  attr.href ""
-                  attr.text "View Analytics"
-                  attr.onClick (fun e ->
-                     e.preventDefault ()
-                     Router.navigate Routes.AnalyticsUrl.BasePath)
-               ]
-            ]
+            AnalyticsDashboard.render3MonthTimeSeriesChart
+               flow
+               analytics.TimeSeries
+               {| Height = 60; Width = 120 |}
          | _ -> ()
       ]
    ]

@@ -119,7 +119,7 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                   let query =
                      {
                         TransactionBrowserQuery.empty with
-                           Date = Some(UIDomain.DateFilter.Last7Days)
+                           Date = Some UIDomain.DateFilter.Last7Days
                      }
                      |> TransactionBrowserQuery.toQueryParams
                      |> Router.encodeQueryString
@@ -144,7 +144,7 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                   let query =
                      {
                         HistoryBrowserQuery.empty with
-                           Date = Some(UIDomain.DateFilter.Last7Days)
+                           Date = Some UIDomain.DateFilter.Last7Days
                            EmployeeEventType =
                               Some [ EmployeeEventGroupFilter.Purchase ]
                            AccountEventType =
