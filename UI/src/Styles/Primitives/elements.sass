@@ -1,0 +1,40 @@
+body
+  overflow: hidden
+
+progress
+  height: 0.3rem
+  .invalid
+    --progress-color: var(--del-color)
+
+small
+  color: var(--muted-color)
+  .invalid
+    color: var(--del-color)
+
+button
+  text-align: center
+  &.close
+    position: relative
+    float: right
+    padding: 0.3rem .8rem
+    width: auto
+    font-size: .9rem
+
+details[role=list] li a.selected
+  background-color: var(--primary)
+  color: var(--primary-inverse)
+
+details
+  &[role=list].no-caret summary::after
+    background-image: none
+  ul li
+    list-style: none
+
+[data-tooltip]:not(a, button, input)
+  border-bottom: none
+  text-decoration: none
+  cursor: pointer
+
+a.pagination
+  padding: 0 .4rem
+  float: right

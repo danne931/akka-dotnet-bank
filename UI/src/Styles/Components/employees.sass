@@ -1,0 +1,41 @@
+.employee-tables
+  margin-top: 1rem
+
+  h1, h2, h3, h4, h5, h6
+    margin-bottom: 0
+
+p[role='employee-tag']
+  display: inline-block
+  background-color: var(--primary)
+  color: var(--primary-inverse)
+  border-radius: 0.8rem
+  padding: .05rem .4rem
+  font-size: .8rem
+  &.pending
+    background-color: var(--muted-color)
+  &.closed
+    background-color: var(--del-color)
+
+.employee-detail
+  p
+    margin-bottom: 0
+  .employee-detail-top-section
+    p
+      display: inline-block
+      margin-right: .5rem
+    details
+      margin-top: .5rem
+
+.employee-permissions
+  p, li
+    font-size: .8rem
+  li
+    padding: 0
+  i
+    padding-right: .3rem
+  .employee-allowed-feature-access
+    i
+      color: var(--ins-color)
+  .employee-disallowed-feature-access
+    i
+      color: var(--del-color)

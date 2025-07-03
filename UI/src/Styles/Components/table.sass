@@ -1,0 +1,17 @@
+td
+  &[data-tooltip]:not(a, button, input)
+    border-bottom: var(--border-width) solid var(--table-border-color)
+tr:hover
+  td[data-tooltip]:not(a, button, input)
+    border-color: var(--primary)
+
+table.clickable-table tbody tr
+  cursor: pointer
+  border-left: solid transparent 0.2rem
+
+  &.warning
+    border-color: var(--secondary)
+  &.error
+    border-color: var(--del-color)
+  &.selected, &:hover
+    border-color: var(--primary)

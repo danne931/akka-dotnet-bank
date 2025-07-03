@@ -1,0 +1,23 @@
+.action-menu
+  position: fixed
+  right: 0
+  top: 30%
+  transform: translateY(-30%)
+  width: 20px
+  button
+    width: 17rem
+    padding: 0
+    background-color: black
+    grid-template-columns: 18% auto
+    margin: .5rem 0
+    position: relative
+    right: 200%
+    transition: transform 0.2s ease-in-out
+    &:hover
+      transform: translateX(-85%)
+    span
+      padding: .5rem 0
+      &:first-child
+        border-right: var(--border-width) solid var(--border-color)
+      &:last-child
+        text-align: left

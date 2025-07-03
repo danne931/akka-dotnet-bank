@@ -1,0 +1,35 @@
+.account-dashboard
+  .org-summary
+    margin-bottom: 1rem
+    padding-bottom: 1rem
+    box-shadow: 0px 6px 8px -6px rgba(0, 0, 0, 0.8)
+    &.grid
+      grid-template-columns: 30% auto
+    > div
+      display: flex
+      align-items: start
+      justify-content: start
+      flex-direction: column
+    .balance
+      margin-bottom: 0
+      margin-top: 0
+    .pending-deductions
+      margin-top: 0
+      margin-right: .3rem
+      display: inline
+  .accounts
+    grid-template-columns: 30% 30% 30%
+    p
+      color: var(--primary)
+      margin-bottom: 0
+    small
+      display: block
+    a
+      padding: 1rem
+    article
+      > div
+        margin-bottom: 1rem
+    button
+      margin-top: 2rem
+      i
+        padding: 0 .5rem

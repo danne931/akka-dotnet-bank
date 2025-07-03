@@ -319,7 +319,7 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
       classyNode Html.main [ "container-fluid" ] [
          classyNode Html.div [ "grid" ] [
             Html.section [
-               classyNode Html.div [ "title-and-button-container" ] [
+               classyNode Html.div [ "title-with-button-container" ] [
                   Html.h4 [ attr.text "Payments" ]
                   Html.button [
                      attr.children [

@@ -41,7 +41,7 @@ let private onClose _ =
 
 let renderAccounts (orgCtx: OrgProvider.State) =
    React.fragment [
-      classyNode Html.div [ "title-and-button-container" ] [
+      classyNode Html.div [ "title-with-button-container" ] [
          Html.h4 "Accounts"
          Html.button [
             attr.children [

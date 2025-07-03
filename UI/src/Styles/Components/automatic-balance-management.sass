@@ -1,0 +1,54 @@
+.automatic-balance-management
+  padding-right: 1rem
+  .grid
+    align-items: start
+  p
+    margin-bottom: 0
+  small
+    display: block
+  .configure-rule-options
+    h6, small
+      display: inline-block
+    h6
+      margin-right: 1em
+    small
+      color: var(--del-color)
+    .grid
+      grid-template-columns: 30% 68%
+    button
+      i
+        padding: 0 .5rem
+  .balance-management-container
+    grid-template-columns: 60% 40%
+    .balance-management-nodes
+      grid-template-columns: 50% 50%
+      justify-items: start
+      article
+        margin-top: 0
+      .account-node
+        padding-top: 1rem
+        padding-bottom: 1rem
+        min-width: 13rem
+        b
+          color: var(--primary)
+    .balance-management-rules
+      article
+        padding: .8rem 1rem 0 1rem
+        margin-top: 0
+        margin-bottom: 0
+        border-left: solid .1rem transparent
+        &:hover
+          border-color: var(--primary)
+      details[role=list]
+        padding-bottom: .3rem
+        summary::after
+          width: 0
+
+.automatic-balance-create-rule
+  .form-list-container
+    .grid
+      grid-template-columns: 15% 50% 10%
+  .form-external-error-container
+    margin-bottom: 1rem
+  .percent-distribution-progress
+    margin-bottom: 1rem

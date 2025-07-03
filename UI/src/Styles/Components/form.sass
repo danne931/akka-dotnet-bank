@@ -1,0 +1,33 @@
+.form-wrapper
+  fieldset
+    width: 100%
+  // TODO:
+  // Update code with a form-wrapper-header container class
+  // around h6 & buttons.  We want h6 to be inline only if there
+  // is a close button.
+  h6
+    display: inline-block
+    margin-top: 0.35rem
+  // TODO: Remove h6 display block when form-wrapper-header added
+  &.automatic-balance-create-rule
+    h6
+      display: block
+
+.form-submit-controls
+  margin-top: 1.5rem
+  .grid
+    grid-template-columns: 30% auto
+  button
+    padding: .4rem
+
+.form-list-container
+  button
+    width: auto
+    i.fas.fa-plus
+      margin-right: .7rem
+
+.form-list
+  align-items: start
+
+:where(input,select,textarea,fieldset,div)[aria-invalid=true] + small
+  color: var(--del-color)
