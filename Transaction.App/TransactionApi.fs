@@ -273,12 +273,12 @@ let transactionQuery (query: TransactionQuery) =
             ORDER BY {Fields.timestamp} ASC
          ) as rowNumber
       FROM {table}
+      {joinAncillaryTxnInfo |> Option.defaultValue ""}
       WHERE {where}
    ),
    matching AS (
       SELECT {matchSelect}
       FROM deduplicated
-      {joinAncillaryTxnInfo |> Option.defaultValue ""}
       WHERE rowNumber = 1  -- Selects the earliest (originating) event for each correlation_id
       ORDER BY {Fields.timestamp} desc
       LIMIT @limit
