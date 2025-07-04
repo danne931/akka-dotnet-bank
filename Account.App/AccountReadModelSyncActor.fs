@@ -285,8 +285,6 @@ let private accountEventReducer
          "cardId",
          aeSqlWriter.cardId (
             match evt with
-            | AccountEvent.DebitPending e ->
-               Some e.Data.EmployeePurchaseReference.CardId
             | AccountEvent.DebitRefunded e ->
                Some e.Data.EmployeePurchaseReference.CardId
             | AccountEvent.DebitSettled e ->
@@ -439,7 +437,7 @@ let sqlParamReducer
          acc with
             AccountCreate = qParams :: acc.AccountCreate
       }
-   | AccountEvent.AccountClosed e ->
+   | AccountEvent.AccountClosed _ ->
       let qParams = [
          "accountId", AccountSqlWriter.accountId evt.AccountId
          "status", AccountSqlWriter.status AccountStatus.Closed
@@ -451,10 +449,19 @@ let sqlParamReducer
       }
    | AccountEvent.DepositedCash e ->
       AccountBalanceReducer.depositFunds accountId e.Data.Amount acc
-   | AccountEvent.DebitPending e ->
-      AccountBalanceReducer.reserveFunds accountId e.Data.Amount acc
+   // DebitPending is Deferred in the actor rather than Persisted so
+   // will not see this event consumed by the read journal.
+   | AccountEvent.DebitPending _ -> acc
    | AccountEvent.DebitSettled e ->
-      AccountBalanceReducer.settleFunds accountId e.Data.Amount acc
+      let qParams = [
+         "accountId", AccountSqlWriter.accountId accountId
+         "balanceDelta", Sql.money -e.Data.Amount
+      ]
+
+      {
+         acc with
+            AccountUpdate = qParams :: acc.AccountUpdate
+      }
    | AccountEvent.DebitFailed e ->
       AccountBalanceReducer.releaseReservedFunds accountId e.Data.Amount acc
    | AccountEvent.DebitRefunded e ->
