@@ -44,6 +44,7 @@ type Response = {
    Status: string
    Reason: string
    TransactionId: string
+   ExpectedSettlementDate: DateTime option
 }
 
 type InProgressTransfers = Dictionary<string, int * Request>
@@ -62,6 +63,7 @@ let processRequest (req: Request) =
       Status = ""
       Reason = ""
       TransactionId = req.TransactionId
+      ExpectedSettlementDate = None
    }
 
    if req.Action = "TransferRequest" then
@@ -119,6 +121,7 @@ let processRequest (req: Request) =
             {
                res with
                   Status = "VerifyingAccountInfo"
+                  ExpectedSettlementDate = Some(DateTime.UtcNow.AddDays 3)
             }
          else
             inMemoryState.Remove res.TransactionId |> ignore

@@ -92,6 +92,7 @@ type DomesticTransferSaga = {
    Events: DomesticTransferSagaEvent list
    Status: DomesticTransferProgress
    TransferInfo: BaseDomesticTransferInfo
+   ExpectedSettlementDate: DateTime
    LifeCycle: SagaLifeCycle<Activity>
    ReasonForRetryServiceAck: DomesticTransferFailReason option
 } with
@@ -128,6 +129,7 @@ let applyStartEvent
       StartEvent = start
       Events = []
       TransferInfo = evt.Data.BaseInfo
+      ExpectedSettlementDate = evt.Data.ExpectedSettlementDate
       ReasonForRetryServiceAck = None
       LifeCycle = {
          SagaLifeCycle.empty with
@@ -154,6 +156,7 @@ let applyStartEvent
       StartEvent = start
       Events = []
       TransferInfo = evt.Data.BaseInfo
+      ExpectedSettlementDate = evt.Data.ExpectedSettlementDate
       ReasonForRetryServiceAck = None
       LifeCycle =
          let timeUntil = evt.Data.BaseInfo.ScheduledDate - DateTime.UtcNow
@@ -209,9 +212,17 @@ let applyEvent
                |> finishActivity Activity.TransferServiceAck
                |> addActivity Activity.SendTransferInitiatedNotification
         }
-      | DomesticTransferThirdPartyUpdate.ProgressDetail _ -> {
+      | DomesticTransferThirdPartyUpdate.ProgressDetail detail -> {
          saga with
             Status = DomesticTransferProgress.ThirdParty progress
+            ExpectedSettlementDate =
+               if
+                  detail.ExpectedSettlementDate.Date
+                  <> saga.ExpectedSettlementDate.Date
+               then
+                  detail.ExpectedSettlementDate
+               else
+                  saga.ExpectedSettlementDate
         }
       | DomesticTransferThirdPartyUpdate.Settled -> {
          saga with
@@ -404,6 +415,7 @@ let onEventPersisted
       ScheduledDate = info.ScheduledDate
       Memo = info.Memo
       Status = currentState.Status
+      ExpectedSettlementDate = currentState.ExpectedSettlementDate
    }
 
    let deductFromSenderAccount () =
@@ -434,7 +446,7 @@ let onEventPersisted
 
       dep.getDomesticTransferRef () <! msg
 
-   let updateTransferProgress progress =
+   let updateTransferProgress (progress: DomesticTransferThirdPartyUpdate) =
       let cmd =
          UpdateDomesticTransferProgressCommand.create
             correlationId
@@ -442,6 +454,11 @@ let onEventPersisted
             {
                BaseInfo = info
                InProgressInfo = progress
+               NewExpectedSettlementDate =
+                  match progress with
+                  | DomesticTransferThirdPartyUpdate.ProgressDetail p ->
+                     Some p.ExpectedSettlementDate
+                  | _ -> None
             }
 
       let msg =
@@ -502,7 +519,12 @@ let onEventPersisted
             updateTransferProgress progress
 
          sendTransferInitiatedEmail ()
-      | DomesticTransferThirdPartyUpdate.ProgressDetail _ -> ()
+      | DomesticTransferThirdPartyUpdate.ProgressDetail detail ->
+         if
+            detail.ExpectedSettlementDate.Date
+            <> previousState.ExpectedSettlementDate.Date
+         then
+            updateTransferProgress progress
       | DomesticTransferThirdPartyUpdate.Settled -> updateTransferAsComplete ()
       | DomesticTransferThirdPartyUpdate.Failed reason ->
          if currentState.RequiresTransferServiceDevelopmentFix then

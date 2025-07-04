@@ -31,12 +31,6 @@ type private NetworkRequest =
 type private InfraFailReason = DomesticTransferInfraFailReason
 type private FailReason = DomesticTransferThirdPartyFailReason
 
-let private progressFromResponse (response: DomesticTransferServiceResponse) =
-   match response.Status with
-   | "Complete" -> DomesticTransferThirdPartyUpdate.Settled
-   | "ReceivedRequest" -> DomesticTransferThirdPartyUpdate.ServiceAckReceived
-   | status -> DomesticTransferThirdPartyUpdate.ProgressDetail status
-
 let private failReasonFromError (err: string) : FailReason =
    match err with
    | Contains "CorruptData" -> FailReason.Infra InfraFailReason.CorruptData
@@ -87,7 +81,19 @@ let onSuccessfulServiceResponse
 
    let latestProgressUpdate =
       if res.Ok then
-         progressFromResponse res
+         match res.Status with
+         | "Complete" -> DomesticTransferThirdPartyUpdate.Settled
+         | "ReceivedRequest" ->
+            DomesticTransferThirdPartyUpdate.ServiceAckReceived
+         | status ->
+            let expectedSettlementDate =
+               res.ExpectedSettlementDate
+               |> Option.defaultValue txn.ExpectedSettlementDate
+
+            DomesticTransferThirdPartyUpdate.ProgressDetail {
+               Detail = status
+               ExpectedSettlementDate = expectedSettlementDate
+            }
       else
          res.Reason
          |> failReasonFromError
@@ -147,6 +153,7 @@ let protectedAction
                      Status = ""
                      Reason = "CorruptData"
                      TransactionId = string txn.TransferId
+                     ExpectedSettlementDate = None
                   }
                | err -> Error err
    }

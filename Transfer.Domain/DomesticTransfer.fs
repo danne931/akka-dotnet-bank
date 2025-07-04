@@ -114,10 +114,15 @@ type DomesticTransferThirdPartyFailReason =
       | NoTransferFound -> "No Transfer Found During Progress Check"
       | Infra infraRelated -> infraRelated.Display
 
+type DomesticTransferThirdPartyProgressDetail = {
+   Detail: string
+   ExpectedSettlementDate: DateTime
+}
+
 [<RequireQualifiedAccess>]
 type DomesticTransferThirdPartyUpdate =
    | ServiceAckReceived
-   | ProgressDetail of string
+   | ProgressDetail of DomesticTransferThirdPartyProgressDetail
    | Settled
    | Failed of DomesticTransferThirdPartyFailReason
 
@@ -172,6 +177,7 @@ type DomesticTransfer = {
    InitiatedBy: Initiator
    Amount: decimal
    ScheduledDate: DateTime
+   ExpectedSettlementDate: DateTime
    Status: DomesticTransferProgress
    Memo: string option
 }

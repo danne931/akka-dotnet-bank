@@ -433,18 +433,20 @@ module DomesticTransferCommand =
          let input = cmd.Data
          let! _ = amountValidator "Transfer amount" input.Amount
 
+         let scheduledDate =
+            input.ScheduledDateSeedOverride |> Option.defaultValue cmd.Timestamp
+
          return
             BankEvent.create2<DomesticTransferInput, DomesticTransferPending>
                cmd
                {
                   FromSchedule = input.OriginatedFromSchedule
+                  ExpectedSettlementDate = scheduledDate.AddDays 5
                   BaseInfo = {
                      TransferId =
                         cmd.CorrelationId |> CorrelationId.get |> TransferId
                      InitiatedBy = cmd.InitiatedBy
-                     ScheduledDate =
-                        input.ScheduledDateSeedOverride
-                        |> Option.defaultValue cmd.Timestamp
+                     ScheduledDate = scheduledDate
                      Amount = input.Amount
                      Sender = input.Sender
                      Recipient = input.Recipient
@@ -476,7 +478,7 @@ module ScheduleDomesticTransferCommand =
          let input = cmd.Data.TransferInput
          let! _ = amountValidator "Transfer amount" input.Amount
 
-         let! _ =
+         let! scheduledDate =
             datePresentOrFutureValidator "Transfer date" cmd.Data.ScheduledDate
 
          return
@@ -490,12 +492,13 @@ module ScheduleDomesticTransferCommand =
                      TransferId =
                         cmd.CorrelationId |> CorrelationId.get |> TransferId
                      InitiatedBy = cmd.InitiatedBy
-                     ScheduledDate = cmd.Data.ScheduledDate
+                     ScheduledDate = scheduledDate
                      Amount = input.Amount
                      Sender = input.Sender
                      Recipient = input.Recipient
                      Memo = input.Memo
                   }
+                  ExpectedSettlementDate = scheduledDate.AddDays 5
                }
       }
 

@@ -1,5 +1,7 @@
 module DomesticTransfer.Service.Domain
 
+open System
+
 [<RequireQualifiedAccess>]
 type DomesticTransferServiceAction =
    | TransferAck
@@ -23,6 +25,7 @@ type DomesticTransferServiceResponse = {
    Recipient: DomesticTransferServiceRecipient
    Ok: bool
    Status: string
+   ExpectedSettlementDate: DateTime option
    Reason: string
    TransactionId: string
 }

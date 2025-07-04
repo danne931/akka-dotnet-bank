@@ -189,6 +189,15 @@ let private canAddCategoryAndNotes =
    | TransactionType.Purchase -> true
    | _ -> false
 
+let private renderLabeledInfo (label: string) (text: string) =
+   Html.div [
+      Html.small $"{label}:"
+      Html.p [
+         attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
+         attr.text text
+      ]
+   ]
+
 let renderTransactionInfo
    (org: OrgWithAccountProfiles)
    (txnInfo: TransactionWithAncillaryInfo)
@@ -214,6 +223,25 @@ let renderTransactionInfo
          org.DomesticTransferRecipients
          txnInfo.Transaction
 
+   let expectedSettlementDate =
+      match txnInfo.Transaction.Type with
+      | TransactionType.DomesticTransfer ->
+         txnInfo.Transaction.History
+         |> List.choose (function
+            | History.Account h ->
+               match h.Event with
+               | AccountEvent.DomesticTransferPending e ->
+                  Some(e.Timestamp, e.Data.ExpectedSettlementDate)
+               | AccountEvent.DomesticTransferProgress e ->
+                  e.Data.NewExpectedSettlementDate
+                  |> Option.map (fun date -> e.Timestamp, date)
+               | _ -> None
+            | _ -> None)
+         |> List.sortByDescending fst
+         |> List.tryHead
+         |> Option.map snd
+      | _ -> None
+
    React.fragment [
       Html.h6 txn.Name
 
@@ -227,21 +255,8 @@ let renderTransactionInfo
       ]
 
       Html.section [
-         Html.div [
-            Html.small "Status:"
-            Html.p [
-               attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
-               attr.text txnInfo.Transaction.Status.Display
-            ]
-         ]
-
-         Html.div [
-            Html.small "From:"
-            Html.p [
-               attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
-               attr.text txn.Source
-            ]
-         ]
+         renderLabeledInfo "Status" txnInfo.Transaction.Status.Display
+         renderLabeledInfo "From" txn.Source
 
          match
             isEditingNickname,
@@ -314,14 +329,14 @@ let renderTransactionInfo
                      MerchantProvider.Action.UpdateMerchantAlias merchant
                      |> merchantDispatch
             |}
-         | _ ->
-            Html.div [
-               Html.small "To:"
-               Html.p [
-                  attr.style [ style.display.inlineBlock; style.marginLeft 10 ]
-                  attr.text txn.Destination
-               ]
-            ]
+         | _ -> renderLabeledInfo "To" txn.Destination
+
+         match expectedSettlementDate with
+         | Some date ->
+            renderLabeledInfo
+               "Funds Will Arrive By"
+               (DateTime.dateUIFriendly date)
+         | None -> ()
 
          classyNode Html.section [ "transaction-detail-history" ] [
             Html.small "History:"

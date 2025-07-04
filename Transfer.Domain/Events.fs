@@ -32,17 +32,22 @@ type InternalTransferBetweenOrgsFailed = {
    Reason: InternalTransferFailReason
 }
 
-type DomesticTransferScheduled = { BaseInfo: BaseDomesticTransferInfo }
+type DomesticTransferScheduled = {
+   BaseInfo: BaseDomesticTransferInfo
+   ExpectedSettlementDate: DateTime
+}
 
 type DomesticTransferPending = {
    /// Indicates whether this transfer originated from a scheduled job.
    FromSchedule: bool
+   ExpectedSettlementDate: DateTime
    BaseInfo: BaseDomesticTransferInfo
 }
 
 type DomesticTransferProgressUpdated = {
    BaseInfo: BaseDomesticTransferInfo
    InProgressInfo: DomesticTransferThirdPartyUpdate
+   NewExpectedSettlementDate: DateTime option
 }
 
 type DomesticTransferSettled = {
@@ -83,6 +88,7 @@ module TransferEventToDomesticTransfer =
          InitiatedBy = evt.InitiatedBy
          Amount = info.Amount
          ScheduledDate = info.ScheduledDate
+         ExpectedSettlementDate = evt.Data.ExpectedSettlementDate
          Memo = info.Memo
          Status = DomesticTransferProgress.WaitingForTransferServiceAck
       }

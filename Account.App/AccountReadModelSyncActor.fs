@@ -2,8 +2,6 @@
 module AccountReadModelSyncActor
 
 open System
-open Akkling
-open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Lib.Types
@@ -36,6 +34,7 @@ type SqlParamsDerivedFromAccountEvents = {
    InternalTransferWithinOrg: SqlParams
    InternalTransferBetweenOrgs: SqlParams
    DomesticTransfer: SqlParams
+   DomesticTransferUpdate: SqlParams
    PartnerBankInitialized: SqlParams
    BillingCycle: SqlParams
    DomesticTransferRecipient: SqlParams
@@ -235,18 +234,17 @@ let private domesticRecipientReducer
 let private domesticTransferStatusReducer
    (acc: SqlParamsDerivedFromAccountEvents)
    (status: DomesticTransferProgress)
-   (info: BaseDomesticTransferInfo)
+   (transferId: TransferId)
    =
-   let qParams =
-      domesticTransferBaseSqlParams info
-      @ [
-         "status", TransferSqlWriter.Domestic.status status
-         "statusDetail", TransferSqlWriter.Domestic.statusDetail status
-      ]
+   let qParams = [
+      "transferId", TransferSqlWriter.transferId transferId
+      "status", TransferSqlWriter.Domestic.status status
+      "statusDetail", TransferSqlWriter.Domestic.statusDetail status
+   ]
 
    {
       acc with
-         DomesticTransfer = qParams :: acc.DomesticTransfer
+         DomesticTransferUpdate = qParams :: acc.DomesticTransferUpdate
    }
 
 let private accountEventReducer
@@ -637,6 +635,9 @@ let sqlParamReducer
          @ [
             "status", TransferSqlWriter.Domestic.status status
             "statusDetail", TransferSqlWriter.Domestic.statusDetail status
+            "expectedSettlementDate",
+            TransferSqlWriter.Domestic.expectedSettlementDate
+               e.Data.ExpectedSettlementDate
          ]
 
       {
@@ -658,8 +659,12 @@ let sqlParamReducer
       let domesticTransferParams =
          domesticTransferBaseSqlParams info
          @ [
+
             "status", TransferSqlWriter.Domestic.status status
             "statusDetail", TransferSqlWriter.Domestic.statusDetail status
+            "expectedSettlementDate",
+            TransferSqlWriter.Domestic.expectedSettlementDate
+               e.Data.ExpectedSettlementDate
          ]
 
       {
@@ -669,10 +674,26 @@ let sqlParamReducer
       }
       |> AccountBalanceReducer.reserveFunds accountId info.Amount
    | AccountEvent.DomesticTransferProgress e ->
-      domesticTransferStatusReducer
-         acc
-         (DomesticTransferProgress.ThirdParty e.Data.InProgressInfo)
-         e.Data.BaseInfo
+      let status = DomesticTransferProgress.ThirdParty e.Data.InProgressInfo
+
+      let qParams = [
+         "transferId", TransferSqlWriter.transferId e.Data.BaseInfo.TransferId
+         "status", TransferSqlWriter.Domestic.status status
+         "statusDetail", TransferSqlWriter.Domestic.statusDetail status
+      ]
+
+      let qParams =
+         match e.Data.NewExpectedSettlementDate with
+         | Some date ->
+            ("expectedSettlementDate",
+             TransferSqlWriter.Domestic.expectedSettlementDate date)
+            :: qParams
+         | None -> qParams
+
+      {
+         acc with
+            DomesticTransferUpdate = qParams :: acc.DomesticTransferUpdate
+      }
    | AccountEvent.DomesticTransferFailed e ->
       let info = e.Data.BaseInfo
 
@@ -680,7 +701,7 @@ let sqlParamReducer
          domesticTransferStatusReducer
             acc
             (DomesticTransferProgress.Failed e.Data.Reason)
-            info
+            info.TransferId
          |> AccountBalanceReducer.releaseReservedFunds accountId info.Amount
 
       let updatedRecipientStatus =
@@ -696,7 +717,7 @@ let sqlParamReducer
          let qParams = [
             "recipientAccountId",
             TransferSqlWriter.DomesticRecipient.recipientAccountId
-               e.Data.BaseInfo.Recipient.RecipientAccountId
+               info.Recipient.RecipientAccountId
 
             "status", TransferSqlWriter.DomesticRecipient.status status
          ]
@@ -711,7 +732,10 @@ let sqlParamReducer
       let info = e.Data.BaseInfo
 
       let acc =
-         domesticTransferStatusReducer acc DomesticTransferProgress.Settled info
+         domesticTransferStatusReducer
+            acc
+            DomesticTransferProgress.Settled
+            info.TransferId
          |> AccountBalanceReducer.settleFunds accountId info.Amount
 
       match e.Data.FromRetry with
@@ -950,6 +974,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          InternalTransferWithinOrg = []
          InternalTransferBetweenOrgs = []
          DomesticTransfer = []
+         DomesticTransferUpdate = []
          DomesticTransferRecipient = []
          UpdatedDomesticTransferRecipientStatus = []
          UpdatedDomesticTransferRecipientNickname = []
@@ -1270,11 +1295,13 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       $"""
       INSERT into {TransferSqlMapper.Table.domesticTransfer}
          ({TransferFields.transferId},
+          {TransferFields.Domestic.expectedSettlementDate},
           {TransferFields.Domestic.status},
           {TransferFields.Domestic.statusDetail},
           {TransferFields.Domestic.recipientAccountId})
       VALUES
          (@transferId,
+          @expectedSettlementDate,
           @status::{TransferTypeCast.domesticTransferStatus},
           @statusDetail,
           @recipientAccountId)
@@ -1284,6 +1311,19 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          {TransferFields.Domestic.statusDetail} = @statusDetail;
       """,
       sqlParamsDerivedFromAccountEvents.DomesticTransfer
+
+      $"""
+      UPDATE {TransferSqlMapper.Table.domesticTransfer}
+      SET
+         {TransferFields.Domestic.expectedSettlementDate} = COALESCE(@expectedSettlementDate, {TransferFields.Domestic.expectedSettlementDate}),
+         {TransferFields.Domestic.status} = @status::{TransferTypeCast.domesticTransferStatus},
+         {TransferFields.Domestic.statusDetail} = @statusDetail
+      WHERE {TransferFields.transferId} = @transferId;
+      """,
+      sqlParamsDerivedFromAccountEvents.DomesticTransferUpdate
+      |> List.map (
+         Lib.Postgres.addCoalescableParamsForUpdate [ "expectedSettlementDate" ]
+      )
    ]
 
 let initProps

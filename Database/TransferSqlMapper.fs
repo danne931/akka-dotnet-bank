@@ -59,6 +59,7 @@ module TransferFields =
       let status = "transfer_status"
       let statusDetail = "transfer_status_detail"
       let recipientAccountId = "recipient_account_id"
+      let expectedSettlementDate = "expected_settlement_date"
 
    // Specific to domestic_transfer_recipient table
    module DomesticRecipient =
@@ -199,6 +200,9 @@ module TransferSqlReader =
          AccountId = AccountSqlReader.accountId read
       }
 
+      let expectedSettlementDate (read: RowReader) =
+         read.dateTime TransferFields.Domestic.expectedSettlementDate
+
       let transfer (read: RowReader) : DomesticTransfer = {
          TransferId = transferId read
          InitiatedBy = {
@@ -211,6 +215,7 @@ module TransferSqlReader =
          Recipient = DomesticRecipient.recipient read
          Amount = amount read
          ScheduledDate = scheduledAt read
+         ExpectedSettlementDate = expectedSettlementDate read
       }
 
 module TransferSqlWriter =
@@ -272,6 +277,8 @@ module TransferSqlWriter =
          status |> Serialization.serialize |> Sql.jsonb
 
       let recipientAccountId = AccountSqlWriter.accountId
+
+      let expectedSettlementDate (date: DateTime) = Sql.timestamptz date
 
    module DomesticRecipient =
       let recipientAccountId = AccountSqlWriter.accountId

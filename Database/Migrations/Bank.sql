@@ -738,6 +738,7 @@ CREATE TYPE domestic_transfer_status AS ENUM (
 
 CREATE TABLE transfer_domestic(
    transfer_id UUID PRIMARY KEY REFERENCES transfer,
+   expected_settlement_date TIMESTAMPTZ NOT NULL,
    transfer_status domestic_transfer_status NOT NULL,
    transfer_status_detail JSONB NOT NULL,
    recipient_account_id UUID REFERENCES transfer_domestic_recipient
