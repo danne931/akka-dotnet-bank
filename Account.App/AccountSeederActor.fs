@@ -30,7 +30,12 @@ module aeFields = AccountEventSqlMapper.Fields
 
 let randomAmount min max =
    let rnd = new Random()
-   decimal (rnd.Next(min, max)) + decimal (rnd.NextDouble())
+
+   Math.Round(
+      decimal (rnd.Next(min, max)) + decimal (rnd.NextDouble()),
+      2,
+      MidpointRounding.AwayFromZero
+   )
 
 type Status =
    | AwaitingClusterUp

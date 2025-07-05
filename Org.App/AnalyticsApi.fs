@@ -299,7 +299,11 @@ let moneyFlowMonthlyTimeSeriesAnalytics
          })
 
       let avg sum =
-         Math.Round(sum / decimal series.Length, 2)
+         Math.Round(
+            sum / decimal series.Length,
+            2,
+            MidpointRounding.AwayFromZero
+         )
 
       return {
          TimeSeries = series
