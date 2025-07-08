@@ -22,7 +22,6 @@ type PlatformPaymentSagaEvent =
    | PaymentFulfilled of PaymentFulfilled
    | PaymentFailed of TransferId * PlatformPaymentFailReason
    | PaymentRequestNotificationSentToPayer
-   | PaymentFulfilledNotificationSentToPayee
    | PaymentDeclinedNotificationSentToPayee
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
@@ -40,7 +39,6 @@ type PlatformPaymentSagaStatus =
 type Activity =
    | NotifyPayerOfRequest
    | NotifyPayeeOfDecline
-   | NotifyPayeeOfFulfillment
    | WaitForPayment
 
    interface IActivity with
@@ -53,8 +51,7 @@ type Activity =
          match x with
          | WaitForPayment -> None
          | NotifyPayerOfRequest
-         | NotifyPayeeOfDecline
-         | NotifyPayeeOfFulfillment -> Some(TimeSpan.FromMinutes 4.)
+         | NotifyPayeeOfDecline -> Some(TimeSpan.FromMinutes 4.)
 
 type PlatformPaymentSaga = {
    StartEvent: PlatformPaymentSagaStartEvent
@@ -112,15 +109,10 @@ let applyEvent
             |> finishActivity Activity.WaitForPayment
             |> addActivity Activity.NotifyPayeeOfDecline
      }
-   | Event.PaymentFulfilled p -> {
+   | Event.PaymentFulfilled _ -> {
       saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.WaitForPayment
-            |> addActivity Activity.NotifyPayeeOfFulfillment
-         Status =
-            PaymentRequestStatus.Fulfilled p
-            |> PlatformPaymentSagaStatus.InProgress
+         LifeCycle = saga.LifeCycle |> finishActivity Activity.WaitForPayment
+         Status = PlatformPaymentSagaStatus.Completed
      }
    | Event.PaymentFailed(_, reason) -> {
       saga with
@@ -131,12 +123,6 @@ let applyEvent
       saga with
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.NotifyPayerOfRequest
-     }
-   | Event.PaymentFulfilledNotificationSentToPayee -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle |> finishActivity Activity.NotifyPayeeOfFulfillment
-         Status = PlatformPaymentSagaStatus.Completed
      }
    | Event.PaymentDeclinedNotificationSentToPayee -> {
       saga with
@@ -182,8 +168,6 @@ let stateTransition
          activityIsDone Activity.WaitForPayment
       | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->
          activityIsDone Activity.NotifyPayerOfRequest
-      | PlatformPaymentSagaEvent.PaymentFulfilledNotificationSentToPayee ->
-         activityIsDone Activity.NotifyPayeeOfFulfillment
       | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
          activityIsDone Activity.NotifyPayeeOfDecline
 
@@ -232,19 +216,6 @@ let onEventPersisted
    let correlationId = PaymentId.toCorrelationId payment.Id
    let emailRef = dep.getEmailRef ()
 
-   let notifyPayeeOfPaymentFulfilled () =
-      let msg =
-         EmailMessage.create
-            payment.Payee.OrgId
-            correlationId
-            (EmailInfo.PlatformPaymentDeposited {
-               PayerBusinessName = payment.Payer.OrgName
-               PayeeBusinessName = payment.Payee.OrgName
-               Amount = payment.Amount
-            })
-
-      emailRef <! msg
-
    let notifyPayeeOfPaymentDecline () =
       let msg =
          EmailMessage.create
@@ -261,17 +232,15 @@ let onEventPersisted
    match evt with
    | Event.PaymentRequestCancelled -> ()
    | Event.PaymentRequestDeclined -> notifyPayeeOfPaymentDecline ()
-   | Event.PaymentFulfilled _ -> notifyPayeeOfPaymentFulfilled ()
+   | Event.PaymentFulfilled _ -> ()
    | Event.PaymentFailed _ -> ()
    | Event.ResetInProgressActivityAttempts
    | Event.PaymentDeclinedNotificationSentToPayee
    | Event.PaymentRequestNotificationSentToPayer
-   | Event.PaymentFulfilledNotificationSentToPayee -> ()
    | Event.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
          | Activity.NotifyPayerOfRequest ->
             notifyPayerOfPaymentRequest emailRef payment
          | Activity.NotifyPayeeOfDecline -> notifyPayeeOfPaymentDecline ()
-         | Activity.NotifyPayeeOfFulfillment -> notifyPayeeOfPaymentFulfilled ()
          | Activity.WaitForPayment -> ()

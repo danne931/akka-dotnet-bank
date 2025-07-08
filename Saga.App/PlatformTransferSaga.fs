@@ -130,13 +130,6 @@ type PlatformTransferSaga = {
       x.LifeCycle.InProgress
       |> List.exists _.Activity.IsWaitForScheduledTransferActivation
 
-   member x.FromPaymentRequest =
-      match x.StartEvent with
-      | PlatformTransferSagaStartEvent.SenderReservedFunds(e, _) ->
-         e.Data.BaseInfo.FromPaymentRequest
-      | PlatformTransferSagaStartEvent.ScheduleTransferRequest e ->
-         e.Data.BaseInfo.FromPaymentRequest
-
 let applyStartEvent
    (evt: PlatformTransferSagaStartEvent)
    (timestamp: DateTime)
@@ -304,19 +297,14 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
             saga.LifeCycle
             |> finishActivity Activity.SettleTransfer
             |> addActivity Activity.SendTransferNotification
-            |> if saga.FromPaymentRequest.IsNone then
-                  addActivity Activity.SendTransferDepositNotification
-               else
-                  id
+            |> addActivity Activity.SendTransferDepositNotification
      }
    | Event.TransferNotificationSent -> {
       saga with
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.SendTransferNotification
          Status =
-            if saga.FromPaymentRequest.IsSome then
-               PlatformTransferSagaStatus.Completed
-            elif saga.TransferDepositNotificationSent then
+            if saga.TransferDepositNotificationSent then
                PlatformTransferSagaStatus.Completed
             else
                saga.Status
@@ -439,7 +427,7 @@ let onEventPersisted
             Memo = transfer.Memo
             ScheduledDateSeedOverride = None
             OriginatedFromSchedule = true
-            OriginatedFromPaymentRequest = currentState.FromPaymentRequest
+            OriginatedFromPaymentRequest = transfer.FromPaymentRequest
          } with
             CorrelationId = correlationId
       }
@@ -463,6 +451,7 @@ let onEventPersisted
                SenderAccountName = transfer.Sender.Name
                RecipientBusinessName = transfer.Recipient.Name
                Amount = transfer.Amount
+               OriginatedFromPaymentRequest = transfer.FromPaymentRequest
             })
 
       dep.getEmailRef () <! msg
@@ -476,6 +465,7 @@ let onEventPersisted
                SenderBusinessName = transfer.Sender.Name
                RecipientAccountName = transfer.Recipient.Name
                Amount = transfer.Amount
+               OriginatedFromPaymentRequest = transfer.FromPaymentRequest
             })
 
       dep.getEmailRef () <! msg
@@ -557,9 +547,7 @@ let onEventPersisted
    | TransferEvent.SenderReleasedReservedFunds -> ()
    | TransferEvent.TransferSettled ->
       transferSentEmail ()
-
-      if currentState.FromPaymentRequest.IsNone then
-         transferDepositEmail ()
+      transferDepositEmail ()
    | TransferEvent.RecipientDepositUndo -> ()
    | TransferEvent.ResetInProgressActivityAttempts -> ()
    | TransferEvent.EvaluateRemainingWork ->

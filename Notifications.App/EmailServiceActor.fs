@@ -128,6 +128,7 @@ let private emailPropsFromMessage
          sender = info.SenderAccountName
          recipient = info.RecipientBusinessName
          amount = $"${info.Amount}"
+         originatedFromPaymentRequest = info.OriginatedFromPaymentRequest.IsSome
       |}
      }
    | EmailInfo.InternalTransferBetweenOrgsDeposited info -> {
@@ -138,31 +139,12 @@ let private emailPropsFromMessage
          sender = info.SenderBusinessName
          recipient = info.RecipientAccountName
          amount = $"${info.Amount}"
+         originatedFromPaymentRequest = info.OriginatedFromPaymentRequest.IsSome
       |}
      }
    | EmailInfo.PlatformPaymentRequested info -> {
       OrgId = msg.OrgId
       Event = "platform-payment-requested"
-      Email = None
-      Data = {|
-         payee = info.PayeeBusinessName
-         payer = info.PayerBusinessName
-         amount = $"${info.Amount}"
-      |}
-     }
-   | EmailInfo.PlatformPaymentPaid info -> {
-      OrgId = msg.OrgId
-      Event = "platform-payment-paid"
-      Email = None
-      Data = {|
-         payee = info.PayeeBusinessName
-         payer = info.PayerBusinessName
-         amount = $"${info.Amount}"
-      |}
-     }
-   | EmailInfo.PlatformPaymentDeposited info -> {
-      OrgId = msg.OrgId
-      Event = "platform-payment-deposited"
       Email = None
       Data = {|
          payee = info.PayeeBusinessName
@@ -385,16 +367,6 @@ let onSuccessfulServiceResponse
          |> Some
       | EmailInfo.PlatformPaymentRequested _ ->
          PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer
-         |> AppSaga.Message.platformPayment orgId corrId
-         |> Some
-      (*
-      | EmailInfo.PlatformPaymentPaid _ ->
-         PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer
-         |> AppSaga.Message.platformPayment orgId corrId
-         |> Some
-      *)
-      | EmailInfo.PlatformPaymentDeposited _ ->
-         PlatformPaymentSagaEvent.PaymentFulfilledNotificationSentToPayee
          |> AppSaga.Message.platformPayment orgId corrId
          |> Some
       | EmailInfo.PlatformPaymentDeclined _ ->

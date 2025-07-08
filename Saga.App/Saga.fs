@@ -243,8 +243,6 @@ type Event =
          | PlatformPaymentSagaEvent.PaymentFailed _ -> "PlatformPaymentFailed"
          | PlatformPaymentSagaEvent.PaymentFulfilled _ ->
             "PlatformPaymentFulfilled"
-         | PlatformPaymentSagaEvent.PaymentFulfilledNotificationSentToPayee ->
-            "PlatformPaymentFulfilledNotificationSentToPayee"
          | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
             "PlatformPaymentDeclinedNotificationSentToPayee"
          | PlatformPaymentSagaEvent.EvaluateRemainingWork ->

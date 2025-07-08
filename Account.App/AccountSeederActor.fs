@@ -770,7 +770,7 @@ let seedPayments
    (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
    =
    task {
-      let buffer = DateTime.UtcNow.AddDays(-2)
+      let buffer = DateTime.UtcNow.AddDays -2
 
       // Payment requests from main demo org to other orgs
       let requestsFromDemoAccount = [
@@ -817,38 +817,6 @@ let seedPayments
       // Some payment requests fulfilled
       let payer, request = List.head requestsFromDemoAccount
       let info = request.Data.BaseInfo
-
-      (*
-      let msg =
-         {
-            PlatformPaymentCommand.create
-               {
-                  Id = InitiatedById payer.AccountOwnerId
-                  Name = payer.BusinessName
-               }
-               {
-                  RequestedPayment = {
-                     Memo = request.Data.Memo
-                     Expiration =
-                        request
-                        |> RequestPlatformPaymentCommand.toEvent
-                        |> Result.toValueOption
-                        |> _.Value.Data.Expiration
-                     BaseInfo = info
-                  }
-                  PaymentMethod = PaymentMethod.Platform payer.PrimaryAccountId
-               } with
-               Timestamp = buffer.AddHours 2
-         }
-         |> AccountCommand.PlatformPayment
-         |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message (
-            ParentAccountId.get payer.ParentAccountId
-         )
-
-      accountRef <! msg
-      *)
-
 
       let msg =
          let ts = buffer.AddHours 2
