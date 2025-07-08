@@ -228,7 +228,7 @@ let PaymentDetailComponent
       React.useElmish (init, update notifyParentOnUpdate, [||])
 
    let baseInfo = payment.BaseInfo
-   let isPaymentOutgoing = session.OrgId = baseInfo.Payee.OrgId
+   let isPaymentRequestOutgoing = session.OrgId = baseInfo.Payee.OrgId
    let accounts = org.Accounts
 
    let paymentPendingApproval =
@@ -275,7 +275,7 @@ let PaymentDetailComponent
 
       Html.br []
 
-      if isPaymentOutgoing then
+      if isPaymentRequestOutgoing then
          Html.div [
             Html.small "Request sent to:"
             Html.p [
@@ -343,63 +343,85 @@ let PaymentDetailComponent
          ]
       ]
 
-      if state.IsFulfillingPayment then
-         PaymentFulfillmentFormComponent
-            session
-            accounts
-            org.Org.CommandApprovalRules
-            payment
-            (fun receipt ->
-               dispatch Msg.TogglePaymentFulfillment
-               notifyParentOnUpdate receipt)
-            (fun cmdApprovalRequest ->
-               cmdApprovalRequest
-               |> OrgCommand.RequestCommandApproval
-               |> OrgProvider.Msg.OrgCommand
-               |> orgDispatch
 
-               dispatch Msg.SubmitPaymentForApproval)
-      else
-         match canManagePayment, isPaymentOutgoing with
-         | true, true ->
-            Html.button [
-               attr.classes [ "outline" ]
-               attr.text "Cancel payment request"
-               attr.onClick (fun _ ->
-                  (session.AsInitiator, Confirmation.CancelPayment payment)
-                  |> Msg.ShowConfirmation
-                  |> dispatch)
-            ]
-         | true, false ->
-            classyNode Html.div [ "grid" ] [
+      match payment.Status with
+      | PaymentRequestStatus.Fulfilled f ->
+         Html.button [
+            attr.classes [ "outline" ]
+            attr.text "View Transfer"
+            attr.onClick (fun _ ->
+               Routes.TransactionsUrl.queryPath {
+                  TransactionBrowserQuery.empty with
+                     Transaction =
+                        f.TransferId
+                        |> TransferId.toCorrelationId
+                        |> TransactionId
+                        |> Some
+               }
+               |> Router.navigate)
+         ]
+      | _ ->
+         if state.IsFulfillingPayment then
+            PaymentFulfillmentFormComponent
+               session
+               accounts
+               org.Org.CommandApprovalRules
+               payment
+               (fun receipt ->
+                  dispatch Msg.TogglePaymentFulfillment
+                  notifyParentOnUpdate receipt)
+               (fun cmdApprovalRequest ->
+                  cmdApprovalRequest
+                  |> OrgCommand.RequestCommandApproval
+                  |> OrgProvider.Msg.OrgCommand
+                  |> orgDispatch
+
+                  dispatch Msg.SubmitPaymentForApproval)
+         else
+            match canManagePayment, isPaymentRequestOutgoing with
+            | true, true ->
                Html.button [
                   attr.classes [ "outline" ]
-                  attr.text "Decline to pay"
+                  attr.text "Cancel payment request"
                   attr.onClick (fun _ ->
-                     (session.AsInitiator, Confirmation.DeclinePayment payment)
+                     (session.AsInitiator, Confirmation.CancelPayment payment)
                      |> Msg.ShowConfirmation
                      |> dispatch)
                ]
-
-               Html.button [
-                  attr.classes [ "outline" ]
-                  attr.text "Fulfill payment"
-                  attr.onClick (fun _ -> dispatch Msg.TogglePaymentFulfillment)
-               ]
-            ]
-         | false, false ->
-            match paymentPendingApproval |> Option.map approvalRemainingCnt with
-            | Some cnt ->
-               Html.p
-                  $"Payment will be sent when {cnt} more approvals acquired."
-
-               if session.Role = Role.Admin then
+            | true, false ->
+               classyNode Html.div [ "grid" ] [
                   Html.button [
                      attr.classes [ "outline" ]
-                     attr.text "View Payment Approval Progress"
+                     attr.text "Decline to pay"
                      attr.onClick (fun _ ->
-                        Router.navigate Routes.ApprovalsUrl.BasePath)
+                        (session.AsInitiator,
+                         Confirmation.DeclinePayment payment)
+                        |> Msg.ShowConfirmation
+                        |> dispatch)
                   ]
-            | None -> ()
-         | _ -> ()
+
+                  Html.button [
+                     attr.classes [ "outline" ]
+                     attr.text "Fulfill payment"
+                     attr.onClick (fun _ ->
+                        dispatch Msg.TogglePaymentFulfillment)
+                  ]
+               ]
+            | false, false ->
+               match
+                  paymentPendingApproval |> Option.map approvalRemainingCnt
+               with
+               | Some cnt ->
+                  Html.p
+                     $"Payment will be sent when {cnt} more approvals acquired."
+
+                  if session.Role = Role.Admin then
+                     Html.button [
+                        attr.classes [ "outline" ]
+                        attr.text "View Payment Approval Progress"
+                        attr.onClick (fun _ ->
+                           Router.navigate Routes.ApprovalsUrl.BasePath)
+                     ]
+               | None -> ()
+            | _ -> ()
    ]

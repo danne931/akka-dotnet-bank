@@ -198,6 +198,113 @@ let private renderLabeledInfo (label: string) (text: string) =
       ]
    ]
 
+let private renderTransactionHistory
+   (session: UserSession)
+   (txn: TransactionUIFriendly)
+   (history: History list)
+   =
+   classyNode Html.section [ "transaction-detail-history" ] [
+      Html.small "History:"
+      Html.ul [
+         for t in history do
+            Html.li [
+               match t with
+               | History.ParentAccount _ -> ()
+               | History.Org orgHistory ->
+                  match orgHistory.Event with
+                  | OrgEvent.CommandApprovalRequested e ->
+                     let requester = e.Data.Requester.EmployeeName
+                     Html.p $"Request by {requester} pending approval"
+                  | OrgEvent.CommandApprovalAcquired e ->
+                     let approver = e.Data.ApprovedBy.EmployeeName
+                     Html.p $"Approval acquired from {approver}"
+                  | OrgEvent.CommandApprovalDeclined e ->
+                     Html.p
+                        $"Approval declined by {e.Data.DeclinedBy.EmployeeName}"
+                  | OrgEvent.CommandApprovalTerminated e ->
+                     Html.p $"Approval terminated early due to {e.Data.Reason}"
+                  | OrgEvent.CommandApprovalProcessCompleted e ->
+                     Html.p
+                        $"Approval completed with approval from {e.Data.ApprovedBy.EmployeeName}"
+                  | _ -> ()
+               | History.Employee employeeHistory ->
+                  match employeeHistory.Event with
+                  | EmployeeEvent.PurchasePending _ ->
+                     Html.p "Purchase processing"
+                  | EmployeeEvent.PurchaseSettled _ ->
+                     Html.p "Deducted funds from card"
+                  | EmployeeEvent.PurchaseRefunded e ->
+                     Html.p $"Purchase refunded to card due to {e.Data.Reason}"
+                  | EmployeeEvent.PurchaseFailed e ->
+                     Html.p $"Failed purchase due to {e.Data.Reason}"
+                  | _ -> ()
+               | History.Account accountHistory ->
+                  match accountHistory.Event with
+                  | AccountEvent.DomesticTransferPending e ->
+                     Html.p $"Funds reserved from {e.Data.BaseInfo.Sender.Name}"
+                  | AccountEvent.DomesticTransferProgress _ ->
+                     Html.p $"Transfer service processing transfer"
+                  | AccountEvent.DomesticTransferFailed e ->
+                     Html.p $"Failed: {e.Data.Reason.Display}"
+
+                     Html.p $"Refunded account: {e.Data.BaseInfo.Sender.Name}"
+                  | AccountEvent.DomesticTransferSettled _ ->
+                     Html.p "Transfer service settled transfer"
+                  | AccountEvent.DomesticTransferScheduled e ->
+                     let date =
+                        DateTime.dateUIFriendly e.Data.BaseInfo.ScheduledDate
+
+                     Html.p $"Scheduled for {date}"
+                  | AccountEvent.PlatformPaymentRequested e ->
+                     Html.p (
+                        if e.OrgId = session.OrgId then
+                           $"Payment request sent to {txn.Source}"
+                        else
+                           $"Received payment request from {txn.Destination}"
+                     )
+                  | AccountEvent.DepositedCash e ->
+                     Html.p $"Deposited money via {e.Data.Origin}"
+                  | AccountEvent.DebitPending _ ->
+                     Html.p "Pending deduction of funds from account"
+                  | AccountEvent.DebitSettled _ ->
+                     Html.p "Deducted funds from account"
+                  | AccountEvent.DebitFailed _ ->
+                     Html.p "Failed to deduct funds from account"
+                  | AccountEvent.DebitRefunded e ->
+                     Html.p $"Account refund applied due to {e.Data.Reason}"
+                  | AccountEvent.InternalTransferWithinOrgDeducted e ->
+                     Html.p $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
+                  | AccountEvent.InternalTransferWithinOrgDeposited e ->
+                     Html.p
+                        $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                  | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
+                     let date =
+                        DateTime.dateUIFriendly e.Data.BaseInfo.ScheduledDate
+
+                     Html.p $"Scheduled for {date}"
+                  | AccountEvent.InternalTransferBetweenOrgsPending _ ->
+                     Html.p $"Transfer processing from {txn.Source}"
+                  | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
+                     Html.p
+                        $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                  | AccountEvent.InternalTransferBetweenOrgsSettled _ ->
+                     Html.p "Transfer settled"
+                  | AccountEvent.InternalTransferBetweenOrgsFailed e ->
+                     Html.p $"Failed: {e.Data.Reason}"
+                  | AccountEvent.InternalAutomatedTransferDeducted _ ->
+                     Html.p $"Funds deducted from {txn.Source}"
+                  | AccountEvent.InternalAutomatedTransferDeposited e ->
+                     Html.p
+                        $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
+                  | _ -> Html.p "Unknown"
+
+               Html.small (
+                  DateTime.dateUIFriendlyWithSeconds t.Envelope.Timestamp
+               )
+            ]
+      ]
+   ]
+
 let renderTransactionInfo
    (org: OrgWithAccountProfiles)
    (txnInfo: TransactionWithAncillaryInfo)
@@ -240,6 +347,20 @@ let renderTransactionInfo
          |> List.sortByDescending fst
          |> List.tryHead
          |> Option.map snd
+      | _ -> None
+
+   let originatedFromPayment =
+      match txnInfo.Transaction.Type with
+      | TransactionType.InternalTransferBetweenOrgs ->
+         txnInfo.Transaction.History
+         |> List.choose (function
+            | History.Account h ->
+               match h.Event with
+               | AccountEvent.InternalTransferBetweenOrgsPending e ->
+                  e.Data.BaseInfo.FromPaymentRequest
+               | _ -> None
+            | _ -> None)
+         |> List.tryHead
       | _ -> None
 
    React.fragment [
@@ -338,115 +459,17 @@ let renderTransactionInfo
                (DateTime.dateUIFriendly date)
          | None -> ()
 
-         classyNode Html.section [ "transaction-detail-history" ] [
-            Html.small "History:"
-            Html.ul [
-               for t in txnInfo.Transaction.History do
-                  Html.li [
-                     match t with
-                     | History.ParentAccount _ -> ()
-                     | History.Org orgHistory ->
-                        match orgHistory.Event with
-                        | OrgEvent.CommandApprovalRequested e ->
-                           let requester = e.Data.Requester.EmployeeName
-                           Html.p $"Request by {requester} pending approval"
-                        | OrgEvent.CommandApprovalAcquired e ->
-                           let approver = e.Data.ApprovedBy.EmployeeName
-                           Html.p $"Approval acquired from {approver}"
-                        | OrgEvent.CommandApprovalDeclined e ->
-                           Html.p
-                              $"Approval declined by {e.Data.DeclinedBy.EmployeeName}"
-                        | OrgEvent.CommandApprovalTerminated e ->
-                           Html.p
-                              $"Approval terminated early due to {e.Data.Reason}"
-                        | OrgEvent.CommandApprovalProcessCompleted e ->
-                           Html.p
-                              $"Approval completed with approval from {e.Data.ApprovedBy.EmployeeName}"
-                        | _ -> ()
-                     | History.Employee employeeHistory ->
-                        match employeeHistory.Event with
-                        | EmployeeEvent.PurchasePending _ ->
-                           Html.p "Purchase processing"
-                        | EmployeeEvent.PurchaseSettled _ ->
-                           Html.p "Deducted funds from card"
-                        | EmployeeEvent.PurchaseRefunded e ->
-                           Html.p
-                              $"Purchase refunded to card due to {e.Data.Reason}"
-                        | EmployeeEvent.PurchaseFailed e ->
-                           Html.p $"Failed purchase due to {e.Data.Reason}"
-                        | _ -> ()
-                     | History.Account accountHistory ->
-                        match accountHistory.Event with
-                        | AccountEvent.DomesticTransferPending e ->
-                           Html.p
-                              $"Funds reserved from {e.Data.BaseInfo.Sender.Name}"
-                        | AccountEvent.DomesticTransferProgress _ ->
-                           Html.p $"Transfer service processing transfer"
-                        | AccountEvent.DomesticTransferFailed e ->
-                           Html.p $"Failed: {e.Data.Reason.Display}"
+         renderTransactionHistory session txn txnInfo.Transaction.History
 
-                           Html.p
-                              $"Refunded account: {e.Data.BaseInfo.Sender.Name}"
-                        | AccountEvent.DomesticTransferSettled _ ->
-                           Html.p "Transfer service settled transfer"
-                        | AccountEvent.DomesticTransferScheduled e ->
-                           let date =
-                              DateTime.dateUIFriendly
-                                 e.Data.BaseInfo.ScheduledDate
-
-                           Html.p $"Scheduled for {date}"
-                        | AccountEvent.PlatformPaymentRequested e ->
-                           Html.p (
-                              if e.OrgId = org.Org.OrgId then
-                                 $"Payment request sent to {txn.Source}"
-                              else
-                                 $"Received payment request from {txn.Destination}"
-                           )
-                        | AccountEvent.DepositedCash e ->
-                           Html.p $"Deposited money via {e.Data.Origin}"
-                        | AccountEvent.DebitPending _ ->
-                           Html.p "Pending deduction of funds from account"
-                        | AccountEvent.DebitSettled _ ->
-                           Html.p "Deducted funds from account"
-                        | AccountEvent.DebitFailed _ ->
-                           Html.p "Failed to deduct funds from account"
-                        | AccountEvent.DebitRefunded e ->
-                           Html.p
-                              $"Account refund applied due to {e.Data.Reason}"
-                        | AccountEvent.InternalTransferWithinOrgDeducted e ->
-                           Html.p
-                              $"Funds deducted from {e.Data.BaseInfo.Sender.Name}"
-                        | AccountEvent.InternalTransferWithinOrgDeposited e ->
-                           Html.p
-                              $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
-                        | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
-                           let date =
-                              DateTime.dateUIFriendly
-                                 e.Data.BaseInfo.ScheduledDate
-
-                           Html.p $"Scheduled for {date}"
-                        | AccountEvent.InternalTransferBetweenOrgsPending _ ->
-                           Html.p $"Transfer processing from {txn.Source}"
-                        | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
-                           Html.p
-                              $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
-                        | AccountEvent.InternalTransferBetweenOrgsSettled _ ->
-                           Html.p "Transfer settled"
-                        | AccountEvent.InternalTransferBetweenOrgsFailed e ->
-                           Html.p $"Failed: {e.Data.Reason}"
-                        | AccountEvent.InternalAutomatedTransferDeducted _ ->
-                           Html.p $"Funds deducted from {txn.Source}"
-                        | AccountEvent.InternalAutomatedTransferDeposited e ->
-                           Html.p
-                              $"Funds deposited to {e.Data.BaseInfo.Recipient.Name}"
-                        | _ -> Html.p "Unknown"
-
-                     Html.small (
-                        DateTime.dateUIFriendlyWithSeconds t.Envelope.Timestamp
-                     )
-                  ]
+         match originatedFromPayment with
+         | Some paymentId ->
+            Html.button [
+               attr.classes [ "outline" ]
+               attr.text "View Payment Request"
+               attr.onClick (fun _ ->
+                  Router.navigate (Routes.PaymentUrl.selectedPath paymentId))
             ]
-         ]
+         | None -> ()
       ]
    ]
 
