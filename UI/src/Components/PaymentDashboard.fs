@@ -121,16 +121,21 @@ let update orgId msg state =
                      | AccountEvent.InternalTransferBetweenOrgsPending e ->
                         match e.Data.BaseInfo.FromPaymentRequest with
                         | Some paymentId ->
-                           let updateStatus =
-                              updatePlatformPaymentStatus
-                                 paymentId
-                                 PaymentRequestStatus.Requested
+                           let status =
+                              PaymentRequestStatus.Fulfilled {
+                                 TransferId = e.Data.BaseInfo.TransferId
+                                 FulfilledAt = e.Timestamp
+                              }
 
                            {
                               paymentSummary with
                                  IncomingRequests =
                                     paymentSummary.IncomingRequests
-                                    |> List.map updateStatus
+                                    |> List.map (
+                                       updatePlatformPaymentStatus
+                                          paymentId
+                                          status
+                                    )
                            }
                         | None -> paymentSummary
                      | AccountEvent.PlatformPaymentRequestDeclined e ->
