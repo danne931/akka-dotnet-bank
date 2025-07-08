@@ -228,32 +228,6 @@ let startTransferRoutes (app: WebApplication) =
 
    app
       .MapPost(
-         PaymentPath.FulfillPayment,
-         Func<ActorSystem, PlatformPaymentCommand, Task<IResult>>(fun sys cmd ->
-            taskResult {
-               let validation =
-                  cmd
-                  |> PlatformPaymentCommand.toEvent
-                  |> Result.map AccountEnvelope.get
-
-               let! res = validation |> Result.mapError Err.ValidationError
-
-               let msg =
-                  cmd
-                  |> FulfillPlatformPayment
-                  |> ApprovableCommand.AmountBased
-                  |> OrgMessage.ApprovableRequest
-
-               (OrgActor.get sys cmd.OrgId) <! msg
-               return res
-            }
-            |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.ManagePayment)
-   |> ignore
-
-   app
-      .MapPost(
          TransferPath.ConfigureAutoTransferRule,
          Func<ActorSystem, ConfigureAutoTransferRuleCommand, Task<IResult>>
             (fun sys cmd ->

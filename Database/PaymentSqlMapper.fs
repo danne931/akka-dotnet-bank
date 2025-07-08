@@ -8,40 +8,39 @@ open AccountSqlMapper
 open Bank.Transfer.Domain
 
 module Table =
-   let payment = "payment"
-   let platformPayment = "payment_platform"
-   let thirdPartyPayment = "payment_third_party"
+   let payment = "payment_request"
+   let platformPayment = "payment_request_platform"
+   let thirdPartyPayment = "payment_request_third_party"
 
 module PaymentTypeCast =
-   let platformPaymentStatus = "platform_payment_status"
-   let thirdPartyPaymentStatus = "third_party_payment_status"
-   let paymentType = "payment_type"
+   let status = "payment_request_status"
+   let requestType = "payment_request_type"
 
 module PaymentFields =
    let paymentId = "payment_id"
    let initiatedById = "initiated_by_id"
    let amount = "amount"
+   let status = "status"
+   let statusDetail = "status_detail"
    let memo = "memo"
-   let paymentType = "payment_type"
+   let requestType = "request_type"
    let expiration = "expiration"
    let payeeOrgId = "payee_org_id"
    let payeeParentAccountId = "payee_parent_account_id"
    let payeeAccountId = "payee_account_id"
+   let fulfilledByTransferId = "fulfilled_by_transfer_id"
+   let fulfilledAt = "fulfilled_at"
    let createdAt = "created_at"
 
-   // Specific to platform_payment table
+   // Specific to payment_request_platform table
    module Platform =
       let payerOrgId = "payer_org_id"
       let payerParentAccountId = "payer_parent_account_id"
-      let status = "status"
-      let statusDetail = "status_detail"
-      let payByAccount = "pay_by_account"
 
-   // Specific to third_party_payment table
+   // Specific to payment_request_third_party table
    module ThirdParty =
       let payerEmail = "payer_email"
       let payerName = "payer_name"
-      let status = "status_tp"
 
 module PaymentSqlReader =
    let paymentId (read: RowReader) =
@@ -52,7 +51,17 @@ module PaymentSqlReader =
 
    let amount (read: RowReader) = PaymentFields.amount |> read.decimal
 
+   let status (read: RowReader) =
+      PaymentFields.statusDetail
+      |> read.text
+      |> Serialization.deserializeUnsafe<PaymentRequestStatus>
+
    let memo (read: RowReader) = PaymentFields.memo |> read.text
+
+   let requestType (read: RowReader) : PaymentRequestType =
+      PaymentFields.requestType
+      |> read.string
+      |> PaymentRequestType.fromStringUnsafe
 
    let expiration (read: RowReader) =
       PaymentFields.expiration |> read.dateTime
@@ -66,12 +75,16 @@ module PaymentSqlReader =
    let payeeAccountId (read: RowReader) =
       PaymentFields.payeeAccountId |> read.uuid |> AccountId
 
+   let fulfilledByTransferId (read: RowReader) =
+      PaymentFields.fulfilledByTransferId
+      |> read.uuidOrNone
+      |> Option.map TransferId
+
+   let fulfilledAt (read: RowReader) =
+      PaymentFields.fulfilledAt |> read.dateTimeOrNone
+
    let createdAt (read: RowReader) = read.dateTime PaymentFields.createdAt
 
-   let paymentType (read: RowReader) : PaymentType =
-      PaymentFields.paymentType |> read.string |> PaymentType.fromStringUnsafe
-
-   // Specific to platform_payment table
    module Platform =
       let payerOrgId (read: RowReader) =
          PaymentFields.Platform.payerOrgId |> read.uuid |> OrgId
@@ -81,28 +94,12 @@ module PaymentSqlReader =
          |> read.uuid
          |> ParentAccountId
 
-      let status (read: RowReader) =
-         PaymentFields.Platform.statusDetail
-         |> read.text
-         |> Serialization.deserializeUnsafe<PlatformPaymentStatus>
-
-      let payByAccount (read: RowReader) : AccountId option =
-         PaymentFields.Platform.payByAccount
-         |> read.uuidOrNone
-         |> Option.map AccountId
-
-   // Specific to third_party_payment table
    module ThirdParty =
       let payerEmail (read: RowReader) =
          PaymentFields.ThirdParty.payerEmail |> read.string |> Email.deserialize
 
       let payerName (read: RowReader) =
          PaymentFields.ThirdParty.payerName |> read.string
-
-      let status (read: RowReader) =
-         PaymentFields.ThirdParty.status
-         |> read.string
-         |> ThirdPartyPaymentStatus.fromStringUnsafe
 
 module PaymentSqlWriter =
    let paymentId (paymentId: PaymentId) =
@@ -115,9 +112,22 @@ module PaymentSqlWriter =
 
    let amount = Sql.decimal
 
+   let status =
+      function
+      | PaymentRequestStatus.Requested -> "Requested"
+      | PaymentRequestStatus.Fulfilled _ -> "Fulfilled"
+      | PaymentRequestStatus.Cancelled -> "Cancelled"
+      | PaymentRequestStatus.Declined -> "Declined"
+      | PaymentRequestStatus.Failed _ -> "Failed"
+      >> Sql.string
+
+   let statusDetail (status: PaymentRequestStatus) =
+      status |> Serialization.serialize |> Sql.jsonb
+
    let memo = Sql.text
 
-   let paymentType (pType: PaymentType) = Sql.string (string pType)
+   let requestType (requestType: PaymentRequestType) =
+      Sql.string (string requestType)
 
    let expiration (date: DateTime) = Sql.timestamptz date
 
@@ -125,33 +135,24 @@ module PaymentSqlWriter =
    let payeeParentAccountId (ParentAccountId id) = Sql.uuid id
    let payeeAccountId = AccountSqlWriter.accountId
 
+   let fulfilledByTransferId =
+      function
+      | PaymentRequestStatus.Fulfilled p -> Some(TransferId.get p.TransferId)
+      | _ -> None
+      >> Sql.uuidOrNone
+
+   let fulfilledAt =
+      function
+      | PaymentRequestStatus.Fulfilled p -> Some p.FulfilledAt
+      | _ -> None
+      >> Sql.timestamptzOrNone
+
    let createdAt (date: DateTime) = Sql.timestamptz date
 
-   // Specific to platform_payment table
    module Platform =
       let payerOrgId = OrgSqlWriter.orgId
-
       let payerParentAccountId (ParentAccountId id) = Sql.uuid id
 
-      let status =
-         function
-         | PlatformPaymentStatus.Unpaid -> "Unpaid"
-         | PlatformPaymentStatus.PaymentPending -> "PaymentPending"
-         | PlatformPaymentStatus.Deposited -> "Deposited"
-         | PlatformPaymentStatus.Settled -> "Settled"
-         | PlatformPaymentStatus.Cancelled -> "Cancelled"
-         | PlatformPaymentStatus.Declined -> "Declined"
-         | PlatformPaymentStatus.Failed _ -> "Failed"
-         >> Sql.string
-
-      let statusDetail (status: PlatformPaymentStatus) =
-         status |> Serialization.serialize |> Sql.jsonb
-
-      let payByAccount (opt: AccountId option) =
-         opt |> Option.map AccountId.get |> Sql.uuidOrNone
-
-   // Specific to third_party_payment table
    module ThirdParty =
       let payerEmail (email: Email) = email |> string |> Sql.string
       let payerName = Sql.string
-      let status (status: ThirdPartyPaymentStatus) = Sql.string (string status)

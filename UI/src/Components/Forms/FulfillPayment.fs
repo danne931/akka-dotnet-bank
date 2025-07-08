@@ -50,18 +50,16 @@ let formPlatformPayment
       let selectedAccountId =
          selectedFundingSourceAccountId |> Guid.Parse |> AccountId
 
-      let cmd =
-         PlatformPaymentCommand.create initiatedBy {
-            PaymentMethod = PaymentMethod.Platform selectedAccountId
-            RequestedPayment = {
-               PlatformPaymentRequested.fromPayment payment with
-                  BaseInfo.InitiatedById = initiatedBy.Id
-            }
-         }
-         |> AccountCommand.PlatformPayment
-         |> FormCommand.Account
+      let sender = payerAccounts[selectedAccountId]
 
-      Msg.GetAndSubmit(FormEntityId.Account selectedAccountId, cmd)
+      let cmd =
+         InternalTransferBetweenOrgsCommand.fromPaymentRequest
+            initiatedBy
+            payment
+            selectedAccountId
+         |> AccountCommand.InternalTransferBetweenOrgs
+
+      Msg.Submit(FormEntity.Account sender, FormCommand.Account cmd, Started)
 
    Form.succeed onSubmit |> Form.append fieldFundingSourceSelect
 
@@ -151,10 +149,9 @@ let PaymentFulfillmentFormComponent
                   function
                   | FormSubmitReceipt.Account receipt ->
                      match receipt.PendingCommand with
-                     | AccountCommand.PlatformPayment cmd ->
+                     | AccountCommand.InternalTransferBetweenOrgs cmd ->
                         let cmd =
-                           cmd
-                           |> FulfillPlatformPayment
+                           InternalTransferBetweenOrgs cmd
                            |> ApprovableCommand.AmountBased
 
                         let requiresApproval =

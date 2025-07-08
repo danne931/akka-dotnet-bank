@@ -1,10 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="CoreTypes.fs" />
+    <Compile Include="Payment.fs" />
     <Compile Include="InternalTransfer.fs" />
     <Compile Include="AutomaticTransfer.fs" />
     <Compile Include="DomesticTransfer.fs" />
-    <Compile Include="Payment.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />
     <Compile Include="DomesticTransferService.fs" />

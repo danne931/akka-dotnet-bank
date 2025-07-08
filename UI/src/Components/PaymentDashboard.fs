@@ -45,12 +45,15 @@ let init () =
 
 let updatePlatformPaymentStatus
    (targetId: PaymentId)
-   (status: PlatformPaymentStatus)
+   (status: PaymentRequestStatus)
    (payment: PlatformPayment)
    : PlatformPayment
    =
    if payment.BaseInfo.Id = targetId then
-      { payment with Status = status }
+      {
+         payment with
+            BaseInfo.Status = status
+      }
    else
       payment
 
@@ -98,11 +101,11 @@ let update orgId msg state =
                               OutgoingRequests =
                                  payment :: paymentSummary.OutgoingRequests
                         }
-                     | AccountEvent.PlatformPaymentCancelled e ->
+                     | AccountEvent.PlatformPaymentRequestCancelled e ->
                         let updateStatus =
                            updatePlatformPaymentStatus
                               e.Data.BaseInfo.Id
-                              PlatformPaymentStatus.Cancelled
+                              PaymentRequestStatus.Cancelled
 
                         {
                            paymentSummary with
@@ -115,23 +118,26 @@ let update orgId msg state =
                                     | Payment.ThirdParty p ->
                                        Payment.ThirdParty p)
                         }
-                     | AccountEvent.PlatformPaymentPending e ->
-                        let updateStatus =
-                           updatePlatformPaymentStatus
-                              e.Data.BaseInfo.Id
-                              PlatformPaymentStatus.PaymentPending
+                     | AccountEvent.InternalTransferBetweenOrgsPending e ->
+                        match e.Data.BaseInfo.FromPaymentRequest with
+                        | Some paymentId ->
+                           let updateStatus =
+                              updatePlatformPaymentStatus
+                                 paymentId
+                                 PaymentRequestStatus.Requested
 
-                        {
-                           paymentSummary with
-                              IncomingRequests =
-                                 paymentSummary.IncomingRequests
-                                 |> List.map updateStatus
-                        }
-                     | AccountEvent.PlatformPaymentDeclined e ->
+                           {
+                              paymentSummary with
+                                 IncomingRequests =
+                                    paymentSummary.IncomingRequests
+                                    |> List.map updateStatus
+                           }
+                        | None -> paymentSummary
+                     | AccountEvent.PlatformPaymentRequestDeclined e ->
                         let updateStatus =
                            updatePlatformPaymentStatus
                               e.Data.BaseInfo.Id
-                              PlatformPaymentStatus.Declined
+                              PaymentRequestStatus.Declined
 
                         {
                            paymentSummary with
@@ -156,7 +162,7 @@ let selectedPayment
       |> Option.map Payment.Platform
       |> Option.orElse (
          payments.OutgoingRequests
-         |> List.tryFind (fun p -> (Payment.baseInfo p).Id = selectedId)
+         |> List.tryFind (fun p -> p.BaseInfo.Id = selectedId)
       )
    | _ -> None
 
@@ -226,8 +232,7 @@ let renderIncomingTable
 
          Html.tbody [
             let payments =
-               payments
-               |> List.sortBy (Payment.Platform >> Payment.displayPriority)
+               payments |> List.sortBy (Payment.Platform >> _.DisplayPriority)
 
             for payment in payments ->
                renderIncomingTableRow progress payment selectedId
@@ -240,7 +245,7 @@ let renderTableRow
    (selectedId: PaymentId option)
    (org: OrgWithAccountProfiles)
    =
-   let paymentBaseInfo = Payment.baseInfo payment
+   let paymentBaseInfo = payment.BaseInfo
    let paymentId = paymentBaseInfo.Id
 
    Html.tr [
@@ -282,7 +287,7 @@ let renderTable
       attr.children [
          Html.thead [
             Html.tr [
-               Html.th [ attr.scope "col"; attr.text "Created on" ]
+               Html.th [ attr.scope "col"; attr.text "Requested on" ]
 
                Html.th [ attr.scope "col"; attr.text "To" ]
 
@@ -295,7 +300,7 @@ let renderTable
          ]
 
          Html.tbody [
-            let payments = payments |> List.sortBy Payment.displayPriority
+            let payments = payments |> List.sortBy _.DisplayPriority
 
             for payment in payments -> renderTableRow payment selectedId org
          ]

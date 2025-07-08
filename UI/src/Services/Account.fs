@@ -40,8 +40,6 @@ let postJson (command: AccountCommand) =
          Serialization.serialize cmd, PaymentPath.CancelPayment
       | AccountCommand.DeclinePlatformPayment cmd ->
          Serialization.serialize cmd, PaymentPath.DeclinePayment
-      | AccountCommand.PlatformPayment cmd ->
-         Serialization.serialize cmd, PaymentPath.FulfillPayment
       | AccountCommand.ConfigureAutoTransferRule cmd ->
          Serialization.serialize cmd, TransferPath.ConfigureAutoTransferRule
       | AccountCommand.DeleteAutoTransferRule cmd ->

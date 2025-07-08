@@ -273,43 +273,41 @@ let EditApprovalRuleComponent
                attr.text rule.CommandType.Display
             ]
 
-            DropdownComponent(
-               {|
-                  Direction = DropdownDirection.RTL
-                  ShowCaret = false
-                  Button = None
-                  Items = [
-                     {
-                        Text = "Edit"
-                        OnClick =
-                           fun _ ->
-                              if isManageRuleNotAllowed then
-                                 Msg.ManageRuleNotAllowed rule.CommandType
-                                 |> dispatch
-                              else
-                                 setRuleToEdit (Some rule)
+            DropdownComponent {|
+               Direction = DropdownDirection.RTL
+               ShowCaret = false
+               Button = None
+               Items = [
+                  {
+                     Text = "Edit"
+                     OnClick =
+                        fun _ ->
+                           if isManageRuleNotAllowed then
+                              Msg.ManageRuleNotAllowed rule.CommandType
+                              |> dispatch
+                           else
+                              setRuleToEdit (Some rule)
 
-                                 fetchAdminsIfNecessary
-                                    state
-                                    dispatch
-                                    session.OrgId
-                        IsSelected = ruleToEdit.IsSome
-                     }
-                     {
-                        Text = "Delete"
-                        OnClick =
-                           fun _ ->
-                              if isManageRuleNotAllowed then
-                                 Msg.ManageRuleNotAllowed rule.CommandType
-                                 |> dispatch
-                              else
-                                 Msg.ShowDeleteRuleConfirmation deleteMsg
-                                 |> dispatch
-                        IsSelected = false
-                     }
-                  ]
-               |}
-            )
+                              fetchAdminsIfNecessary
+                                 state
+                                 dispatch
+                                 session.OrgId
+                     IsSelected = ruleToEdit.IsSome
+                  }
+                  {
+                     Text = "Delete"
+                     OnClick =
+                        fun _ ->
+                           if isManageRuleNotAllowed then
+                              Msg.ManageRuleNotAllowed rule.CommandType
+                              |> dispatch
+                           else
+                              Msg.ShowDeleteRuleConfirmation deleteMsg
+                              |> dispatch
+                     IsSelected = false
+                  }
+               ]
+            |}
          ]
 
          match rule.Criteria with
@@ -397,20 +395,18 @@ let ApprovalRuleManagementDashboardComponent (session: UserSession) (org: Org) =
             |> Seq.sortBy (_.Criteria >> ApprovalCriteria.sortBy)
             |> Seq.sortBy (fun r ->
                match r.CommandType with
-               | ApprovableCommandType.ApprovableAmountBased FulfillPlatformPaymentCommandType ->
+               | ApprovableCommandType.ApprovableAmountBased InternalTransferBetweenOrgsCommandType ->
                   0
                | ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType ->
                   1
-               | ApprovableCommandType.ApprovableAmountBased InternalTransferBetweenOrgsCommandType ->
-                  2
                | ApprovableCommandType.ApprovablePerCommand InviteEmployeeCommandType ->
-                  3
+                  2
                | ApprovableCommandType.ApprovablePerCommand UnlockCardCommandType ->
-                  4
+                  3
                | ApprovableCommandType.ApprovablePerCommand UpdateEmployeeRoleCommandType ->
-                  5
+                  4
                | ApprovableCommandType.ApprovablePerCommand ManageApprovalRuleCommandType ->
-                  6)
+                  5)
 
          for rule in rules do
             classyNode Html.article [ "approval-rule" ] [

@@ -94,14 +94,10 @@ let accountEventFilterNames
               typeof<DomesticTransferFailed>.Name
               typeof<DomesticTransferProgressUpdated>.Name
              ]
-           | AccountEventGroupFilter.PlatformPayment -> [
+           | AccountEventGroupFilter.PaymentRequest -> [
               typeof<PlatformPaymentRequested>.Name
-              typeof<PlatformPaymentPending>.Name
-              typeof<PlatformPaymentDeposited>.Name
-              typeof<PlatformPaymentFailed>.Name
-              typeof<PlatformPaymentSettled>.Name
-              typeof<PlatformPaymentDeclined>.Name
-              typeof<PlatformPaymentCancelled>.Name
+              typeof<PlatformPaymentRequestDeclined>.Name
+              typeof<PlatformPaymentRequestCancelled>.Name
              ])
       []
    |> List.toArray

@@ -5,27 +5,6 @@ open System
 open Bank.Account.Domain
 open Lib.SharedTypes
 
-(*
-[<RequireQualifiedAccess>]
-type PartnerBankServiceFailReason =
-   | CorruptData
-   | InvalidAction
-   | InvalidPaymentNetwork
-   | InvalidDepository
-   | InvalidAmount
-   | AccountClosed
-   | InvalidAccountInfo
-   | Unknown of string
-type DomesticTransferServiceResponse = {
-   Sender: DomesticTransferServiceSender
-   Recipient: DomesticTransferServiceRecipient
-   Ok: bool
-   Status: string
-   Reason: string
-   TransactionId: string
-}
-*)
-
 type PartnerBankMetadata = {
    OrgId: OrgId
    CorrelationId: CorrelationId
@@ -48,17 +27,11 @@ type PartnerBankSyncPurchase = {
    Metadata: PartnerBankMetadata
 }
 
-[<RequireQualifiedAccess>]
-type TransferSagaReplyTo =
-   | PlatformTransfer
-   | PlatformPayment
-
 type PartnerBankSyncTransferBetweenOrgs = {
    Amount: decimal
    From: PartnerBankAccountLink
    To: PartnerBankAccountLink
    Metadata: PartnerBankMetadata
-   ReplyTo: TransferSagaReplyTo
 }
 
 [<RequireQualifiedAccess>]

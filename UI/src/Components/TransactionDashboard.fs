@@ -261,7 +261,6 @@ let renderControlPanel
                      AccountEventGroupFilter.InternalTransferBetweenOrgs
                      AccountEventGroupFilter.InternalAutomatedTransfer
                      AccountEventGroupFilter.DomesticTransfer
-                     AccountEventGroupFilter.PlatformPayment
                   ]
                   |> List.map (fun o -> { Id = o; Display = o.Display })
                SelectedItems = query.EventType
@@ -571,9 +570,7 @@ let transactions
       | AccountEvent.InternalTransferBetweenOrgsPending _
       | AccountEvent.InternalAutomatedTransferDeducted _
       | AccountEvent.DomesticTransferScheduled _
-      | AccountEvent.DomesticTransferPending _
-      | AccountEvent.PlatformPaymentPending _
-      | AccountEvent.PlatformPaymentDeposited _ -> true
+      | AccountEvent.DomesticTransferPending _ -> true
       | _ -> false
 
    realtimeAccountEvents

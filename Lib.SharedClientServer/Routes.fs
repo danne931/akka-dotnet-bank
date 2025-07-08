@@ -90,7 +90,6 @@ module PaymentPath =
    let RequestPayment = Base + "/request"
    let CancelPayment = Base + "/cancel"
    let DeclinePayment = Base + "/decline"
-   let FulfillPayment = Base + "/fulfill"
 
 module TransactionPath =
    let Base = $"{API}/transactions"

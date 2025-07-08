@@ -20,7 +20,6 @@ type OrgStatus =
 
 [<RequireQualifiedAccess>]
 type OrgAccrualMetricEventType =
-   | PaymentPaid
    | InternalTransferBetweenOrgs
    | DomesticTransfer
 

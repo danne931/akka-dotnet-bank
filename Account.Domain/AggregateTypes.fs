@@ -45,10 +45,6 @@ type AccountCommand =
    | RequestPlatformPayment of RequestPlatformPaymentCommand
    | CancelPlatformPayment of CancelPlatformPaymentCommand
    | DeclinePlatformPayment of DeclinePlatformPaymentCommand
-   | PlatformPayment of PlatformPaymentCommand
-   | DepositPlatformPayment of DepositPlatformPaymentCommand
-   | FailPlatformPayment of FailPlatformPaymentCommand
-   | SettlePlatformPayment of SettlePlatformPaymentCommand
    | CloseAccount of CloseAccountCommand
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
    | DeleteAutoTransferRule of DeleteAutoTransferRuleCommand
@@ -82,10 +78,6 @@ type AccountCommand =
       | RequestPlatformPayment cmd -> Command.envelope cmd
       | CancelPlatformPayment cmd -> Command.envelope cmd
       | DeclinePlatformPayment cmd -> Command.envelope cmd
-      | PlatformPayment cmd -> Command.envelope cmd
-      | DepositPlatformPayment cmd -> Command.envelope cmd
-      | FailPlatformPayment cmd -> Command.envelope cmd
-      | SettlePlatformPayment cmd -> Command.envelope cmd
       | CloseAccount cmd -> Command.envelope cmd
       | ConfigureAutoTransferRule cmd -> Command.envelope cmd
       | DeleteAutoTransferRule cmd -> Command.envelope cmd
@@ -131,19 +123,6 @@ type AccountCommand =
          cmd.Data.RequestedPayment.BaseInfo.Payee.AccountId
       | DeclinePlatformPayment cmd ->
          cmd.Data.RequestedPayment.BaseInfo.Payee.AccountId
-      | PlatformPayment cmd ->
-         match cmd.Data.PaymentMethod with
-         | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
-      | DepositPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
-      | SettlePlatformPayment cmd ->
-         match cmd.Data.PaymentMethod with
-         | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
-      | FailPlatformPayment cmd ->
-         match cmd.Data.PaymentMethod with
-         | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
       | CloseAccount cmd -> cmd.Data.AccountId
       | ConfigureAutoTransferRule cmd -> cmd.Data.AccountId
       | DeleteAutoTransferRule cmd -> cmd.Data.AccountId
@@ -193,12 +172,9 @@ type AccountEvent =
    | DomesticTransferSettled of BankEvent<DomesticTransferSettled>
    | DomesticTransferFailed of BankEvent<DomesticTransferFailed>
    | PlatformPaymentRequested of BankEvent<PlatformPaymentRequested>
-   | PlatformPaymentCancelled of BankEvent<PlatformPaymentCancelled>
-   | PlatformPaymentDeclined of BankEvent<PlatformPaymentDeclined>
-   | PlatformPaymentPending of BankEvent<PlatformPaymentPending>
-   | PlatformPaymentDeposited of BankEvent<PlatformPaymentDeposited>
-   | PlatformPaymentSettled of BankEvent<PlatformPaymentSettled>
-   | PlatformPaymentFailed of BankEvent<PlatformPaymentFailed>
+   | PlatformPaymentRequestCancelled of
+      BankEvent<PlatformPaymentRequestCancelled>
+   | PlatformPaymentRequestDeclined of BankEvent<PlatformPaymentRequestDeclined>
    | AccountClosed of BankEvent<AccountClosed>
    | AutoTransferRuleConfigured of BankEvent<AutomaticTransferRuleConfigured>
    | AutoTransferRuleDeleted of BankEvent<AutomaticTransferRuleDeleted>
@@ -240,21 +216,8 @@ type AccountEvent =
       | DomesticTransferSettled evt -> evt.Data.BaseInfo.Sender.AccountId
       | DomesticTransferFailed evt -> evt.Data.BaseInfo.Sender.AccountId
       | PlatformPaymentRequested evt -> evt.Data.BaseInfo.Payee.AccountId
-      | PlatformPaymentCancelled evt -> evt.Data.BaseInfo.Payee.AccountId
-      | PlatformPaymentDeclined evt -> evt.Data.BaseInfo.Payee.AccountId
-      | PlatformPaymentPending evt ->
-         match evt.Data.PaymentMethod with
-         | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
-      | PlatformPaymentDeposited evt -> evt.Data.BaseInfo.Payee.AccountId
-      | PlatformPaymentSettled evt ->
-         match evt.Data.PaymentMethod with
-         | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
-      | PlatformPaymentFailed evt ->
-         match evt.Data.PaymentMethod with
-         | PaymentMethod.Platform accountId -> accountId
-         | PaymentMethod.ThirdParty _ -> AccountId Guid.Empty
+      | PlatformPaymentRequestCancelled evt -> evt.Data.BaseInfo.Payee.AccountId
+      | PlatformPaymentRequestDeclined evt -> evt.Data.BaseInfo.Payee.AccountId
       | AccountClosed evt -> evt.Data.AccountId
       | AutoTransferRuleConfigured evt -> evt.Data.AccountId
       | AutoTransferRuleDeleted evt -> evt.Data.AccountId
@@ -334,24 +297,12 @@ module AccountEvent =
       | AccountEvent.PlatformPaymentRequested evt ->
          let p = evt.Data.BaseInfo
          Some p.Amount, None, Some p.Payee.OrgName
-      | AccountEvent.PlatformPaymentCancelled evt ->
+      | AccountEvent.PlatformPaymentRequestCancelled evt ->
          let p = evt.Data.BaseInfo
          Some p.Amount, None, Some p.Payee.OrgName
-      | AccountEvent.PlatformPaymentDeclined evt ->
+      | AccountEvent.PlatformPaymentRequestDeclined evt ->
          let p = evt.Data.BaseInfo
          Some p.Amount, None, Some p.Payer.OrgName
-      | AccountEvent.PlatformPaymentPending evt ->
-         let p = evt.Data.BaseInfo
-         Some p.Amount, None, Some p.Payee.OrgName
-      | AccountEvent.PlatformPaymentDeposited evt ->
-         let p = evt.Data.BaseInfo
-         Some p.Amount, Some MoneyFlow.In, Some p.Payer.OrgName
-      | AccountEvent.PlatformPaymentSettled evt ->
-         let p = evt.Data.BaseInfo
-         Some p.Amount, Some MoneyFlow.Out, Some p.Payee.OrgName
-      | AccountEvent.PlatformPaymentFailed evt ->
-         let p = evt.Data.BaseInfo
-         Some p.Amount, Some MoneyFlow.In, Some p.Payee.OrgName
       | _ -> None, None, None
 
 type OpenEventEnvelope = AccountEvent * Envelope
@@ -406,17 +357,10 @@ module AccountEnvelope =
          DomesticTransferFailed evt
       | :? BankEvent<PlatformPaymentRequested> as evt ->
          PlatformPaymentRequested evt
-      | :? BankEvent<PlatformPaymentCancelled> as evt ->
-         PlatformPaymentCancelled evt
-      | :? BankEvent<PlatformPaymentDeclined> as evt ->
-         PlatformPaymentDeclined evt
-      | :? BankEvent<PlatformPaymentPending> as evt ->
-         PlatformPaymentPending evt
-      | :? BankEvent<PlatformPaymentDeposited> as evt ->
-         PlatformPaymentDeposited evt
-      | :? BankEvent<PlatformPaymentSettled> as evt ->
-         PlatformPaymentSettled evt
-      | :? BankEvent<PlatformPaymentFailed> as evt -> PlatformPaymentFailed evt
+      | :? BankEvent<PlatformPaymentRequestCancelled> as evt ->
+         PlatformPaymentRequestCancelled evt
+      | :? BankEvent<PlatformPaymentRequestDeclined> as evt ->
+         PlatformPaymentRequestDeclined evt
       | :? BankEvent<AccountClosed> as evt -> AccountClosed evt
       | :? BankEvent<AutomaticTransferRuleConfigured> as evt ->
          AutoTransferRuleConfigured evt
@@ -464,12 +408,8 @@ module AccountEnvelope =
       | DomesticTransferSettled evt -> wrap evt, get evt
       | DomesticTransferFailed evt -> wrap evt, get evt
       | PlatformPaymentRequested evt -> wrap evt, get evt
-      | PlatformPaymentCancelled evt -> wrap evt, get evt
-      | PlatformPaymentDeclined evt -> wrap evt, get evt
-      | PlatformPaymentPending evt -> wrap evt, get evt
-      | PlatformPaymentDeposited evt -> wrap evt, get evt
-      | PlatformPaymentFailed evt -> wrap evt, get evt
-      | PlatformPaymentSettled evt -> wrap evt, get evt
+      | PlatformPaymentRequestCancelled evt -> wrap evt, get evt
+      | PlatformPaymentRequestDeclined evt -> wrap evt, get evt
       | AccountClosed evt -> wrap evt, get evt
       | AutoTransferRuleConfigured evt -> wrap evt, get evt
       | AutoTransferRuleDeleted evt -> wrap evt, get evt
@@ -588,13 +528,11 @@ type AccountMetrics = {
    DailyInternalTransferWithinOrg: decimal
    DailyInternalTransferBetweenOrgs: decimal
    DailyDomesticTransfer: decimal
-   DailyPaymentPaid: decimal
    DailyPurchase: decimal
    MonthlyInternalTransferWithinOrg: decimal
    MonthlyInternalTransferBetweenOrgs: decimal
    MonthlyDomesticTransfer: decimal
    MonthlyPurchase: decimal
-   MonthlyPaymentPaid: decimal
 }
 
 module AccountMetrics =
@@ -602,12 +540,10 @@ module AccountMetrics =
       DailyInternalTransferWithinOrg = 0m
       DailyInternalTransferBetweenOrgs = 0m
       DailyDomesticTransfer = 0m
-      DailyPaymentPaid = 0m
       DailyPurchase = 0m
       MonthlyInternalTransferWithinOrg = 0m
       MonthlyInternalTransferBetweenOrgs = 0m
       MonthlyDomesticTransfer = 0m
-      MonthlyPaymentPaid = 0m
       MonthlyPurchase = 0m
    }
 

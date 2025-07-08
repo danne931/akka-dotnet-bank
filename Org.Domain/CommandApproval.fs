@@ -10,7 +10,6 @@ open Bank.Transfer.Domain
 /// Daily org metrics required to determine whether a
 /// command requires approval based on AmountDailyLimit criteria.
 type CommandApprovalDailyAccrual = {
-   PaymentsPaid: decimal
    InternalTransferBetweenOrgs: decimal
    DomesticTransfer: decimal
 }
@@ -22,7 +21,6 @@ type ApprovablePerCommand =
    | ManageApprovalRuleCommandType
 
 type ApprovableAmountBased =
-   | FulfillPlatformPaymentCommandType
    | InternalTransferBetweenOrgsCommandType
    | DomesticTransferCommandType
 
@@ -41,7 +39,6 @@ type ApprovableCommandType =
          | ManageApprovalRuleCommandType -> "ManageApprovalRule"
       | ApprovableAmountBased x ->
          match x with
-         | FulfillPlatformPaymentCommandType -> "SendPayment"
          | InternalTransferBetweenOrgsCommandType ->
             "SendInternalTransferBetweenOrgs"
          | DomesticTransferCommandType -> "SendDomesticTransfer"
@@ -56,7 +53,6 @@ type ApprovableCommandType =
          | ManageApprovalRuleCommandType -> "Manage Approval Rules"
       | ApprovableAmountBased x ->
          match x with
-         | FulfillPlatformPaymentCommandType -> "Fulfill Platform Payment"
          | InternalTransferBetweenOrgsCommandType ->
             "Internal Transfer Between Orgs"
          | DomesticTransferCommandType -> "Domestic Transfer"
@@ -73,8 +69,6 @@ type ApprovableCommandType =
          | "UnlockCard" -> Some(ApprovablePerCommand UnlockCardCommandType)
          | "ManageApprovalRule" ->
             Some(ApprovablePerCommand ManageApprovalRuleCommandType)
-         | "SendPayment" ->
-            Some(ApprovableAmountBased FulfillPlatformPaymentCommandType)
          | "SendInternalTransferBetweenOrgs" ->
             Some(ApprovableAmountBased InternalTransferBetweenOrgsCommandType)
          | "SendDomesticTransfer" ->
@@ -321,7 +315,7 @@ type ManageApprovalRuleCommand = Command<ManageApprovalRuleInput>
 
 module ManageApprovalRuleCommand =
    let create (data: ManageApprovalRuleInput) =
-      let (rule, initiator) =
+      let rule, initiator =
          match data with
          | ManageApprovalRuleInput.CreateOrEdit(rule, initiator)
          | ManageApprovalRuleInput.Delete(rule, initiator) -> rule, initiator
@@ -340,7 +334,6 @@ type ApprovableCommandPerCommand =
    | ManageApprovalRule of ManageApprovalRuleCommand
 
 type ApprovableCommandAmountBased =
-   | FulfillPlatformPayment of PlatformPaymentCommand
    | InternalTransferBetweenOrgs of InternalTransferBetweenOrgsCommand
    | DomesticTransfer of DomesticTransferCommand
 
@@ -359,7 +352,6 @@ type ApprovableCommand =
          | ManageApprovalRule o -> Command.envelope o
       | ApprovableCommand.AmountBased c ->
          match c with
-         | FulfillPlatformPayment o -> Command.envelope o
          | InternalTransferBetweenOrgs o -> Command.envelope o
          | DomesticTransfer o -> Command.envelope o
 
@@ -376,7 +368,6 @@ type ApprovableCommand =
       | ApprovableCommand.PerCommand _ -> 0m
       | ApprovableCommand.AmountBased c ->
          match c with
-         | FulfillPlatformPayment o -> o.Data.RequestedPayment.BaseInfo.Amount
          | InternalTransferBetweenOrgs o -> o.Data.Amount
          | DomesticTransfer o -> o.Data.Amount
 
@@ -396,9 +387,6 @@ type ApprovableCommand =
                ManageApprovalRuleCommandType
       | ApprovableCommand.AmountBased c ->
          match c with
-         | FulfillPlatformPayment _ ->
-            ApprovableCommandType.ApprovableAmountBased
-               FulfillPlatformPaymentCommandType
          | InternalTransferBetweenOrgs _ ->
             ApprovableCommandType.ApprovableAmountBased
                InternalTransferBetweenOrgsCommandType
@@ -602,12 +590,6 @@ module CommandApprovalRule =
          | ApprovableCommand.PerCommand _ -> false
          | ApprovableCommand.AmountBased c ->
             match c with
-            | FulfillPlatformPayment cmd ->
-               let overLimit =
-                  cmd.Data.RequestedPayment.BaseInfo.Amount
-                  + accrual.PaymentsPaid > limit
-
-               overLimit
             | InternalTransferBetweenOrgs cmd ->
                let overLimit =
                   cmd.Data.Amount + accrual.InternalTransferBetweenOrgs > limit

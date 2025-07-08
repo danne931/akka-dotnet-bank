@@ -224,8 +224,8 @@ module TransferSqlWriter =
    let amount = Sql.decimal
    let transferCategory (cat: TransferCategory) = Sql.string (string cat)
    let scheduledAt (date: DateTime) = Sql.timestamptz date
-   let senderOrgId = OrgSqlWriter.orgId
-   let senderAccountId = AccountSqlWriter.accountId
+   let orgId = OrgSqlWriter.orgId
+   let accountId = AccountSqlWriter.accountId
    let memo = Sql.textOrNone
    let createdAt (date: DateTime) = Sql.timestamptz date
 
@@ -241,9 +241,6 @@ module TransferSqlWriter =
       let statusDetail (status: InternalTransferWithinOrgStatus) =
          Serialization.serialize status |> Sql.jsonb
 
-      let recipientOrgId = OrgSqlWriter.orgId
-      let recipientAccountId = AccountSqlWriter.accountId
-
    module InternalBetweenOrgs =
       let status =
          function
@@ -256,9 +253,6 @@ module TransferSqlWriter =
 
       let statusDetail (status: InternalTransferBetweenOrgsStatus) =
          Serialization.serialize status |> Sql.jsonb
-
-      let recipientOrgId = OrgSqlWriter.orgId
-      let recipientAccountId = AccountSqlWriter.accountId
 
    module Domestic =
       let status =
@@ -275,8 +269,6 @@ module TransferSqlWriter =
 
       let statusDetail (status: DomesticTransferProgress) =
          status |> Serialization.serialize |> Sql.jsonb
-
-      let recipientAccountId = AccountSqlWriter.accountId
 
       let expectedSettlementDate (date: DateTime) = Sql.timestamptz date
 

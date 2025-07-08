@@ -52,91 +52,103 @@ let private onValidationError
 
    let orgId = cmd.Envelope.OrgId
    let corrId = cmd.Envelope.CorrelationId
+   let sagaRef = getSagaRef corrId
 
-   let isNoop, fail =
-      match err with
-      | AccountStateTransitionError e ->
-         match e with
-         | AccountNotReadyToActivate -> true, None
-         | AccountNotActive accountName ->
-            match cmd with
-            | AccountCommand.Debit _ ->
-               false,
-               Some(
-                  PurchaseAccountFailReason.AccountNotActive accountName
-                  |> PurchaseSagaEvent.PurchaseRejectedByAccount
-                  |> AppSaga.Message.purchase orgId corrId
-               )
-            | AccountCommand.DomesticTransfer cmd when
-               cmd.Data.OriginatedFromSchedule
-               ->
-               false,
-               Some(
-                  DomesticTransferFailReason.SenderAccountNotActive
-                  |> DomesticTransferSagaEvent.SenderUnableToReserveFunds
-                  |> AppSaga.Message.domesticTransfer orgId corrId
-               )
-            | AccountCommand.InternalTransferBetweenOrgs cmd when
-               cmd.Data.OriginatedFromSchedule
-               ->
-               false,
-               Some(
-                  InternalTransferFailReason.AccountClosed
-                  |> PlatformTransferSagaEvent.SenderUnableToReserveFunds
-                  |> AppSaga.Message.platformTransfer orgId corrId
-               )
-            | AccountCommand.DepositTransferBetweenOrgs _ ->
-               false,
-               Some(
-                  InternalTransferFailReason.AccountClosed
-                  |> PlatformTransferSagaEvent.RecipientUnableToDepositFunds
-                  |> AppSaga.Message.platformTransfer orgId corrId
-               )
-            | AccountCommand.PlatformPayment _ ->
-               false,
-               Some(
-                  PlatformPaymentFailReason.AccountClosed
-                  |> PlatformPaymentSagaEvent.PayerAccountUnableToReserveFunds
-                  |> AppSaga.Message.platformPayment orgId corrId
-               )
-            | AccountCommand.DepositPlatformPayment cmd ->
-               false,
-               Some(
-                  (PlatformPaymentFailReason.AccountClosed,
-                   cmd.Data.PaymentMethod)
-                  |> PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds
-                  |> AppSaga.Message.platformPayment orgId corrId
-               )
-            | _ -> false, None
-         | InsufficientBalance(balance, accountName) ->
-            match cmd with
-            | AccountCommand.Debit _ ->
-               false,
-               Some(
-                  PurchaseAccountFailReason.InsufficientAccountFunds(
-                     balance,
-                     accountName
-                  )
-                  |> PurchaseSagaEvent.PurchaseRejectedByAccount
-                  |> AppSaga.Message.purchase orgId corrId
-               )
-            | AccountCommand.DomesticTransfer _ ->
-               false,
-               Some(
-                  DomesticTransferFailReason.SenderAccountInsufficientFunds
-                  |> DomesticTransferSagaEvent.SenderUnableToReserveFunds
-                  |> AppSaga.Message.domesticTransfer orgId corrId
-               )
-            | _ -> false, None
-         | _ -> false, None
-      | _ -> false, None
+   broadcaster.accountEventError orgId cmd.AccountId corrId err
 
-   if isNoop then
-      logDebug mailbox $"AccountTransferActor NOOP msg {err}"
-   else
-      broadcaster.accountEventError orgId cmd.AccountId corrId err
+   match cmd with
+   | AccountCommand.Debit _ -> option {
+      let! reason =
+         match err with
+         | AccountStateTransitionError ParentAccountNotActive ->
+            Some(PurchaseAccountFailReason.AccountNotActive "ParentAccount")
+         | AccountStateTransitionError(AccountNotActive name) ->
+            Some(PurchaseAccountFailReason.AccountNotActive name)
+         | AccountStateTransitionError(InsufficientBalance(balance, accountName)) ->
+            Some(
+               PurchaseAccountFailReason.InsufficientAccountFunds(
+                  balance,
+                  accountName
+               )
+            )
+         | _ -> None
 
-      fail |> Option.iter (fun msg -> getSagaRef corrId <! msg)
+      let msg =
+         PurchaseSagaEvent.PurchaseRejectedByAccount reason
+         |> AppSaga.Message.purchase orgId corrId
+
+      sagaRef <! msg
+     }
+   | AccountCommand.DomesticTransfer cmd when cmd.Data.OriginatedFromSchedule -> option {
+      let! reason =
+         match err with
+         | AccountStateTransitionError ParentAccountNotActive
+         | AccountStateTransitionError(AccountNotActive _) ->
+            Some DomesticTransferFailReason.SenderAccountNotActive
+         | AccountStateTransitionError(InsufficientBalance _) ->
+            Some DomesticTransferFailReason.SenderAccountInsufficientFunds
+         | _ -> None
+
+      let msg =
+         DomesticTransferSagaEvent.SenderUnableToReserveFunds reason
+         |> AppSaga.Message.domesticTransfer orgId corrId
+
+      sagaRef <! msg
+     }
+   | AccountCommand.InternalTransferBetweenOrgs cmd when
+      cmd.Data.OriginatedFromSchedule
+      || cmd.Data.OriginatedFromPaymentRequest.IsSome
+        ->
+        option {
+           let! reason =
+              match err with
+              | AccountStateTransitionError ParentAccountNotActive
+              | AccountStateTransitionError(AccountNotActive _) ->
+                 Some InternalTransferFailReason.AccountNotActive
+              | AccountStateTransitionError(InsufficientBalance _) ->
+                 Some InternalTransferFailReason.InsufficientFunds
+              | _ -> None
+
+           let msg =
+              PlatformTransferSagaEvent.SenderUnableToReserveFunds reason
+              |> AppSaga.Message.platformTransfer orgId corrId
+
+           sagaRef <! msg
+
+           let! paymentId = cmd.Data.OriginatedFromPaymentRequest
+           let corrId = PaymentId.toCorrelationId paymentId
+
+           let msg =
+              PlatformPaymentSagaEvent.PaymentFailed(
+                 TransferId(CorrelationId.get cmd.CorrelationId),
+                 PlatformPaymentFailReason.AccountClosed
+              )
+              |> AppSaga.Message.platformPayment orgId corrId
+
+           getSagaRef corrId <! msg
+        }
+   | AccountCommand.DepositTransferBetweenOrgs cmd -> option {
+      let msg =
+         InternalTransferFailReason.AccountNotActive
+         |> PlatformTransferSagaEvent.RecipientUnableToDepositFunds
+         |> AppSaga.Message.platformTransfer orgId corrId
+
+      sagaRef <! msg
+
+      let! paymentId = cmd.Data.BaseInfo.FromPaymentRequest
+      let corrId = PaymentId.toCorrelationId paymentId
+
+      let msg =
+         PlatformPaymentSagaEvent.PaymentFailed(
+            cmd.Data.BaseInfo.TransferId,
+            PlatformPaymentFailReason.AccountClosed
+         )
+         |> AppSaga.Message.platformPayment orgId corrId
+
+      getSagaRef corrId <! msg
+     }
+   | _ -> None
+   |> ignore
 
 let onPersisted
    (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
@@ -213,43 +225,15 @@ let onPersisted
          |> AppSaga.Message.platformPaymentStart e.OrgId e.CorrelationId
 
       getSagaGuaranteedDeliveryRef () <! msg
-   | AccountEvent.PlatformPaymentPending e ->
-      let msg =
-         PlatformPaymentSagaEvent.PayerAccountReservedFunds(
-            e,
-            partnerBankAccountLink
-         )
-         |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
-
-      getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentDeposited e ->
-      let msg =
-         partnerBankAccountLink
-         |> PlatformPaymentSagaEvent.PayeeAccountDepositedFunds
-         |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
-
-      getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentDeclined e ->
+   | AccountEvent.PlatformPaymentRequestDeclined e ->
       let msg =
          PlatformPaymentSagaEvent.PaymentRequestDeclined
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentCancelled e ->
+   | AccountEvent.PlatformPaymentRequestCancelled e ->
       let msg =
          PlatformPaymentSagaEvent.PaymentRequestCancelled
-         |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
-
-      getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentSettled e ->
-      let msg =
-         PlatformPaymentSagaEvent.PaymentSettled
-         |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
-
-      getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentFailed e ->
-      let msg =
-         PlatformPaymentSagaEvent.PayerAccountReleasedReservedFunds
          |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
@@ -288,11 +272,29 @@ let onPersisted
 
       getSagaRef e.CorrelationId <! msg
    | AccountEvent.InternalTransferBetweenOrgsSettled e ->
+      let info = e.Data.BaseInfo
+
       let msg =
          PlatformTransferSagaEvent.TransferSettled
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message (CorrelationId.get e.CorrelationId)
 
-      getSagaRef e.CorrelationId <! msg
+      getSagaGuaranteedDeliveryRef () <! msg
+
+      match info.FromPaymentRequest with
+      | Some paymentRequestId ->
+         let corrId = PaymentId.toCorrelationId paymentRequestId
+
+         let msg =
+            PlatformPaymentSagaEvent.PaymentFulfilled {
+               TransferId = info.TransferId
+               FulfilledAt = e.Timestamp
+            }
+            |> AppSaga.Message.platformPayment info.Recipient.OrgId corrId
+            |> GuaranteedDelivery.message (CorrelationId.get corrId)
+
+         getSagaGuaranteedDeliveryRef () <! msg
+      | None -> ()
    | AccountEvent.DomesticTransferScheduled e ->
       let msg =
          DomesticTransferSagaStartEvent.ScheduleTransferRequest e

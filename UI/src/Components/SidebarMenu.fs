@@ -151,7 +151,7 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                               Some [
                                  AccountEventGroupFilter.Deposit
                                  AccountEventGroupFilter.Purchase
-                                 AccountEventGroupFilter.PlatformPayment
+                                 AccountEventGroupFilter.PaymentRequest
                                  AccountEventGroupFilter.InternalTransferBetweenOrgs
                                  AccountEventGroupFilter.DomesticTransfer
                               ]

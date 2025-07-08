@@ -88,11 +88,13 @@ module ApprovableCommand =
          | DomesticTransfer c ->
             $"{Money.format c.Data.Amount} domestic transfer from
             {c.Data.Sender.Name} to {c.Data.Recipient.Name}"
-         | FulfillPlatformPayment c ->
-            let pay = c.Data.RequestedPayment.BaseInfo
-            $"{Money.format pay.Amount} payment fulfillment to {pay.Payee.OrgName}"
          | InternalTransferBetweenOrgs c ->
-            $"{Money.format c.Data.Amount} transfer to {c.Data.Recipient.Name}"
+            let p = c.Data
+
+            match p.OriginatedFromPaymentRequest with
+            | Some _ ->
+               $"{Money.format p.Amount} payment fulfillment to {p.Recipient.Name}"
+            | None -> $"{Money.format p.Amount} transfer to {p.Recipient.Name}"
 
 /// Determines if there is a pending command approval for updating an employee
 /// role. If there is then returns that pending role.
@@ -106,7 +108,7 @@ let employeeRolePendingApproval
       match p.Status, p.CommandToInitiateOnApproval with
       | CommandApprovalProgress.Status.Pending,
         ApprovableCommand.PerCommand(UpdateEmployeeRole cmd) ->
-         if (EmployeeId.fromEntityId cmd.EntityId) = employeeId then
+         if EmployeeId.fromEntityId cmd.EntityId = employeeId then
             Some cmd.Data.Role
          else
             None
@@ -123,9 +125,8 @@ let paymentFulfillmentPendingApproval
    |> Seq.tryPick (fun p ->
       match p.Status, p.CommandToInitiateOnApproval with
       | CommandApprovalProgress.Status.Pending,
-        ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
-         if cmd.Data.RequestedPayment.BaseInfo.Id = paymentId then
-            Some p
-         else
-            None
+        ApprovableCommand.AmountBased(InternalTransferBetweenOrgs cmd) ->
+         match cmd.Data.OriginatedFromPaymentRequest with
+         | Some id when id = paymentId -> Some p
+         | _ -> None
       | _ -> None)

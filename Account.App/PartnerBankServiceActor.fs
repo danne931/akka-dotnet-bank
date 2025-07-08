@@ -16,7 +16,6 @@ open Lib.Types
 open OrgOnboardingSaga
 open PurchaseSaga
 open PlatformTransferSaga
-open PlatformPaymentSaga
 open PartnerBank.Service.Domain
 
 let protectedAction
@@ -80,15 +79,9 @@ let actorProps
                | PartnerBankServiceMessage.TransferBetweenOrganizations req,
                  PartnerBankResponse.TransferBetweenOrganizations res ->
                   let msg =
-                     match req.ReplyTo with
-                     | TransferSagaReplyTo.PlatformTransfer ->
-                        Ok(SettlementId res.ConfirmationId)
-                        |> PlatformTransferSagaEvent.PartnerBankSyncResponse
-                        |> AppSaga.Message.platformTransfer orgId corrId
-                     | TransferSagaReplyTo.PlatformPayment ->
-                        Ok(SettlementId res.ConfirmationId)
-                        |> PlatformPaymentSagaEvent.PartnerBankSyncResponse
-                        |> AppSaga.Message.platformPayment orgId corrId
+                     Ok(SettlementId res.ConfirmationId)
+                     |> PlatformTransferSagaEvent.PartnerBankSyncResponse
+                     |> AppSaga.Message.platformTransfer orgId corrId
 
                   getSagaRef corrId <! msg
                | _ -> logError mailbox "Partner Bank Sync: Mixed req/res."

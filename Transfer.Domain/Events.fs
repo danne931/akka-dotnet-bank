@@ -4,31 +4,35 @@ open System
 
 open Lib.SharedTypes
 
-type InternalTransferWithinOrgDeducted = { BaseInfo: BaseInternalTransferInfo }
+type InternalTransferWithinOrgDeducted = {
+   BaseInfo: BaseInternalTransferWithinOrgInfo
+}
 
-type InternalTransferWithinOrgDeposited = { BaseInfo: BaseInternalTransferInfo }
+type InternalTransferWithinOrgDeposited = {
+   BaseInfo: BaseInternalTransferWithinOrgInfo
+}
 
 type InternalTransferBetweenOrgsScheduled = {
-   BaseInfo: BaseInternalTransferInfo
+   BaseInfo: BaseInternalTransferBetweenOrgsInfo
 }
 
 type InternalTransferBetweenOrgsPending = {
-   BaseInfo: BaseInternalTransferInfo
+   BaseInfo: BaseInternalTransferBetweenOrgsInfo
    /// Indicates whether this transfer originated from a scheduled job.
    FromSchedule: bool
 }
 
 type InternalTransferBetweenOrgsDeposited = {
-   BaseInfo: BaseInternalTransferInfo
+   BaseInfo: BaseInternalTransferBetweenOrgsInfo
 }
 
 type InternalTransferBetweenOrgsSettled = {
-   BaseInfo: BaseInternalTransferInfo
+   BaseInfo: BaseInternalTransferBetweenOrgsInfo
    SettlementId: SettlementId
 }
 
 type InternalTransferBetweenOrgsFailed = {
-   BaseInfo: BaseInternalTransferInfo
+   BaseInfo: BaseInternalTransferBetweenOrgsInfo
    Reason: InternalTransferFailReason
 }
 
@@ -128,47 +132,24 @@ module PlatformPaymentRequested =
             Id = info.Id
             InitiatedBy = info.InitiatedById
             Amount = info.Amount
-            Type = PaymentType.Platform
+            Type = PaymentRequestType.Platform
             Payee = info.Payee
+            Status = PaymentRequestStatus.Requested
             CreatedAt = e.Timestamp
             Expiration = e.Data.Expiration
             Memo = e.Data.Memo
          }
-         Status = PlatformPaymentStatus.Unpaid
          Payer = e.Data.BaseInfo.Payer
-         PaidBy = None
       }
 
-type PlatformPaymentPending = {
-   BaseInfo: PlatformPaymentBaseInfo
-   PaymentMethod: PaymentMethod
-}
-
-type PlatformPaymentDeposited = {
-   BaseInfo: PlatformPaymentBaseInfo
-   PaymentMethod: PaymentMethod
-}
-
-type PlatformPaymentSettled = {
-   BaseInfo: PlatformPaymentBaseInfo
-   SettlementId: SettlementId
-   PaymentMethod: PaymentMethod
-}
-
-type PlatformPaymentCancelled = {
+type PlatformPaymentRequestCancelled = {
    BaseInfo: PlatformPaymentBaseInfo
    Reason: string option
 }
 
-type PlatformPaymentDeclined = {
+type PlatformPaymentRequestDeclined = {
    BaseInfo: PlatformPaymentBaseInfo
    Reason: string option
-}
-
-type PlatformPaymentFailed = {
-   BaseInfo: PlatformPaymentBaseInfo
-   Reason: PlatformPaymentFailReason
-   PaymentMethod: PaymentMethod
 }
 
 type ThirdPartyPaymentBaseInfo = {
@@ -185,12 +166,7 @@ type ThirdPartyPaymentRequested = {
    Memo: string
 }
 
-type ThirdPartyPaymentDeposited = {
-   BaseInfo: ThirdPartyPaymentBaseInfo
-   PaymentMethod: ThirdPartyPaymentMethod
-}
-
-type ThirdPartyPaymentCancelled = {
+type ThirdPartyPaymentRequestCancelled = {
    BaseInfo: ThirdPartyPaymentBaseInfo
    Reason: string option
 }
@@ -203,11 +179,11 @@ type AutomaticTransferRuleConfigured = {
 type AutomaticTransferRuleDeleted = { AccountId: AccountId; RuleId: Guid }
 
 type InternalAutomatedTransferDeducted = {
-   BaseInfo: BaseInternalTransferInfo
+   BaseInfo: BaseInternalTransferWithinOrgInfo
    Rule: AutomaticTransfer.AutomaticTransferRule
 }
 
 type InternalAutomatedTransferDeposited = {
-   BaseInfo: BaseInternalTransferInfo
+   BaseInfo: BaseInternalTransferWithinOrgInfo
    Rule: AutomaticTransfer.AutomaticTransferRule
 }

@@ -818,6 +818,7 @@ let seedPayments
       let payer, request = List.head requestsFromDemoAccount
       let info = request.Data.BaseInfo
 
+      (*
       let msg =
          {
             PlatformPaymentCommand.create
@@ -840,6 +841,46 @@ let seedPayments
                Timestamp = buffer.AddHours 2
          }
          |> AccountCommand.PlatformPayment
+         |> AccountMessage.StateChange
+         |> GuaranteedDelivery.message (
+            ParentAccountId.get payer.ParentAccountId
+         )
+
+      accountRef <! msg
+      *)
+
+
+      let msg =
+         let ts = buffer.AddHours 2
+
+         {
+            InternalTransferBetweenOrgsCommand.create
+               {
+                  Id = InitiatedById payer.AccountOwnerId
+                  Name = payer.BusinessName
+               }
+               {
+                  Memo = None
+                  OriginatedFromSchedule = false
+                  OriginatedFromPaymentRequest = Some info.Id
+                  Amount = info.Amount
+                  Recipient = {
+                     OrgId = info.Payee.OrgId
+                     AccountId = info.Payee.AccountId
+                     ParentAccountId = info.Payee.ParentAccountId
+                     Name = info.Payee.OrgName
+                  }
+                  ScheduledDateSeedOverride = Some ts
+                  Sender = {
+                     Name = info.Payer.OrgName
+                     AccountId = payer.PrimaryAccountId
+                     ParentAccountId = info.Payer.ParentAccountId
+                     OrgId = info.Payer.OrgId
+                  }
+               } with
+               Timestamp = ts
+         }
+         |> AccountCommand.InternalTransferBetweenOrgs
          |> AccountMessage.StateChange
          |> GuaranteedDelivery.message (
             ParentAccountId.get payer.ParentAccountId
@@ -1213,6 +1254,7 @@ let seedAccountOwnerActions
                      {
                         Memo = None
                         OriginatedFromSchedule = false
+                        OriginatedFromPaymentRequest = None
                         Amount = 10_000m + randomAmount 1000 10_000
                         Recipient = {
                            OrgId = myOrg.OrgId
@@ -1246,6 +1288,7 @@ let seedAccountOwnerActions
                   InternalTransferBetweenOrgsCommand.create mockAccountOwner {
                      Memo = None
                      OriginatedFromSchedule = false
+                     OriginatedFromPaymentRequest = None
                      Recipient =
                         let ind =
                            randomAmount 0 (socialTransferCandidates.Length - 1)

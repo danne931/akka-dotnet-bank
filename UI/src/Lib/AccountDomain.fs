@@ -488,30 +488,26 @@ let transactionUIFriendly
          |> List.tryPick (function
             | History.Account accountHistory ->
                match accountHistory.Event with
-               | AccountEvent.PlatformPaymentDeposited e when
+               | AccountEvent.InternalTransferBetweenOrgsDeposited e when
                   e.OrgId = org.Org.OrgId
+                  && e.Data.BaseInfo.FromPaymentRequest.IsSome
                   ->
                   let i = e.Data.BaseInfo
 
                   Some(
-                     i.Payer.OrgName,
-                     accountName i.Payee.AccountId,
+                     i.Sender.Name,
+                     accountName i.Recipient.AccountId,
                      Some MoneyFlow.In
                   )
-               | AccountEvent.PlatformPaymentSettled e when
+               | AccountEvent.InternalTransferBetweenOrgsSettled e when
                   e.OrgId = org.Org.OrgId
+                  && e.Data.BaseInfo.FromPaymentRequest.IsSome
                   ->
                   let i = e.Data.BaseInfo
 
-                  let sender =
-                     match e.Data.PaymentMethod with
-                     | PaymentMethod.Platform accountId -> accountName accountId
-                     | PaymentMethod.ThirdParty pay ->
-                        match pay with
-                        | ThirdPartyPaymentMethod.ACH -> "ACH"
-                        | ThirdPartyPaymentMethod.Card -> "3rd party card"
+                  let sender = accountName i.Sender.AccountId
 
-                  Some(sender, i.Payee.OrgName, Some MoneyFlow.Out)
+                  Some(sender, i.Recipient.Name, Some MoneyFlow.Out)
                | AccountEvent.PlatformPaymentRequested e when
                   e.OrgId = org.Org.OrgId
                   ->
@@ -603,15 +599,7 @@ let private matchesAccountEventGroupFilter
       | AccountEvent.DomesticTransferFailed _
       | AccountEvent.DomesticTransferProgress _ -> true
       | _ -> false
-   | AccountEventGroupFilter.PlatformPayment ->
-      match event with
-      | AccountEvent.PlatformPaymentRequested _
-      | AccountEvent.PlatformPaymentPending _
-      | AccountEvent.PlatformPaymentDeposited _
-      | AccountEvent.PlatformPaymentSettled _
-      | AccountEvent.PlatformPaymentDeclined _
-      | AccountEvent.PlatformPaymentCancelled _ -> true
-      | _ -> false
+   | AccountEventGroupFilter.PaymentRequest -> false
 
 /// Apply the selected filter logic to events arriving via SignalR.
 /// History fetched from the network query will be filtered via the
@@ -692,3 +680,10 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
    && qualifiedAmount
    && qualifiedCategory
    && qualifiedEventType
+
+module Payment =
+   let statusDisplay (payment: Payment) =
+      match payment.Status with
+      | PaymentRequestStatus.Fulfilled p ->
+         "Fulfilled on " + DateTime.dateUIFriendly p.FulfilledAt
+      | _ -> payment.StatusDisplay

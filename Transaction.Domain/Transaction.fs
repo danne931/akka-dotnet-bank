@@ -90,17 +90,17 @@ type TransactionWithAncillaryInfo = {
 
 let private transactionInfoFromApprovableCommand =
    function
-   | ApprovableCommandType.ApprovableAmountBased c ->
+   | ApprovableCommand.AmountBased c ->
       match c with
-      | ApprovableAmountBased.DomesticTransferCommandType ->
+      | ApprovableCommandAmountBased.DomesticTransfer _ ->
          Some(TransactionType.DomesticTransfer, TransactionStatus.InProgress)
-      | ApprovableAmountBased.InternalTransferBetweenOrgsCommandType ->
-         Some(
-            TransactionType.InternalTransferBetweenOrgs,
-            TransactionStatus.InProgress
-         )
-      | ApprovableAmountBased.FulfillPlatformPaymentCommandType ->
-         Some(TransactionType.Payment, TransactionStatus.InProgress)
+      | ApprovableCommandAmountBased.InternalTransferBetweenOrgs e ->
+         let txnType =
+            match e.Data.OriginatedFromPaymentRequest with
+            | Some _ -> TransactionType.Payment
+            | None -> TransactionType.InternalTransferBetweenOrgs
+
+         Some(txnType, TransactionStatus.InProgress)
    | _ -> None
 
 let transactionInfoFromHistory
@@ -113,20 +113,20 @@ let transactionInfoFromHistory
       let info =
          match orgHistory.Event with
          | OrgEvent.CommandApprovalRequested e ->
-            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+            Some(e.Data.Command, e.Data.Command.Amount)
          | OrgEvent.CommandApprovalAcquired e ->
-            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+            Some(e.Data.Command, e.Data.Command.Amount)
          | OrgEvent.CommandApprovalProcessCompleted e ->
-            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+            Some(e.Data.Command, e.Data.Command.Amount)
          | OrgEvent.CommandApprovalDeclined e ->
-            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+            Some(e.Data.Command, e.Data.Command.Amount)
          | OrgEvent.CommandApprovalTerminated e ->
-            Some(e.Data.Command.CommandType, e.Data.Command.Amount)
+            Some(e.Data.Command, e.Data.Command.Amount)
          | _ -> None
 
       info
-      |> Option.bind (fun (cmdType, amount) ->
-         transactionInfoFromApprovableCommand cmdType
+      |> Option.bind (fun (cmd, amount) ->
+         transactionInfoFromApprovableCommand cmd
          |> Option.map (fun (txnType, txnStatus) -> txnType, txnStatus, amount))
    | History.Employee employeeHistory ->
       match employeeHistory.Event with
@@ -273,40 +273,16 @@ let transactionInfoFromHistory
             TransactionStatus.InProgress,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.PlatformPaymentDeclined e ->
+      | AccountEvent.PlatformPaymentRequestDeclined e ->
          Some(
             TransactionType.Payment,
             TransactionStatus.Failed,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.PlatformPaymentCancelled e ->
+      | AccountEvent.PlatformPaymentRequestCancelled e ->
          Some(
             TransactionType.Payment,
             TransactionStatus.Failed,
-            e.Data.BaseInfo.Amount
-         )
-      | AccountEvent.PlatformPaymentPending e ->
-         Some(
-            TransactionType.Payment,
-            TransactionStatus.InProgress,
-            e.Data.BaseInfo.Amount
-         )
-      | AccountEvent.PlatformPaymentDeposited e ->
-         Some(
-            TransactionType.Payment,
-            TransactionStatus.InProgress,
-            e.Data.BaseInfo.Amount
-         )
-      | AccountEvent.PlatformPaymentFailed e ->
-         Some(
-            TransactionType.Payment,
-            TransactionStatus.Failed,
-            e.Data.BaseInfo.Amount
-         )
-      | AccountEvent.PlatformPaymentSettled e ->
-         Some(
-            TransactionType.Payment,
-            TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
       | _ -> None
@@ -325,31 +301,11 @@ let applyHistory
       | Some _ ->
          Map.change
             txnId
-            (Option.map (fun txn ->
-               let txn = {
-                  txn with
-                     Status = status
-                     History = history :: txn.History
-               }
-
-               // For most transactions the timestamp shown will be the
-               // timestamp of the start of a transaction's lifecycle.
-               // (ex: The timestamp of a domestic transfer initiating
-               //      processing rather than when it finished potentially
-               //      days later.)
-               // An exception will be made for payments received.  We will
-               // show the timestamp of when an incoming payment was received,
-               // rather than their respective lifecycle start "PaymentRequested"
-               // timestamps.
-               match history with
-               | History.Account accountHistory ->
-                  match accountHistory.Event with
-                  | AccountEvent.PlatformPaymentDeposited e -> {
-                     txn with
-                        Timestamp = e.Timestamp
-                    }
-                  | _ -> txn
-               | _ -> txn))
+            (Option.map (fun txn -> {
+               txn with
+                  Status = status
+                  History = history :: txn.History
+            }))
             txns
       | None ->
          txns

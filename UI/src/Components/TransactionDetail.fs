@@ -402,12 +402,6 @@ let renderTransactionInfo
                               else
                                  $"Received payment request from {txn.Destination}"
                            )
-                        | AccountEvent.PlatformPaymentPending _ ->
-                           Html.p $"Payment fulfilled by {txn.Source}"
-                        | AccountEvent.PlatformPaymentDeposited _ ->
-                           Html.p $"Payment deposited into {txn.Destination}"
-                        | AccountEvent.PlatformPaymentSettled _ ->
-                           Html.p $"Payment settled"
                         | AccountEvent.DepositedCash e ->
                            Html.p $"Deposited money via {e.Data.Origin}"
                         | AccountEvent.DebitPending _ ->

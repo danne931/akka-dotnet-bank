@@ -15,9 +15,9 @@ DROP VIEW IF EXISTS monthly_purchase_accrued_by_card;
 
 DROP TABLE IF EXISTS balance_history;
 DROP TABLE IF EXISTS billing_statement;
-DROP TABLE IF EXISTS payment_platform;
-DROP TABLE IF EXISTS payment_third_party;
-DROP TABLE IF EXISTS payment;
+DROP TABLE IF EXISTS payment_request_platform;
+DROP TABLE IF EXISTS payment_request_third_party;
+DROP TABLE IF EXISTS payment_request;
 DROP TABLE IF EXISTS transfer_internal_within_org;
 DROP TABLE IF EXISTS transfer_internal_between_orgs;
 DROP TABLE IF EXISTS transfer_domestic;
@@ -54,9 +54,8 @@ DROP TYPE IF EXISTS parent_account_status;
 DROP TYPE IF EXISTS auto_transfer_rule_frequency;
 DROP TYPE IF EXISTS card_status;
 DROP TYPE IF EXISTS card_type;
-DROP TYPE IF EXISTS platform_payment_status;
-DROP TYPE IF EXISTS third_party_payment_status;
-DROP TYPE IF EXISTS payment_type;
+DROP TYPE IF EXISTS payment_request_status;
+DROP TYPE IF EXISTS payment_request_type;
 DROP TYPE IF EXISTS payment_network;
 DROP TYPE IF EXISTS domestic_transfer_recipient_account_depository;
 DROP TYPE IF EXISTS domestic_transfer_recipient_status;
@@ -635,9 +634,9 @@ CREATE INDEX transfer_sender_org_id_idx ON transfer (sender_org_id);
 COMMENT ON TABLE transfer IS
 'Parent of three kinds of transfers, each of which has an associated child table:
 
-- Internal transfers within an organization
-- Internal transfers between organizations
-- Domestic transfers (from an account on the platform to a domestic account outside the platform)
+1. Internal transfers within an organization
+2. Internal transfers between organizations
+3. Domestic transfers (from an account on the platform to a domestic account outside the platform)
 ';
 
 -- Status for internal transfers within an organization
@@ -760,96 +759,77 @@ to a mock 3rd party transfer processor (MockDomesticTransferProcess.Web/Program.
 TODO: Look into integrating Plaid.';
 
 
---- PAYMENTS ---
-CREATE TYPE payment_type AS ENUM ('Platform', 'ThirdParty');
+--- PAYMENT REQUESTS ---
+CREATE TYPE payment_request_type AS ENUM ('Platform', 'ThirdParty');
 
-CREATE TABLE payment(
-   payment_id UUID PRIMARY KEY,
-   initiated_by_id UUID NOT NULL REFERENCES employee(employee_id),
-   amount MONEY NOT NULL,
-   memo TEXT NOT NULL,
-   payment_type payment_type NOT NULL,
-   expiration TIMESTAMPTZ NOT NULL,
-   payee_org_id UUID NOT NULL REFERENCES organization(org_id),
-   payee_account_id UUID NOT NULL REFERENCES account(account_id),
-   payee_parent_account_id UUID NOT NULL
-);
-
-SELECT add_created_at_column('payment');
-SELECT add_updated_at_column_and_trigger('payment');
-
-CREATE INDEX payment_payee_org_id_idx ON payment(payee_org_id);
-CREATE INDEX payment_payee_account_id_idx ON payment(payee_account_id);
-CREATE INDEX payment_initiated_by_id_idx ON payment(initiated_by_id);
-
-COMMENT ON TABLE payment IS
-'Parent of two kinds of payments, each of which has an associated child table:
-
-- Platform payments (payments requested between entities in the platform)
-- Third party payments (payment requests across platform boundaries)';
-
-
---- PLATFORM PAYMENTS ---
-CREATE TYPE platform_payment_status AS ENUM (
-   'Unpaid',
-   'PaymentPending',
-   'Deposited',
-   'Settled',
+CREATE TYPE payment_request_status AS ENUM (
+   'Requested',
+   'Fulfilled',
    'Cancelled',
    'Declined',
    'Failed'
 );
 
-CREATE TABLE payment_platform(
-   payment_id UUID PRIMARY KEY REFERENCES payment,
-   status platform_payment_status NOT NULL,
+CREATE TABLE payment_request(
+   payment_id UUID PRIMARY KEY,
+   initiated_by_id UUID NOT NULL REFERENCES employee(employee_id),
+   amount MONEY NOT NULL,
+   status payment_request_status NOT NULL,
    status_detail JSONB NOT NULL,
-   payer_org_id UUID NOT NULL REFERENCES organization(org_id),
-   payer_parent_account_id UUID NOT NULL,
-   pay_by_account UUID REFERENCES account(account_id)
-   --pay_by_card ...
-   --pay_by_ach ...
+   memo TEXT NOT NULL,
+   request_type payment_request_type NOT NULL,
+   expiration TIMESTAMPTZ NOT NULL,
+   payee_org_id UUID NOT NULL REFERENCES organization(org_id),
+   payee_parent_account_id UUID NOT NULL REFERENCES partner_bank_parent_account(parent_account_id),
+   payee_account_id UUID NOT NULL REFERENCES account(account_id),
+   fulfilled_by_transfer_id UUID REFERENCES transfer(transfer_id),
+   fulfilled_at TIMESTAMPTZ
 );
 
-SELECT add_created_at_column('payment_platform');
-SELECT add_updated_at_column_and_trigger('payment_platform');
+SELECT add_created_at_column('payment_request');
+SELECT add_updated_at_column_and_trigger('payment_request');
 
-CREATE INDEX payment_platform_payer_org_id_idx ON payment_platform(payer_org_id);
-CREATE INDEX payment_platform_pay_by_account_idx ON payment_platform (pay_by_account) WHERE pay_by_account IS NOT NULL;
+CREATE INDEX payment_payee_org_id_idx ON payment_request(payee_org_id);
+CREATE INDEX payment_payee_account_id_idx ON payment_request(payee_account_id);
+CREATE INDEX payment_initiated_by_id_idx ON payment_request(initiated_by_id);
 
-COMMENT ON TABLE payment_platform IS
-'Payments requested to entities within the platform.
+COMMENT ON TABLE payment_request IS
+'Parent of two kinds of payments, each of which has an associated child table:
+
+1. Platform payments (payments requested between orgs on the platform)
+2. Third party payments (payment requests across platform boundaries)';
+
+
+--- PLATFORM PAYMENTS ---
+
+CREATE TABLE payment_request_platform(
+   payment_id UUID PRIMARY KEY REFERENCES payment_request,
+   payer_org_id UUID NOT NULL REFERENCES organization(org_id),
+   payer_parent_account_id UUID NOT NULL
+);
+
+SELECT add_created_at_column('payment_request_platform');
+SELECT add_updated_at_column_and_trigger('payment_request_platform');
+
+CREATE INDEX payment_request_platform_payer_org_id_idx ON payment_request_platform(payer_org_id);
+
+COMMENT ON TABLE payment_request_platform IS
+'Payments requested to orgs on the platform.
 
 An organization on the platform may request another organization on the platform to provide
 a payment to them for services rendered.';
 
-COMMENT ON COLUMN payment_platform.pay_by_account IS
-'An organization who conducts business on the platform may choose
-to pay by deducting funds from one of their accounts on the platform.
-
-Alternatively, they may choose to pay by ACH or card
-(NOTE: This option will be provided once Plaid/Stripe integration is implemented.)';
-
 --- THIRD PARTY PAYMENTS ---
-CREATE TYPE third_party_payment_status AS ENUM (
-   'Unpaid',
-   'Deposited',
-   'Cancelled'
-);
-
-CREATE TABLE payment_third_party(
-   payment_id UUID PRIMARY KEY REFERENCES payment,
-   status_tp third_party_payment_status NOT NULL,
+CREATE TABLE payment_request_third_party(
+   payment_id UUID PRIMARY KEY REFERENCES payment_request,
    payer_email VARCHAR(255) NOT NULL,
    payer_name VARCHAR(100) NOT NULL
-   --pay_by_card ...
-   --pay_by_ach ...
 );
 
-SELECT add_created_at_column('payment_third_party');
-SELECT add_updated_at_column_and_trigger('payment_third_party');
+SELECT add_created_at_column('payment_request_third_party');
+SELECT add_updated_at_column_and_trigger('payment_request_third_party');
 
-COMMENT ON TABLE payment_third_party IS
+COMMENT ON TABLE payment_request_third_party IS
 'Payments requested to entities outside the platform.
 
 An organization on the platform may request a payment from some organization
@@ -857,10 +837,7 @@ or contractor who does not conduct business on the platform.
 They will receive an email requesting a payment and will be
 be redirected to a secure form to pay by ACH or card.
 
-TODO:
-This table will be developed more after researching
-Plaid and seeing what data will be necessary for paying by ACH/card.
-This table is currently not in use.';
+NOTE: This table is currently not in use.';
 
 
 --- APPROVAL RULES ---
@@ -869,7 +846,6 @@ CREATE TYPE approvable_command AS ENUM (
    'UpdateEmployeeRole',
    'UnlockCard',
    'ManageApprovalRule',
-   'SendPayment',
    'SendInternalTransferBetweenOrgs',
    'SendDomesticTransfer'
 );
@@ -1333,8 +1309,7 @@ RETURNS TABLE (
    account_id UUID,
    internal_transfer_within_org_accrued NUMERIC,
    internal_transfer_between_orgs_accrued NUMERIC,
-   domestic_transfer_accrued NUMERIC,
-   payment_paid_accrued NUMERIC
+   domestic_transfer_accrued NUMERIC
 ) AS $$
 BEGIN
   RETURN QUERY
@@ -1374,23 +1349,10 @@ BEGIN
            END
         ),
         0
-     ) AS domestic_transfer_accrued,
-
-     COALESCE(
-        SUM(
-           CASE
-           WHEN ae.name = 'PlatformPaymentSettled' THEN ae.amount::numeric
-           ELSE 0
-           END
-        ),
-        0
-     ) AS payment_paid_accrued
+     ) AS domestic_transfer_accrued
   FROM account_event ae
   JOIN partner_bank_parent_account using(parent_account_id)
-  -- Account events related to transfers are represented as "transfer" read models.
-  -- Account events related to platform payments are represented as "payment_platform" read models.
-  -- Use LEFT JOIN instead of JOIN on transfer or we will miss out on payments paid metrics.
-  LEFT JOIN transfer ON ae.correlation_id = transfer.transfer_id
+  JOIN transfer ON ae.correlation_id = transfer.transfer_id
   WHERE
      ae.org_id = orgId
      AND ae.amount IS NOT NULL
@@ -1398,8 +1360,7 @@ BEGIN
         'InternalAutomatedTransferDeducted',
         'InternalTransferWithinOrgDeducted',
         'InternalTransferBetweenOrgsSettled',
-        'DomesticTransferSettled',
-        'PlatformPaymentSettled'
+        'DomesticTransferSettled'
      )
      AND (
        partner_bank_parent_account.last_billing_cycle_at IS NULL 
@@ -1408,25 +1369,9 @@ BEGIN
      AND
        CASE
        WHEN timeFrame = 'Day'
-       THEN
-          CASE
-          WHEN transfer.scheduled_at IS NOT NULL
-          THEN transfer.scheduled_at::date = CURRENT_DATE
-
-          WHEN ae.name = 'PlatformPaymentSettled'
-          THEN ae.timestamp::date = CURRENT_DATE
-
-          ELSE false
-          END
+       THEN transfer.scheduled_at::date = CURRENT_DATE
        WHEN timeFrame = 'Month'
-       THEN
-          CASE
-          WHEN ae.name = 'PlatformPaymentSettled'
-          THEN ae.timestamp::date >= date_trunc('month', CURRENT_DATE)
-          -- Account event corresponds to a transfer rather than a payment.
-          -- Need to check it's scheduled_at date rather than account_event.timestamp.
-          ELSE transfer.scheduled_at::date >= date_trunc('month', CURRENT_DATE)
-          END
+       THEN transfer.scheduled_at::date >= date_trunc('month', CURRENT_DATE)
        END
   GROUP BY ae.account_id;
 END

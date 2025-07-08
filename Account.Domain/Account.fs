@@ -116,33 +116,8 @@ let applyEvent (account: Account) (evt: AccountEvent) =
             account.PendingDeductions.Remove e.Data.BaseInfo.Amount
      }
    | PlatformPaymentRequested _ -> account
-   | PlatformPaymentCancelled _ -> account
-   | PlatformPaymentDeclined _ -> account
-   | PlatformPaymentPending e ->
-      // If payment fulfilled with account funds then
-      // add the deducted amount to PendingDeductions.
-      match e.Data.PaymentMethod with
-      | PaymentMethod.Platform _ -> {
-         account with
-            PendingDeductions =
-               account.PendingDeductions.Add e.Data.BaseInfo.Amount
-        }
-      | PaymentMethod.ThirdParty _ -> account
-   | PlatformPaymentDeposited e -> {
-      account with
-         Balance = account.Balance + e.Data.BaseInfo.Amount
-     }
-   | PlatformPaymentSettled e -> {
-      account with
-         Balance = account.Balance - e.Data.BaseInfo.Amount
-         PendingDeductions =
-            account.PendingDeductions.Remove e.Data.BaseInfo.Amount
-     }
-   | PlatformPaymentFailed e -> {
-      account with
-         PendingDeductions =
-            account.PendingDeductions.Remove e.Data.BaseInfo.Amount
-     }
+   | PlatformPaymentRequestCancelled _ -> account
+   | PlatformPaymentRequestDeclined _ -> account
    | AutoTransferRuleConfigured e -> {
       account with
          AutoTransferRule = Some e.Data.Config
@@ -291,11 +266,11 @@ module private StateTransition =
       (account: Account)
       (cmd: InternalTransferBetweenOrgsCommand)
       =
-      let input = cmd.Data
+      let info = cmd.Data
 
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
-      elif account.AvailableBalance - input.Amount < 0m then
+      elif account.AvailableBalance - info.Amount < 0m then
          transitionErr
          <| InsufficientBalance(account.AvailableBalance, account.FullName)
       else
@@ -400,7 +375,7 @@ module private StateTransition =
             account
             (RequestPlatformPaymentCommand.toEvent cmd)
 
-   let cancelPlatformPayment
+   let cancelPlatformPaymentRequest
       (account: Account)
       (cmd: CancelPlatformPaymentCommand)
       =
@@ -408,11 +383,11 @@ module private StateTransition =
          accountNotActiveError account
       else
          map
-            PlatformPaymentCancelled
+            PlatformPaymentRequestCancelled
             account
             (CancelPlatformPaymentCommand.toEvent cmd)
 
-   let declinePlatformPayment
+   let declinePlatformPaymentRequest
       (account: Account)
       (cmd: DeclinePlatformPaymentCommand)
       =
@@ -420,53 +395,9 @@ module private StateTransition =
          accountNotActiveError account
       else
          map
-            PlatformPaymentDeclined
+            PlatformPaymentRequestDeclined
             account
             (DeclinePlatformPaymentCommand.toEvent cmd)
-
-   let platformPaymentPending (account: Account) (cmd: PlatformPaymentCommand) =
-      let input = cmd.Data.RequestedPayment.BaseInfo
-
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      elif account.AvailableBalance - input.Amount < 0m then
-         transitionErr
-         <| InsufficientBalance(account.AvailableBalance, account.FullName)
-      else
-         map PlatformPaymentPending account (PlatformPaymentCommand.toEvent cmd)
-
-   let failPlatformPayment
-      (account: Account)
-      (cmd: FailPlatformPaymentCommand)
-      =
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      else
-         map
-            PlatformPaymentFailed
-            account
-            (FailPlatformPaymentCommand.toEvent cmd)
-
-   let depositPlatformPayment
-      (account: Account)
-      (cmd: DepositPlatformPaymentCommand)
-      =
-      if account.Status <> AccountStatus.Active then
-         accountNotActiveError account
-      else
-         map
-            PlatformPaymentDeposited
-            account
-            (DepositPlatformPaymentCommand.toEvent cmd)
-
-   let settlePlatformPayment
-      (account: Account)
-      (cmd: SettlePlatformPaymentCommand)
-      =
-      map
-         PlatformPaymentSettled
-         account
-         (SettlePlatformPaymentCommand.toEvent cmd)
 
    let closeAccount (account: Account) (cmd: CloseAccountCommand) =
       map AccountEvent.AccountClosed account (CloseAccountCommand.toEvent cmd)
@@ -573,18 +504,10 @@ let stateTransition (account: Account) (command: AccountCommand) =
    | AccountCommand.CloseAccount cmd -> StateTransition.closeAccount account cmd
    | AccountCommand.RequestPlatformPayment cmd ->
       StateTransition.requestPlatformPayment account cmd
-   | AccountCommand.PlatformPayment cmd ->
-      StateTransition.platformPaymentPending account cmd
-   | AccountCommand.FailPlatformPayment cmd ->
-      StateTransition.failPlatformPayment account cmd
-   | AccountCommand.SettlePlatformPayment cmd ->
-      StateTransition.settlePlatformPayment account cmd
-   | AccountCommand.DepositPlatformPayment cmd ->
-      StateTransition.depositPlatformPayment account cmd
    | AccountCommand.CancelPlatformPayment cmd ->
-      StateTransition.cancelPlatformPayment account cmd
+      StateTransition.cancelPlatformPaymentRequest account cmd
    | AccountCommand.DeclinePlatformPayment cmd ->
-      StateTransition.declinePlatformPayment account cmd
+      StateTransition.declinePlatformPaymentRequest account cmd
    | AccountCommand.ConfigureAutoTransferRule cmd ->
       StateTransition.configureAutoTransferRule account cmd
    | AccountCommand.DeleteAutoTransferRule cmd ->

@@ -15,7 +15,6 @@ open Lib.Types
 open ActorUtil
 open Bank.Org.Domain
 open Bank.Account.Domain
-open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open CommandApproval
 open SignalRBroadcast
@@ -80,14 +79,6 @@ let private sendApprovedCommand
          orgRef <! OrgMessage.StateChange cmd
    | ApprovableCommand.AmountBased c ->
       match c with
-      | FulfillPlatformPayment cmd ->
-         let msg =
-            { cmd with Timestamp = DateTime.UtcNow }
-            |> AccountCommand.PlatformPayment
-            |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
-
-         getAccountRef () <! msg
       | DomesticTransfer cmd ->
          let msg =
             { cmd with Timestamp = DateTime.UtcNow }
@@ -117,7 +108,6 @@ let private hasAccruableTransaction
          TransactionAmount = cmd.Amount
          EventType =
             match c with
-            | FulfillPlatformPayment _ -> OrgAccrualMetricEventType.PaymentPaid
             | DomesticTransfer _ -> OrgAccrualMetricEventType.DomesticTransfer
             | InternalTransferBetweenOrgs _ ->
                OrgAccrualMetricEventType.InternalTransferBetweenOrgs
@@ -263,6 +253,7 @@ let onPersisted
             |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
          getEmployeeRef () <! msg
+      (*
       | ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
          let msg =
             DeclinePlatformPaymentCommand.create e.InitiatedBy {
@@ -276,6 +267,7 @@ let onPersisted
             |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
          getAccountRef () <! msg
+      *)
       | _ -> ()
    | _ -> ()
 

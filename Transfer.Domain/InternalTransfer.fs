@@ -4,14 +4,14 @@ open System
 
 open Lib.SharedTypes
 
-type InternalTransferRecipient = {
+type InternalTransferSender = {
    Name: string
    AccountId: AccountId
    ParentAccountId: ParentAccountId
    OrgId: OrgId
 }
 
-type InternalTransferSender = {
+type InternalTransferRecipient = {
    Name: string
    AccountId: AccountId
    ParentAccountId: ParentAccountId
@@ -20,14 +20,31 @@ type InternalTransferSender = {
 
 [<RequireQualifiedAccess>]
 type InternalTransferFailReason =
-   | AccountClosed
-   | InvalidAccountInfo
+   | AccountNotActive
+   | InsufficientFunds
    | PartnerBankSync of string
 
 [<RequireQualifiedAccess>]
 type InternalTransferWithinOrgStatus =
    | Pending
    | Settled
+
+type BaseInternalTransferWithinOrgInfo = {
+   TransferId: TransferId
+   InitiatedBy: Initiator
+   Sender: InternalTransferSender
+   Recipient: InternalTransferRecipient
+   Amount: decimal
+   ScheduledDate: DateTime
+   Memo: string option
+}
+
+type InProgressInternalWithinOrgTransfer = {
+   TransferId: TransferId
+   Info: BaseInternalTransferWithinOrgInfo
+   IsAutomated: bool
+   Status: InternalTransferWithinOrgStatus
+}
 
 [<RequireQualifiedAccess>]
 type InternalTransferBetweenOrgsStatus =
@@ -37,19 +54,13 @@ type InternalTransferBetweenOrgsStatus =
    | Settled
    | Failed of InternalTransferFailReason
 
-type BaseInternalTransferInfo = {
+type BaseInternalTransferBetweenOrgsInfo = {
    TransferId: TransferId
    InitiatedBy: Initiator
+   Sender: InternalTransferSender
    Recipient: InternalTransferRecipient
    Amount: decimal
    ScheduledDate: DateTime
-   Sender: InternalTransferSender
+   FromPaymentRequest: PaymentId option
    Memo: string option
-}
-
-type InProgressInternalTransfer = {
-   TransferId: TransferId
-   Info: BaseInternalTransferInfo
-   IsAutomated: bool
-   Status: InternalTransferWithinOrgStatus
 }

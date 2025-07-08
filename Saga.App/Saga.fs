@@ -238,29 +238,13 @@ type Event =
             "PlatformPaymentRequestCancelled"
          | PlatformPaymentSagaEvent.PaymentRequestDeclined ->
             "PlatformPaymentRequestDeclined"
-         | PlatformPaymentSagaEvent.PayerAccountReservedFunds _ ->
-            "PlatformPaymentPayerAccountReservedFunds"
-         | PlatformPaymentSagaEvent.PayerAccountUnableToReserveFunds _ ->
-            "PlatformPaymentPayerAccountUnableToReserveFunds"
-         | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds _ ->
-            "PlatformPaymentPayeeAccountDepositedFunds"
-         | PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds _ ->
-            "PlatformPaymentPayeeAccountUnableToDepositFunds"
-         | PlatformPaymentSagaEvent.PartnerBankSyncResponse _ ->
-            "PlatformPaymentPartnerBankSyncResponse"
-         | PlatformPaymentSagaEvent.PaymentSettled -> "PlatformPaymentSettled"
-         | PlatformPaymentSagaEvent.SupportTeamResolvedPartnerBankSync ->
-            "PlatformPaymentSupportTeamResolvedPartnerBankSync"
-         | PlatformPaymentSagaEvent.PayerAccountReleasedReservedFunds ->
-            "PlatformPaymentPayerAccountReleasedReservedFunds"
-         | PlatformPaymentSagaEvent.ThirdPartyPaymentMethodRefunded ->
-            "PlatformPaymentThirdPartyPaymentMethodRefunded"
          | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->
             "PlatformPaymentRequestNotificationSentToPayer"
-         | PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer ->
-            "PlatformPaymentPaidNotificationSentToPayer"
-         | PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee ->
-            "PlatformPaymentDepositedNotificationSentToPayee"
+         | PlatformPaymentSagaEvent.PaymentFailed _ -> "PlatformPaymentFailed"
+         | PlatformPaymentSagaEvent.PaymentFulfilled _ ->
+            "PlatformPaymentFulfilled"
+         | PlatformPaymentSagaEvent.PaymentFulfilledNotificationSentToPayee ->
+            "PlatformPaymentFulfilledNotificationSentToPayee"
          | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
             "PlatformPaymentDeclinedNotificationSentToPayee"
          | PlatformPaymentSagaEvent.EvaluateRemainingWork ->
@@ -875,8 +859,6 @@ let sagaHandler
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
                   getPartnerBankServiceRef = getPartnerBankServiceRef
-                  refundPaymentToThirdParty =
-                     PlatformPaymentSaga.refundPaymentToThirdParty
                   sendMessageToSelf =
                      fun payment asyncEvt ->
                         let orgId = payment.Payee.OrgId

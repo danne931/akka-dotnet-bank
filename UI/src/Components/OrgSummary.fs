@@ -10,12 +10,10 @@ type private RotatingMetric =
    | DailyInternalTransferWithinOrg
    | DailyInternalTransferBetweenOrgs
    | DailyDomesticTransfer
-   | DailyPaymentPaid
    | DailyPurchaseAccrued
    | MonthlyInternalTransferWithinOrg
    | MonthlyInternalTransferBetweenOrgs
    | MonthlyDomesticTransfer
-   | MonthlyPaymentPaid
    | MonthlyPurchaseAccrued
 
 let private rotatingMetrics = [
@@ -23,12 +21,10 @@ let private rotatingMetrics = [
    RotatingMetric.DailyInternalTransferWithinOrg
    RotatingMetric.DailyInternalTransferBetweenOrgs
    RotatingMetric.DailyDomesticTransfer
-   RotatingMetric.DailyPaymentPaid
    RotatingMetric.MonthlyPurchaseAccrued
    RotatingMetric.MonthlyInternalTransferWithinOrg
    RotatingMetric.MonthlyInternalTransferBetweenOrgs
    RotatingMetric.MonthlyDomesticTransfer
-   RotatingMetric.MonthlyPaymentPaid
 ]
 
 let private renderMoneyOut amount =
@@ -182,9 +178,6 @@ let OrgSummaryComponent (org: OrgWithAccountProfiles) =
                | RotatingMetric.DailyDomesticTransfer ->
                   Html.p "Daily Domestic Transfer: "
                   renderMoneyOut metrics.DailyDomesticTransfer
-               | RotatingMetric.DailyPaymentPaid ->
-                  Html.p "Daily Payments Paid: "
-                  renderMoneyOut metrics.DailyPaymentPaid
                | RotatingMetric.DailyPurchaseAccrued ->
                   Html.p "Daily Purchase: "
                   renderMoneyOut metrics.DailyPurchase
@@ -200,9 +193,6 @@ let OrgSummaryComponent (org: OrgWithAccountProfiles) =
                | RotatingMetric.MonthlyPurchaseAccrued ->
                   Html.p "Monthly Purchase: "
                   renderMoneyOut metrics.MonthlyPurchase
-               | RotatingMetric.MonthlyPaymentPaid ->
-                  Html.p "Monthly Payments Paid: "
-                  renderMoneyOut metrics.MonthlyPaymentPaid
             ]
          ]
 

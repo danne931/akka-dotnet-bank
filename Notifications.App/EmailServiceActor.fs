@@ -387,12 +387,14 @@ let onSuccessfulServiceResponse
          PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer
          |> AppSaga.Message.platformPayment orgId corrId
          |> Some
+      (*
       | EmailInfo.PlatformPaymentPaid _ ->
          PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer
          |> AppSaga.Message.platformPayment orgId corrId
          |> Some
+      *)
       | EmailInfo.PlatformPaymentDeposited _ ->
-         PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee
+         PlatformPaymentSagaEvent.PaymentFulfilledNotificationSentToPayee
          |> AppSaga.Message.platformPayment orgId corrId
          |> Some
       | EmailInfo.PlatformPaymentDeclined _ ->

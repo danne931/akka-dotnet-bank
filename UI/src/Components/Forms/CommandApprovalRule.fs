@@ -134,10 +134,6 @@ let private fieldApprovableCommandType =
             let cardUnlock =
                ApprovableCommandType.ApprovablePerCommand UnlockCardCommandType
 
-            let platformPayment =
-               ApprovableCommandType.ApprovableAmountBased
-                  FulfillPlatformPaymentCommandType
-
             let internalTransferBetweenOrgs =
                ApprovableCommandType.ApprovableAmountBased
                   InternalTransferBetweenOrgsCommandType
@@ -150,7 +146,6 @@ let private fieldApprovableCommandType =
                string employeeInvite, employeeInvite.Display
                string employeeRole, employeeRole.Display
                string cardUnlock, cardUnlock.Display
-               string platformPayment, platformPayment.Display
                string internalTransferBetweenOrgs,
                internalTransferBetweenOrgs.Display
                string domesticTransfer, domesticTransfer.Display

@@ -14,7 +14,7 @@ module BillingTransaction =
       : BillingTransaction option
       =
       let cutoffStart = DateTime(period.Year, period.Month, 1).ToUniversalTime()
-      let cutoffEnd = cutoffStart.AddMonths(1)
+      let cutoffEnd = cutoffStart.AddMonths 1
       let _, env = AccountEnvelope.unwrap evt
 
       if env.Timestamp < cutoffStart || env.Timestamp >= cutoffEnd then
@@ -31,8 +31,6 @@ module BillingTransaction =
          | InternalTransferBetweenOrgsDeposited _
          | InternalAutomatedTransferDeducted _
          | InternalAutomatedTransferDeposited _
-         | PlatformPaymentSettled _
-         | PlatformPaymentDeposited _
          | DomesticTransferSettled _ -> Some(BillingTransaction evt)
          | _ -> None
 

@@ -22,7 +22,7 @@ module atiWriter = AncillaryTransactionSqlWriter
 module atiReader = AncillaryTransactionSqlReader
 let private atiTable = AncillaryTransactionInfoSqlMapper.table
 
-let filtersToOriginatingEventNames
+let private filtersToOriginatingEventNames
    (filters: AccountEventGroupFilter list)
    : string array
    =
@@ -47,10 +47,12 @@ let filtersToOriginatingEventNames
               typeof<DomesticTransferScheduled>.Name
               typeof<DomesticTransferPending>.Name
              ]
-           | AccountEventGroupFilter.PlatformPayment -> [
-              typeof<PlatformPaymentPending>.Name // Outgoing payments
-              typeof<PlatformPaymentDeposited>.Name // Incoming payments
-             ])
+           // NOTE:
+           // Payment request / cancelled / decline used only in history dashboard.
+           // Transfers originating from payment requests are selected via
+           // AccountEventGroupFilter.InternalTransferBetweenOrgs &
+           // AccountEventGroupFilter.DomesticTransfer
+           | AccountEventGroupFilter.PaymentRequest -> [])
       []
    |> List.toArray
 

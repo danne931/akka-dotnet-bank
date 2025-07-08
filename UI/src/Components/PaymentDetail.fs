@@ -18,7 +18,11 @@ open UIDomain.Org
 open Lib.Time
 open Lib.SharedTypes
 
-type State = { IsFulfillingPayment: bool }
+type State = {
+   IsFulfillingPayment: bool
+} with
+
+   static member Init = { IsFulfillingPayment = false }
 
 [<RequireQualifiedAccess>]
 type Confirmation =
@@ -41,14 +45,10 @@ type Msg =
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
    | SubmitPaymentForApproval
 
-let init () =
-   { IsFulfillingPayment = false }, Cmd.none
+let init () = State.Init, Cmd.none
 
 let getAccount (payment: Payment) =
-   payment
-   |> Payment.baseInfo
-   |> fun p -> p.Payee.AccountId
-   |> AccountService.getAccount
+   AccountService.getAccount payment.BaseInfo.Payee.AccountId
 
 let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
    match msg with
@@ -98,7 +98,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
          match payment, accountOpt with
          | Payment.ThirdParty _, _ ->
             let err =
-               NotImplementedException("third party payment")
+               NotImplementedException "third party payment"
                |> Err.NotImplementedError
                |> Error
 
@@ -146,8 +146,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
       notifyParentOnUpdate receipt
 
       state,
-      Alerts.toastSuccessCommand
-         $"Cancelled payment request to {Payment.payer p}"
+      Alerts.toastSuccessCommand $"Cancelled payment request to {p.Payer}"
    | ConfirmCancelPaymentRequest(_, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
@@ -158,7 +157,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
          match payment, accountOpt with
          | Payment.ThirdParty _, _ ->
             let err =
-               NotImplementedException("third party payment")
+               NotImplementedException "third party payment"
                |> Err.NotImplementedError
                |> Error
 
@@ -204,13 +203,13 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
       state, Cmd.fromAsync decline
    | ConfirmDeclinePaymentRequest(_, _, p, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
-      let payee = (Payment.baseInfo p).Payee.OrgName
+      let payee = p.BaseInfo.Payee.OrgName
       state, Alerts.toastSuccessCommand $"Declined payment request from {payee}"
    | ConfirmDeclinePaymentRequest(_, _, _, Finished(Error err)) ->
       Log.error (string err)
       state, Alerts.toastCommand err
    | SubmitPaymentForApproval ->
-      { IsFulfillingPayment = false },
+      State.Init,
       Cmd.batch [
          Alerts.toastSuccessCommand "Submitted payment for approval."
          Cmd.navigate Routes.PaymentUrl.BasePath
@@ -228,7 +227,7 @@ let PaymentDetailComponent
    let state, dispatch =
       React.useElmish (init, update notifyParentOnUpdate, [||])
 
-   let baseInfo = Payment.baseInfo payment
+   let baseInfo = payment.BaseInfo
    let isPaymentOutgoing = session.OrgId = baseInfo.Payee.OrgId
    let accounts = org.Accounts
 
@@ -244,8 +243,7 @@ let PaymentDetailComponent
          |> _.Length
          |> string)
 
-   let canManagePayment =
-      Payment.canManage payment && paymentPendingApproval.IsNone
+   let canManagePayment = payment.CanManage && paymentPendingApproval.IsNone
 
    classyNode Html.div [ "payment-detail" ] [
       Html.div [
@@ -282,7 +280,7 @@ let PaymentDetailComponent
             Html.small "Request sent to:"
             Html.p [
                attr.style [ style.marginLeft 10; style.display.inlineElement ]
-               attr.text (Payment.payer payment)
+               attr.text payment.Payer
             ]
          ]
 
@@ -328,7 +326,7 @@ let PaymentDetailComponent
 
       classyNode Html.div [ "grid" ] [
          Html.div [
-            Html.small "Created on:"
+            Html.small "Requested on:"
             Html.p (DateTime.format baseInfo.CreatedAt)
          ]
 

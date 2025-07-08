@@ -147,13 +147,6 @@ let update msg state =
                   domesticTransfer e.Data.BaseInfo.Amount
                | AccountEvent.InternalTransferBetweenOrgsPending e ->
                   internalTransferBetweenOrgs e.Data.BaseInfo.Amount
-               | AccountEvent.PlatformPaymentPending e -> {
-                  metrics with
-                     DailyPaymentPaid =
-                        metrics.DailyPaymentPaid + e.Data.BaseInfo.Amount
-                     MonthlyPaymentPaid =
-                        metrics.MonthlyPaymentPaid + e.Data.BaseInfo.Amount
-                 }
                | AccountEvent.DebitPending e -> {
                   metrics with
                      DailyPurchase = metrics.DailyPurchase + e.Data.Amount

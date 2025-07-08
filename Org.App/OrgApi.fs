@@ -91,11 +91,9 @@ let getOrgAndAccountProfiles
             dta.internal_transfer_within_org_accrued as daily_internal_within,
             dta.internal_transfer_between_orgs_accrued as daily_internal_between,
             dta.domestic_transfer_accrued as daily_domestic,
-            dta.payment_paid_accrued as daily_payment_paid,
             mta.internal_transfer_within_org_accrued as monthly_internal_within,
             mta.internal_transfer_between_orgs_accrued as monthly_internal_between,
             mta.domestic_transfer_accrued as monthly_domestic,
-            mta.payment_paid_accrued as monthly_payment_paid,
             {mpaView}.amount_accrued as monthly_purchase,
             {dpaView}.amount_accrued as daily_purchase
          FROM {table} o
@@ -126,9 +124,6 @@ let getOrgAndAccountProfiles
                      DailyDomesticTransfer =
                         read.decimalOrNone "daily_domestic"
                         |> Option.defaultValue 0m
-                     DailyPaymentPaid =
-                        read.decimalOrNone "daily_payment_paid"
-                        |> Option.defaultValue 0m
                      DailyPurchase =
                         read.decimalOrNone "daily_purchase"
                         |> Option.defaultValue 0m
@@ -140,9 +135,6 @@ let getOrgAndAccountProfiles
                         |> Option.defaultValue 0m
                      MonthlyDomesticTransfer =
                         read.decimalOrNone "monthly_domestic"
-                        |> Option.defaultValue 0m
-                     MonthlyPaymentPaid =
-                        read.decimalOrNone "monthly_payment_paid"
                         |> Option.defaultValue 0m
                      MonthlyPurchase =
                         read.decimalOrNone "monthly_purchase"

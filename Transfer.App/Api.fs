@@ -17,10 +17,8 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
          {Table.payment}.*,
          payeeOrg.{OrganizationSqlMapper.OrgFields.name} as payee_org_name,
          payerOrg.{OrganizationSqlMapper.OrgFields.name} as payer_org_name,
-         {Table.platformPayment}.{PaymentFields.Platform.statusDetail},
          {Table.platformPayment}.{PaymentFields.Platform.payerParentAccountId},
-         {PaymentFields.Platform.payerOrgId},
-         {PaymentFields.Platform.payByAccount}
+         {Table.platformPayment}.{PaymentFields.Platform.payerOrgId}
       FROM {Table.payment} 
       JOIN {Table.platformPayment} using({PaymentFields.paymentId})
       JOIN {OrganizationSqlMapper.table} payeeOrg ON payeeOrg.org_id = {PaymentFields.payeeOrgId}
@@ -47,34 +45,31 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
                Id = Reader.paymentId read
                InitiatedBy = Reader.initiatedById read
                Amount = Reader.amount read
-               Type = Reader.paymentType read
+               Type = Reader.requestType read
                Payee = {
                   OrgId = Reader.payeeOrgId read
                   OrgName = read.string "payee_org_name"
                   AccountId = Reader.payeeAccountId read
                   ParentAccountId = Reader.payeeParentAccountId read
                }
+               Status = Reader.status read
                CreatedAt = Reader.createdAt read
                Expiration = Reader.expiration read
                Memo = Reader.memo read
             }
 
             match baseInfo.Type with
-            | PaymentType.Platform ->
+            | PaymentRequestType.Platform ->
                Some {
                   BaseInfo = baseInfo
-                  Status = Reader.Platform.status read
                   Payer = {
                      OrgName = read.string "payer_org_name"
                      OrgId = Reader.Platform.payerOrgId read
                      ParentAccountId =
                         Reader.Platform.payerParentAccountId read
                   }
-                  PaidBy =
-                     Reader.Platform.payByAccount read
-                     |> Option.map PaymentMethod.Platform
                }
-            | PaymentType.ThirdParty -> None) // Not implemented yet
+            | PaymentRequestType.ThirdParty -> None) // Not implemented yet
 
    let paymentSummary =
       payments
@@ -85,7 +80,7 @@ let getPayments (orgId: OrgId) : Result<PaymentSummary option, Err> Task = taskR
                {
                   acc with
                      OutgoingRequests =
-                        (Payment.Platform payment) :: acc.OutgoingRequests
+                        Payment.Platform payment :: acc.OutgoingRequests
                }
             else
                {

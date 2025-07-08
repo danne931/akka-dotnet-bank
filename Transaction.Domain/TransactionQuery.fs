@@ -13,8 +13,7 @@ type AccountEventGroupFilter =
    | InternalTransferBetweenOrgs
    | InternalAutomatedTransfer
    | DomesticTransfer
-   | PlatformPayment
-   //| ThirdPartyPayment
+   | PaymentRequest
 
    member x.Display =
       match x with
@@ -28,10 +27,7 @@ type AccountEventGroupFilter =
          "Automated balance management transfers"
       | AccountEventGroupFilter.DomesticTransfer ->
          "Domestic transfers outside the platform"
-      | AccountEventGroupFilter.PlatformPayment ->
-         "Payments between orgs on the platform"
-   //| AccountEventGroupFilter.ThirdPartyPayment ->
-   //   "Payments outside the platform"
+      | AccountEventGroupFilter.PaymentRequest -> "Payment requests"
 
    static member All = [
       AccountEventGroupFilter.Purchase
@@ -40,7 +36,7 @@ type AccountEventGroupFilter =
       AccountEventGroupFilter.InternalTransferBetweenOrgs
       AccountEventGroupFilter.InternalAutomatedTransfer
       AccountEventGroupFilter.DomesticTransfer
-      AccountEventGroupFilter.PlatformPayment
+      AccountEventGroupFilter.PaymentRequest
    ]
 
    static member fromString =
@@ -54,8 +50,7 @@ type AccountEventGroupFilter =
       | "InternalAutomatedTransfer" ->
          Some AccountEventGroupFilter.InternalAutomatedTransfer
       | "DomesticTransfer" -> Some AccountEventGroupFilter.DomesticTransfer
-      | "PlatformPayment" -> Some AccountEventGroupFilter.PlatformPayment
-      //| "ThirdPartyPayment" -> Some AccountEventGroupFilter.ThirdPartyPayment
+      | "PaymentRequest" -> Some AccountEventGroupFilter.PaymentRequest
       | _ -> None
 
    static member fromQueryString: string -> AccountEventGroupFilter list option =

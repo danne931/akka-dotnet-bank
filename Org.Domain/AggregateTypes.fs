@@ -183,8 +183,6 @@ type OrgWithAccountProfiles = {
             DailyDomesticTransfer =
                acc.DailyDomesticTransfer
                + profile.Metrics.DailyDomesticTransfer
-            DailyPaymentPaid =
-               acc.DailyPaymentPaid + profile.Metrics.DailyPaymentPaid
             DailyPurchase = acc.DailyPurchase + profile.Metrics.DailyPurchase
             MonthlyInternalTransferWithinOrg =
                acc.DailyInternalTransferWithinOrg
@@ -195,8 +193,6 @@ type OrgWithAccountProfiles = {
             MonthlyDomesticTransfer =
                acc.DailyDomesticTransfer
                + profile.Metrics.DailyDomesticTransfer
-            MonthlyPaymentPaid =
-               acc.DailyPaymentPaid + profile.Metrics.DailyPaymentPaid
             MonthlyPurchase = acc.DailyPurchase + profile.Metrics.DailyPurchase
          })
          AccountMetrics.empty

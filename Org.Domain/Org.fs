@@ -86,10 +86,6 @@ let dailyAccrual
             && metrics.InitiatedBy.Id = initiatedBy
          then
             match metrics.EventType with
-            | OrgAccrualMetricEventType.PaymentPaid -> {
-               acc with
-                  PaymentsPaid = acc.PaymentsPaid + metrics.TransactionAmount
-              }
             | OrgAccrualMetricEventType.DomesticTransfer -> {
                acc with
                   DomesticTransfer =
@@ -104,7 +100,6 @@ let dailyAccrual
          else
             acc)
       {
-         PaymentsPaid = 0m
          InternalTransferBetweenOrgs = 0m
          DomesticTransfer = 0m
       }
@@ -127,7 +122,7 @@ let commandRequiresApproval (cmd: ApprovableCommand) (state: OrgSnapshot) =
 // organization_event table.
 let private trimExcess (state: OrgSnapshot) : OrgSnapshot =
    let dateWithinLookbackPeriod (date: DateTime) =
-      date.ToUniversalTime() > DateTime.UtcNow.AddDays(-2.)
+      date.ToUniversalTime() > DateTime.UtcNow.AddDays -2.
 
    {
       AccrualMetrics =

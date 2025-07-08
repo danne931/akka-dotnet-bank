@@ -201,21 +201,23 @@ let PaymentRequestFormComponent
    let initiatedBy = session.AsInitiator
 
    let selectedPaymentType, setSelectedPaymentType =
-      React.useState PaymentType.Platform
+      React.useState PaymentRequestType.Platform
 
    React.fragment [
       Html.select [
-         attr.onChange (PaymentType.fromStringUnsafe >> setSelectedPaymentType)
+         attr.onChange (
+            PaymentRequestType.fromStringUnsafe >> setSelectedPaymentType
+         )
          attr.value (string selectedPaymentType)
 
          attr.children [
             Html.option [
-               attr.value (string PaymentType.Platform)
+               attr.value (string PaymentRequestType.Platform)
                attr.text "To org on the platform"
             ]
 
             Html.option [
-               attr.value (string PaymentType.ThirdParty)
+               attr.value (string PaymentRequestType.ThirdParty)
                attr.text "To org/person outside the platform"
                attr.disabled true
             ]
@@ -223,7 +225,7 @@ let PaymentRequestFormComponent
       ]
 
       match selectedPaymentType with
-      | PaymentType.Platform ->
+      | PaymentRequestType.Platform ->
          OrgSocialTransferDiscovery.OrgSearchComponent
             session.OrgId
             (fun searchInput orgs ->
@@ -260,5 +262,5 @@ let PaymentRequestFormComponent
                | Deferred.Resolved(Ok None) ->
                   Html.p $"No orgs found by search query {searchInput}."
                | _ -> Html.none)
-      | PaymentType.ThirdParty -> Html.p "Not implemented."
+      | PaymentRequestType.ThirdParty -> Html.p "Not implemented."
    ]

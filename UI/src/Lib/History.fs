@@ -474,8 +474,7 @@ let accountHistoryUIFriendly
          props with
             Info =
                $"Progress update received for {payNetwork} transfer 
-                 to {recipientName} from {accountName}
-                 - {evt.Data.InProgressInfo}"
+                 to {recipientName} from {accountName}"
             Amount = Some <| Money.format info.Amount
       }
    | AccountClosed evt -> {
@@ -495,63 +494,23 @@ let accountHistoryUIFriendly
                   $"Received payment request from {p.Payee.OrgName}"
             Amount = Some <| Money.format p.Amount
       }
-   | PlatformPaymentPending evt ->
+   | PlatformPaymentRequestCancelled evt ->
       let p = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Payment Pending"
-            Info = $"Payment pending to {p.Payee.OrgName} from {accountName}."
-            Amount = Some <| Money.format p.Amount
-      }
-   | PlatformPaymentDeposited evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Deposited"
-            Info =
-               $"Payment received from {p.Payer.OrgName} into {accountName}."
-            Amount = Some <| Money.format p.Amount
-            MoneyFlow = Some MoneyFlow.In
-      }
-   | PlatformPaymentFailed evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Refunded"
-            Info =
-               $"Payment refunded to {p.Payer.OrgName} due to {evt.Data.Reason}."
-            Amount = Some <| Money.format p.Amount
-      }
-   | PlatformPaymentCancelled evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Cancelled"
+            Name = "Payment Request Cancelled"
             Info = $"Payment request cancelled to {p.Payer.OrgName}"
             Amount = Some <| Money.format p.Amount
       }
-   | PlatformPaymentDeclined evt ->
+   | PlatformPaymentRequestDeclined evt ->
       let p = evt.Data.BaseInfo
 
       {
          props with
-            Name = "Payment Declined"
+            Name = "Payment Request Declined"
             Info = $"Payment request declined by {p.Payer.OrgName}"
             Amount = Some <| Money.format p.Amount
-      }
-   | PlatformPaymentSettled evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Settled"
-            Info = $"Payment settled to {p.Payee.OrgName}"
-            Amount = Some <| Money.format p.Amount
-            MoneyFlow = Some MoneyFlow.Out
       }
    | AutoTransferRuleConfigured evt -> {
       props with
@@ -710,14 +669,11 @@ let private matchesAccountEventFilter
       | AccountEvent.DomesticTransferFailed _
       | AccountEvent.DomesticTransferProgress _ -> true
       | _ -> false
-   | AccountEventGroupFilter.PlatformPayment ->
+   | AccountEventGroupFilter.PaymentRequest ->
       match event with
       | AccountEvent.PlatformPaymentRequested _
-      | AccountEvent.PlatformPaymentPending _
-      | AccountEvent.PlatformPaymentDeposited _
-      | AccountEvent.PlatformPaymentFailed _
-      | AccountEvent.PlatformPaymentDeclined _
-      | AccountEvent.PlatformPaymentCancelled _ -> true
+      | AccountEvent.PlatformPaymentRequestDeclined _
+      | AccountEvent.PlatformPaymentRequestCancelled _ -> true
       | _ -> false
 
 let private matchesEmployeeEventFilter

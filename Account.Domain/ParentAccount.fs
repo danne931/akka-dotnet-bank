@@ -22,7 +22,7 @@ module AutoTransfer =
 
 /// Transfer amounts accrued include settled and in flight transactions.
 module TransferLimits =
-   /// Transfers & payments between orgs on the platform
+   /// Transfers between orgs on the platform
    let DailyPlatformLimit = 999_999_999m
 
    /// Transfers to entities outside the platform (ex: via ACH)
@@ -51,10 +51,6 @@ module TransferLimits =
          | AccountEvent.InternalTransferBetweenOrgsFailed e ->
             let info = e.Data.BaseInfo
             Some(info.ScheduledDate, -info.Amount)
-         | AccountEvent.PlatformPaymentPending e ->
-            Some(e.Timestamp, e.Data.BaseInfo.Amount)
-         | AccountEvent.PlatformPaymentFailed e ->
-            Some(e.Timestamp, -e.Data.BaseInfo.Amount)
          | _ -> None)
 
    let dailyDomesticTransferAccrued =
@@ -161,16 +157,6 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
                   state.MaintenanceFeeCriteria
                   updated.Balance
         }
-      | AccountEvent.PlatformPaymentSettled e ->
-         match e.Data.PaymentMethod with
-         | PaymentMethod.Platform _ -> {
-            updated with
-               MaintenanceFeeCriteria =
-                  MaintenanceFee.fromDebit
-                     state.MaintenanceFeeCriteria
-                     updated.Balance
-           }
-         | PaymentMethod.ThirdParty _ -> updated
       // When a domestic transfer lifecycle is as follows:
       // (fails due to invalid account info -> retries -> settled)
       // then update the recipient status to Confirmed.
@@ -244,13 +230,6 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
                   e.Data.BaseInfo.Amount
         }
       | AccountEvent.InternalTransferBetweenOrgsDeposited e -> {
-         updated with
-            MaintenanceFeeCriteria =
-               MaintenanceFee.fromDeposit
-                  state.MaintenanceFeeCriteria
-                  e.Data.BaseInfo.Amount
-        }
-      | AccountEvent.PlatformPaymentDeposited e -> {
          updated with
             MaintenanceFeeCriteria =
                MaintenanceFee.fromDeposit
@@ -442,14 +421,6 @@ let stateTransition
       |> Result.bind (
          validatePlatformTransferLimit cmd.Data.Amount cmd.Timestamp
       )
-   | AccountCommand.PlatformPayment cmd, Some account ->
-      validateParentAccountActive state
-      |> Result.bind (virtualAccountTransition account command)
-      |> Result.bind (
-         validatePlatformTransferLimit
-            cmd.Data.RequestedPayment.BaseInfo.Amount
-            cmd.Timestamp
-      )
    | AccountCommand.DomesticTransfer cmd, Some account ->
       validateParentAccountActive state
       |> Result.bind (virtualAccountTransition account command)
@@ -482,7 +453,7 @@ let computeAutoTransferStateTransitions
    (parentAccount: ParentAccountSnapshot)
    : Result<ParentAccountSnapshot * AccountEvent list, AccountCommand * Err> option
    =
-   parentAccount.VirtualAccounts.TryFind(accountId)
+   parentAccount.VirtualAccounts.TryFind accountId
    |> Option.bind (fun account ->
       let transfers =
          match frequency with

@@ -29,6 +29,7 @@ type SqlParamsDerivedFromAccountEvents = {
    AccountEvent: SqlParams
    ParentAccountEvent: SqlParams
    Payment: SqlParams
+   PaymentUpdate: SqlParams
    PlatformPayment: SqlParams
    Transfer: SqlParams
    InternalTransferWithinOrg: SqlParams
@@ -38,8 +39,7 @@ type SqlParamsDerivedFromAccountEvents = {
    PartnerBankInitialized: SqlParams
    BillingCycle: SqlParams
    DomesticTransferRecipient: SqlParams
-   UpdatedDomesticTransferRecipientStatus: SqlParams
-   UpdatedDomesticTransferRecipientNickname: SqlParams
+   DomesticTransferRecipientUpdate: SqlParams
 }
 
 let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [
@@ -58,39 +58,65 @@ let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [
 
    "payerParentAccountId",
    PaymentSqlWriter.Platform.payerParentAccountId p.Payer.ParentAccountId
-
-   "payByAccount", PaymentSqlWriter.Platform.payByAccount None
 ]
 
-let private internalTransferBaseSqlParams (o: BaseInternalTransferInfo) = [
-   "transferId", TransferSqlWriter.transferId o.TransferId
+let private internalTransferWithinOrgBaseSqlParams
+   (o: BaseInternalTransferWithinOrgInfo)
+   =
+   [
+      "transferId", TransferSqlWriter.transferId o.TransferId
 
-   "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
+      "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
 
-   "senderOrgId", TransferSqlWriter.senderOrgId o.Sender.OrgId
+      "senderOrgId", TransferSqlWriter.orgId o.Sender.OrgId
 
-   "senderAccountId", TransferSqlWriter.senderAccountId o.Sender.AccountId
+      "senderAccountId", TransferSqlWriter.accountId o.Sender.AccountId
 
-   "scheduledAt", TransferSqlWriter.scheduledAt o.ScheduledDate
+      "recipientOrgId", TransferSqlWriter.orgId o.Recipient.OrgId
 
-   "amount", TransferSqlWriter.amount o.Amount
-]
+      "recipientAccountId", TransferSqlWriter.accountId o.Recipient.AccountId
+
+      "scheduledAt", TransferSqlWriter.scheduledAt o.ScheduledDate
+
+      "amount", TransferSqlWriter.amount o.Amount
+   ]
+
+let private internalTransferBetweenOrgsBaseSqlParams
+   (o: BaseInternalTransferBetweenOrgsInfo)
+   =
+   [
+      "transferId", TransferSqlWriter.transferId o.TransferId
+
+      "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
+
+      "senderOrgId", TransferSqlWriter.orgId o.Sender.OrgId
+
+      "senderAccountId", TransferSqlWriter.accountId o.Sender.AccountId
+
+      "recipientOrgId", TransferSqlWriter.orgId o.Recipient.OrgId
+
+      "recipientAccountId", TransferSqlWriter.accountId o.Recipient.AccountId
+
+      "scheduledAt", TransferSqlWriter.scheduledAt o.ScheduledDate
+
+      "amount", TransferSqlWriter.amount o.Amount
+   ]
 
 let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
    "transferId", TransferSqlWriter.transferId o.TransferId
 
    "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
 
-   "senderOrgId", TransferSqlWriter.senderOrgId o.Sender.OrgId
+   "senderOrgId", TransferSqlWriter.orgId o.Sender.OrgId
 
-   "senderAccountId", TransferSqlWriter.senderAccountId o.Sender.AccountId
+   "senderAccountId", TransferSqlWriter.accountId o.Sender.AccountId
 
    "scheduledAt", TransferSqlWriter.scheduledAt o.ScheduledDate
 
    "amount", TransferSqlWriter.amount o.Amount
 
    "recipientAccountId",
-   TransferSqlWriter.Domestic.recipientAccountId o.Recipient.RecipientAccountId
+   TransferSqlWriter.accountId o.Recipient.RecipientAccountId
 
    "memo", TransferSqlWriter.memo o.Memo
 ]
@@ -147,19 +173,12 @@ module private AccountBalanceReducer =
 let private internalTransferWithinOrgStatusReducer
    (acc: SqlParamsDerivedFromAccountEvents)
    (status: InternalTransferWithinOrgStatus)
-   (info: BaseInternalTransferInfo)
+   (info: BaseInternalTransferWithinOrgInfo)
    (isAutomated: bool)
    =
    let qParams =
-      internalTransferBaseSqlParams info
+      internalTransferWithinOrgBaseSqlParams info
       @ [
-         "recipientOrgId",
-         TransferSqlWriter.InternalWithinOrg.recipientOrgId info.Recipient.OrgId
-
-         "recipientAccountId",
-         TransferSqlWriter.InternalWithinOrg.recipientAccountId
-            info.Recipient.AccountId
-
          "status", TransferSqlWriter.InternalWithinOrg.status status
          "statusDetail", TransferSqlWriter.InternalWithinOrg.statusDetail status
          "isAutomated",
@@ -174,19 +193,11 @@ let private internalTransferWithinOrgStatusReducer
 let private internalTransferBetweenOrgsStatusReducer
    (acc: SqlParamsDerivedFromAccountEvents)
    (status: InternalTransferBetweenOrgsStatus)
-   (info: BaseInternalTransferInfo)
+   (info: BaseInternalTransferBetweenOrgsInfo)
    =
    let qParams =
-      internalTransferBaseSqlParams info
+      internalTransferBetweenOrgsBaseSqlParams info
       @ [
-         "recipientOrgId",
-         TransferSqlWriter.InternalBetweenOrgs.recipientOrgId
-            info.Recipient.OrgId
-
-         "recipientAccountId",
-         TransferSqlWriter.InternalBetweenOrgs.recipientAccountId
-            info.Recipient.AccountId
-
          "status", TransferSqlWriter.InternalBetweenOrgs.status status
          "statusDetail",
          TransferSqlWriter.InternalBetweenOrgs.statusDetail status
@@ -359,8 +370,8 @@ let sqlParamReducer
 
       {
          acc with
-            UpdatedDomesticTransferRecipientNickname =
-               qParams :: acc.UpdatedDomesticTransferRecipientNickname
+            DomesticTransferRecipientUpdate =
+               qParams :: acc.DomesticTransferRecipientUpdate
       }
    | AccountEvent.InitializedPrimaryCheckingAccount e ->
       let parentAccountQueryParams = [
@@ -470,7 +481,7 @@ let sqlParamReducer
       let info = e.Data.BaseInfo
 
       let transferParams =
-         internalTransferBaseSqlParams info
+         internalTransferWithinOrgBaseSqlParams info
          @ [
             "memo", TransferSqlWriter.memo None
             "transferCategory",
@@ -518,7 +529,7 @@ let sqlParamReducer
       let info = e.Data.BaseInfo
 
       let transferParams =
-         internalTransferBaseSqlParams info
+         internalTransferWithinOrgBaseSqlParams info
          @ [
             "memo", TransferSqlWriter.memo None
             "transferCategory",
@@ -566,7 +577,7 @@ let sqlParamReducer
       let info = e.Data.BaseInfo
 
       let transferParams =
-         internalTransferBaseSqlParams info
+         internalTransferBetweenOrgsBaseSqlParams info
          @ [
             "memo", TransferSqlWriter.memo info.Memo
             "transferCategory",
@@ -586,7 +597,7 @@ let sqlParamReducer
       let info = e.Data.BaseInfo
 
       let transferParams =
-         internalTransferBaseSqlParams info
+         internalTransferBetweenOrgsBaseSqlParams info
          @ [
             "memo", TransferSqlWriter.memo info.Memo
             "transferCategory",
@@ -605,11 +616,35 @@ let sqlParamReducer
    | AccountEvent.InternalTransferBetweenOrgsSettled e ->
       let info = e.Data.BaseInfo
 
-      internalTransferBetweenOrgsStatusReducer
-         acc
-         InternalTransferBetweenOrgsStatus.Settled
-         info
-      |> AccountBalanceReducer.settleFunds accountId info.Amount
+      let acc =
+         internalTransferBetweenOrgsStatusReducer
+            acc
+            InternalTransferBetweenOrgsStatus.Settled
+            info
+         |> AccountBalanceReducer.settleFunds accountId info.Amount
+
+      match info.FromPaymentRequest with
+      | Some paymentId ->
+         let status =
+            PaymentRequestStatus.Fulfilled {
+               TransferId = info.TransferId
+               FulfilledAt = e.Timestamp
+            }
+
+         let pParams = [
+            "paymentId", PaymentSqlWriter.paymentId paymentId
+            "status", PaymentSqlWriter.status status
+            "statusDetail", PaymentSqlWriter.statusDetail status
+            "fulfilledByTransferId",
+            PaymentSqlWriter.fulfilledByTransferId status
+            "fulfilledAt", PaymentSqlWriter.fulfilledAt status
+         ]
+
+         {
+            acc with
+               PaymentUpdate = pParams :: acc.PaymentUpdate
+         }
+      | None -> acc
    | AccountEvent.InternalTransferBetweenOrgsFailed e ->
       let info = e.Data.BaseInfo
 
@@ -731,8 +766,8 @@ let sqlParamReducer
 
          {
             acc with
-               UpdatedDomesticTransferRecipientStatus =
-                  qParams :: acc.UpdatedDomesticTransferRecipientStatus
+               DomesticTransferRecipientUpdate =
+                  qParams :: acc.DomesticTransferRecipientUpdate
          }
       | None -> acc
    | AccountEvent.DomesticTransferSettled e ->
@@ -759,143 +794,58 @@ let sqlParamReducer
 
          {
             acc with
-               UpdatedDomesticTransferRecipientStatus =
-                  qParams :: acc.UpdatedDomesticTransferRecipientStatus
+               DomesticTransferRecipientUpdate =
+                  qParams :: acc.DomesticTransferRecipientUpdate
          }
       | _ -> acc
    | AccountEvent.PlatformPaymentRequested e ->
       let pInfo = e.Data.BaseInfo
+      let status = PaymentRequestStatus.Requested
 
       let payParams =
          platformPaymentBaseSqlParams pInfo
          @ [
             "amount", PaymentSqlWriter.amount pInfo.Amount
-            "paymentType", Sql.string "Platform"
+            "requestType", Sql.string "Platform"
             "expiration", PaymentSqlWriter.expiration e.Data.Expiration
             "memo", PaymentSqlWriter.memo e.Data.Memo
+            "status", PaymentSqlWriter.status status
+            "statusDetail", PaymentSqlWriter.statusDetail status
          ]
 
-      let status = PlatformPaymentStatus.Unpaid
 
-      let platformPayParams =
-         [
-            "status", PaymentSqlWriter.Platform.status status
-            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
-         ]
-         @ platformPaymentBaseSqlParams pInfo
+      let platformPayParams = platformPaymentBaseSqlParams pInfo
 
       {
          acc with
             Payment = payParams :: acc.Payment
             PlatformPayment = platformPayParams :: acc.PlatformPayment
       }
-   | AccountEvent.PlatformPaymentCancelled e ->
-      let status = PlatformPaymentStatus.Cancelled
+   | AccountEvent.PlatformPaymentRequestCancelled e ->
+      let status = PaymentRequestStatus.Cancelled
 
-      let pParams =
-         [
-            "status", PaymentSqlWriter.Platform.status status
-            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
-         ]
-         @ platformPaymentBaseSqlParams e.Data.BaseInfo
+      let pParams = [
+         "paymentId", PaymentSqlWriter.paymentId e.Data.BaseInfo.Id
+         "status", PaymentSqlWriter.status status
+         "statusDetail", PaymentSqlWriter.statusDetail status
+      ]
 
       {
          acc with
-            PlatformPayment = pParams :: acc.PlatformPayment
+            PaymentUpdate = pParams :: acc.PaymentUpdate
       }
-   | AccountEvent.PlatformPaymentPending e ->
-      let status = PlatformPaymentStatus.PaymentPending
-      let info = e.Data.BaseInfo
+   | AccountEvent.PlatformPaymentRequestDeclined e ->
+      let status = PaymentRequestStatus.Declined
 
-      let pParams =
-         [
-            "status", PaymentSqlWriter.Platform.status status
-            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
-         ]
-         @ platformPaymentBaseSqlParams info
-
-      match e.Data.PaymentMethod with
-      | PaymentMethod.Platform accountId ->
-         let pParams =
-            pParams
-            |> List.map (fun (field, sqlValue) ->
-               if field = "payByAccount" then
-                  field,
-                  PaymentSqlWriter.Platform.payByAccount (Some accountId)
-               else
-                  field, sqlValue)
-
-         {
-            acc with
-               PlatformPayment = pParams :: acc.PlatformPayment
-         }
-         |> AccountBalanceReducer.reserveFunds accountId info.Amount
-      | PaymentMethod.ThirdParty tp ->
-         // TODO: Implement third party payment methods
-         acc
-
-   | AccountEvent.PlatformPaymentDeposited e ->
-      let status = PlatformPaymentStatus.Deposited
-      let info = e.Data.BaseInfo
-
-      let pParams =
-         [
-            "status", PaymentSqlWriter.Platform.status status
-            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
-         ]
-         @ platformPaymentBaseSqlParams info
+      let pParams = [
+         "paymentId", PaymentSqlWriter.paymentId e.Data.BaseInfo.Id
+         "status", PaymentSqlWriter.status status
+         "statusDetail", PaymentSqlWriter.statusDetail status
+      ]
 
       {
          acc with
-            PlatformPayment = pParams :: acc.PlatformPayment
-      }
-      |> AccountBalanceReducer.depositFunds accountId info.Amount
-   | AccountEvent.PlatformPaymentSettled e ->
-      let status = PlatformPaymentStatus.Settled
-      let info = e.Data.BaseInfo
-
-      let pParams =
-         [
-            "status", PaymentSqlWriter.Platform.status status
-            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
-         ]
-         @ platformPaymentBaseSqlParams info
-
-      {
-         acc with
-            PlatformPayment = pParams :: acc.PlatformPayment
-      }
-      |> AccountBalanceReducer.settleFunds accountId info.Amount
-   | AccountEvent.PlatformPaymentFailed e ->
-      let status = PlatformPaymentStatus.Failed e.Data.Reason
-      let info = e.Data.BaseInfo
-
-      let pParams =
-         [
-            "status", PaymentSqlWriter.Platform.status status
-            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
-         ]
-         @ platformPaymentBaseSqlParams info
-
-      {
-         acc with
-            PlatformPayment = pParams :: acc.PlatformPayment
-      }
-      |> AccountBalanceReducer.releaseReservedFunds accountId info.Amount
-
-   | AccountEvent.PlatformPaymentDeclined e ->
-      let status = PlatformPaymentStatus.Declined
-
-      let pParams =
-         [
-            "status", PaymentSqlWriter.Platform.status status
-            "statusDetail", PaymentSqlWriter.Platform.statusDetail status
-         ]
-         @ platformPaymentBaseSqlParams e.Data.BaseInfo
-
-      {
-         acc with
-            PlatformPayment = pParams :: acc.PlatformPayment
+            PaymentUpdate = pParams :: acc.PaymentUpdate
       }
    | AccountEvent.MaintenanceFeeDebited e ->
       let qParams = [
@@ -976,6 +926,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          PartnerBankInitialized = []
          BillingCycle = []
          Payment = []
+         PaymentUpdate = []
          PlatformPayment = []
          Transfer = []
          InternalTransferWithinOrg = []
@@ -983,8 +934,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          DomesticTransfer = []
          DomesticTransferUpdate = []
          DomesticTransferRecipient = []
-         UpdatedDomesticTransferRecipientStatus = []
-         UpdatedDomesticTransferRecipientNickname = []
+         DomesticTransferRecipientUpdate = []
       }
 
    pgTransaction [
@@ -1053,11 +1003,17 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       UPDATE {AccountSqlMapper.table}
       SET
          {AccountFields.balance} = {AccountFields.balance} + COALESCE(@balanceDelta, 0::money),
-         {AccountFields.pendingDeductionsMoney} = {AccountFields.pendingDeductionsMoney} + COALESCE(@pendingDeductionsMoneyDelta, 0::money),
-         {AccountFields.pendingDeductionsCount} = {AccountFields.pendingDeductionsCount} + COALESCE(@pendingDeductionsCountDelta, 0::int),
+         {AccountFields.pendingDeductionsMoney} =
+            {AccountFields.pendingDeductionsMoney} + COALESCE(@pendingDeductionsMoneyDelta, 0::money),
+         {AccountFields.pendingDeductionsCount} =
+            {AccountFields.pendingDeductionsCount} + COALESCE(@pendingDeductionsCountDelta, 0::int),
          {AccountFields.status} = COALESCE(@status::{AccountTypeCast.status}, {AccountFields.status}),
          {AccountFields.autoTransferRule} = COALESCE(@autoTransferRule, {AccountFields.autoTransferRule}),
-         {AccountFields.autoTransferRuleFrequency} = COALESCE(@autoTransferRuleFrequency::{AccountTypeCast.autoTransferRuleFrequency}, {AccountFields.autoTransferRuleFrequency})
+         {AccountFields.autoTransferRuleFrequency} =
+            COALESCE(
+               @autoTransferRuleFrequency::{AccountTypeCast.autoTransferRuleFrequency},
+               {AccountFields.autoTransferRuleFrequency}
+            )
       WHERE {AccountFields.accountId} = @accountId;
       """,
       sqlParamsDerivedFromAccountEvents.AccountUpdate
@@ -1130,13 +1086,17 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       """,
       sqlParamsDerivedFromAccountEvents.ParentAccountEvent
 
+      let paymentTable = PaymentSqlMapper.Table.payment
+
       $"""
-      INSERT into {PaymentSqlMapper.Table.payment}
+      INSERT into {paymentTable}
          ({PaymentFields.paymentId},
           {PaymentFields.initiatedById},
           {PaymentFields.amount},
+          {PaymentFields.status},
+          {PaymentFields.statusDetail},
           {PaymentFields.memo},
-          {PaymentFields.paymentType},
+          {PaymentFields.requestType},
           {PaymentFields.expiration},
           {PaymentFields.payeeOrgId},
           {PaymentFields.payeeAccountId},
@@ -1145,8 +1105,10 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          (@paymentId,
           @initiatedById,
           @amount,
+          @status::{PaymentTypeCast.status},
+          @statusDetail,
           @memo,
-          @paymentType::{PaymentTypeCast.paymentType},
+          @requestType::{PaymentTypeCast.requestType},
           @expiration,
           @payeeOrgId,
           @payeeAccountId,
@@ -1156,27 +1118,17 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       """,
       sqlParamsDerivedFromAccountEvents.Payment
 
-      let paymentTable = PaymentSqlMapper.Table.platformPayment
-      let payByField = PaymentFields.Platform.payByAccount
-
       $"""
-      INSERT into {paymentTable}
+      INSERT into {PaymentSqlMapper.Table.platformPayment}
          ({PaymentFields.paymentId},
-          {PaymentFields.Platform.status},
-          {PaymentFields.Platform.statusDetail},
           {PaymentFields.Platform.payerOrgId},
           {PaymentFields.Platform.payerParentAccountId})
       VALUES
          (@paymentId,
-          @status::{PaymentTypeCast.platformPaymentStatus},
-          @statusDetail,
           @payerOrgId,
           @payerParentAccountId)
       ON CONFLICT ({PaymentFields.paymentId})
-      DO UPDATE SET
-         {PaymentFields.Platform.status} = @status::{PaymentTypeCast.platformPaymentStatus},
-         {PaymentFields.Platform.statusDetail} = @statusDetail,
-         {payByField} = COALESCE(@payByAccount, {paymentTable}.{payByField});
+      DO NOTHING;
       """,
       sqlParamsDerivedFromAccountEvents.PlatformPayment
 
@@ -1287,17 +1239,20 @@ let upsertReadModels (accountEvents: AccountEvent list) =
 
       $"""
       UPDATE {TransferSqlMapper.Table.domesticRecipient}
-      SET {TransferFields.DomesticRecipient.status} = @status::{TransferTypeCast.domesticRecipientStatus}
+      SET 
+         {TransferFields.DomesticRecipient.nickname} =
+            COALESCE(@nickname, {TransferFields.DomesticRecipient.nickname}),
+         {TransferFields.DomesticRecipient.status} =
+            COALESCE(
+               @status::{TransferTypeCast.domesticRecipientStatus},
+               {TransferFields.DomesticRecipient.status}
+            )
       WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
       """,
-      sqlParamsDerivedFromAccountEvents.UpdatedDomesticTransferRecipientStatus
-
-      $"""
-      UPDATE {TransferSqlMapper.Table.domesticRecipient}
-      SET {TransferFields.DomesticRecipient.nickname} = @nickname
-      WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
-      """,
-      sqlParamsDerivedFromAccountEvents.UpdatedDomesticTransferRecipientNickname
+      sqlParamsDerivedFromAccountEvents.DomesticTransferRecipientUpdate
+      |> List.map (
+         Lib.Postgres.addCoalescableParamsForUpdate [ "nickname"; "status" ]
+      )
 
       $"""
       INSERT into {TransferSqlMapper.Table.domesticTransfer}
@@ -1330,6 +1285,25 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       sqlParamsDerivedFromAccountEvents.DomesticTransferUpdate
       |> List.map (
          Lib.Postgres.addCoalescableParamsForUpdate [ "expectedSettlementDate" ]
+      )
+
+      $"""
+      UPDATE {paymentTable}
+      SET
+         {PaymentFields.status} = @status::{PaymentTypeCast.status},
+         {PaymentFields.statusDetail} = @statusDetail,
+         {PaymentFields.fulfilledByTransferId} =
+            COALESCE(@fulfilledByTransferId, {paymentTable}.{PaymentFields.fulfilledByTransferId}),
+         {PaymentFields.fulfilledAt} =
+            COALESCE(@fulfilledAt, {paymentTable}.{PaymentFields.fulfilledAt})
+      WHERE {PaymentFields.paymentId} = @paymentId;
+      """,
+      sqlParamsDerivedFromAccountEvents.PaymentUpdate
+      |> List.map (
+         Lib.Postgres.addCoalescableParamsForUpdate [
+            "fulfilledByTransferId"
+            "fulfilledAt"
+         ]
       )
    ]
 

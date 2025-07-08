@@ -104,7 +104,7 @@ let formInternalWithinOrg
       let orgId = sender.OrgId
       let parentAccountId = sender.ParentAccountId
 
-      let transfer: InternalTransferInput = {
+      let transfer: InternalTransferWithinOrgInput = {
          Memo = None
          ScheduledDateSeedOverride = None
          Amount = amount
@@ -144,7 +144,7 @@ let formInternalWithinOrg
          let recipient = accounts[recipientId]
          onSubmit sender recipient amount)
       |> Form.append (
-         (fieldSenderSelect senderOptions)
+         fieldSenderSelect senderOptions
          |> Form.andThen (fun senderId ->
             let sender = accounts[senderId]
 
@@ -198,7 +198,7 @@ let formInternalBetweenOrgs
                Some(o.ParentAccountId, o.OrgId, o.Name)
             | _ -> None)
 
-      let transfer: InternalTransferInput = {
+      let transfer: InternalTransferBetweenOrgsInput = {
          ScheduledDateSeedOverride = None
          Amount = amount
          Sender = {
@@ -216,6 +216,7 @@ let formInternalBetweenOrgs
          Memo = memo
          OriginatedFromSchedule =
             scheduledAt.ToUniversalTime() <> DateTime.Today.ToUniversalTime()
+         OriginatedFromPaymentRequest = None
       }
 
       let cmd =

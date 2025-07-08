@@ -19,23 +19,11 @@ type PlatformPaymentSagaStartEvent =
 type PlatformPaymentSagaEvent =
    | PaymentRequestCancelled
    | PaymentRequestDeclined
-   | PayerAccountReservedFunds of
-      BankEvent<PlatformPaymentPending> *
-      PartnerBankAccountLink
-   | PayerAccountUnableToReserveFunds of PlatformPaymentFailReason
-   | PayeeAccountDepositedFunds of PartnerBankAccountLink
-   | PayeeAccountUnableToDepositFunds of
-      PlatformPaymentFailReason *
-      PaymentMethod
+   | PaymentFulfilled of PaymentFulfilled
+   | PaymentFailed of TransferId * PlatformPaymentFailReason
    | PaymentRequestNotificationSentToPayer
-   | PaymentPaidNotificationSentToPayer
-   | PaymentDepositedNotificationSentToPayee
+   | PaymentFulfilledNotificationSentToPayee
    | PaymentDeclinedNotificationSentToPayee
-   | PartnerBankSyncResponse of Result<SettlementId, string>
-   | PaymentSettled
-   | SupportTeamResolvedPartnerBankSync
-   | ThirdPartyPaymentMethodRefunded
-   | PayerAccountReleasedReservedFunds
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
@@ -44,7 +32,7 @@ type private Event = PlatformPaymentSagaEvent
 
 [<RequireQualifiedAccess>]
 type PlatformPaymentSagaStatus =
-   | InProgress of PlatformPaymentStatus
+   | InProgress of PaymentRequestStatus
    | Completed
    | Failed of PlatformPaymentFailReason
 
@@ -52,37 +40,21 @@ type PlatformPaymentSagaStatus =
 type Activity =
    | NotifyPayerOfRequest
    | NotifyPayeeOfDecline
-   | DepositToPayeeAccount
-   | SyncToPartnerBank
-   | SettlePayment
-   | NotifyPayerOfPaymentSent
-   | NotifyPayeeOfPaymentDeposit
-   | RefundThirdPartyPaymentMethod
-   | ReleasePayerAccountReservedFunds
+   | NotifyPayeeOfFulfillment
    | WaitForPayment
-   | WaitForSupportTeamToResolvePartnerBankSync
 
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | WaitForPayment
-         | WaitForSupportTeamToResolvePartnerBankSync -> 0
-         | SyncToPartnerBank -> 4
+         | WaitForPayment -> 0
          | _ -> 3
 
       member x.InactivityTimeout =
          match x with
-         | WaitForPayment
-         | WaitForSupportTeamToResolvePartnerBankSync -> None
-         | SyncToPartnerBank
-         | RefundThirdPartyPaymentMethod
-         | NotifyPayerOfPaymentSent
+         | WaitForPayment -> None
          | NotifyPayerOfRequest
          | NotifyPayeeOfDecline
-         | NotifyPayeeOfPaymentDeposit -> Some(TimeSpan.FromMinutes 4.)
-         | DepositToPayeeAccount
-         | ReleasePayerAccountReservedFunds
-         | SettlePayment -> Some(TimeSpan.FromSeconds 5.)
+         | NotifyPayeeOfFulfillment -> Some(TimeSpan.FromMinutes 4.)
 
 type PlatformPaymentSaga = {
    StartEvent: PlatformPaymentSagaStartEvent
@@ -90,47 +62,17 @@ type PlatformPaymentSaga = {
    Status: PlatformPaymentSagaStatus
    PaymentInfo: PlatformPaymentBaseInfo
    LifeCycle: SagaLifeCycle<Activity>
-   PartnerBankSenderAccountLink: PartnerBankAccountLink option
-   PartnerBankRecipientAccountLink: PartnerBankAccountLink option
    InitiatedBy: Initiator
-} with
-
-   member x.PaymentSyncedToPartnerBank =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsSyncToPartnerBank
-
-   member x.IsSettled =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsSettlePayment
-
-   member x.SettlementId =
-      x.Events
-      |> List.tryPick (function
-         | PlatformPaymentSagaEvent.PartnerBankSyncResponse(Ok settlementId) ->
-            Some settlementId
-         | _ -> None)
-
-   member x.PaymentMethod =
-      x.Events
-      |> List.tryPick (function
-         | PlatformPaymentSagaEvent.PayerAccountReservedFunds(e, _) ->
-            Some e.Data.PaymentMethod
-         | _ -> None)
-
-   member x.PaymentPaidNotificationSentToPayer =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsNotifyPayerOfPaymentSent
-
-   member x.PaymentDepositedNotificationSentToPayee =
-      x.LifeCycle.Completed
-      |> List.exists _.Activity.IsNotifyPayeeOfPaymentDeposit
+}
 
 let applyStartEvent (e: PlatformPaymentSagaStartEvent) (timestamp: DateTime) =
    match e with
    | StartEvent.PaymentRequested evt -> {
       StartEvent = e
       Events = []
-      Status = PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Unpaid
+      Status =
+         PlatformPaymentSagaStatus.InProgress PaymentRequestStatus.Requested
       PaymentInfo = evt.Data.BaseInfo
-      PartnerBankSenderAccountLink = None
-      PartnerBankRecipientAccountLink = None
       InitiatedBy = evt.InitiatedBy
       LifeCycle = {
          SagaLifeCycle.empty with
@@ -149,7 +91,6 @@ let applyEvent
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
-   let retryActivity = SagaLifeCycle.retryActivity timestamp
 
    let saga = {
       saga with
@@ -165,150 +106,43 @@ let applyEvent
    | Event.PaymentRequestDeclined -> {
       saga with
          Status =
-            PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Declined
+            PlatformPaymentSagaStatus.InProgress PaymentRequestStatus.Declined
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.WaitForPayment
             |> addActivity Activity.NotifyPayeeOfDecline
      }
-   | Event.PayerAccountReservedFunds(_, senderLink) -> {
+   | Event.PaymentFulfilled p -> {
       saga with
-         PartnerBankSenderAccountLink = Some senderLink
-         Status =
-            PlatformPaymentSagaStatus.InProgress
-               PlatformPaymentStatus.PaymentPending
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.WaitForPayment
-            |> addActivity Activity.DepositToPayeeAccount
+            |> addActivity Activity.NotifyPayeeOfFulfillment
+         Status =
+            PaymentRequestStatus.Fulfilled p
+            |> PlatformPaymentSagaStatus.InProgress
      }
-   | Event.PayerAccountUnableToReserveFunds reason -> {
+   | Event.PaymentFailed(_, reason) -> {
       saga with
+         Status = PlatformPaymentSagaStatus.Failed reason
          LifeCycle = saga.LifeCycle |> failActivity Activity.WaitForPayment
-         Status = PlatformPaymentSagaStatus.Failed reason
-     }
-   | Event.PayeeAccountDepositedFunds recipientLink -> {
-      saga with
-         PartnerBankRecipientAccountLink = Some recipientLink
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.DepositToPayeeAccount
-            |> addActivity Activity.SyncToPartnerBank
-            |> addActivity Activity.NotifyPayerOfPaymentSent
-            |> addActivity Activity.NotifyPayeeOfPaymentDeposit
-         Status =
-            PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Deposited
-     }
-   | Event.PayeeAccountUnableToDepositFunds(reason, payMethod) -> {
-      saga with
-         Status = PlatformPaymentSagaStatus.Failed reason
-         LifeCycle =
-            saga.LifeCycle
-            |> failActivity Activity.DepositToPayeeAccount
-            |> addActivity (
-               match payMethod with
-               | PaymentMethod.Platform _ ->
-                  Activity.ReleasePayerAccountReservedFunds
-               | PaymentMethod.ThirdParty _ ->
-                  Activity.RefundThirdPartyPaymentMethod
-            )
-     }
-   | Event.PartnerBankSyncResponse res ->
-      match res with
-      | Error err ->
-         let activity = Activity.SyncToPartnerBank
-
-         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
-            {
-               saga with
-                  LifeCycle = retryActivity activity saga.LifeCycle
-            }
-         else
-            {
-               saga with
-                  Status =
-                     PlatformPaymentFailReason.PartnerBankSync err
-                     |> PlatformPaymentSagaStatus.Failed
-                  LifeCycle =
-                     saga.LifeCycle
-                     |> failActivity Activity.SyncToPartnerBank
-                     |> addActivity
-                           Activity.WaitForSupportTeamToResolvePartnerBankSync
-            }
-      | Ok _ -> {
-         saga with
-            LifeCycle =
-               saga.LifeCycle
-               |> finishActivity Activity.SyncToPartnerBank
-               |> addActivity Activity.SettlePayment
-        }
-   | Event.PaymentSettled -> {
-      saga with
-         Status =
-            if
-               saga.PaymentPaidNotificationSentToPayer
-               && saga.PaymentDepositedNotificationSentToPayee
-            then
-               PlatformPaymentSagaStatus.Completed
-            else
-               saga.Status
-         LifeCycle = saga.LifeCycle |> finishActivity Activity.SettlePayment
-     }
-   | Event.SupportTeamResolvedPartnerBankSync -> {
-      saga with
-         Status =
-            PlatformPaymentSagaStatus.InProgress PlatformPaymentStatus.Deposited
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity
-                  Activity.WaitForSupportTeamToResolvePartnerBankSync
-            |> addActivity Activity.SyncToPartnerBank
      }
    | Event.PaymentRequestNotificationSentToPayer -> {
       saga with
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.NotifyPayerOfRequest
      }
-   | Event.PaymentPaidNotificationSentToPayer -> {
+   | Event.PaymentFulfilledNotificationSentToPayee -> {
       saga with
          LifeCycle =
-            saga.LifeCycle |> finishActivity Activity.NotifyPayerOfPaymentSent
-         Status =
-            if
-               saga.PaymentDepositedNotificationSentToPayee && saga.IsSettled
-            then
-               PlatformPaymentSagaStatus.Completed
-            else
-               saga.Status
-     }
-   | Event.PaymentDepositedNotificationSentToPayee -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.NotifyPayeeOfPaymentDeposit
-         Status =
-            if saga.PaymentPaidNotificationSentToPayer && saga.IsSettled then
-               PlatformPaymentSagaStatus.Completed
-            else
-               saga.Status
+            saga.LifeCycle |> finishActivity Activity.NotifyPayeeOfFulfillment
+         Status = PlatformPaymentSagaStatus.Completed
      }
    | Event.PaymentDeclinedNotificationSentToPayee -> {
       saga with
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.NotifyPayeeOfDecline
          Status = PlatformPaymentSagaStatus.Completed
-     }
-   | Event.ThirdPartyPaymentMethodRefunded -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.RefundThirdPartyPaymentMethod
-     }
-   | Event.PayerAccountReleasedReservedFunds -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.ReleasePayerAccountReservedFunds
      }
    | Event.EvaluateRemainingWork -> {
       saga with
@@ -341,32 +175,17 @@ let stateTransition
       match evt with
       | PlatformPaymentSagaEvent.EvaluateRemainingWork
       | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts -> false
-      | PlatformPaymentSagaEvent.PayerAccountReservedFunds _
-      | PlatformPaymentSagaEvent.PayerAccountUnableToReserveFunds _
       | PlatformPaymentSagaEvent.PaymentRequestDeclined
-      | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
+      | PlatformPaymentSagaEvent.PaymentRequestCancelled
+      | PlatformPaymentSagaEvent.PaymentFailed _
+      | PlatformPaymentSagaEvent.PaymentFulfilled _ ->
          activityIsDone Activity.WaitForPayment
-      | PlatformPaymentSagaEvent.PayeeAccountUnableToDepositFunds _
-      | PlatformPaymentSagaEvent.PayeeAccountDepositedFunds _ ->
-         activityIsDone Activity.DepositToPayeeAccount
-      | PlatformPaymentSagaEvent.PartnerBankSyncResponse _ ->
-         activityIsDone Activity.SyncToPartnerBank
-      | PlatformPaymentSagaEvent.PaymentSettled ->
-         activityIsDone Activity.SettlePayment
-      | PlatformPaymentSagaEvent.SupportTeamResolvedPartnerBankSync ->
-         activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankSync
       | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->
          activityIsDone Activity.NotifyPayerOfRequest
-      | PlatformPaymentSagaEvent.PaymentPaidNotificationSentToPayer ->
-         activityIsDone Activity.NotifyPayerOfPaymentSent
-      | PlatformPaymentSagaEvent.PaymentDepositedNotificationSentToPayee ->
-         activityIsDone Activity.NotifyPayeeOfPaymentDeposit
+      | PlatformPaymentSagaEvent.PaymentFulfilledNotificationSentToPayee ->
+         activityIsDone Activity.NotifyPayeeOfFulfillment
       | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
          activityIsDone Activity.NotifyPayeeOfDecline
-      | PlatformPaymentSagaEvent.PayerAccountReleasedReservedFunds ->
-         activityIsDone Activity.ReleasePayerAccountReservedFunds
-      | PlatformPaymentSagaEvent.ThirdPartyPaymentMethodRefunded ->
-         activityIsDone Activity.RefundThirdPartyPaymentMethod
 
    if saga.Status = PlatformPaymentSagaStatus.Completed then
       Error SagaStateTransitionError.HasAlreadyCompleted
@@ -400,8 +219,6 @@ type PersistenceHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
    getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
-   refundPaymentToThirdParty:
-      PlatformPaymentBaseInfo -> ThirdPartyPaymentMethod -> Async<Event>
    sendMessageToSelf: PlatformPaymentBaseInfo -> Async<Event> -> unit
 }
 
@@ -415,20 +232,7 @@ let onEventPersisted
    let correlationId = PaymentId.toCorrelationId payment.Id
    let emailRef = dep.getEmailRef ()
 
-   let notifyPayerOfPaymentSent () =
-      let msg =
-         EmailMessage.create
-            payment.Payer.OrgId
-            correlationId
-            (EmailInfo.PlatformPaymentPaid {
-               PayerBusinessName = payment.Payer.OrgName
-               PayeeBusinessName = payment.Payee.OrgName
-               Amount = payment.Amount
-            })
-
-      emailRef <! msg
-
-   let notifyPayeeOfPaymentDeposit () =
+   let notifyPayeeOfPaymentFulfilled () =
       let msg =
          EmailMessage.create
             payment.Payee.OrgId
@@ -454,145 +258,20 @@ let onEventPersisted
 
       emailRef <! msg
 
-   let depositToPayeeAccount (e: BankEvent<PlatformPaymentPending>) =
-      let msg =
-         DepositPlatformPaymentCommand.create e.InitiatedBy {
-            BaseInfo = payment
-            PaymentMethod = e.Data.PaymentMethod
-         }
-         |> AccountCommand.DepositPlatformPayment
-         |> AccountMessage.StateChange
-
-      dep.getAccountRef payment.Payee.ParentAccountId <! msg
-
-   let refundPayment (reason, payMethod) =
-      match payMethod with
-      | PaymentMethod.Platform _ ->
-         let msg =
-            FailPlatformPaymentCommand.create state.InitiatedBy {
-               BaseInfo = payment
-               Reason = reason
-               PaymentMethod = payMethod
-            }
-            |> AccountCommand.FailPlatformPayment
-            |> AccountMessage.StateChange
-
-         dep.getAccountRef payment.Payee.ParentAccountId <! msg
-      | PaymentMethod.ThirdParty payMethod ->
-         dep.sendMessageToSelf
-            payment
-            (dep.refundPaymentToThirdParty payment payMethod)
-
-   let syncToPartnerBank () =
-      match
-         state.PartnerBankSenderAccountLink,
-         state.PartnerBankRecipientAccountLink
-      with
-      | Some sender, Some recipient ->
-         dep.getPartnerBankServiceRef ()
-         <! PartnerBankServiceMessage.TransferBetweenOrganizations {
-            Amount = payment.Amount
-            From = sender
-            To = recipient
-            Metadata = {
-               OrgId = payment.Payee.OrgId
-               CorrelationId = correlationId
-            }
-            ReplyTo = TransferSagaReplyTo.PlatformPayment
-         }
-      | _ -> ()
-
-   let settlePayment settlementId payMethod =
-      let msg =
-         SettlePlatformPaymentCommand.create state.InitiatedBy {
-            BaseInfo = payment
-            SettlementId = settlementId
-            PaymentMethod = payMethod
-         }
-         |> AccountCommand.SettlePlatformPayment
-         |> AccountMessage.StateChange
-
-      dep.getAccountRef payment.Payer.ParentAccountId <! msg
-
    match evt with
    | Event.PaymentRequestCancelled -> ()
    | Event.PaymentRequestDeclined -> notifyPayeeOfPaymentDecline ()
-   | Event.PayerAccountReservedFunds(e, _) -> depositToPayeeAccount e
-   | Event.PayeeAccountDepositedFunds _ ->
-      notifyPayerOfPaymentSent ()
-      notifyPayeeOfPaymentDeposit ()
-      syncToPartnerBank ()
-   | Event.PartnerBankSyncResponse res ->
-      match res with
-      | Ok settlementId ->
-         state.PaymentMethod |> Option.iter (settlePayment settlementId)
-      | Error reason ->
-         if
-            previousState.LifeCycle.ActivityHasRemainingAttempts
-               Activity.SyncToPartnerBank
-         then
-            syncToPartnerBank ()
-         else
-            let msg =
-               EmailMessage.create
-                  payment.Payee.OrgId
-                  correlationId
-                  (EmailInfo.ApplicationErrorRequiresSupport reason)
-
-            emailRef <! msg
-   | Event.PaymentSettled -> ()
-   | Event.PayerAccountUnableToReserveFunds _ -> ()
-   | Event.PayeeAccountUnableToDepositFunds(reason, payMethod) ->
-      refundPayment (reason, payMethod)
-   | Event.SupportTeamResolvedPartnerBankSync ->
-      // Support team resolved dispute with partner bank so
-      // reattempt syncing transaction to partner bank.
-      syncToPartnerBank ()
+   | Event.PaymentFulfilled _ -> notifyPayeeOfPaymentFulfilled ()
+   | Event.PaymentFailed _ -> ()
    | Event.ResetInProgressActivityAttempts
-   | Event.ThirdPartyPaymentMethodRefunded
-   | Event.PayerAccountReleasedReservedFunds
    | Event.PaymentDeclinedNotificationSentToPayee
    | Event.PaymentRequestNotificationSentToPayer
-   | Event.PaymentPaidNotificationSentToPayer
-   | Event.PaymentDepositedNotificationSentToPayee -> ()
+   | Event.PaymentFulfilledNotificationSentToPayee -> ()
    | Event.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
          | Activity.NotifyPayerOfRequest ->
             notifyPayerOfPaymentRequest emailRef payment
          | Activity.NotifyPayeeOfDecline -> notifyPayeeOfPaymentDecline ()
-         | Activity.NotifyPayerOfPaymentSent -> notifyPayerOfPaymentSent ()
-         | Activity.NotifyPayeeOfPaymentDeposit ->
-            notifyPayeeOfPaymentDeposit ()
-         | Activity.SyncToPartnerBank -> syncToPartnerBank ()
-         | Activity.SettlePayment ->
-            match state.SettlementId, state.PaymentMethod with
-            | Some id, Some payMethod -> settlePayment id payMethod
-            | _ -> ()
-         | Activity.DepositToPayeeAccount ->
-            state.Events
-            |> List.tryPick (function
-               | PlatformPaymentSagaEvent.PayerAccountReservedFunds(e, _) ->
-                  Some e
-               | _ -> None)
-            |> Option.iter depositToPayeeAccount
-         | Activity.RefundThirdPartyPaymentMethod
-         | Activity.ReleasePayerAccountReservedFunds ->
-            state.Events
-            |> List.tryPick (function
-               | Event.PayeeAccountUnableToDepositFunds(reason, payMethod) ->
-                  Some(reason, payMethod)
-               | _ -> None)
-            |> Option.iter refundPayment
-         | Activity.WaitForPayment
-         | Activity.WaitForSupportTeamToResolvePartnerBankSync -> ()
-
-let refundPaymentToThirdParty
-   (info: PlatformPaymentBaseInfo)
-   (payMethod: ThirdPartyPaymentMethod)
-   =
-   async {
-      do! Async.Sleep(1500)
-
-      return Event.ThirdPartyPaymentMethodRefunded
-   }
+         | Activity.NotifyPayeeOfFulfillment -> notifyPayeeOfPaymentFulfilled ()
+         | Activity.WaitForPayment -> ()

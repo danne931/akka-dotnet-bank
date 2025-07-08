@@ -19,59 +19,39 @@ module PaymentId =
    let toCorrelationId (PaymentId payId) = CorrelationId payId
 
 [<RequireQualifiedAccess>]
-type PaymentType =
+type PaymentRequestType =
    | Platform
    | ThirdParty
 
-module PaymentType =
-   let fromString (str: string) : PaymentType option =
+module PaymentRequestType =
+   let fromString (str: string) : PaymentRequestType option =
       match str.ToLower() with
-      | "platform" -> Some PaymentType.Platform
-      | "thirdparty" -> Some PaymentType.ThirdParty
+      | "platform" -> Some PaymentRequestType.Platform
+      | "thirdparty" -> Some PaymentRequestType.ThirdParty
       | _ -> None
 
-   let fromStringUnsafe str : PaymentType =
+   let fromStringUnsafe str : PaymentRequestType =
       match fromString str with
       | Some s -> s
-      | None -> failwith "Error attempting to cast string to PaymentType"
+      | None -> failwith "Error attempting to cast string to PaymentRequestType"
 
 [<RequireQualifiedAccess>]
 type PlatformPaymentFailReason =
    | AccountClosed
-   | PartnerBankSync of string
+   | InsufficientFunds
+
+type PaymentFulfilled = {
+   TransferId: TransferId
+   FulfilledAt: DateTime
+}
 
 [<RequireQualifiedAccess>]
-type PlatformPaymentRefundReason = PaymentFailed of PlatformPaymentFailReason
-
-[<RequireQualifiedAccess>]
-type PlatformPaymentStatus =
-   | Unpaid
-   | PaymentPending
-   | Deposited
-   | Settled
+type PaymentRequestStatus =
+   | Requested
+   | Fulfilled of PaymentFulfilled
    | Cancelled
    | Declined
    | Failed of PlatformPaymentFailReason
-
-[<RequireQualifiedAccess>]
-type ThirdPartyPaymentStatus =
-   | Unpaid
-   | Deposited
-   | Cancelled
-
-module ThirdPartyPaymentStatus =
-   let fromString (str: string) : ThirdPartyPaymentStatus option =
-      match str.ToLower() with
-      | "unpaid" -> Some ThirdPartyPaymentStatus.Unpaid
-      | "deposited" -> Some ThirdPartyPaymentStatus.Deposited
-      | "cancelled" -> Some ThirdPartyPaymentStatus.Cancelled
-      | _ -> None
-
-   let fromStringUnsafe str : ThirdPartyPaymentStatus =
-      match fromString str with
-      | Some s -> s
-      | None ->
-         failwith "Error attempting to cast string to ThirdPartyPaymentStatus"
 
 type ThirdPartyPayer = { Name: string; Email: Email }
 
@@ -99,24 +79,13 @@ type Payee = {
    AccountId: AccountId
 }
 
-// TODO:
-// Research Plaid to see what data should be included in these payment types.
-[<RequireQualifiedAccess>]
-type ThirdPartyPaymentMethod =
-   | ACH
-   | Card
-
-[<RequireQualifiedAccess>]
-type PaymentMethod =
-   | Platform of AccountId
-   | ThirdParty of ThirdPartyPaymentMethod
-
 type PaymentBaseInfo = {
    Id: PaymentId
    InitiatedBy: InitiatedById
    Amount: decimal
-   Type: PaymentType
+   Type: PaymentRequestType
    Payee: Payee
+   Status: PaymentRequestStatus
    CreatedAt: DateTime
    Expiration: DateTime
    Memo: string
@@ -125,17 +94,13 @@ type PaymentBaseInfo = {
 [<RequireQualifiedAccess>]
 type PlatformPayment = {
    BaseInfo: PaymentBaseInfo
-   Status: PlatformPaymentStatus
    Payer: PlatformPayer
-   PaidBy: PaymentMethod option
 }
 
 [<RequireQualifiedAccess>]
 type ThirdPartyPayment = {
    BaseInfo: PaymentBaseInfo
-   Status: ThirdPartyPaymentStatus
    Payer: ThirdPartyPayer
-   PaidBy: ThirdPartyPaymentMethod
 }
 
 [<RequireQualifiedAccess>]
@@ -143,67 +108,44 @@ type Payment =
    | Platform of PlatformPayment
    | ThirdParty of ThirdPartyPayment
 
-module Payment =
-   let baseInfo =
-      function
-      | Payment.Platform p -> p.BaseInfo
-      | Payment.ThirdParty p -> p.BaseInfo
+   member x.BaseInfo =
+      match x with
+      | Platform p -> p.BaseInfo
+      | ThirdParty p -> p.BaseInfo
 
-   let payer =
-      function
-      | Payment.Platform p -> p.Payer.OrgName
-      | Payment.ThirdParty p -> p.Payer.Name
+   member x.Status = x.BaseInfo.Status
 
-   let isExpired =
-      function
+   member x.Payer =
+      match x with
+      | Platform p -> p.Payer.OrgName
+      | ThirdParty p -> p.Payer.Name
+
+   member x.IsExpired =
+      match x with
       | Payment.Platform p -> p.BaseInfo.Expiration <= DateTime.UtcNow
       | Payment.ThirdParty p -> p.BaseInfo.Expiration <= DateTime.UtcNow
 
-   let isUnpaid (payment: Payment) =
-      match payment with
-      | Payment.Platform p -> p.Status = PlatformPaymentStatus.Unpaid
-      | Payment.ThirdParty p -> p.Status = ThirdPartyPaymentStatus.Unpaid
+   member x.IsUnpaid = x.Status = PaymentRequestStatus.Requested
 
-   let canManage (payment: Payment) =
-      (not (isExpired payment)) && isUnpaid payment
+   member x.CanManage = (not (x.IsExpired)) && x.IsUnpaid
 
-   let displayPriority (payment: Payment) =
-      match payment with
-      | Payment.Platform p ->
-         match p.Status with
-         | PlatformPaymentStatus.Unpaid when isExpired payment -> 6
-         | PlatformPaymentStatus.Settled
-         | PlatformPaymentStatus.Deposited -> 5
-         | PlatformPaymentStatus.PaymentPending -> 4
-         | PlatformPaymentStatus.Cancelled -> 3
-         | PlatformPaymentStatus.Declined -> 3
-         | PlatformPaymentStatus.Failed _ -> 2
-         | PlatformPaymentStatus.Unpaid -> 1
-      | Payment.ThirdParty p ->
-         match p.Status with
-         | ThirdPartyPaymentStatus.Unpaid when isExpired payment -> 4
-         | ThirdPartyPaymentStatus.Deposited -> 3
-         | ThirdPartyPaymentStatus.Cancelled -> 2
-         | ThirdPartyPaymentStatus.Unpaid -> 1
+   member x.DisplayPriority =
+      match x.Status with
+      | PaymentRequestStatus.Requested when x.IsExpired -> 6
+      | PaymentRequestStatus.Fulfilled _ -> 5
+      | PaymentRequestStatus.Cancelled -> 4
+      | PaymentRequestStatus.Declined -> 3
+      | PaymentRequestStatus.Failed _ -> 2
+      | PaymentRequestStatus.Requested -> 1
 
-   let statusDisplay =
-      function
-      | Payment.Platform p ->
-         if
-            p.Status = PlatformPaymentStatus.Unpaid
-            && p.BaseInfo.Expiration < DateTime.UtcNow
-         then
-            "Expired"
-         else
-            string p.Status
-      | Payment.ThirdParty p ->
-         if
-            p.Status = ThirdPartyPaymentStatus.Unpaid
-            && p.BaseInfo.Expiration < DateTime.UtcNow
-         then
-            "Expired"
-         else
-            string p.Status
+   member x.StatusDisplay =
+      match x.Status with
+      | PaymentRequestStatus.Requested when x.IsExpired -> "Expired"
+      | PaymentRequestStatus.Requested -> "Requested"
+      | PaymentRequestStatus.Fulfilled _ -> "Fulfilled"
+      | PaymentRequestStatus.Cancelled -> "Cancelled"
+      | PaymentRequestStatus.Declined -> "Declined"
+      | PaymentRequestStatus.Failed _ -> "Failed"
 
 type PaymentSummary = {
    // Payment requests to orgs on the platform or outside the platform.
