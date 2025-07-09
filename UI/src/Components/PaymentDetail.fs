@@ -112,10 +112,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
          | Payment.Platform p, Ok(Some account) ->
             let cmd =
                CancelPlatformPaymentCommand.create initiator {
-                  RequestedPayment = {
-                     PlatformPaymentRequested.fromPayment p with
-                        BaseInfo.InitiatedById = initiator.Id
-                  }
+                  BaseInfo = PlatformPaymentBaseInfo.fromPayment p
                   Reason = reason
                }
                |> AccountCommand.CancelPlatformPayment
@@ -171,10 +168,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
          | Payment.Platform p, Ok(Some account) ->
             let cmd =
                DeclinePlatformPaymentCommand.create initiator {
-                  RequestedPayment = {
-                     PlatformPaymentRequested.fromPayment p with
-                        BaseInfo.InitiatedById = initiator.Id
-                  }
+                  BaseInfo = PlatformPaymentBaseInfo.fromPayment p
                   Reason = reason
                }
                |> AccountCommand.DeclinePlatformPayment
@@ -258,11 +252,11 @@ let PaymentDetailComponent
                   let cnt =
                      approvalRemainingCnt progress |> Option.defaultValue "all"
 
-                  attr.text (Payment.statusDisplay payment + " -> Paid")
+                  attr.text (Payment.statusDisplay payment + " -> Fulfilled")
 
                   attr.custom (
                      "data-tooltip",
-                     $"Updates to Paid when {cnt} approvals acquired."
+                     $"Updates to Fulfilled when {cnt} approvals acquired."
                   )
 
                   attr.custom ("data-placement", "right")

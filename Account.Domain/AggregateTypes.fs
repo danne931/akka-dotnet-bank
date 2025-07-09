@@ -119,10 +119,8 @@ type AccountCommand =
       | SettleDomesticTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
       | FailDomesticTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
       | RequestPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
-      | CancelPlatformPayment cmd ->
-         cmd.Data.RequestedPayment.BaseInfo.Payee.AccountId
-      | DeclinePlatformPayment cmd ->
-         cmd.Data.RequestedPayment.BaseInfo.Payee.AccountId
+      | CancelPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
+      | DeclinePlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
       | CloseAccount cmd -> cmd.Data.AccountId
       | ConfigureAutoTransferRule cmd -> cmd.Data.AccountId
       | DeleteAutoTransferRule cmd -> cmd.Data.AccountId

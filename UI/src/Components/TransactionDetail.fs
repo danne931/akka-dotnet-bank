@@ -351,16 +351,15 @@ let renderTransactionInfo
 
    let originatedFromPayment =
       match txnInfo.Transaction.Type with
-      | TransactionType.InternalTransferBetweenOrgs ->
+      | TransactionType.Payment ->
          txnInfo.Transaction.History
-         |> List.choose (function
+         |> List.tryPick (function
             | History.Account h ->
                match h.Event with
                | AccountEvent.InternalTransferBetweenOrgsPending e ->
                   e.Data.BaseInfo.FromPaymentRequest
                | _ -> None
             | _ -> None)
-         |> List.tryHead
       | _ -> None
 
    React.fragment [

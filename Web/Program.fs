@@ -66,6 +66,7 @@ builder.Services.AddAkka(
          .WithCustomSerializer(
             BankSerializer.Name,
             [
+               typedefof<OrgMessage>
                typedefof<AccountMessage>
                typedefof<Account>
                typedefof<EmployeeMessage>
@@ -84,7 +85,7 @@ builder.Services.AddAkka(
                //       a message from Akka ShardRegionProxy.
                typedefof<Akkling.Cluster.Sharding.ShardEnvelope>
             ],
-            fun system -> BankSerializer(system)
+            fun system -> BankSerializer system
          )
          .WithDistributedPubSub(ClusterMetadata.roles.signalR)
          .WithShardRegionProxy<ActorMetadata.OrgMarker>(

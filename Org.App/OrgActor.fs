@@ -15,6 +15,7 @@ open Lib.Types
 open ActorUtil
 open Bank.Org.Domain
 open Bank.Account.Domain
+open Bank.Transfer.Domain
 open Bank.Employee.Domain
 open CommandApproval
 open SignalRBroadcast
@@ -253,21 +254,44 @@ let onPersisted
             |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
          getEmployeeRef () <! msg
-      (*
-      | ApprovableCommand.AmountBased(FulfillPlatformPayment cmd) ->
-         let msg =
-            DeclinePlatformPaymentCommand.create e.InitiatedBy {
-               RequestedPayment = cmd.Data.RequestedPayment
-               Reason =
-                  Some
-                     $"Outgoing payment declined by {e.Data.DeclinedBy.EmployeeName}"
-            }
-            |> AccountCommand.DeclinePlatformPayment
-            |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+      | ApprovableCommand.AmountBased(InternalTransferBetweenOrgs cmd) ->
+         let info = cmd.Data
 
-         getAccountRef () <! msg
-      *)
+         match info.OriginatedFromPaymentRequest with
+         | Some paymentId ->
+            let initiatorOfPaymentRequest = cmd.InitiatedBy
+            let initiatorOfPaymentDecline = e.InitiatedBy
+
+            let msg =
+               DeclinePlatformPaymentCommand.create initiatorOfPaymentDecline {
+                  Reason =
+                     Some
+                        $"Outgoing payment declined by {e.Data.DeclinedBy.EmployeeName}"
+                  BaseInfo = {
+                     Payer = {
+                        OrgId = info.Sender.OrgId
+                        OrgName = info.Sender.Name
+                        ParentAccountId = info.Sender.ParentAccountId
+                     }
+                     Payee = {
+                        OrgId = info.Recipient.OrgId
+                        OrgName = info.Recipient.Name
+                        ParentAccountId = info.Recipient.ParentAccountId
+                        AccountId = info.Recipient.AccountId
+                     }
+                     Amount = info.Amount
+                     InitiatedById = initiatorOfPaymentRequest.Id
+                     Id = paymentId
+                  }
+               }
+               |> AccountCommand.DeclinePlatformPayment
+               |> AccountMessage.StateChange
+               |> GuaranteedDelivery.message (
+                  ParentAccountId.get info.Recipient.ParentAccountId
+               )
+
+            getAccountRef () <! msg
+         | None -> ()
       | _ -> ()
    | _ -> ()
 

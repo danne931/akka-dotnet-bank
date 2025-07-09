@@ -665,21 +665,16 @@ module RequestPlatformPaymentCommand =
                }
       }
 
-type CancelPlatformPaymentInput = {
-   RequestedPayment: PlatformPaymentRequested
-   Reason: string option
-}
-
-type CancelPlatformPaymentCommand = Command<CancelPlatformPaymentInput>
+type CancelPlatformPaymentCommand = Command<PlatformPaymentRequestCancelled>
 
 module CancelPlatformPaymentCommand =
-   let create (initiatedBy: Initiator) (data: CancelPlatformPaymentInput) =
-      let payee = data.RequestedPayment.BaseInfo.Payee
+   let create (initiatedBy: Initiator) (data: PlatformPaymentRequestCancelled) =
+      let payee = data.BaseInfo.Payee
 
       Command.create
          (ParentAccountId.toEntityId payee.ParentAccountId)
          payee.OrgId
-         (data.RequestedPayment.BaseInfo.Id |> PaymentId.get |> CorrelationId)
+         (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
 
@@ -687,33 +682,18 @@ module CancelPlatformPaymentCommand =
       (cmd: CancelPlatformPaymentCommand)
       : ValidationResult<BankEvent<PlatformPaymentRequestCancelled>>
       =
-      BankEvent.create2<
-         CancelPlatformPaymentInput,
-         PlatformPaymentRequestCancelled
-       >
-         cmd
-         {
-            Reason = cmd.Data.Reason
-            BaseInfo = cmd.Data.RequestedPayment.BaseInfo
-         }
-      |> Ok
+      BankEvent.create<PlatformPaymentRequestCancelled> cmd |> Ok
 
-
-type DeclinePlatformPaymentInput = {
-   RequestedPayment: PlatformPaymentRequested
-   Reason: string option
-}
-
-type DeclinePlatformPaymentCommand = Command<DeclinePlatformPaymentInput>
+type DeclinePlatformPaymentCommand = Command<PlatformPaymentRequestDeclined>
 
 module DeclinePlatformPaymentCommand =
-   let create (initiatedBy: Initiator) (data: DeclinePlatformPaymentInput) =
-      let payer = data.RequestedPayment.BaseInfo.Payer
+   let create (initiatedBy: Initiator) (data: PlatformPaymentRequestDeclined) =
+      let payee = data.BaseInfo.Payee
 
       Command.create
-         (ParentAccountId.toEntityId payer.ParentAccountId)
-         payer.OrgId
-         (data.RequestedPayment.BaseInfo.Id |> PaymentId.get |> CorrelationId)
+         (ParentAccountId.toEntityId payee.ParentAccountId)
+         payee.OrgId
+         (data.BaseInfo.Id |> PaymentId.get |> CorrelationId)
          initiatedBy
          data
 
@@ -721,16 +701,7 @@ module DeclinePlatformPaymentCommand =
       (cmd: DeclinePlatformPaymentCommand)
       : ValidationResult<BankEvent<PlatformPaymentRequestDeclined>>
       =
-      BankEvent.create2<
-         DeclinePlatformPaymentInput,
-         PlatformPaymentRequestDeclined
-       >
-         cmd
-         {
-            Reason = cmd.Data.Reason
-            BaseInfo = cmd.Data.RequestedPayment.BaseInfo
-         }
-      |> Ok
+      BankEvent.create<PlatformPaymentRequestDeclined> cmd |> Ok
 
 type ConfigureAutoTransferRuleInput = {
    RuleIdToUpdate: Guid option

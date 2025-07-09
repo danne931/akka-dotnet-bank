@@ -127,7 +127,7 @@ type Payment =
 
    member x.IsUnpaid = x.Status = PaymentRequestStatus.Requested
 
-   member x.CanManage = (not (x.IsExpired)) && x.IsUnpaid
+   member x.CanManage = not x.IsExpired && x.IsUnpaid
 
    member x.DisplayPriority =
       match x.Status with

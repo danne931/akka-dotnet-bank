@@ -204,11 +204,11 @@ let renderIncomingTableRow
             match paymentPendingApproval with
             | None -> attr.text statusDisplay
             | Some _ ->
-               attr.text (statusDisplay + " -> Paid")
+               attr.text (statusDisplay + " -> Fulfilled")
 
                attr.custom (
                   "data-tooltip",
-                  "Updates to Paid when all approvals acquired."
+                  "Updates to Fulfilled when all approvals acquired."
                )
          ]
       ]

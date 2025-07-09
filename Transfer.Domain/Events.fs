@@ -105,6 +105,15 @@ type PlatformPaymentBaseInfo = {
    Amount: decimal
 }
 
+module PlatformPaymentBaseInfo =
+   let fromPayment (p: PlatformPayment) : PlatformPaymentBaseInfo = {
+      Id = p.BaseInfo.Id
+      Payee = p.BaseInfo.Payee
+      Payer = p.Payer
+      InitiatedById = p.BaseInfo.InitiatedBy
+      Amount = p.BaseInfo.Amount
+   }
+
 type PlatformPaymentRequested = {
    BaseInfo: PlatformPaymentBaseInfo
    Expiration: DateTime
@@ -112,18 +121,6 @@ type PlatformPaymentRequested = {
 }
 
 module PlatformPaymentRequested =
-   let fromPayment (p: PlatformPayment) : PlatformPaymentRequested = {
-      BaseInfo = {
-         Id = p.BaseInfo.Id
-         Payee = p.BaseInfo.Payee
-         Payer = p.Payer
-         InitiatedById = p.BaseInfo.InitiatedBy
-         Amount = p.BaseInfo.Amount
-      }
-      Memo = p.BaseInfo.Memo
-      Expiration = p.BaseInfo.Expiration
-   }
-
    let toPayment (e: BankEvent<PlatformPaymentRequested>) : PlatformPayment =
       let info = e.Data.BaseInfo
 

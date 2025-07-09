@@ -5,6 +5,7 @@ open System
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Transfer.Domain
 open Lib.SharedTypes
 open CommandApproval
 
@@ -88,6 +89,12 @@ type TransactionWithAncillaryInfo = {
    Note: string option
 }
 
+let private txnTypePaymentOrTransfer (paymentId: PaymentId option) =
+   if paymentId.IsSome then
+      TransactionType.Payment
+   else
+      TransactionType.InternalTransferBetweenOrgs
+
 let private transactionInfoFromApprovableCommand =
    function
    | ApprovableCommand.AmountBased c ->
@@ -95,12 +102,10 @@ let private transactionInfoFromApprovableCommand =
       | ApprovableCommandAmountBased.DomesticTransfer _ ->
          Some(TransactionType.DomesticTransfer, TransactionStatus.InProgress)
       | ApprovableCommandAmountBased.InternalTransferBetweenOrgs e ->
-         let txnType =
-            match e.Data.OriginatedFromPaymentRequest with
-            | Some _ -> TransactionType.Payment
-            | None -> TransactionType.InternalTransferBetweenOrgs
-
-         Some(txnType, TransactionStatus.InProgress)
+         Some(
+            txnTypePaymentOrTransfer e.Data.OriginatedFromPaymentRequest,
+            TransactionStatus.InProgress
+         )
    | _ -> None
 
 let transactionInfoFromHistory
@@ -171,31 +176,31 @@ let transactionInfoFromHistory
          )
       | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
          Some(
-            TransactionType.InternalTransferBetweenOrgs,
+            txnTypePaymentOrTransfer e.Data.BaseInfo.FromPaymentRequest,
             TransactionStatus.Scheduled,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalTransferBetweenOrgsPending e ->
          Some(
-            TransactionType.InternalTransferBetweenOrgs,
+            txnTypePaymentOrTransfer e.Data.BaseInfo.FromPaymentRequest,
             TransactionStatus.InProgress,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
          Some(
-            TransactionType.InternalTransferBetweenOrgs,
+            txnTypePaymentOrTransfer e.Data.BaseInfo.FromPaymentRequest,
             TransactionStatus.InProgress,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalTransferBetweenOrgsSettled e ->
          Some(
-            TransactionType.InternalTransferBetweenOrgs,
+            txnTypePaymentOrTransfer e.Data.BaseInfo.FromPaymentRequest,
             TransactionStatus.Complete,
             e.Data.BaseInfo.Amount
          )
       | AccountEvent.InternalTransferBetweenOrgsFailed e ->
          Some(
-            TransactionType.InternalTransferBetweenOrgs,
+            txnTypePaymentOrTransfer e.Data.BaseInfo.FromPaymentRequest,
             TransactionStatus.Failed,
             e.Data.BaseInfo.Amount
          )
