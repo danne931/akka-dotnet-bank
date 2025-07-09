@@ -1,4 +1,4 @@
-module Bank.Card.Routes
+module Bank.Routes.Card
 
 open System
 open System.Threading.Tasks
@@ -17,7 +17,7 @@ open Lib.SharedTypes
 open Bank.UserSession.Middleware
 open Lib.NetworkQuery
 
-let startCardRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app.MapGet(
       CardPath.Get,
       Func<

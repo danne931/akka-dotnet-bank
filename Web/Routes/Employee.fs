@@ -1,4 +1,4 @@
-module Bank.Employee.Routes
+module Bank.Routes.Employee
 
 open System
 open System.Threading.Tasks
@@ -17,7 +17,7 @@ open Lib.SharedTypes
 open Bank.UserSession.Middleware
 open Email
 
-let startEmployeeRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app
       .MapGet(
          EmployeePath.GetEmployee,
@@ -149,7 +149,7 @@ let startEmployeeRoutes (app: WebApplication) =
                            { Reason = None }
                         |> EmployeeCommand.RefreshInvitationToken
 
-                     match! (processCommand sys cmd) with
+                     match! processCommand sys cmd with
                      | Ok _ -> return Results.Ok()
                      | Error e -> return RouteUtil.badRequest e
                   else

@@ -5,7 +5,7 @@ open System
 open Lib.SharedTypes
 open OrganizationSqlMapper
 open AccountSqlMapper
-open Bank.Transfer.Domain
+open Bank.Payment.Domain
 
 module Table =
    let payment = "payment_request"
@@ -44,7 +44,7 @@ module PaymentFields =
 
 module PaymentSqlReader =
    let paymentId (read: RowReader) =
-      PaymentFields.paymentId |> read.uuid |> PaymentId
+      PaymentFields.paymentId |> read.uuid |> PaymentRequestId
 
    let initiatedById (read: RowReader) =
       PaymentFields.initiatedById |> read.uuid |> EmployeeId |> InitiatedById
@@ -102,8 +102,8 @@ module PaymentSqlReader =
          PaymentFields.ThirdParty.payerName |> read.string
 
 module PaymentSqlWriter =
-   let paymentId (paymentId: PaymentId) =
-      let (PaymentId id) = paymentId
+   let paymentId (paymentId: PaymentRequestId) =
+      let (PaymentRequestId id) = paymentId
       Sql.uuid id
 
    let accountId = AccountSqlWriter.accountId

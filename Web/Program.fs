@@ -13,18 +13,9 @@ open System
 
 open Bank.Infrastructure
 open Bank.UserSession.Middleware
-open Bank.UserSession.Routes
-open Bank.Org.Routes
-open Bank.Account.Routes
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Bank.Transfer.Routes
-open Bank.Diagnostic.Routes
-open Bank.Transaction.Routes
-open Bank.Employee.Routes
-open Bank.Card.Routes
-open Bank.Analytics.Routes
 open Bank.Hubs
 open ActorUtil
 open Lib.CircuitBreaker
@@ -201,14 +192,15 @@ app.MapAkkaHealthCheckRoutes(
 )
 |> ignore
 
-startOrgRoutes app
-startUserSessionRoutes app
-startTransferRoutes app
-startAccountRoutes app
-startDiagnosticRoutes app
-startTransactionRoutes app
-startEmployeeRoutes app
-startCardRoutes app
-startAnalyticsRoutes app
+Bank.Routes.Org.start app
+Bank.Routes.UserSession.start app
+Bank.Routes.Transfer.start app
+Bank.Routes.PaymentRequest.start app
+Bank.Routes.Account.start app
+Bank.Routes.Diagnostic.start app
+Bank.Routes.Transaction.start app
+Bank.Routes.Employee.start app
+Bank.Routes.Card.start app
+Bank.Routes.Analytics.start app
 
 app.Run()

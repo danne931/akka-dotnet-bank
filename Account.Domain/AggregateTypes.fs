@@ -4,6 +4,7 @@ open System
 
 open Lib.SharedTypes
 open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open MaintenanceFee
 open AutomaticTransfer
 
@@ -43,8 +44,8 @@ type AccountCommand =
    | SettleDomesticTransfer of SettleDomesticTransferCommand
    | FailDomesticTransfer of FailDomesticTransferCommand
    | RequestPlatformPayment of RequestPlatformPaymentCommand
-   | CancelPlatformPayment of CancelPlatformPaymentCommand
-   | DeclinePlatformPayment of DeclinePlatformPaymentCommand
+   | CancelPlatformPayment of CancelPlatformPaymentRequestCommand
+   | DeclinePlatformPayment of DeclinePlatformPaymentRequestCommand
    | CloseAccount of CloseAccountCommand
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
    | DeleteAutoTransferRule of DeleteAutoTransferRuleCommand

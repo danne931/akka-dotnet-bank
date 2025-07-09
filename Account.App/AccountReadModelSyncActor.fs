@@ -8,6 +8,7 @@ open Lib.Types
 open Lib.Postgres
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open AccountSqlMapper
 open PaymentSqlMapper
 open TransferSqlMapper

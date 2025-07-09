@@ -9,6 +9,7 @@ open Lib.Postgres
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open Bank.Payment.Domain
 
 module Fields = AccountSqlMapper.AccountFields
 module Reader = AccountSqlMapper.AccountSqlReader
@@ -55,10 +56,10 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
          RequestPlatformPaymentCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
       | AccountCommand.CancelPlatformPayment cmd ->
-         CancelPlatformPaymentCommand.toEvent cmd
+         CancelPlatformPaymentRequestCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
       | AccountCommand.DeclinePlatformPayment cmd ->
-         DeclinePlatformPaymentCommand.toEvent cmd
+         DeclinePlatformPaymentRequestCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
       | AccountCommand.ConfigureAutoTransferRule cmd ->
          ConfigureAutoTransferRuleCommand.toEvent cmd

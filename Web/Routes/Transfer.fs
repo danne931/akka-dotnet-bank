@@ -1,4 +1,4 @@
-module Bank.Transfer.Routes
+module Bank.Routes.Transfer
 
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
@@ -20,7 +20,7 @@ open Bank.UserSession.Middleware
 
 let processAccountCommand = Bank.Account.Api.processCommand
 
-let startTransferRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app
       .MapPost(
          TransferPath.DomesticTransferRecipient,
@@ -95,7 +95,7 @@ let startTransferRoutes (app: WebApplication) =
                      |> ApprovableCommand.AmountBased
                      |> OrgMessage.ApprovableRequest
 
-                  (OrgActor.get sys cmd.OrgId) <! msg
+                  OrgActor.get sys cmd.OrgId <! msg
                   return res
                }
                |> RouteUtil.unwrapTaskResult)
@@ -176,54 +176,6 @@ let startTransferRoutes (app: WebApplication) =
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
-   |> ignore
-
-   app
-      .MapGet(
-         PaymentPath.Payments,
-         Func<Guid, Task<IResult>>(fun orgId ->
-            OrgId orgId |> getPayments |> RouteUtil.unwrapTaskResultOption)
-      )
-      .RBAC(Permissions.ViewPayments)
-   |> ignore
-
-   app
-      .MapPost(
-         PaymentPath.RequestPayment,
-         Func<ActorSystem, RequestPlatformPaymentCommand, Task<IResult>>
-            (fun sys cmd ->
-               processAccountCommand
-                  sys
-                  (AccountCommand.RequestPlatformPayment cmd)
-               |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.ManagePayment)
-   |> ignore
-
-   app
-      .MapPost(
-         PaymentPath.CancelPayment,
-         Func<ActorSystem, CancelPlatformPaymentCommand, Task<IResult>>
-            (fun sys cmd ->
-               processAccountCommand
-                  sys
-                  (AccountCommand.CancelPlatformPayment cmd)
-               |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.ManagePayment)
-   |> ignore
-
-   app
-      .MapPost(
-         PaymentPath.DeclinePayment,
-         Func<ActorSystem, DeclinePlatformPaymentCommand, Task<IResult>>
-            (fun sys cmd ->
-               processAccountCommand
-                  sys
-                  (AccountCommand.DeclinePlatformPayment cmd)
-               |> RouteUtil.unwrapTaskResult)
-      )
-      .RBAC(Permissions.ManagePayment)
    |> ignore
 
    app

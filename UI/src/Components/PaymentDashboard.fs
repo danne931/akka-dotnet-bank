@@ -8,7 +8,7 @@ open Fable.FontAwesome
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open Bank.Org.Domain
 open CommandApproval
 open UIDomain.Account
@@ -23,7 +23,7 @@ type State = { Payments: Deferred<PaymentsMaybe> }
 [<RequireQualifiedAccess>]
 type PaymentActionView =
    | RequestPayment
-   | ViewPayment of PaymentId
+   | ViewPayment of PaymentRequestId
 
 let private actionNav (action: PaymentActionView option) =
    let path =
@@ -44,10 +44,10 @@ let init () =
    { Payments = Deferred.Idle }, Cmd.ofMsg (LoadPayments Started)
 
 let updatePlatformPaymentStatus
-   (targetId: PaymentId)
+   (targetId: PaymentRequestId)
    (status: PaymentRequestStatus)
-   (payment: PlatformPayment)
-   : PlatformPayment
+   (payment: PlatformPaymentRequest)
+   : PlatformPaymentRequest
    =
    if payment.BaseInfo.Id = targetId then
       {
@@ -94,7 +94,7 @@ let update orgId msg state =
                      | AccountEvent.PlatformPaymentRequested p ->
                         let payment =
                            PlatformPaymentRequested.toPayment p
-                           |> Payment.Platform
+                           |> PaymentRequest.Platform
 
                         {
                            paymentSummary with
@@ -112,11 +112,11 @@ let update orgId msg state =
                               OutgoingRequests =
                                  paymentSummary.OutgoingRequests
                                  |> List.map (function
-                                    | Payment.Platform p ->
-                                       Payment.Platform(updateStatus p)
+                                    | PaymentRequest.Platform p ->
+                                       PaymentRequest.Platform(updateStatus p)
                                     // NOT yet implemented
-                                    | Payment.ThirdParty p ->
-                                       Payment.ThirdParty p)
+                                    | PaymentRequest.ThirdParty p ->
+                                       PaymentRequest.ThirdParty p)
                         }
                      | AccountEvent.InternalTransferBetweenOrgsPending e ->
                         match e.Data.BaseInfo.FromPaymentRequest with
@@ -157,14 +157,14 @@ let update orgId msg state =
 
 let selectedPayment
    (payments: Deferred<PaymentsMaybe>)
-   (selectedId: PaymentId)
-   : Payment option
+   (selectedId: PaymentRequestId)
+   : PaymentRequest option
    =
    match payments with
    | Deferred.Resolved(Ok(Some payments)) ->
       payments.IncomingRequests
       |> List.tryFind (fun p -> p.BaseInfo.Id = selectedId)
-      |> Option.map Payment.Platform
+      |> Option.map PaymentRequest.Platform
       |> Option.orElse (
          payments.OutgoingRequests
          |> List.tryFind (fun p -> p.BaseInfo.Id = selectedId)
@@ -173,12 +173,12 @@ let selectedPayment
 
 let renderIncomingTableRow
    (progress: CommandApprovalProgress.T seq)
-   (payment: PlatformPayment)
-   (selectedId: PaymentId option)
+   (payment: PlatformPaymentRequest)
+   (selectedId: PaymentRequestId option)
    =
    let info = payment.BaseInfo
    let paymentId = info.Id
-   let statusDisplay = Payment.statusDisplay (Payment.Platform payment)
+   let statusDisplay = Payment.statusDisplay (PaymentRequest.Platform payment)
 
    let paymentPendingApproval =
       paymentFulfillmentPendingApproval progress paymentId
@@ -216,8 +216,8 @@ let renderIncomingTableRow
 
 let renderIncomingTable
    (progress: CommandApprovalProgress.T seq)
-   (payments: PlatformPayment list)
-   (selectedId: PaymentId option)
+   (payments: PlatformPaymentRequest list)
+   (selectedId: PaymentRequestId option)
    =
    Html.table [
       attr.classes [ "clickable-table" ]
@@ -237,7 +237,8 @@ let renderIncomingTable
 
          Html.tbody [
             let payments =
-               payments |> List.sortBy (Payment.Platform >> _.DisplayPriority)
+               payments
+               |> List.sortBy (PaymentRequest.Platform >> _.DisplayPriority)
 
             for payment in payments ->
                renderIncomingTableRow progress payment selectedId
@@ -246,8 +247,8 @@ let renderIncomingTable
    ]
 
 let renderTableRow
-   (payment: Payment)
-   (selectedId: PaymentId option)
+   (payment: PaymentRequest)
+   (selectedId: PaymentRequestId option)
    (org: OrgWithAccountProfiles)
    =
    let paymentBaseInfo = payment.BaseInfo
@@ -267,8 +268,8 @@ let renderTableRow
          Html.td (DateTime.formatShort paymentBaseInfo.CreatedAt)
 
          match payment with
-         | Payment.Platform p -> Html.td p.Payer.OrgName
-         | Payment.ThirdParty p -> Html.td p.Payer.Name
+         | PaymentRequest.Platform p -> Html.td p.Payer.OrgName
+         | PaymentRequest.ThirdParty p -> Html.td p.Payer.Name
 
          Html.td (Money.format paymentBaseInfo.Amount)
 
@@ -282,8 +283,8 @@ let renderTableRow
    ]
 
 let renderTable
-   (payments: Payment list)
-   (selectedId: PaymentId option)
+   (payments: PaymentRequest list)
+   (selectedId: PaymentRequestId option)
    (org: OrgWithAccountProfiles)
    =
    Html.table [
@@ -317,8 +318,7 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
    let state, dispatch = React.useElmish (init, update session.OrgId, [||])
    let orgCtx = React.useContext OrgProvider.context
 
-
-   let selectedPaymentId =
+   let selectedPaymentRequestId =
       match url with
       | Routes.PaymentUrl.ViewPayment payId -> Some payId
       | _ -> None
@@ -362,7 +362,7 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
                         renderIncomingTable
                            org.Org.CommandApprovalProgress.Values
                            payments.IncomingRequests
-                           selectedPaymentId
+                           selectedPaymentRequestId
 
                      Html.h6 "Outgoing Requests"
 
@@ -371,7 +371,7 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
                      else
                         renderTable
                            payments.OutgoingRequests
-                           selectedPaymentId
+                           selectedPaymentRequestId
                            org
                   | _ -> ()
                ]

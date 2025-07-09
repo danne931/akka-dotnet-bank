@@ -25,6 +25,7 @@
     <ProjectReference Include="../Lib/Lib.fsproj" />
     <ProjectReference Include="../Scheduler.Domain/Scheduler.Domain.fsproj" />
     <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../Payment.Domain/Payment.Domain.fsproj" /> 
     <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
     <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" />
     <ProjectReference Include="../Billing.Domain/Billing.Domain.fsproj" /> 

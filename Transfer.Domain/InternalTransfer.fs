@@ -61,6 +61,6 @@ type BaseInternalTransferBetweenOrgsInfo = {
    Recipient: InternalTransferRecipient
    Amount: decimal
    ScheduledDate: DateTime
-   FromPaymentRequest: PaymentId option
+   FromPaymentRequest: PaymentRequestId option
    Memo: string option
 }

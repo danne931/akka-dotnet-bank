@@ -7,7 +7,7 @@ open Akkling.Cluster.Sharding
 open Lib.SharedTypes
 open Lib.Saga
 open Bank.Account.Domain
-open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open Email
 open PartnerBank.Service.Domain
 
@@ -182,7 +182,7 @@ let notifyPayerOfPaymentRequest emailRef (payment: PlatformPaymentBaseInfo) =
    let msg =
       EmailMessage.create
          payment.Payer.OrgId
-         (PaymentId.toCorrelationId payment.Id)
+         (PaymentRequestId.toCorrelationId payment.Id)
          (EmailInfo.PlatformPaymentRequested {
             Amount = payment.Amount
             PayeeBusinessName = payment.Payee.OrgName
@@ -213,7 +213,7 @@ let onEventPersisted
    (evt: Event)
    =
    let payment = state.PaymentInfo
-   let correlationId = PaymentId.toCorrelationId payment.Id
+   let correlationId = PaymentRequestId.toCorrelationId payment.Id
    let emailRef = dep.getEmailRef ()
 
    let notifyPayeeOfPaymentDecline () =

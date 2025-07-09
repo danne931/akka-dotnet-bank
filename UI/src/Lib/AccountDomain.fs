@@ -5,6 +5,7 @@ open System
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open Lib.SharedTypes
 open Lib.NetworkQuery
 open Transaction
@@ -15,7 +16,7 @@ type AccountMaybe = Result<Account option, Err>
 
 type TransactionsMaybe = Result<Transaction list option, Err>
 
-type PaymentsMaybe = Result<PaymentSummary option, Err>
+type PaymentsMaybe = Result<PaymentRequestSummary option, Err>
 
 type AccountCommandReceipt = {
    PendingCommand: AccountCommand
@@ -682,7 +683,7 @@ let keepRealtimeEventsCorrespondingToSelectedFilter
    && qualifiedEventType
 
 module Payment =
-   let statusDisplay (payment: Payment) =
+   let statusDisplay (payment: PaymentRequest) =
       match payment.Status with
       | PaymentRequestStatus.Fulfilled p ->
          "Fulfilled on " + DateTime.dateUIFriendly p.FulfilledAt

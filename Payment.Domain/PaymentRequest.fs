@@ -1,22 +1,8 @@
-namespace Bank.Transfer.Domain
+namespace Bank.Payment.Domain
 
 open System
 
 open Lib.SharedTypes
-
-type PaymentId =
-   | PaymentId of Guid
-
-   override x.ToString() =
-      let (PaymentId id) = x
-      string id
-
-module PaymentId =
-   let get (payId: PaymentId) =
-      let (PaymentId id) = payId
-      id
-
-   let toCorrelationId (PaymentId payId) = CorrelationId payId
 
 [<RequireQualifiedAccess>]
 type PaymentRequestType =
@@ -53,13 +39,22 @@ type PaymentRequestStatus =
    | Declined
    | Failed of PlatformPaymentFailReason
 
-type ThirdPartyPayer = { Name: string; Email: Email }
+// The org which requested the payment and the account they
+// wish the payment to be made out to.
+type Payee = {
+   OrgId: OrgId
+   OrgName: string
+   ParentAccountId: ParentAccountId
+   AccountId: AccountId
+}
 
 type PlatformPayer = {
    OrgId: OrgId
    ParentAccountId: ParentAccountId
    OrgName: string
 }
+
+type ThirdPartyPayer = { Name: string; Email: Email }
 
 [<RequireQualifiedAccess>]
 type Payer =
@@ -70,17 +65,8 @@ type Payer =
    // prospective payer via email.
    | ThirdParty of ThirdPartyPayer
 
-// The org which requested the payment and the account they
-// wish the payment to be made out to.
-type Payee = {
-   OrgId: OrgId
-   OrgName: string
-   ParentAccountId: ParentAccountId
-   AccountId: AccountId
-}
-
-type PaymentBaseInfo = {
-   Id: PaymentId
+type PaymentRequestBaseInfo = {
+   Id: PaymentRequestId
    InitiatedBy: InitiatedById
    Amount: decimal
    Type: PaymentRequestType
@@ -92,21 +78,50 @@ type PaymentBaseInfo = {
 }
 
 [<RequireQualifiedAccess>]
-type PlatformPayment = {
-   BaseInfo: PaymentBaseInfo
+type PlatformPaymentRequest = {
+   BaseInfo: PaymentRequestBaseInfo
    Payer: PlatformPayer
 }
 
+module PlatformPaymentRequest =
+   let toTransferCommand
+      (initiator: Initiator)
+      (payment: PlatformPaymentRequest)
+      selectedAccountId
+      =
+      let info = payment.BaseInfo
+      let payer = payment.Payer
+
+      Bank.Transfer.Domain.InternalTransferBetweenOrgsCommand.create initiator {
+         ScheduledDateSeedOverride = None
+         Amount = payment.BaseInfo.Amount
+         Sender = {
+            OrgId = payer.OrgId
+            ParentAccountId = payer.ParentAccountId
+            AccountId = selectedAccountId
+            Name = payer.OrgName
+         }
+         Recipient = {
+            OrgId = info.Payee.OrgId
+            ParentAccountId = info.Payee.ParentAccountId
+            AccountId = info.Payee.AccountId
+            Name = info.Payee.OrgName
+         }
+         Memo = Some info.Memo
+         OriginatedFromSchedule = false
+         OriginatedFromPaymentRequest = Some info.Id
+      }
+
 [<RequireQualifiedAccess>]
-type ThirdPartyPayment = {
-   BaseInfo: PaymentBaseInfo
+type ThirdPartyPaymentRequest = {
+   BaseInfo: PaymentRequestBaseInfo
    Payer: ThirdPartyPayer
 }
 
 [<RequireQualifiedAccess>]
-type Payment =
-   | Platform of PlatformPayment
-   | ThirdParty of ThirdPartyPayment
+type PaymentRequest =
+   | Platform of PlatformPaymentRequest
+   | ThirdParty of ThirdPartyPaymentRequest
 
    member x.BaseInfo =
       match x with
@@ -122,8 +137,8 @@ type Payment =
 
    member x.IsExpired =
       match x with
-      | Payment.Platform p -> p.BaseInfo.Expiration <= DateTime.UtcNow
-      | Payment.ThirdParty p -> p.BaseInfo.Expiration <= DateTime.UtcNow
+      | PaymentRequest.Platform p -> p.BaseInfo.Expiration <= DateTime.UtcNow
+      | PaymentRequest.ThirdParty p -> p.BaseInfo.Expiration <= DateTime.UtcNow
 
    member x.IsUnpaid = x.Status = PaymentRequestStatus.Requested
 
@@ -147,9 +162,9 @@ type Payment =
       | PaymentRequestStatus.Declined -> "Declined"
       | PaymentRequestStatus.Failed _ -> "Failed"
 
-type PaymentSummary = {
+type PaymentRequestSummary = {
    // Payment requests to orgs on the platform or outside the platform.
-   OutgoingRequests: Payment list
+   OutgoingRequests: PaymentRequest list
    // Payment request from orgs on the platform.
-   IncomingRequests: PlatformPayment list
+   IncomingRequests: PlatformPaymentRequest list
 }

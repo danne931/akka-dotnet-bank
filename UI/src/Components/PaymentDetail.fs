@@ -9,7 +9,7 @@ open Feliz.Router
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open Bank.Org.Domain
 open CommandApproval
 open Bank.Account.Forms.PaymentFulfillment
@@ -26,8 +26,8 @@ type State = {
 
 [<RequireQualifiedAccess>]
 type Confirmation =
-   | CancelPayment of Payment
-   | DeclinePayment of Payment
+   | CancelPayment of PaymentRequest
+   | DeclinePayment of PaymentRequest
 
 type Msg =
    | TogglePaymentFulfillment
@@ -36,19 +36,19 @@ type Msg =
    | ConfirmCancelPaymentRequest of
       Initiator *
       reason: string option *
-      Payment *
+      PaymentRequest *
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
    | ConfirmDeclinePaymentRequest of
       Initiator *
       reason: string option *
-      Payment *
+      PaymentRequest *
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
    | SubmitPaymentForApproval
 
 let init () = State.Init, Cmd.none
 
-let getAccount (payment: Payment) =
-   AccountService.getAccount payment.BaseInfo.Payee.AccountId
+let getAccount (p: PaymentRequest) =
+   AccountService.getAccount p.BaseInfo.Payee.AccountId
 
 let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
    match msg with
@@ -96,7 +96,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
          let! accountOpt = getAccount payment
 
          match payment, accountOpt with
-         | Payment.ThirdParty _, _ ->
+         | PaymentRequest.ThirdParty _, _ ->
             let err =
                NotImplementedException "third party payment"
                |> Err.NotImplementedError
@@ -109,9 +109,9 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
                   payment,
                   Finished err
                )
-         | Payment.Platform p, Ok(Some account) ->
+         | PaymentRequest.Platform p, Ok(Some account) ->
             let cmd =
-               CancelPlatformPaymentCommand.create initiator {
+               CancelPlatformPaymentRequestCommand.create initiator {
                   BaseInfo = PlatformPaymentBaseInfo.fromPayment p
                   Reason = reason
                }
@@ -152,7 +152,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
          let! accountOpt = getAccount payment
 
          match payment, accountOpt with
-         | Payment.ThirdParty _, _ ->
+         | PaymentRequest.ThirdParty _, _ ->
             let err =
                NotImplementedException "third party payment"
                |> Err.NotImplementedError
@@ -165,9 +165,9 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
                   payment,
                   Finished err
                )
-         | Payment.Platform p, Ok(Some account) ->
+         | PaymentRequest.Platform p, Ok(Some account) ->
             let cmd =
-               DeclinePlatformPaymentCommand.create initiator {
+               DeclinePlatformPaymentRequestCommand.create initiator {
                   BaseInfo = PlatformPaymentBaseInfo.fromPayment p
                   Reason = reason
                }
@@ -212,7 +212,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
 [<ReactComponent>]
 let PaymentDetailComponent
    (session: UserSession)
-   (payment: Payment)
+   (payment: PaymentRequest)
    (org: OrgWithAccountProfiles)
    (notifyParentOnUpdate: AccountCommandReceipt -> unit)
    =

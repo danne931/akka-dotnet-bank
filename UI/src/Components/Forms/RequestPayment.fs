@@ -7,7 +7,7 @@ open System
 open Fable.Form.Simple.Pico
 open Bank.Org.Domain
 open Bank.Account.Domain
-open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
 open Lib.Validators
@@ -144,7 +144,7 @@ let formPlatformPayment
             Expiration = expirationOpt |> Option.map _.ToUniversalTime()
             Memo = memo
             BaseInfo = {
-               Id = Guid.NewGuid() |> PaymentId
+               Id = Guid.NewGuid() |> PaymentRequestId
                InitiatedById = initiatedBy.Id
                Amount = amount
                Payer = {

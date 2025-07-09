@@ -6,7 +6,7 @@ open System
 
 open Fable.Form.Simple.Pico
 open Bank.Account.Domain
-open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open Bank.Employee.Domain
 open UIDomain.Org
 open UIDomain.Account
@@ -18,7 +18,7 @@ type Values = { AccountIdSourceOfFunds: string }
 
 let formPlatformPayment
    (payerAccounts: Map<AccountId, Account>)
-   (payment: PlatformPayment)
+   (payment: PlatformPaymentRequest)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -53,7 +53,7 @@ let formPlatformPayment
       let sender = payerAccounts[selectedAccountId]
 
       let cmd =
-         InternalTransferBetweenOrgsCommand.fromPaymentRequest
+         PlatformPaymentRequest.toTransferCommand
             initiatedBy
             payment
             selectedAccountId
@@ -68,7 +68,7 @@ let PaymentFulfillmentFormComponent
    (session: UserSession)
    (payerAccounts: Map<AccountId, Account>)
    (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
-   (payment: Payment)
+   (payment: PaymentRequest)
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
@@ -108,8 +108,8 @@ let PaymentFulfillmentFormComponent
 
    React.fragment [
       match payment with
-      | Payment.ThirdParty _ -> Html.p "Not implemented."
-      | Payment.Platform payment ->
+      | PaymentRequest.ThirdParty _ -> Html.p "Not implemented."
+      | PaymentRequest.Platform payment ->
          Html.select [
             attr.onChange (fun (_: string) -> ())
             attr.value "platform"

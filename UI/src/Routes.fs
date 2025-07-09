@@ -8,7 +8,7 @@ open UIDomain.History
 open UIDomain.Account
 open UIDomain.Employee
 open UIDomain.Card
-open Bank.Transfer.Domain
+open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
 type AnalyticsUrl =
@@ -197,7 +197,7 @@ module CardUrl =
 type PaymentUrl =
    | Payments
    | RequestPayment
-   | ViewPayment of PaymentId
+   | ViewPayment of PaymentRequestId
    | NotFound
 
 module PaymentUrl =
@@ -206,13 +206,17 @@ module PaymentUrl =
 
    let RequestPaymentPath = [| BasePath; "request" |]
 
-   let selectedPath (paymentId: PaymentId) = [| BasePath; string paymentId |]
+   let selectedPath (paymentId: PaymentRequestId) = [|
+      BasePath
+      string paymentId
+   |]
 
    let parse =
       function
       | [] -> PaymentUrl.Payments
       | [ "request" ] -> PaymentUrl.RequestPayment
-      | [ Route.Guid paymentId ] -> PaymentUrl.ViewPayment(PaymentId paymentId)
+      | [ Route.Guid paymentId ] ->
+         PaymentUrl.ViewPayment(PaymentRequestId paymentId)
       | _ -> PaymentUrl.NotFound
 
 [<RequireQualifiedAccess>]

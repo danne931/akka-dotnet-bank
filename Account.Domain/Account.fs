@@ -5,6 +5,7 @@ open Validus
 
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open Lib.SharedTypes
 
 let applyEvent (account: Account) (evt: AccountEvent) =
@@ -377,7 +378,7 @@ module private StateTransition =
 
    let cancelPlatformPaymentRequest
       (account: Account)
-      (cmd: CancelPlatformPaymentCommand)
+      (cmd: CancelPlatformPaymentRequestCommand)
       =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
@@ -385,11 +386,11 @@ module private StateTransition =
          map
             PlatformPaymentRequestCancelled
             account
-            (CancelPlatformPaymentCommand.toEvent cmd)
+            (CancelPlatformPaymentRequestCommand.toEvent cmd)
 
    let declinePlatformPaymentRequest
       (account: Account)
-      (cmd: DeclinePlatformPaymentCommand)
+      (cmd: DeclinePlatformPaymentRequestCommand)
       =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
@@ -397,7 +398,7 @@ module private StateTransition =
          map
             PlatformPaymentRequestDeclined
             account
-            (DeclinePlatformPaymentCommand.toEvent cmd)
+            (DeclinePlatformPaymentRequestCommand.toEvent cmd)
 
    let closeAccount (account: Account) (cmd: CloseAccountCommand) =
       map AccountEvent.AccountClosed account (CloseAccountCommand.toEvent cmd)

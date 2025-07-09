@@ -17,6 +17,7 @@ open Lib.Types
 open ActorUtil
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open BillingStatement
 open AutomaticTransfer
 open SignalRBroadcast
@@ -116,7 +117,7 @@ let private onValidationError
            sagaRef <! msg
 
            let! paymentId = cmd.Data.OriginatedFromPaymentRequest
-           let corrId = PaymentId.toCorrelationId paymentId
+           let corrId = PaymentRequestId.toCorrelationId paymentId
 
            let msg =
               PlatformPaymentSagaEvent.PaymentFailed(
@@ -136,7 +137,7 @@ let private onValidationError
       sagaRef <! msg
 
       let! paymentId = cmd.Data.BaseInfo.FromPaymentRequest
-      let corrId = PaymentId.toCorrelationId paymentId
+      let corrId = PaymentRequestId.toCorrelationId paymentId
 
       let msg =
          PlatformPaymentSagaEvent.PaymentFailed(
@@ -283,7 +284,7 @@ let onPersisted
 
       match info.FromPaymentRequest with
       | Some paymentRequestId ->
-         let corrId = PaymentId.toCorrelationId paymentRequestId
+         let corrId = PaymentRequestId.toCorrelationId paymentRequestId
 
          let msg =
             PlatformPaymentSagaEvent.PaymentFulfilled {

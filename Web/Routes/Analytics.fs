@@ -1,4 +1,4 @@
-module Bank.Analytics.Routes
+module Bank.Routes.Analytics
 
 open System
 open System.Threading.Tasks
@@ -12,7 +12,7 @@ open Lib.Time
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
 
-let startAnalyticsRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app
       .MapGet(
          AnalyticsPath.Get,

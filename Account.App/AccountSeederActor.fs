@@ -22,6 +22,7 @@ open Bank.Account.Api
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open Bank.Payment.Domain
 open Bank.Employee.Domain
 open ActorUtil
 open AutomaticTransfer
@@ -781,7 +782,7 @@ let seedPayments
                   Expiration = None
                   BaseInfo = {
                      InitiatedById = mockAccountOwner.Id
-                     Id = Guid.NewGuid() |> PaymentId
+                     Id = Guid.NewGuid() |> PaymentRequestId
                      Amount = randomAmount 3000 5000
                      Payee = {
                         OrgId = myOrg.OrgId
@@ -869,7 +870,7 @@ let seedPayments
                   Memo = "Services rendered..."
                   BaseInfo = {
                      InitiatedById = InitiatedById payee.AccountOwnerId
-                     Id = Guid.NewGuid() |> PaymentId
+                     Id = Guid.NewGuid() |> PaymentRequestId
                      Amount = 5000m + randomAmount 1000 3000
                      Payee = {
                         OrgId = payee.OrgId

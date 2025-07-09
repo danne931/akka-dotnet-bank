@@ -1,4 +1,4 @@
-module Bank.Transaction.Routes
+module Bank.Routes.Transaction
 
 open System
 open System.IO
@@ -17,7 +17,7 @@ open Lib.SharedTypes
 open Lib.Time
 open Bank.UserSession.Middleware
 
-let startTransactionRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app
       .MapGet(
          TransactionPath.History,

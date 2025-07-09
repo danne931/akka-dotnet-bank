@@ -118,7 +118,7 @@ let employeeRolePendingApproval
 /// a payment fulfillment.
 let paymentFulfillmentPendingApproval
    (progress: CommandApprovalProgress.T seq)
-   (paymentId: PaymentId)
+   (paymentId: PaymentRequestId)
    : CommandApprovalProgress.T option
    =
    progress

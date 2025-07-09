@@ -37,14 +37,14 @@ type InternalTransferBetweenOrgsEmailInfo = {
    SenderAccountName: string
    RecipientBusinessName: string
    Amount: decimal
-   OriginatedFromPaymentRequest: PaymentId option
+   OriginatedFromPaymentRequest: PaymentRequestId option
 }
 
 type InternalTransferBetweenOrgsDepositEmailInfo = {
    SenderBusinessName: string
    RecipientAccountName: string
    Amount: decimal
-   OriginatedFromPaymentRequest: PaymentId option
+   OriginatedFromPaymentRequest: PaymentRequestId option
 }
 
 type PlatformPaymentEmailInfo = {

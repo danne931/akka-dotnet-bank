@@ -89,7 +89,7 @@ type TransactionWithAncillaryInfo = {
    Note: string option
 }
 
-let private txnTypePaymentOrTransfer (paymentId: PaymentId option) =
+let private txnTypePaymentOrTransfer (paymentId: PaymentRequestId option) =
    if paymentId.IsSome then
       TransactionType.Payment
    else

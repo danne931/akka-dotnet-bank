@@ -13,6 +13,7 @@ Web/logs.json
 Web/snapshots/*
 Account.Service/ddata-*
 Account.Service/snapshots/*
+Account.Service/logs.json
 Scheduler.Service/snapshots/*
 Deploy/K8s/node_modules/*
 Deploy/Azure/node_modules/*

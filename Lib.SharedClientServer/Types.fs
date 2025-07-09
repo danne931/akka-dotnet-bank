@@ -190,6 +190,34 @@ type SettlementId =
       let (SettlementId id) = x
       string id
 
+type PaymentRequestId =
+   | PaymentRequestId of Guid
+
+   override x.ToString() =
+      let (PaymentRequestId id) = x
+      string id
+
+module PaymentRequestId =
+   let get (payId: PaymentRequestId) =
+      let (PaymentRequestId id) = payId
+      id
+
+   let toCorrelationId (PaymentRequestId payId) = CorrelationId payId
+
+type TransferId =
+   | TransferId of Guid
+
+   override x.ToString() =
+      let (TransferId id) = x
+      string id
+
+module TransferId =
+   let get (transferId: TransferId) =
+      let (TransferId id) = transferId
+      id
+
+   let toCorrelationId (TransferId transferId) = CorrelationId transferId
+
 type Initiator = { Id: InitiatedById; Name: string }
 
 module Initiator =

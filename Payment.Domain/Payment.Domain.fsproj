@@ -1,13 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <Compile Include="CoreTypes.fs" />
-    <Compile Include="InternalTransfer.fs" />
-    <Compile Include="AutomaticTransfer.fs" />
-    <Compile Include="DomesticTransfer.fs" />
+    <Compile Include="PaymentRequest.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />
-    <Compile Include="DomesticTransferService.fs" />
-    <Compile Include="Messages.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,5 +11,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Lib.SharedClientServer/Lib.SharedClientServer.fsproj" />
+    <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
   </ItemGroup>
 </Project>

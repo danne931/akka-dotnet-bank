@@ -1,22 +1,5 @@
 namespace Bank.Transfer.Domain
 
-open System
-open Lib.SharedTypes
-
-type TransferId =
-   | TransferId of Guid
-
-   override x.ToString() =
-      let (TransferId id) = x
-      string id
-
-module TransferId =
-   let get (transferId: TransferId) =
-      let (TransferId id) = transferId
-      id
-
-   let toCorrelationId (TransferId transferId) = CorrelationId transferId
-
 [<RequireQualifiedAccess>]
 type TransferCategory =
    | InternalWithinOrg

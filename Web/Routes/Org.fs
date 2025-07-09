@@ -1,4 +1,4 @@
-module Bank.Org.Routes
+module Bank.Routes.Org
 
 open System
 open System.Threading.Tasks
@@ -14,7 +14,7 @@ open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
 
-let startOrgRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app
       .MapGet(
          OrgPath.Get,

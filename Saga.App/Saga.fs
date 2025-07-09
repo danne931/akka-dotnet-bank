@@ -285,7 +285,8 @@ type Saga =
             TransferId.toCorrelationId s.TransferInfo.TransferId
          | Saga.PlatformTransfer s ->
             TransferId.toCorrelationId s.TransferInfo.TransferId
-         | Saga.PlatformPayment s -> PaymentId.toCorrelationId s.PaymentInfo.Id
+         | Saga.PlatformPayment s ->
+            PaymentRequestId.toCorrelationId s.PaymentInfo.Id
          | Saga.Billing s -> s.CorrelationId
 
       member x.OrgId =
@@ -860,7 +861,7 @@ let sagaHandler
                   sendMessageToSelf =
                      fun payment asyncEvt ->
                         let orgId = payment.Payee.OrgId
-                        let corrId = PaymentId.toCorrelationId payment.Id
+                        let corrId = PaymentRequestId.toCorrelationId payment.Id
 
                         let asyncMsg =
                            asyncEvt

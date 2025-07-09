@@ -1,4 +1,4 @@
-module Bank.Diagnostic.Routes
+module Bank.Routes.Diagnostic
 
 open System
 open System.Threading.Tasks
@@ -16,7 +16,7 @@ open RoutePaths
 open Bank.UserSession.Middleware
 open Lib.CircuitBreaker
 
-let startDiagnosticRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app
       .MapGet(
          DiagnosticPath.Account,
@@ -41,7 +41,7 @@ let startDiagnosticRoutes (app: WebApplication) =
          Func<ActorSystem, Task<IResult>>(fun sys ->
             let ref = CircuitBreakerActor.get sys
 
-            let (lookup: CircuitBreakerState Task) =
+            let lookup: CircuitBreakerState Task =
                ref <? CircuitBreakerMessage.Lookup |> Async.toTask
 
             lookup |> RouteUtil.unwrapTask)

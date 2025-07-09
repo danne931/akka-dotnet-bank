@@ -1,4 +1,4 @@
-module Bank.Account.Routes
+module Bank.Routes.Account
 
 open System
 open System.Threading.Tasks
@@ -13,7 +13,7 @@ open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
 
-let startAccountRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app
       .MapGet(
          AccountPath.Account,

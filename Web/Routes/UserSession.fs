@@ -1,4 +1,4 @@
-module Bank.UserSession.Routes
+module Bank.Routes.UserSession
 
 open System
 open System.Threading.Tasks
@@ -63,7 +63,7 @@ let private setUserSessionContext
             Results.Ok()
    }
 
-let startUserSessionRoutes (app: WebApplication) =
+let start (app: WebApplication) =
    app.MapGet(
       UserSessionPath.GetDemoUserSessions,
       Func<Guid, Task<IResult>>(fun orgId ->
