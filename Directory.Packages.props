@@ -4,31 +4,40 @@
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
+
+  <PropertyGroup Label="SharedVersions">
+    <AkkaVersion>1.5.45</AkkaVersion>
+    <AkklingVersion>0.17.0</AkklingVersion>
+    <PbmVersion>1.4.5</PbmVersion>
+    <QuartzVersion>3.8.1</QuartzVersion>
+    <FontAwesomeVersion>3.0.0</FontAwesomeVersion>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageVersion Include="Akka" Version="1.5.44" />
-    <PackageVersion Include="Akka.Cluster" Version="1.5.44" />
-    <PackageVersion Include="Akka.Cluster.Sharding" Version="1.5.44" />
-    <PackageVersion Include="Akka.Cluster.Hosting" Version="1.5.42" />
-    <PackageVersion Include="Akka.DependencyInjection" Version="1.5.44" />
-    <PackageVersion Include="Akka.Discovery.KubernetesApi" Version="1.5.42" />
+    <PackageVersion Include="Akka" Version="$(AkkaVersion)" />
+    <PackageVersion Include="Akka.Cluster" Version="$(AkkaVersion)" />
+    <PackageVersion Include="Akka.Cluster.Sharding" Version="$(AkkaVersion)" />
+    <PackageVersion Include="Akka.Cluster.Hosting" Version="$(AkkaVersion)" />
+    <PackageVersion Include="Akka.DependencyInjection" Version="$(AkkaVersion)" />
+    <PackageVersion Include="Akka.Discovery.KubernetesApi" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.HealthCheck.Hosting.Web" Version="1.5.37" />
-    <PackageVersion Include="Akka.Hosting" Version="1.5.42" />
+    <PackageVersion Include="Akka.Hosting" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Logger.Serilog" Version="1.5.25" />
-    <PackageVersion Include="Akka.Management" Version="1.5.42" />
+    <PackageVersion Include="Akka.Management" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Persistence.Extras" Version="1.5.1" />
-    <PackageVersion Include="Akka.Persistence.Hosting" Version="1.5.42" />
-    <PackageVersion Include="Akka.Persistence.Sql.Hosting" Version="1.5.42" />
-    <PackageVersion Include="Akka.Persistence.Sql" Version="1.5.42" />
+    <PackageVersion Include="Akka.Persistence.Hosting" Version="$(AkkaVersion)" />
+    <PackageVersion Include="Akka.Persistence.Sql.Hosting" Version="1.5.44" />
+    <PackageVersion Include="Akka.Persistence.Sql" Version="1.5.44" />
     <PackageVersion Include="Akka.Quartz.Actor" Version="1.5.13" />
-    <PackageVersion Include="Akka.Remote.Hosting" Version="1.5.42" />
+    <PackageVersion Include="Akka.Remote.Hosting" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Streams.Amqp.RabbitMq" Version="1.5.40" />
-    <PackageVersion Include="Akkling" Version="0.17.0" />
-    <PackageVersion Include="Akkling.Cluster.Sharding" Version="0.17.0" />
-    <PackageVersion Include="Akkling.Persistence" Version="0.17.0" />
-    <PackageVersion Include="Akkling.TestKit" Version="0.17.0" />
+    <PackageVersion Include="Akkling" Version="$(AkklingVersion)" />
+    <PackageVersion Include="Akkling.Cluster.Sharding" Version="$(AkklingVersion)" />
+    <PackageVersion Include="Akkling.Persistence" Version="$(AkklingVersion)" />
+    <PackageVersion Include="Akkling.TestKit" Version="$(AkklingVersion)" />
     <PackageVersion Include="Elmish.SweetAlert" Version="3.4.0" />
-    <PackageVersion Include="Fable.FontAwesome" Version="3.0.0" />
-    <PackageVersion Include="Fable.FontAwesome.Free" Version="3.0.0" />
+    <PackageVersion Include="Fable.FontAwesome" Version="$(FontAwesomeVersion)" />
+    <PackageVersion Include="Fable.FontAwesome.Free" Version="$(FontAwesomeVersion)" />
     <PackageVersion Include="Fable.Form.Simple" Version="4.1.0" />
     <PackageVersion Include="Fable.Mocha" Version="2.17.0" />
     <PackageVersion Include="Fable.SimpleHttp" Version="3.6.0" />
@@ -39,13 +48,13 @@
     <PackageVersion Include="FsToolkit.ErrorHandling.TaskResult" Version="4.18.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="9.0.1" />
     <PackageVersion Include="Npgsql.FSharp" Version="8.0.0" />
-    <PackageVersion Include="Petabridge.Cmd.Cluster" Version="1.4.4" />
-    <PackageVersion Include="Petabridge.Cmd.Cluster.Sharding" Version="1.4.4" />
-    <PackageVersion Include="Quartz" Version="3.8.1" />
-    <PackageVersion Include="Quartz.Extensions.DependencyInjection" Version="3.8.1" />
-    <PackageVersion Include="Quartz.Extensions.Hosting" Version="3.8.1" />
-    <PackageVersion Include="Quartz.Plugins" Version="3.8.1" />
-    <PackageVersion Include="Quartz.Serialization.Json" Version="3.8.1" />
+    <PackageVersion Include="Petabridge.Cmd.Cluster" Version="$(PbmVersion)" />
+    <PackageVersion Include="Petabridge.Cmd.Cluster.Sharding" Version="$(PbmVersion)" />
+    <PackageVersion Include="Quartz" Version="$(QuartzVersion)" />
+    <PackageVersion Include="Quartz.Extensions.DependencyInjection" Version="$(QuartzVersion)" />
+    <PackageVersion Include="Quartz.Extensions.Hosting" Version="$(QuartzVersion)" />
+    <PackageVersion Include="Quartz.Plugins" Version="$(QuartzVersion)" />
+    <PackageVersion Include="Quartz.Serialization.Json" Version="$(QuartzVersion)" />
     <PackageVersion Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="7.2.0" />
