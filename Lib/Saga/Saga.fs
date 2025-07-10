@@ -158,6 +158,26 @@ type SagaLifeCycle<'Activity when 'Activity :> IActivity and 'Activity: equality
             Aborted = state.InProgress |> List.map (fun w -> w.finish timestamp)
       }
 
+   static member abortActivity
+      (timestamp: DateTime)
+      (activity: 'Activity)
+      (state: SagaLifeCycle<'Activity>)
+      =
+      let aborted =
+         state.InProgress
+         |> List.tryFind (fun w -> w.Activity = activity)
+         |> Option.map (fun w -> w.finish timestamp :: state.Aborted)
+         |> Option.defaultValue state.Aborted
+
+      let wip =
+         state.InProgress |> List.filter (fun w -> w.Activity <> activity)
+
+      {
+         state with
+            InProgress = wip
+            Aborted = aborted
+      }
+
    static member retryActivity
       (timestamp: DateTime)
       (activity: 'Activity)

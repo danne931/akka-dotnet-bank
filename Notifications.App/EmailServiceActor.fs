@@ -152,6 +152,16 @@ let private emailPropsFromMessage
          amount = $"${info.Amount}"
       |}
      }
+   | EmailInfo.PlatformPaymentReminder info -> {
+      OrgId = msg.OrgId
+      Event = "platform-payment-reminder"
+      Email = None
+      Data = {|
+         payee = info.PayeeBusinessName
+         payer = info.PayerBusinessName
+         amount = $"${info.Amount}"
+      |}
+     }
    | EmailInfo.PlatformPaymentDeclined info -> {
       OrgId = msg.OrgId
       Event = "platform-payment-declined"

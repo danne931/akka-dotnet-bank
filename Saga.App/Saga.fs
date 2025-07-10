@@ -234,6 +234,8 @@ type Event =
             "PlatformTransferResetInProgressActivityAttempts"
       | Event.PlatformPayment e ->
          match e with
+         | PlatformPaymentSagaEvent.ScheduledPaymentReminderActivated ->
+            "PlatformPaymentScheduledPaymentReminderActivated"
          | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
             "PlatformPaymentRequestCancelled"
          | PlatformPaymentSagaEvent.PaymentRequestDeclined ->
@@ -858,16 +860,15 @@ let sagaHandler
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
                   getPartnerBankServiceRef = getPartnerBankServiceRef
-                  sendMessageToSelf =
-                     fun payment asyncEvt ->
-                        let orgId = payment.Payee.OrgId
-                        let corrId = PaymentRequestId.toCorrelationId payment.Id
+                  sendEventToSelf =
+                     fun payment evt ->
+                        let msg =
+                           Message.platformPayment
+                              payment.Payee.OrgId
+                              (PaymentRequestId.toCorrelationId payment.Id)
+                              evt
 
-                        let asyncMsg =
-                           asyncEvt
-                           |> Async.map (Message.platformPayment orgId corrId)
-
-                        mailbox.Parent() <!| asyncMsg
+                        mailbox.Parent() <! msg
                }
 
                match priorState, state with

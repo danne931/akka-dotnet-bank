@@ -96,6 +96,7 @@ type EmailInfo =
    | InternalTransferBetweenOrgsDeposited of
       InternalTransferBetweenOrgsDepositEmailInfo
    | PlatformPaymentRequested of PlatformPaymentEmailInfo
+   | PlatformPaymentReminder of PlatformPaymentEmailInfo
    | PlatformPaymentDeclined of PlatformPaymentEmailInfo
    | DomesticTransfer of DomesticTransferEmailInfo
    | ScheduledTransferInsufficientBalanceWarning of
