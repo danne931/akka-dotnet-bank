@@ -26,7 +26,7 @@ open OrgOnboardingSaga
 open PurchaseSaga
 open DomesticTransferSaga
 open PlatformTransferSaga
-open PlatformPaymentSaga
+open PaymentRequestSaga
 open BillingSaga
 
 // Account events with an in/out money flow can produce an
@@ -120,11 +120,11 @@ let private onValidationError
            let corrId = PaymentRequestId.toCorrelationId paymentId
 
            let msg =
-              PlatformPaymentSagaEvent.PaymentFailed(
+              PaymentRequestSagaEvent.PaymentFailed(
                  TransferId(CorrelationId.get cmd.CorrelationId),
-                 PlatformPaymentFailReason.AccountClosed
+                 PaymentFailReason.AccountClosed
               )
-              |> AppSaga.Message.platformPayment orgId corrId
+              |> AppSaga.Message.paymentRequest orgId corrId
 
            getSagaRef corrId <! msg
         }
@@ -140,11 +140,11 @@ let private onValidationError
       let corrId = PaymentRequestId.toCorrelationId paymentId
 
       let msg =
-         PlatformPaymentSagaEvent.PaymentFailed(
+         PaymentRequestSagaEvent.PaymentFailed(
             cmd.Data.BaseInfo.TransferId,
-            PlatformPaymentFailReason.AccountClosed
+            PaymentFailReason.AccountClosed
          )
-         |> AppSaga.Message.platformPayment orgId corrId
+         |> AppSaga.Message.paymentRequest orgId corrId
 
       getSagaRef corrId <! msg
      }
@@ -220,22 +220,22 @@ let onPersisted
          |> AppSaga.Message.billing e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentRequested e ->
+   | AccountEvent.PaymentRequested e ->
       let msg =
-         PlatformPaymentSagaStartEvent.PaymentRequested e
-         |> AppSaga.Message.platformPaymentStart e.OrgId e.CorrelationId
+         PaymentRequestSagaStartEvent.PaymentRequested e
+         |> AppSaga.Message.paymentRequestStart e.OrgId e.CorrelationId
 
       getSagaGuaranteedDeliveryRef () <! msg
-   | AccountEvent.PlatformPaymentRequestDeclined e ->
+   | AccountEvent.PaymentRequestDeclined e ->
       let msg =
-         PlatformPaymentSagaEvent.PaymentRequestDeclined
-         |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
+         PaymentRequestSagaEvent.PaymentRequestDeclined
+         |> AppSaga.Message.paymentRequest e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   | AccountEvent.PlatformPaymentRequestCancelled e ->
+   | AccountEvent.PaymentRequestCancelled e ->
       let msg =
-         PlatformPaymentSagaEvent.PaymentRequestCancelled
-         |> AppSaga.Message.platformPayment e.OrgId e.CorrelationId
+         PaymentRequestSagaEvent.PaymentRequestCancelled
+         |> AppSaga.Message.paymentRequest e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
    (*
@@ -287,11 +287,11 @@ let onPersisted
          let corrId = PaymentRequestId.toCorrelationId paymentRequestId
 
          let msg =
-            PlatformPaymentSagaEvent.PaymentFulfilled {
+            PaymentRequestSagaEvent.PaymentFulfilled {
                TransferId = info.TransferId
                FulfilledAt = e.Timestamp
             }
-            |> AppSaga.Message.platformPayment info.Recipient.OrgId corrId
+            |> AppSaga.Message.paymentRequest info.Recipient.OrgId corrId
             |> GuaranteedDelivery.message (CorrelationId.get corrId)
 
          getSagaGuaranteedDeliveryRef () <! msg

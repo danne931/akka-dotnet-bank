@@ -922,7 +922,7 @@ CREATE TYPE saga_type AS ENUM (
    'Purchase',
    'DomesticTransfer',
    'PlatformTransfer',
-   'PlatformPayment',
+   'PaymentRequest',
    'BillingStatement'
 );
 

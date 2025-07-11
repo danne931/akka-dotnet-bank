@@ -70,8 +70,7 @@ let expirationField =
       }
    }
 
-let expirationForm =
-   Form.succeed id |> Form.append expirationField |> Form.optional
+let expirationForm = Form.succeed id |> Form.append expirationField
 
 let formPlatformPayment
    (payeeOrg: Org)
@@ -128,7 +127,7 @@ let formPlatformPayment
       (selectedPayerOrgId: string)
       (amount: decimal)
       (memo: string)
-      (expirationOpt: DateTime option)
+      (expiration: DateTime)
       (selectedDestinationAccountId: string)
       =
       let payerOrg =
@@ -139,28 +138,30 @@ let formPlatformPayment
 
       let payeeAccount = payeeDestinationAccounts[payeeAccountId]
 
-      let cmd =
-         RequestPlatformPaymentCommand.create initiatedBy {
-            Expiration = expirationOpt |> Option.map _.ToUniversalTime()
-            Memo = memo
-            BaseInfo = {
+      let info =
+         PaymentRequested.Platform {
+            Payer = {
+               OrgId = payerOrg.OrgId
+               OrgName = payerOrg.Name
+               ParentAccountId = payerOrg.ParentAccountId
+            }
+            SharedDetails = {
                Id = Guid.NewGuid() |> PaymentRequestId
-               InitiatedById = initiatedBy.Id
                Amount = amount
-               Payer = {
-                  OrgId = payerOrg.OrgId
-                  OrgName = payerOrg.Name
-                  ParentAccountId = payerOrg.ParentAccountId
-               }
+               Expiration = expiration.ToUniversalTime()
                Payee = {
                   OrgId = payeeOrg.OrgId
                   OrgName = payeeOrg.Name
                   AccountId = payeeAccountId
                   ParentAccountId = payeeAccount.ParentAccountId
                }
+               Memo = memo
             }
          }
-         |> AccountCommand.RequestPlatformPayment
+
+      let cmd =
+         RequestPaymentCommand.create initiatedBy info
+         |> AccountCommand.RequestPayment
          |> FormCommand.Account
 
       Msg.GetAndSubmit(FormEntityId.Account payeeAccountId, cmd)
@@ -195,7 +196,7 @@ let PaymentRequestFormComponent
       PayeeAccountId = defaultDestinationAccount
       PayerOrgId = ""
       Memo = ""
-      Expiration = ""
+      Expiration = (DateTime.Now.AddMonths 1).ToString "MM/dd/yyyy"
    }
 
    let initiatedBy = session.AsInitiator

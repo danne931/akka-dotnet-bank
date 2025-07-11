@@ -481,37 +481,31 @@ let accountHistoryUIFriendly
       props with
          Info = $"Closed Account - Reference: {evt.Data.Reference}"
      }
-   | PlatformPaymentRequested evt ->
-      let p = evt.Data.BaseInfo
+   | PaymentRequested evt ->
+      let shared = evt.Data.SharedDetails
 
       {
          props with
             Name = "Payment Requested"
             Info =
                if evt.OrgId = org.Org.OrgId then
-                  $"Payment request sent to {p.Payer.OrgName}"
+                  $"Payment request sent to {evt.Data.PayerName}"
                else
-                  $"Received payment request from {p.Payee.OrgName}"
-            Amount = Some <| Money.format p.Amount
+                  $"Received payment request from {shared.Payee.OrgName}"
+            Amount = Some <| Money.format shared.Amount
       }
-   | PlatformPaymentRequestCancelled evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Request Cancelled"
-            Info = $"Payment request cancelled to {p.Payer.OrgName}"
-            Amount = Some <| Money.format p.Amount
-      }
-   | PlatformPaymentRequestDeclined evt ->
-      let p = evt.Data.BaseInfo
-
-      {
-         props with
-            Name = "Payment Request Declined"
-            Info = $"Payment request declined by {p.Payer.OrgName}"
-            Amount = Some <| Money.format p.Amount
-      }
+   | PaymentRequestCancelled evt -> {
+      props with
+         Name = "Payment Request Cancelled"
+         Info = $"Payment request cancelled to {evt.Data.PayerName}"
+         Amount = Some <| Money.format evt.Data.SharedDetails.Amount
+     }
+   | PaymentRequestDeclined evt -> {
+      props with
+         Name = "Payment Request Declined"
+         Info = $"Payment request declined by {evt.Data.PayerName}"
+         Amount = Some <| Money.format evt.Data.SharedDetails.Amount
+     }
    | AutoTransferRuleConfigured evt -> {
       props with
          Name = "Auto Transfer Rule Configured"
@@ -671,9 +665,9 @@ let private matchesAccountEventFilter
       | _ -> false
    | AccountEventGroupFilter.PaymentRequest ->
       match event with
-      | AccountEvent.PlatformPaymentRequested _
-      | AccountEvent.PlatformPaymentRequestDeclined _
-      | AccountEvent.PlatformPaymentRequestCancelled _ -> true
+      | AccountEvent.PaymentRequested _
+      | AccountEvent.PaymentRequestDeclined _
+      | AccountEvent.PaymentRequestCancelled _ -> true
       | _ -> false
 
 let private matchesEmployeeEventFilter

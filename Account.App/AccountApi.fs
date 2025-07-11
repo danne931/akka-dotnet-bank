@@ -52,14 +52,13 @@ let processCommand (system: ActorSystem) (command: AccountCommand) = taskResult 
          |> Result.map AccountEnvelope.get
       | AccountCommand.CloseAccount cmd ->
          CloseAccountCommand.toEvent cmd |> Result.map AccountEnvelope.get
-      | AccountCommand.RequestPlatformPayment cmd ->
-         RequestPlatformPaymentCommand.toEvent cmd
+      | AccountCommand.RequestPayment cmd ->
+         RequestPaymentCommand.toEvent cmd |> Result.map AccountEnvelope.get
+      | AccountCommand.CancelPaymentRequest cmd ->
+         CancelPaymentRequestCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
-      | AccountCommand.CancelPlatformPayment cmd ->
-         CancelPlatformPaymentRequestCommand.toEvent cmd
-         |> Result.map AccountEnvelope.get
-      | AccountCommand.DeclinePlatformPayment cmd ->
-         DeclinePlatformPaymentRequestCommand.toEvent cmd
+      | AccountCommand.DeclinePaymentRequest cmd ->
+         DeclinePaymentRequestCommand.toEvent cmd
          |> Result.map AccountEnvelope.get
       | AccountCommand.ConfigureAutoTransferRule cmd ->
          ConfigureAutoTransferRuleCommand.toEvent cmd

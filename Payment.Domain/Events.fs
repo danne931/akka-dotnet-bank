@@ -4,76 +4,85 @@ open System
 
 open Lib.SharedTypes
 
-type PlatformPaymentBaseInfo = {
+type PaymentRequestSharedEventDetails = {
    Id: PaymentRequestId
-   Payee: Payee
-   Payer: PlatformPayer
-   InitiatedById: InitiatedById
    Amount: decimal
-}
-
-module PlatformPaymentBaseInfo =
-   let fromPayment (p: PlatformPaymentRequest) : PlatformPaymentBaseInfo = {
-      Id = p.BaseInfo.Id
-      Payee = p.BaseInfo.Payee
-      Payer = p.Payer
-      InitiatedById = p.BaseInfo.InitiatedBy
-      Amount = p.BaseInfo.Amount
-   }
-
-type PlatformPaymentRequested = {
-   BaseInfo: PlatformPaymentBaseInfo
+   Payee: Payee
    Expiration: DateTime
    Memo: string
 }
 
-module PlatformPaymentRequested =
-   let toPayment
-      (e: BankEvent<PlatformPaymentRequested>)
-      : PlatformPaymentRequest
+module PaymentRequestSharedEventDetails =
+   let fromPaymentRequest
+      (p: PaymentRequest)
+      : PaymentRequestSharedEventDetails
       =
-      let info = e.Data.BaseInfo
-
       {
-         BaseInfo = {
-            Id = info.Id
-            InitiatedBy = info.InitiatedById
-            Amount = info.Amount
-            Type = PaymentRequestType.Platform
-            Payee = info.Payee
-            Status = PaymentRequestStatus.Requested
-            CreatedAt = e.Timestamp
-            Expiration = e.Data.Expiration
-            Memo = e.Data.Memo
-         }
-         Payer = e.Data.BaseInfo.Payer
+         Id = p.SharedDetails.Id
+         Amount = p.SharedDetails.Amount
+         Payee = p.SharedDetails.Payee
+         Expiration = p.SharedDetails.Expiration
+         Memo = p.SharedDetails.Memo
       }
 
-type PlatformPaymentRequestCancelled = {
-   BaseInfo: PlatformPaymentBaseInfo
-   Reason: string option
-}
-
-type PlatformPaymentRequestDeclined = {
-   BaseInfo: PlatformPaymentBaseInfo
-   Reason: string option
-}
-
-type ThirdPartyPaymentBaseInfo = {
-   Id: PaymentRequestId
-   Payee: Payee
-   Payer: ThirdPartyPayer
-   InitiatedById: InitiatedById
+type PlatformPaymentRequested = {
+   SharedDetails: PaymentRequestSharedEventDetails
+   Payer: PlatformPayer
 }
 
 type ThirdPartyPaymentRequested = {
-   BaseInfo: ThirdPartyPaymentBaseInfo
-   Amount: decimal
-   Expiration: DateTime
-   Memo: string
+   SharedDetails: PaymentRequestSharedEventDetails
+   Payer: ThirdPartyPayer
+   SecurePaymentFormUrl: string
 }
 
-type ThirdPartyPaymentRequestCancelled = {
-   BaseInfo: ThirdPartyPaymentBaseInfo
+type PaymentRequested =
+   | Platform of PlatformPaymentRequested
+   | ThirdParty of ThirdPartyPaymentRequested
+
+   member x.SharedDetails =
+      match x with
+      | Platform p -> p.SharedDetails
+      | ThirdParty p -> p.SharedDetails
+
+   member x.PayerName =
+      match x with
+      | Platform p -> p.Payer.OrgName
+      | ThirdParty p -> p.Payer.Name
+
+module PaymentRequested =
+   let toPaymentRequest (e: BankEvent<PaymentRequested>) : PaymentRequest =
+      let sharedDetails: PaymentRequestSharedDetails = {
+         Id = e.Data.SharedDetails.Id
+         InitiatedBy = e.InitiatedBy.Id
+         Amount = e.Data.SharedDetails.Amount
+         Payee = e.Data.SharedDetails.Payee
+         Expiration = e.Data.SharedDetails.Expiration
+         Memo = e.Data.SharedDetails.Memo
+         CreatedAt = e.Timestamp
+         Status = PaymentRequestStatus.Requested
+      }
+
+      match e.Data with
+      | Platform p ->
+         PaymentRequest.Platform {
+            SharedDetails = sharedDetails
+            Payer = p.Payer
+         }
+      | ThirdParty p ->
+         PaymentRequest.ThirdParty {
+            SharedDetails = sharedDetails
+            Payer = p.Payer
+         }
+
+type PaymentRequestCancelled = {
+   SharedDetails: PaymentRequestSharedEventDetails
+   PayerName: string
+   Reason: string option
+}
+
+type PaymentRequestDeclined = {
+   SharedDetails: PaymentRequestSharedEventDetails
+   PayerName: string
    Reason: string option
 }

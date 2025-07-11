@@ -49,10 +49,10 @@ let updatePlatformPaymentStatus
    (payment: PlatformPaymentRequest)
    : PlatformPaymentRequest
    =
-   if payment.BaseInfo.Id = targetId then
+   if payment.SharedDetails.Id = targetId then
       {
          payment with
-            BaseInfo.Status = status
+            SharedDetails.Status = status
       }
    else
       payment
@@ -91,20 +91,18 @@ let update orgId msg state =
                (Deferred.map << Result.map << Option.map)
                   (fun paymentSummary ->
                      match receipt.PendingEvent with
-                     | AccountEvent.PlatformPaymentRequested p ->
-                        let payment =
-                           PlatformPaymentRequested.toPayment p
-                           |> PaymentRequest.Platform
+                     | AccountEvent.PaymentRequested p ->
+                        let payment = PaymentRequested.toPaymentRequest p
 
                         {
                            paymentSummary with
                               OutgoingRequests =
                                  payment :: paymentSummary.OutgoingRequests
                         }
-                     | AccountEvent.PlatformPaymentRequestCancelled e ->
+                     | AccountEvent.PaymentRequestCancelled e ->
                         let updateStatus =
                            updatePlatformPaymentStatus
-                              e.Data.BaseInfo.Id
+                              e.Data.SharedDetails.Id
                               PaymentRequestStatus.Cancelled
 
                         {
@@ -138,10 +136,10 @@ let update orgId msg state =
                                     )
                            }
                         | None -> paymentSummary
-                     | AccountEvent.PlatformPaymentRequestDeclined e ->
+                     | AccountEvent.PaymentRequestDeclined e ->
                         let updateStatus =
                            updatePlatformPaymentStatus
-                              e.Data.BaseInfo.Id
+                              e.Data.SharedDetails.Id
                               PaymentRequestStatus.Declined
 
                         {
@@ -163,11 +161,11 @@ let selectedPayment
    match payments with
    | Deferred.Resolved(Ok(Some payments)) ->
       payments.IncomingRequests
-      |> List.tryFind (fun p -> p.BaseInfo.Id = selectedId)
+      |> List.tryFind (fun p -> p.SharedDetails.Id = selectedId)
       |> Option.map PaymentRequest.Platform
       |> Option.orElse (
          payments.OutgoingRequests
-         |> List.tryFind (fun p -> p.BaseInfo.Id = selectedId)
+         |> List.tryFind (fun p -> p.SharedDetails.Id = selectedId)
       )
    | _ -> None
 
@@ -176,8 +174,8 @@ let renderIncomingTableRow
    (payment: PlatformPaymentRequest)
    (selectedId: PaymentRequestId option)
    =
-   let info = payment.BaseInfo
-   let paymentId = info.Id
+   let sharedDetails = payment.SharedDetails
+   let paymentId = sharedDetails.Id
    let statusDisplay = Payment.statusDisplay (PaymentRequest.Platform payment)
 
    let paymentPendingApproval =
@@ -194,11 +192,11 @@ let renderIncomingTableRow
          paymentId |> PaymentActionView.ViewPayment |> Some |> actionNav)
 
       attr.children [
-         Html.td (DateTime.formatShort info.Expiration)
+         Html.td (DateTime.formatShort sharedDetails.Expiration)
 
-         Html.td info.Payee.OrgName
+         Html.td sharedDetails.Payee.OrgName
 
-         Html.td (Money.format info.Amount)
+         Html.td (Money.format sharedDetails.Amount)
 
          Html.td [
             match paymentPendingApproval with
@@ -251,8 +249,8 @@ let renderTableRow
    (selectedId: PaymentRequestId option)
    (org: OrgWithAccountProfiles)
    =
-   let paymentBaseInfo = payment.BaseInfo
-   let paymentId = paymentBaseInfo.Id
+   let sharedDetails = payment.SharedDetails
+   let paymentId = sharedDetails.Id
 
    Html.tr [
       attr.key (string paymentId)
@@ -265,17 +263,17 @@ let renderTableRow
          paymentId |> PaymentActionView.ViewPayment |> Some |> actionNav)
 
       attr.children [
-         Html.td (DateTime.formatShort paymentBaseInfo.CreatedAt)
+         Html.td (DateTime.formatShort sharedDetails.CreatedAt)
 
          match payment with
          | PaymentRequest.Platform p -> Html.td p.Payer.OrgName
          | PaymentRequest.ThirdParty p -> Html.td p.Payer.Name
 
-         Html.td (Money.format paymentBaseInfo.Amount)
+         Html.td (Money.format sharedDetails.Amount)
 
          Html.td (Payment.statusDisplay payment)
 
-         org.Accounts.TryFind paymentBaseInfo.Payee.AccountId
+         org.Accounts.TryFind sharedDetails.Payee.AccountId
          |> Option.map _.FullName
          |> Option.defaultValue ""
          |> Html.td

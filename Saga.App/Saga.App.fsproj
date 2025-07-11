@@ -5,7 +5,7 @@
     <Compile Include="BillingStatementSaga.fs" />   
     <Compile Include="EmployeeOnboardingSaga.fs" /> 
     <Compile Include="PlatformTransferSaga.fs" />
-    <Compile Include="PlatformPaymentSaga.fs" />
+    <Compile Include="PaymentRequestSaga.fs" />
     <Compile Include="DomesticTransferSaga.fs" />
     <Compile Include="PurchaseSaga.fs" />
     <Compile Include="Saga.fs" />

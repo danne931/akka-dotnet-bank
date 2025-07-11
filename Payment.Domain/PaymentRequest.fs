@@ -22,11 +22,11 @@ module PaymentRequestType =
       | None -> failwith "Error attempting to cast string to PaymentRequestType"
 
 [<RequireQualifiedAccess>]
-type PlatformPaymentFailReason =
+type PaymentFailReason =
    | AccountClosed
    | InsufficientFunds
 
-type PaymentFulfilled = {
+type PaymentFulfillment = {
    TransferId: TransferId
    FulfilledAt: DateTime
 }
@@ -34,10 +34,10 @@ type PaymentFulfilled = {
 [<RequireQualifiedAccess>]
 type PaymentRequestStatus =
    | Requested
-   | Fulfilled of PaymentFulfilled
+   | Fulfilled of PaymentFulfillment
    | Cancelled
    | Declined
-   | Failed of PlatformPaymentFailReason
+   | Failed of PaymentFailReason
 
 // The org which requested the payment and the account they
 // wish the payment to be made out to.
@@ -65,21 +65,19 @@ type Payer =
    // prospective payer via email.
    | ThirdParty of ThirdPartyPayer
 
-type PaymentRequestBaseInfo = {
+type PaymentRequestSharedDetails = {
    Id: PaymentRequestId
    InitiatedBy: InitiatedById
    Amount: decimal
-   Type: PaymentRequestType
    Payee: Payee
-   Status: PaymentRequestStatus
-   CreatedAt: DateTime
    Expiration: DateTime
    Memo: string
+   CreatedAt: DateTime
+   Status: PaymentRequestStatus
 }
 
-[<RequireQualifiedAccess>]
 type PlatformPaymentRequest = {
-   BaseInfo: PaymentRequestBaseInfo
+   SharedDetails: PaymentRequestSharedDetails
    Payer: PlatformPayer
 }
 
@@ -89,12 +87,13 @@ module PlatformPaymentRequest =
       (payment: PlatformPaymentRequest)
       selectedAccountId
       =
-      let info = payment.BaseInfo
+      let shared = payment.SharedDetails
       let payer = payment.Payer
+      let payee = shared.Payee
 
       Bank.Transfer.Domain.InternalTransferBetweenOrgsCommand.create initiator {
          ScheduledDateSeedOverride = None
-         Amount = payment.BaseInfo.Amount
+         Amount = shared.Amount
          Sender = {
             OrgId = payer.OrgId
             ParentAccountId = payer.ParentAccountId
@@ -102,19 +101,19 @@ module PlatformPaymentRequest =
             Name = payer.OrgName
          }
          Recipient = {
-            OrgId = info.Payee.OrgId
-            ParentAccountId = info.Payee.ParentAccountId
-            AccountId = info.Payee.AccountId
-            Name = info.Payee.OrgName
+            OrgId = payee.OrgId
+            ParentAccountId = payee.ParentAccountId
+            AccountId = payee.AccountId
+            Name = payee.OrgName
          }
-         Memo = Some info.Memo
+         Memo = Some shared.Memo
          OriginatedFromSchedule = false
-         OriginatedFromPaymentRequest = Some info.Id
+         OriginatedFromPaymentRequest = Some shared.Id
       }
 
 [<RequireQualifiedAccess>]
 type ThirdPartyPaymentRequest = {
-   BaseInfo: PaymentRequestBaseInfo
+   SharedDetails: PaymentRequestSharedDetails
    Payer: ThirdPartyPayer
 }
 
@@ -123,12 +122,12 @@ type PaymentRequest =
    | Platform of PlatformPaymentRequest
    | ThirdParty of ThirdPartyPaymentRequest
 
-   member x.BaseInfo =
+   member x.SharedDetails =
       match x with
-      | Platform p -> p.BaseInfo
-      | ThirdParty p -> p.BaseInfo
+      | Platform p -> p.SharedDetails
+      | ThirdParty p -> p.SharedDetails
 
-   member x.Status = x.BaseInfo.Status
+   member x.Status = x.SharedDetails.Status
 
    member x.Payer =
       match x with
@@ -137,8 +136,8 @@ type PaymentRequest =
 
    member x.IsExpired =
       match x with
-      | PaymentRequest.Platform p -> p.BaseInfo.Expiration <= DateTime.UtcNow
-      | PaymentRequest.ThirdParty p -> p.BaseInfo.Expiration <= DateTime.UtcNow
+      | Platform p -> p.SharedDetails.Expiration <= DateTime.UtcNow
+      | ThirdParty p -> p.SharedDetails.Expiration <= DateTime.UtcNow
 
    member x.IsUnpaid = x.Status = PaymentRequestStatus.Requested
 

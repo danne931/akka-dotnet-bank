@@ -49,7 +49,6 @@ let getPayments
                   Id = Reader.paymentId read
                   InitiatedBy = Reader.initiatedById read
                   Amount = Reader.amount read
-                  Type = Reader.requestType read
                   Payee = {
                      OrgId = Reader.payeeOrgId read
                      OrgName = read.string "payee_org_name"
@@ -62,10 +61,10 @@ let getPayments
                   Memo = Reader.memo read
                }
 
-               match baseInfo.Type with
+               match Reader.requestType read with
                | PaymentRequestType.Platform ->
                   Some {
-                     BaseInfo = baseInfo
+                     SharedDetails = baseInfo
                      Payer = {
                         OrgName = read.string "payer_org_name"
                         OrgId = Reader.Platform.payerOrgId read
@@ -80,7 +79,7 @@ let getPayments
          |> List.choose id
          |> List.fold
             (fun acc payment ->
-               if payment.BaseInfo.Payee.OrgId = orgId then
+               if payment.SharedDetails.Payee.OrgId = orgId then
                   {
                      acc with
                         OutgoingRequests =

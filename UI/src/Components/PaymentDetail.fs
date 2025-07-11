@@ -48,7 +48,7 @@ type Msg =
 let init () = State.Init, Cmd.none
 
 let getAccount (p: PaymentRequest) =
-   AccountService.getAccount p.BaseInfo.Payee.AccountId
+   AccountService.getAccount p.SharedDetails.Payee.AccountId
 
 let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
    match msg with
@@ -93,29 +93,18 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
       state, SweetAlert.Run confirm
    | ConfirmCancelPaymentRequest(initiator, reason, payment, Started) ->
       let cancel = async {
-         let! accountOpt = getAccount payment
+         let! accountMaybe = getAccount payment
 
-         match payment, accountOpt with
-         | PaymentRequest.ThirdParty _, _ ->
-            let err =
-               NotImplementedException "third party payment"
-               |> Err.NotImplementedError
-               |> Error
-
-            return
-               ConfirmCancelPaymentRequest(
-                  initiator,
-                  reason,
-                  payment,
-                  Finished err
-               )
-         | PaymentRequest.Platform p, Ok(Some account) ->
+         match accountMaybe with
+         | Ok(Some account) ->
             let cmd =
-               CancelPlatformPaymentRequestCommand.create initiator {
-                  BaseInfo = PlatformPaymentBaseInfo.fromPayment p
+               CancelPaymentRequestCommand.create initiator {
                   Reason = reason
+                  PayerName = payment.Payer
+                  SharedDetails =
+                     PaymentRequestSharedEventDetails.fromPaymentRequest payment
                }
-               |> AccountCommand.CancelPlatformPayment
+               |> AccountCommand.CancelPaymentRequest
 
             let! res = AccountService.submitCommand account cmd
 
@@ -167,11 +156,13 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
                )
          | PaymentRequest.Platform p, Ok(Some account) ->
             let cmd =
-               DeclinePlatformPaymentRequestCommand.create initiator {
-                  BaseInfo = PlatformPaymentBaseInfo.fromPayment p
+               DeclinePaymentRequestCommand.create initiator {
                   Reason = reason
+                  PayerName = payment.Payer
+                  SharedDetails =
+                     PaymentRequestSharedEventDetails.fromPaymentRequest payment
                }
-               |> AccountCommand.DeclinePlatformPayment
+               |> AccountCommand.DeclinePaymentRequest
 
             let! res = AccountService.submitCommand account cmd
 
@@ -197,7 +188,7 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
       state, Cmd.fromAsync decline
    | ConfirmDeclinePaymentRequest(_, _, p, Finished(Ok receipt)) ->
       notifyParentOnUpdate receipt
-      let payee = p.BaseInfo.Payee.OrgName
+      let payee = p.SharedDetails.Payee.OrgName
       state, Alerts.toastSuccessCommand $"Declined payment request from {payee}"
    | ConfirmDeclinePaymentRequest(_, _, _, Finished(Error err)) ->
       Log.error (string err)
@@ -221,14 +212,15 @@ let PaymentDetailComponent
    let state, dispatch =
       React.useElmish (init, update notifyParentOnUpdate, [||])
 
-   let baseInfo = payment.BaseInfo
-   let isPaymentRequestOutgoing = session.OrgId = baseInfo.Payee.OrgId
+   let sharedDetails = payment.SharedDetails
+   let payee = sharedDetails.Payee
+   let isPaymentRequestOutgoing = session.OrgId = payee.OrgId
    let accounts = org.Accounts
 
    let paymentPendingApproval =
       paymentFulfillmentPendingApproval
          org.Org.CommandApprovalProgress.Values
-         baseInfo.Id
+         sharedDetails.Id
 
    let approvalRemainingCnt (progress: CommandApprovalProgress.T) =
       org.Org.CommandApprovalRules.TryFind progress.RuleId
@@ -243,7 +235,7 @@ let PaymentDetailComponent
       Html.div [
          Html.h5 [
             attr.style [ style.marginBottom 0 ]
-            attr.text (Money.format baseInfo.Amount)
+            attr.text (Money.format sharedDetails.Amount)
          ]
          Html.div [
             Html.small [
@@ -285,9 +277,9 @@ let PaymentDetailComponent
 
                attr.text (
                   accounts
-                  |> Map.tryFind baseInfo.Payee.AccountId
+                  |> Map.tryFind sharedDetails.Payee.AccountId
                   |> Option.map _.FullName
-                  |> Option.defaultValue baseInfo.Payee.OrgName
+                  |> Option.defaultValue sharedDetails.Payee.OrgName
                )
             ]
          ]
@@ -296,7 +288,7 @@ let PaymentDetailComponent
             Html.small "Memo:"
             Html.p [
                attr.style [ style.marginLeft 10; style.display.inlineElement ]
-               attr.text baseInfo.Memo
+               attr.text sharedDetails.Memo
             ]
          ]
       else
@@ -304,7 +296,7 @@ let PaymentDetailComponent
             Html.small "Request sent from:"
             Html.p [
                attr.style [ style.marginLeft 10; style.display.inlineElement ]
-               attr.text baseInfo.Payee.OrgName
+               attr.text payee.OrgName
             ]
          ]
 
@@ -312,7 +304,7 @@ let PaymentDetailComponent
             Html.small "Memo:"
             Html.p [
                attr.style [ style.marginLeft 10; style.display.inlineElement ]
-               attr.text baseInfo.Memo
+               attr.text sharedDetails.Memo
             ]
          ]
 
@@ -321,19 +313,19 @@ let PaymentDetailComponent
       classyNode Html.div [ "grid" ] [
          Html.div [
             Html.small "Requested on:"
-            Html.p (DateTime.format baseInfo.CreatedAt)
+            Html.p (DateTime.format sharedDetails.CreatedAt)
          ]
 
          Html.div [
             Html.small (
                if
-                  baseInfo.Expiration.ToUniversalTime().Date > System.DateTime.UtcNow.Date
+                  sharedDetails.Expiration.ToUniversalTime().Date > DateTime.UtcNow.Date
                then
                   "Due:"
                else
                   "Expired on:"
             )
-            Html.p (DateTime.format baseInfo.Expiration)
+            Html.p (DateTime.format sharedDetails.Expiration)
          ]
       ]
 

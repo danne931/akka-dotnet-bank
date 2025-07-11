@@ -19,7 +19,7 @@ open Email
 open PurchaseSaga
 open DomesticTransferSaga
 open PlatformTransferSaga
-open PlatformPaymentSaga
+open PaymentRequestSaga
 open OrgOnboardingSaga
 open EmployeeOnboardingSaga
 open CardSetupSaga
@@ -37,7 +37,7 @@ type StartEvent =
    | Purchase of PurchaseSagaStartEvent
    | DomesticTransfer of DomesticTransferSagaStartEvent
    | PlatformTransfer of PlatformTransferSagaStartEvent
-   | PlatformPayment of PlatformPaymentSagaStartEvent
+   | PaymentRequest of PaymentRequestSagaStartEvent
    | Billing of BillingSagaStartEvent
 
    member x.Name =
@@ -72,10 +72,9 @@ type StartEvent =
             "PlatformTransferSenderReservedFunds"
          | PlatformTransferSagaStartEvent.ScheduleTransferRequest _ ->
             "PlatformTransferScheduleTransferRequest"
-      | PlatformPayment e ->
+      | PaymentRequest e ->
          match e with
-         | PlatformPaymentSagaStartEvent.PaymentRequested _ ->
-            "PlatformPaymentPaymentRequested"
+         | PaymentRequestSagaStartEvent.PaymentRequested _ -> "PaymentRequested"
       | Billing _ -> "BillingSagaStart"
 
 [<RequireQualifiedAccess>]
@@ -86,7 +85,7 @@ type Event =
    | Purchase of PurchaseSagaEvent
    | DomesticTransfer of DomesticTransferSagaEvent
    | PlatformTransfer of PlatformTransferSagaEvent
-   | PlatformPayment of PlatformPaymentSagaEvent
+   | PaymentRequest of PaymentRequestSagaEvent
    | Billing of BillingSagaEvent
 
    member x.Name =
@@ -232,25 +231,24 @@ type Event =
             "PlatformTransferEvaluateRemainingWork"
          | PlatformTransferSagaEvent.ResetInProgressActivityAttempts ->
             "PlatformTransferResetInProgressActivityAttempts"
-      | Event.PlatformPayment e ->
+      | Event.PaymentRequest e ->
          match e with
-         | PlatformPaymentSagaEvent.ScheduledPaymentReminderActivated ->
-            "PlatformPaymentScheduledPaymentReminderActivated"
-         | PlatformPaymentSagaEvent.PaymentRequestCancelled ->
-            "PlatformPaymentRequestCancelled"
-         | PlatformPaymentSagaEvent.PaymentRequestDeclined ->
-            "PlatformPaymentRequestDeclined"
-         | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->
-            "PlatformPaymentRequestNotificationSentToPayer"
-         | PlatformPaymentSagaEvent.PaymentFailed _ -> "PlatformPaymentFailed"
-         | PlatformPaymentSagaEvent.PaymentFulfilled _ ->
-            "PlatformPaymentFulfilled"
-         | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
-            "PlatformPaymentDeclinedNotificationSentToPayee"
-         | PlatformPaymentSagaEvent.EvaluateRemainingWork ->
-            "PlatformPaymentEvaluateRemainingWork"
-         | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts ->
-            "PlatformPaymentResetInProgressActivityAttempts"
+         | PaymentRequestSagaEvent.ScheduledPaymentReminderActivated ->
+            "PaymentRequestScheduledPaymentReminderActivated"
+         | PaymentRequestSagaEvent.PaymentRequestCancelled ->
+            "PaymentRequestCancelled"
+         | PaymentRequestSagaEvent.PaymentRequestDeclined ->
+            "PaymentRequestDeclined"
+         | PaymentRequestSagaEvent.PaymentRequestNotificationSentToPayer ->
+            "PaymentRequestNotificationSentToPayer"
+         | PaymentRequestSagaEvent.PaymentFailed _ -> "PaymentFailed"
+         | PaymentRequestSagaEvent.PaymentFulfilled _ -> "PaymentFulfilled"
+         | PaymentRequestSagaEvent.PaymentDeclinedNotificationSentToPayee ->
+            "PaymentDeclinedNotificationSentToPayee"
+         | PaymentRequestSagaEvent.EvaluateRemainingWork ->
+            "PaymentEvaluateRemainingWork"
+         | PaymentRequestSagaEvent.ResetInProgressActivityAttempts ->
+            "PaymentResetInProgressActivityAttempts"
       | Event.Billing e ->
          match e with
          | BillingSagaEvent.BillingStatementProcessing _ ->
@@ -273,7 +271,7 @@ type Saga =
    | Purchase of PurchaseSaga
    | DomesticTransfer of DomesticTransferSaga
    | PlatformTransfer of PlatformTransferSaga
-   | PlatformPayment of PlatformPaymentSaga
+   | PaymentRequest of PaymentRequestSaga
    | Billing of BillingSaga
 
    interface ISaga with
@@ -287,8 +285,8 @@ type Saga =
             TransferId.toCorrelationId s.TransferInfo.TransferId
          | Saga.PlatformTransfer s ->
             TransferId.toCorrelationId s.TransferInfo.TransferId
-         | Saga.PlatformPayment s ->
-            PaymentRequestId.toCorrelationId s.PaymentInfo.Id
+         | Saga.PaymentRequest s ->
+            PaymentRequestId.toCorrelationId s.PaymentInfo.SharedDetails.Id
          | Saga.Billing s -> s.CorrelationId
 
       member x.OrgId =
@@ -299,7 +297,7 @@ type Saga =
          | Saga.Purchase s -> s.PurchaseInfo.OrgId
          | Saga.DomesticTransfer s -> s.TransferInfo.Sender.OrgId
          | Saga.PlatformTransfer s -> s.TransferInfo.Sender.OrgId
-         | Saga.PlatformPayment s -> s.PaymentInfo.Payee.OrgId
+         | Saga.PaymentRequest s -> s.PaymentInfo.SharedDetails.Payee.OrgId
          | Saga.Billing s -> s.OrgId
 
       member x.ActivityInProgressCount =
@@ -310,7 +308,7 @@ type Saga =
          | Saga.Purchase s -> s.LifeCycle.InProgress.Length
          | Saga.DomesticTransfer s -> s.LifeCycle.InProgress.Length
          | Saga.PlatformTransfer s -> s.LifeCycle.InProgress.Length
-         | Saga.PlatformPayment s -> s.LifeCycle.InProgress.Length
+         | Saga.PaymentRequest s -> s.LifeCycle.InProgress.Length
          | Saga.Billing s -> s.LifeCycle.InProgress.Length
 
       member x.ActivityAttemptsExhaustedCount =
@@ -326,7 +324,7 @@ type Saga =
             s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
          | Saga.PlatformTransfer s ->
             s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-         | Saga.PlatformPayment s ->
+         | Saga.PaymentRequest s ->
             s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
          | Saga.Billing s -> s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
 
@@ -344,7 +342,7 @@ type Saga =
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
          | Saga.PlatformTransfer s ->
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-         | Saga.PlatformPayment s ->
+         | Saga.PaymentRequest s ->
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
          | Saga.Billing s ->
             s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
@@ -357,7 +355,7 @@ type Saga =
          | Saga.Purchase s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.DomesticTransfer s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.PlatformTransfer s -> s.LifeCycle.SagaExhaustedAttempts
-         | Saga.PlatformPayment s -> s.LifeCycle.SagaExhaustedAttempts
+         | Saga.PaymentRequest s -> s.LifeCycle.SagaExhaustedAttempts
          | Saga.Billing s -> s.LifeCycle.SagaExhaustedAttempts
 
       member x.InactivityTimeout =
@@ -368,7 +366,7 @@ type Saga =
          | Saga.Purchase s -> s.LifeCycle.InactivityTimeout
          | Saga.DomesticTransfer s -> s.LifeCycle.InactivityTimeout
          | Saga.PlatformTransfer s -> s.LifeCycle.InactivityTimeout
-         | Saga.PlatformPayment s -> s.LifeCycle.InactivityTimeout
+         | Saga.PaymentRequest s -> s.LifeCycle.InactivityTimeout
          | Saga.Billing s -> s.LifeCycle.InactivityTimeout
 
 type AppSagaPersistableEvent = SagaPersistableEvent<StartEvent, Event>
@@ -452,11 +450,11 @@ module Message =
    let platformTransfer orgId corrId (evt: PlatformTransferSagaEvent) =
       message orgId corrId (Event.PlatformTransfer evt)
 
-   let platformPaymentStart orgId corrId (evt: PlatformPaymentSagaStartEvent) =
-      startMessage orgId corrId (StartEvent.PlatformPayment evt)
+   let paymentRequestStart orgId corrId (evt: PaymentRequestSagaStartEvent) =
+      startMessage orgId corrId (StartEvent.PaymentRequest evt)
 
-   let platformPayment orgId corrId (evt: PlatformPaymentSagaEvent) =
-      message orgId corrId (Event.PlatformPayment evt)
+   let paymentRequest orgId corrId (evt: PaymentRequestSagaEvent) =
+      message orgId corrId (Event.PaymentRequest evt)
 
    let billingStart orgId corrId (evt: BillingSagaStartEvent) =
       startMessage orgId corrId (StartEvent.Billing evt)
@@ -496,9 +494,9 @@ let sagaHandler
          | Saga.PlatformTransfer _ ->
             PlatformTransferSagaEvent.EvaluateRemainingWork
             |> Event.PlatformTransfer
-         | Saga.PlatformPayment _ ->
-            PlatformPaymentSagaEvent.EvaluateRemainingWork
-            |> Event.PlatformPayment
+         | Saga.PaymentRequest _ ->
+            PaymentRequestSagaEvent.EvaluateRemainingWork
+            |> Event.PaymentRequest
          | Saga.Billing _ ->
             BillingSagaEvent.EvaluateRemainingWork |> Event.Billing
       getResetInProgressActivitiesEvent =
@@ -520,9 +518,9 @@ let sagaHandler
          | Saga.PlatformTransfer _ ->
             PlatformTransferSagaEvent.ResetInProgressActivityAttempts
             |> Event.PlatformTransfer
-         | Saga.PlatformPayment _ ->
-            PlatformPaymentSagaEvent.ResetInProgressActivityAttempts
-            |> Event.PlatformPayment
+         | Saga.PaymentRequest _ ->
+            PaymentRequestSagaEvent.ResetInProgressActivityAttempts
+            |> Event.PaymentRequest
          | Saga.Billing _ ->
             BillingSagaEvent.ResetInProgressActivityAttempts |> Event.Billing
       stateTransitionStart =
@@ -546,9 +544,9 @@ let sagaHandler
             | StartEvent.PlatformTransfer e ->
                PlatformTransferSaga.stateTransitionStart e timestamp
                |> Result.map Saga.PlatformTransfer
-            | StartEvent.PlatformPayment e ->
-               PlatformPaymentSaga.stateTransitionStart e timestamp
-               |> Result.map Saga.PlatformPayment
+            | StartEvent.PaymentRequest e ->
+               PaymentRequestSaga.stateTransitionStart e timestamp
+               |> Result.map Saga.PaymentRequest
             | StartEvent.Billing e ->
                BillingSaga.stateTransitionStart e timestamp
                |> Result.map Saga.Billing
@@ -571,9 +569,9 @@ let sagaHandler
             | StartEvent.PlatformTransfer e ->
                PlatformTransferSaga.applyStartEvent e timestamp
                |> Saga.PlatformTransfer
-            | StartEvent.PlatformPayment e ->
-               PlatformPaymentSaga.applyStartEvent e timestamp
-               |> Saga.PlatformPayment
+            | StartEvent.PaymentRequest e ->
+               PaymentRequestSaga.applyStartEvent e timestamp
+               |> Saga.PaymentRequest
             | StartEvent.Billing e ->
                BillingSaga.applyStartEvent e timestamp |> Saga.Billing
       stateTransition =
@@ -597,9 +595,9 @@ let sagaHandler
             | Saga.PlatformTransfer state, Event.PlatformTransfer e ->
                PlatformTransferSaga.stateTransition state e timestamp
                |> Result.map Saga.PlatformTransfer
-            | Saga.PlatformPayment state, Event.PlatformPayment e ->
-               PlatformPaymentSaga.stateTransition state e timestamp
-               |> Result.map Saga.PlatformPayment
+            | Saga.PaymentRequest state, Event.PaymentRequest e ->
+               PaymentRequestSaga.stateTransition state e timestamp
+               |> Result.map Saga.PaymentRequest
             | Saga.Billing state, Event.Billing e ->
                BillingSaga.stateTransition state e timestamp
                |> Result.map Saga.Billing
@@ -624,9 +622,9 @@ let sagaHandler
             | Saga.PlatformTransfer state, Event.PlatformTransfer e ->
                PlatformTransferSaga.applyEvent state e timestamp
                |> Saga.PlatformTransfer
-            | Saga.PlatformPayment state, Event.PlatformPayment e ->
-               PlatformPaymentSaga.applyEvent state e timestamp
-               |> Saga.PlatformPayment
+            | Saga.PaymentRequest state, Event.PaymentRequest e ->
+               PaymentRequestSaga.applyEvent state e timestamp
+               |> Saga.PaymentRequest
             | Saga.Billing state, Event.Billing e ->
                BillingSaga.applyEvent state e timestamp |> Saga.Billing
             | _ -> state
@@ -680,9 +678,9 @@ let sagaHandler
                   PlatformTransferSaga.onStartEventPersisted getAccountRef evt
                else
                   notHandled ()
-            | StartEvent.PlatformPayment evt ->
-               if state.IsPlatformPayment then
-                  PlatformPaymentSaga.onStartEventPersisted getEmailRef evt
+            | StartEvent.PaymentRequest evt ->
+               if state.IsPaymentRequest then
+                  PaymentRequestSaga.onStartEventPersisted getEmailRef evt
                else
                   notHandled ()
             | StartEvent.Billing e ->
@@ -855,25 +853,26 @@ let sagaHandler
                      state
                      evt
                | _ -> notHandled ()
-            | Event.PlatformPayment evt ->
-               let deps: PlatformPaymentSaga.PersistenceHandlerDependencies = {
+            | Event.PaymentRequest evt ->
+               let deps: PaymentRequestSaga.PersistenceHandlerDependencies = {
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
                   getPartnerBankServiceRef = getPartnerBankServiceRef
                   sendEventToSelf =
                      fun payment evt ->
                         let msg =
-                           Message.platformPayment
-                              payment.Payee.OrgId
-                              (PaymentRequestId.toCorrelationId payment.Id)
+                           Message.paymentRequest
+                              payment.SharedDetails.Payee.OrgId
+                              (PaymentRequestId.toCorrelationId
+                                 payment.SharedDetails.Id)
                               evt
 
                         mailbox.Parent() <! msg
                }
 
                match priorState, state with
-               | Saga.PlatformPayment priorState, Saga.PlatformPayment state ->
-                  PlatformPaymentSaga.onEventPersisted deps priorState state evt
+               | Saga.PaymentRequest priorState, Saga.PaymentRequest state ->
+                  PaymentRequestSaga.onEventPersisted deps priorState state evt
                | _ -> notHandled ()
             | Event.Billing evt ->
                let deps: BillingSaga.PersistenceHandlerDependencies = {

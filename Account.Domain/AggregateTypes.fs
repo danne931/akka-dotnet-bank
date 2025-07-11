@@ -43,9 +43,9 @@ type AccountCommand =
    | UpdateDomesticTransferProgress of UpdateDomesticTransferProgressCommand
    | SettleDomesticTransfer of SettleDomesticTransferCommand
    | FailDomesticTransfer of FailDomesticTransferCommand
-   | RequestPlatformPayment of RequestPlatformPaymentCommand
-   | CancelPlatformPayment of CancelPlatformPaymentRequestCommand
-   | DeclinePlatformPayment of DeclinePlatformPaymentRequestCommand
+   | RequestPayment of RequestPaymentCommand
+   | CancelPaymentRequest of CancelPaymentRequestCommand
+   | DeclinePaymentRequest of DeclinePaymentRequestCommand
    | CloseAccount of CloseAccountCommand
    | ConfigureAutoTransferRule of ConfigureAutoTransferRuleCommand
    | DeleteAutoTransferRule of DeleteAutoTransferRuleCommand
@@ -76,9 +76,9 @@ type AccountCommand =
       | UpdateDomesticTransferProgress cmd -> Command.envelope cmd
       | SettleDomesticTransfer cmd -> Command.envelope cmd
       | FailDomesticTransfer cmd -> Command.envelope cmd
-      | RequestPlatformPayment cmd -> Command.envelope cmd
-      | CancelPlatformPayment cmd -> Command.envelope cmd
-      | DeclinePlatformPayment cmd -> Command.envelope cmd
+      | RequestPayment cmd -> Command.envelope cmd
+      | CancelPaymentRequest cmd -> Command.envelope cmd
+      | DeclinePaymentRequest cmd -> Command.envelope cmd
       | CloseAccount cmd -> Command.envelope cmd
       | ConfigureAutoTransferRule cmd -> Command.envelope cmd
       | DeleteAutoTransferRule cmd -> Command.envelope cmd
@@ -119,9 +119,9 @@ type AccountCommand =
       | UpdateDomesticTransferProgress cmd -> cmd.Data.BaseInfo.Sender.AccountId
       | SettleDomesticTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
       | FailDomesticTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
-      | RequestPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
-      | CancelPlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
-      | DeclinePlatformPayment cmd -> cmd.Data.BaseInfo.Payee.AccountId
+      | RequestPayment cmd -> cmd.Data.SharedDetails.Payee.AccountId
+      | CancelPaymentRequest cmd -> cmd.Data.SharedDetails.Payee.AccountId
+      | DeclinePaymentRequest cmd -> cmd.Data.SharedDetails.Payee.AccountId
       | CloseAccount cmd -> cmd.Data.AccountId
       | ConfigureAutoTransferRule cmd -> cmd.Data.AccountId
       | DeleteAutoTransferRule cmd -> cmd.Data.AccountId
@@ -170,10 +170,9 @@ type AccountEvent =
    | DomesticTransferProgress of BankEvent<DomesticTransferProgressUpdated>
    | DomesticTransferSettled of BankEvent<DomesticTransferSettled>
    | DomesticTransferFailed of BankEvent<DomesticTransferFailed>
-   | PlatformPaymentRequested of BankEvent<PlatformPaymentRequested>
-   | PlatformPaymentRequestCancelled of
-      BankEvent<PlatformPaymentRequestCancelled>
-   | PlatformPaymentRequestDeclined of BankEvent<PlatformPaymentRequestDeclined>
+   | PaymentRequested of BankEvent<PaymentRequested>
+   | PaymentRequestCancelled of BankEvent<PaymentRequestCancelled>
+   | PaymentRequestDeclined of BankEvent<PaymentRequestDeclined>
    | AccountClosed of BankEvent<AccountClosed>
    | AutoTransferRuleConfigured of BankEvent<AutomaticTransferRuleConfigured>
    | AutoTransferRuleDeleted of BankEvent<AutomaticTransferRuleDeleted>
@@ -214,9 +213,9 @@ type AccountEvent =
       | DomesticTransferProgress evt -> evt.Data.BaseInfo.Sender.AccountId
       | DomesticTransferSettled evt -> evt.Data.BaseInfo.Sender.AccountId
       | DomesticTransferFailed evt -> evt.Data.BaseInfo.Sender.AccountId
-      | PlatformPaymentRequested evt -> evt.Data.BaseInfo.Payee.AccountId
-      | PlatformPaymentRequestCancelled evt -> evt.Data.BaseInfo.Payee.AccountId
-      | PlatformPaymentRequestDeclined evt -> evt.Data.BaseInfo.Payee.AccountId
+      | PaymentRequested evt -> evt.Data.SharedDetails.Payee.AccountId
+      | PaymentRequestCancelled evt -> evt.Data.SharedDetails.Payee.AccountId
+      | PaymentRequestDeclined evt -> evt.Data.SharedDetails.Payee.AccountId
       | AccountClosed evt -> evt.Data.AccountId
       | AutoTransferRuleConfigured evt -> evt.Data.AccountId
       | AutoTransferRuleDeleted evt -> evt.Data.AccountId
@@ -293,15 +292,15 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Recipient.Name
       | AccountEvent.MaintenanceFeeDebited evt ->
          Some evt.Data.Amount, Some MoneyFlow.Out, Some "Maintenance Fee"
-      | AccountEvent.PlatformPaymentRequested evt ->
-         let p = evt.Data.BaseInfo
+      | AccountEvent.PaymentRequested evt ->
+         let p = evt.Data.SharedDetails
          Some p.Amount, None, Some p.Payee.OrgName
-      | AccountEvent.PlatformPaymentRequestCancelled evt ->
-         let p = evt.Data.BaseInfo
+      | AccountEvent.PaymentRequestCancelled evt ->
+         let p = evt.Data.SharedDetails
          Some p.Amount, None, Some p.Payee.OrgName
-      | AccountEvent.PlatformPaymentRequestDeclined evt ->
-         let p = evt.Data.BaseInfo
-         Some p.Amount, None, Some p.Payer.OrgName
+      | AccountEvent.PaymentRequestDeclined evt ->
+         let p = evt.Data.SharedDetails
+         Some p.Amount, None, Some p.Payee.OrgName
       | _ -> None, None, None
 
 type OpenEventEnvelope = AccountEvent * Envelope
@@ -354,12 +353,11 @@ module AccountEnvelope =
          DomesticTransferSettled evt
       | :? BankEvent<DomesticTransferFailed> as evt ->
          DomesticTransferFailed evt
-      | :? BankEvent<PlatformPaymentRequested> as evt ->
-         PlatformPaymentRequested evt
-      | :? BankEvent<PlatformPaymentRequestCancelled> as evt ->
-         PlatformPaymentRequestCancelled evt
-      | :? BankEvent<PlatformPaymentRequestDeclined> as evt ->
-         PlatformPaymentRequestDeclined evt
+      | :? BankEvent<PaymentRequested> as evt -> PaymentRequested evt
+      | :? BankEvent<PaymentRequestCancelled> as evt ->
+         PaymentRequestCancelled evt
+      | :? BankEvent<PaymentRequestDeclined> as evt ->
+         PaymentRequestDeclined evt
       | :? BankEvent<AccountClosed> as evt -> AccountClosed evt
       | :? BankEvent<AutomaticTransferRuleConfigured> as evt ->
          AutoTransferRuleConfigured evt
@@ -406,9 +404,9 @@ module AccountEnvelope =
       | DomesticTransferProgress evt -> wrap evt, get evt
       | DomesticTransferSettled evt -> wrap evt, get evt
       | DomesticTransferFailed evt -> wrap evt, get evt
-      | PlatformPaymentRequested evt -> wrap evt, get evt
-      | PlatformPaymentRequestCancelled evt -> wrap evt, get evt
-      | PlatformPaymentRequestDeclined evt -> wrap evt, get evt
+      | PaymentRequested evt -> wrap evt, get evt
+      | PaymentRequestCancelled evt -> wrap evt, get evt
+      | PaymentRequestDeclined evt -> wrap evt, get evt
       | AccountClosed evt -> wrap evt, get evt
       | AutoTransferRuleConfigured evt -> wrap evt, get evt
       | AutoTransferRuleDeleted evt -> wrap evt, get evt

@@ -35,11 +35,11 @@ let postJson (command: AccountCommand) =
          Serialization.serialize cmd, TransferPath.Domestic
       | AccountCommand.ScheduleDomesticTransfer cmd ->
          Serialization.serialize cmd, TransferPath.ScheduleDomestic
-      | AccountCommand.RequestPlatformPayment cmd ->
+      | AccountCommand.RequestPayment cmd ->
          Serialization.serialize cmd, PaymentPath.RequestPayment
-      | AccountCommand.CancelPlatformPayment cmd ->
+      | AccountCommand.CancelPaymentRequest cmd ->
          Serialization.serialize cmd, PaymentPath.CancelPayment
-      | AccountCommand.DeclinePlatformPayment cmd ->
+      | AccountCommand.DeclinePaymentRequest cmd ->
          Serialization.serialize cmd, PaymentPath.DeclinePayment
       | AccountCommand.ConfigureAutoTransferRule cmd ->
          Serialization.serialize cmd, TransferPath.ConfigureAutoTransferRule

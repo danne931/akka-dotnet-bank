@@ -1,95 +1,93 @@
 namespace Bank.Payment.Domain
 
 open Validus
-open System
 
 open Lib.SharedTypes
-open Lib.Validators
 
-type PlatformPaymentRequestInput = {
-   BaseInfo: PlatformPaymentBaseInfo
-   Expiration: DateTime option
-   Memo: string
-}
+type RequestPaymentCommand = Command<PaymentRequested>
 
-type RequestPlatformPaymentCommand = Command<PlatformPaymentRequestInput>
+module RequestPaymentCommand =
+   let create (initiatedBy: Initiator) (data: PaymentRequested) =
+      let payee = data.SharedDetails.Payee
 
-module RequestPlatformPaymentCommand =
-   let create (initiatedBy: Initiator) (data: PlatformPaymentRequestInput) =
       Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Payee.ParentAccountId)
-         data.BaseInfo.Payee.OrgId
-         (data.BaseInfo.Id |> PaymentRequestId.get |> CorrelationId)
+         (ParentAccountId.toEntityId payee.ParentAccountId)
+         payee.OrgId
+         (data.SharedDetails.Id |> PaymentRequestId.get |> CorrelationId)
          initiatedBy
          data
 
    let toEvent
-      (cmd: RequestPlatformPaymentCommand)
-      : ValidationResult<BankEvent<PlatformPaymentRequested>>
+      (cmd: RequestPaymentCommand)
+      : ValidationResult<BankEvent<PaymentRequested>>
       =
       validate {
-         let info = cmd.Data.BaseInfo
-         let payerOrg = OrgId.get info.Payer.OrgId
-         let payeeOrg = OrgId.get info.Payee.OrgId
+         let shared = cmd.Data.SharedDetails
+         let! _ = Check.String.notEmpty "memo" shared.Memo
 
-         let expiration =
-            cmd.Data.Expiration
-            |> Option.defaultValue (DateTime.UtcNow.AddDays 30)
+         let! _ =
+            Lib.Validators.datePresentOrFutureValidator
+               "due date"
+               shared.Expiration
 
-         let! _ = amountValidator "Payment amount" info.Amount
-         let! expiration = dateInFutureValidator "Payment expiration" expiration
-         let! _ = Check.Guid.notEquals payerOrg "Payer org = Payee org" payeeOrg
-         let! memo = Check.String.notEmpty "memo" cmd.Data.Memo
+         match cmd.Data with
+         | Platform info ->
+            let payerOrgId = OrgId.get info.Payer.OrgId
+            let payeeOrgId = OrgId.get shared.Payee.OrgId
 
-         return
-            BankEvent.create2<
-               PlatformPaymentRequestInput,
-               PlatformPaymentRequested
-             >
-               cmd
-               {
-                  Expiration = expiration
-                  BaseInfo = info
-                  Memo = memo
-               }
+            let! _ =
+               Lib.Validators.amountValidator "Payment amount" shared.Amount
+
+            let! _ =
+               Check.Guid.notEquals
+                  payerOrgId
+                  "Payer org = Payee org"
+                  payeeOrgId
+
+            return BankEvent.create<PaymentRequested> cmd
+         | ThirdParty info ->
+            // TODO: validate info.SecurePaymentFormUrl
+            // TODO: validate info.Payer.Email
+            let! _ =
+               Lib.Validators.amountValidator "Payment amount" shared.Amount
+
+            return BankEvent.create<PaymentRequested> cmd
       }
 
-type CancelPlatformPaymentRequestCommand =
-   Command<PlatformPaymentRequestCancelled>
+type CancelPaymentRequestCommand = Command<PaymentRequestCancelled>
 
-module CancelPlatformPaymentRequestCommand =
-   let create (initiatedBy: Initiator) (data: PlatformPaymentRequestCancelled) =
-      let payee = data.BaseInfo.Payee
-
-      Command.create
-         (ParentAccountId.toEntityId payee.ParentAccountId)
-         payee.OrgId
-         (data.BaseInfo.Id |> PaymentRequestId.get |> CorrelationId)
-         initiatedBy
-         data
-
-   let toEvent
-      (cmd: CancelPlatformPaymentRequestCommand)
-      : ValidationResult<BankEvent<PlatformPaymentRequestCancelled>>
-      =
-      BankEvent.create<PlatformPaymentRequestCancelled> cmd |> Ok
-
-type DeclinePlatformPaymentRequestCommand =
-   Command<PlatformPaymentRequestDeclined>
-
-module DeclinePlatformPaymentRequestCommand =
-   let create (initiatedBy: Initiator) (data: PlatformPaymentRequestDeclined) =
-      let payee = data.BaseInfo.Payee
+module CancelPaymentRequestCommand =
+   let create (initiatedBy: Initiator) (data: PaymentRequestCancelled) =
+      let payee = data.SharedDetails.Payee
 
       Command.create
          (ParentAccountId.toEntityId payee.ParentAccountId)
          payee.OrgId
-         (data.BaseInfo.Id |> PaymentRequestId.get |> CorrelationId)
+         (data.SharedDetails.Id |> PaymentRequestId.get |> CorrelationId)
          initiatedBy
          data
 
    let toEvent
-      (cmd: DeclinePlatformPaymentRequestCommand)
-      : ValidationResult<BankEvent<PlatformPaymentRequestDeclined>>
+      (cmd: CancelPaymentRequestCommand)
+      : ValidationResult<BankEvent<PaymentRequestCancelled>>
       =
-      BankEvent.create<PlatformPaymentRequestDeclined> cmd |> Ok
+      BankEvent.create<PaymentRequestCancelled> cmd |> Ok
+
+type DeclinePaymentRequestCommand = Command<PaymentRequestDeclined>
+
+module DeclinePaymentRequestCommand =
+   let create (initiatedBy: Initiator) (data: PaymentRequestDeclined) =
+      let payee = data.SharedDetails.Payee
+
+      Command.create
+         (ParentAccountId.toEntityId payee.ParentAccountId)
+         payee.OrgId
+         (data.SharedDetails.Id |> PaymentRequestId.get |> CorrelationId)
+         initiatedBy
+         data
+
+   let toEvent
+      (cmd: DeclinePaymentRequestCommand)
+      : ValidationResult<BankEvent<PaymentRequestDeclined>>
+      =
+      BankEvent.create<PaymentRequestDeclined> cmd |> Ok

@@ -509,12 +509,10 @@ let transactionUIFriendly
                   let sender = accountName i.Sender.AccountId
 
                   Some(sender, i.Recipient.Name, Some MoneyFlow.Out)
-               | AccountEvent.PlatformPaymentRequested e when
-                  e.OrgId = org.Org.OrgId
-                  ->
-                  let i = e.Data.BaseInfo
+               | AccountEvent.PaymentRequested e when e.OrgId = org.Org.OrgId ->
+                  let i = e.Data.SharedDetails
 
-                  Some(i.Payer.OrgName, accountName i.Payee.AccountId, None)
+                  Some(e.Data.PayerName, accountName i.Payee.AccountId, None)
                | _ -> None
             | _ -> None)
          |> Option.defaultValue ("Unknown", "Unknown", None)

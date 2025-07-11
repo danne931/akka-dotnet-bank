@@ -777,37 +777,38 @@ let seedPayments
       let requestsFromDemoAccount = [
          for payer in paymentPayers ->
             let cmd =
-               RequestPlatformPaymentCommand.create mockAccountOwner {
-                  Memo = "Services rendered..."
-                  Expiration = None
-                  BaseInfo = {
-                     InitiatedById = mockAccountOwner.Id
-                     Id = Guid.NewGuid() |> PaymentRequestId
-                     Amount = randomAmount 3000 5000
-                     Payee = {
-                        OrgId = myOrg.OrgId
-                        OrgName = myOrg.BusinessName
-                        AccountId = arCheckingAccountId
-                        ParentAccountId = myOrg.ParentAccountId
+               RequestPaymentCommand.create
+                  mockAccountOwner
+                  (PaymentRequested.Platform {
+                     SharedDetails = {
+                        Id = Guid.NewGuid() |> PaymentRequestId
+                        Amount = randomAmount 3000 5000
+                        Payee = {
+                           OrgId = myOrg.OrgId
+                           OrgName = myOrg.BusinessName
+                           AccountId = arCheckingAccountId
+                           ParentAccountId = myOrg.ParentAccountId
+                        }
+                        Memo = "Services rendered..."
+                        Expiration = DateTime.UtcNow.AddDays 15
                      }
                      Payer = {
                         OrgId = payer.OrgId
                         OrgName = payer.BusinessName
                         ParentAccountId = payer.ParentAccountId
                      }
-                  }
-               }
+                  })
 
             payer, { cmd with Timestamp = buffer }
       ]
 
       for _, request in requestsFromDemoAccount do
          let entityId =
-            ParentAccountId.get request.Data.BaseInfo.Payee.ParentAccountId
+            ParentAccountId.get request.Data.SharedDetails.Payee.ParentAccountId
 
          let msg =
             request
-            |> AccountCommand.RequestPlatformPayment
+            |> AccountCommand.RequestPayment
             |> AccountMessage.StateChange
             |> GuaranteedDelivery.message entityId
 
@@ -816,8 +817,10 @@ let seedPayments
       do! Async.Sleep 2000
 
       // Some payment requests fulfilled
-      let payer, request = List.head requestsFromDemoAccount
-      let info = request.Data.BaseInfo
+      let payerStub, request = List.head requestsFromDemoAccount
+      let shared = request.Data.SharedDetails
+      let (PaymentRequested.Platform payRequest) = request.Data
+      let payer = payRequest.Payer
 
       let msg =
          let ts = buffer.AddHours 2
@@ -825,26 +828,26 @@ let seedPayments
          {
             InternalTransferBetweenOrgsCommand.create
                {
-                  Id = InitiatedById payer.AccountOwnerId
-                  Name = payer.BusinessName
+                  Id = InitiatedById payerStub.AccountOwnerId
+                  Name = payerStub.BusinessName
                }
                {
                   Memo = None
                   OriginatedFromSchedule = false
-                  OriginatedFromPaymentRequest = Some info.Id
-                  Amount = info.Amount
+                  OriginatedFromPaymentRequest = Some shared.Id
+                  Amount = shared.Amount
                   Recipient = {
-                     OrgId = info.Payee.OrgId
-                     AccountId = info.Payee.AccountId
-                     ParentAccountId = info.Payee.ParentAccountId
-                     Name = info.Payee.OrgName
+                     OrgId = shared.Payee.OrgId
+                     AccountId = shared.Payee.AccountId
+                     ParentAccountId = shared.Payee.ParentAccountId
+                     Name = shared.Payee.OrgName
                   }
                   ScheduledDateSeedOverride = Some ts
                   Sender = {
-                     Name = info.Payer.OrgName
-                     AccountId = payer.PrimaryAccountId
-                     ParentAccountId = info.Payer.ParentAccountId
-                     OrgId = info.Payer.OrgId
+                     Name = payer.OrgName
+                     AccountId = payerStub.PrimaryAccountId
+                     ParentAccountId = payer.ParentAccountId
+                     OrgId = payer.OrgId
                   }
                } with
                Timestamp = ts
@@ -852,7 +855,7 @@ let seedPayments
          |> AccountCommand.InternalTransferBetweenOrgs
          |> AccountMessage.StateChange
          |> GuaranteedDelivery.message (
-            ParentAccountId.get payer.ParentAccountId
+            ParentAccountId.get payerStub.ParentAccountId
          )
 
       accountRef <! msg
@@ -860,16 +863,13 @@ let seedPayments
       // Payment requests from other orgs to main demo org
       for payee in paymentRequesters do
          let cmd =
-            RequestPlatformPaymentCommand.create
+            RequestPaymentCommand.create
                {
                   Id = InitiatedById payee.AccountOwnerId
                   Name = payee.BusinessName
                }
-               {
-                  Expiration = Some <| DateTime.UtcNow.AddDays 13
-                  Memo = "Services rendered..."
-                  BaseInfo = {
-                     InitiatedById = InitiatedById payee.AccountOwnerId
+               (PaymentRequested.Platform {
+                  SharedDetails = {
                      Id = Guid.NewGuid() |> PaymentRequestId
                      Amount = 5000m + randomAmount 1000 3000
                      Payee = {
@@ -878,17 +878,19 @@ let seedPayments
                         AccountId = payee.PrimaryAccountId
                         ParentAccountId = payee.ParentAccountId
                      }
-                     Payer = {
-                        OrgId = myOrg.OrgId
-                        OrgName = myOrg.BusinessName
-                        ParentAccountId = myOrg.ParentAccountId
-                     }
+                     Expiration = DateTime.UtcNow.AddDays 13
+                     Memo = "Services rendered..."
                   }
-               }
+                  Payer = {
+                     OrgId = myOrg.OrgId
+                     OrgName = myOrg.BusinessName
+                     ParentAccountId = myOrg.ParentAccountId
+                  }
+               })
 
          let msg =
             cmd
-            |> AccountCommand.RequestPlatformPayment
+            |> AccountCommand.RequestPayment
             |> AccountMessage.StateChange
             |> GuaranteedDelivery.message (
                ParentAccountId.get payee.ParentAccountId

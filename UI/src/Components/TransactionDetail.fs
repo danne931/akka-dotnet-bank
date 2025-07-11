@@ -255,7 +255,7 @@ let private renderTransactionHistory
                         DateTime.dateUIFriendly e.Data.BaseInfo.ScheduledDate
 
                      Html.p $"Scheduled for {date}"
-                  | AccountEvent.PlatformPaymentRequested e ->
+                  | AccountEvent.PaymentRequested e ->
                      Html.p (
                         if e.OrgId = session.OrgId then
                            $"Payment request sent to {txn.Source}"

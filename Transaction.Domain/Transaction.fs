@@ -272,23 +272,23 @@ let transactionInfoFromHistory
             TransactionStatus.Failed,
             e.Data.BaseInfo.Amount
          )
-      | AccountEvent.PlatformPaymentRequested e ->
+      | AccountEvent.PaymentRequested e ->
          Some(
             TransactionType.Payment,
             TransactionStatus.InProgress,
-            e.Data.BaseInfo.Amount
+            e.Data.SharedDetails.Amount
          )
-      | AccountEvent.PlatformPaymentRequestDeclined e ->
+      | AccountEvent.PaymentRequestDeclined e ->
          Some(
             TransactionType.Payment,
             TransactionStatus.Failed,
-            e.Data.BaseInfo.Amount
+            e.Data.SharedDetails.Amount
          )
-      | AccountEvent.PlatformPaymentRequestCancelled e ->
+      | AccountEvent.PaymentRequestCancelled e ->
          Some(
             TransactionType.Payment,
             TransactionStatus.Failed,
-            e.Data.BaseInfo.Amount
+            e.Data.SharedDetails.Amount
          )
       | _ -> None
 

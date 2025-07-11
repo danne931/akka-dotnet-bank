@@ -22,7 +22,7 @@ open OrgOnboardingSaga
 open EmployeeOnboardingSaga
 open CardSetupSaga
 open PlatformTransferSaga
-open PlatformPaymentSaga
+open PaymentRequestSaga
 open PurchaseSaga
 open DomesticTransferSaga
 
@@ -170,6 +170,26 @@ let private emailPropsFromMessage
          payee = info.PayeeBusinessName
          payer = info.PayerBusinessName
          amount = $"${info.Amount}"
+      |}
+     }
+   | EmailInfo.ThirdPartyPaymentRequested info -> {
+      OrgId = msg.OrgId
+      Event = "third-party-payment-requested"
+      Email = Some(string info.PayerEmail)
+      Data = {|
+         payee = info.PayeeBusinessName
+         amount = $"${info.Amount}"
+         securePaymentFormUrl = info.SecurePaymentFormUrl
+      |}
+     }
+   | EmailInfo.ThirdPartyPaymentReminder info -> {
+      OrgId = msg.OrgId
+      Event = "third-party-payment-reminder"
+      Email = Some(string info.PayerEmail)
+      Data = {|
+         payee = info.PayeeBusinessName
+         amount = $"${info.Amount}"
+         securePaymentFormUrl = info.SecurePaymentFormUrl
       |}
      }
    | EmailInfo.DomesticTransfer info -> {
@@ -375,13 +395,17 @@ let onSuccessfulServiceResponse
          PlatformTransferSagaEvent.TransferDepositNotificationSent
          |> AppSaga.Message.platformTransfer orgId corrId
          |> Some
+      | EmailInfo.ThirdPartyPaymentRequested _ ->
+         PaymentRequestSagaEvent.PaymentRequestNotificationSentToPayer
+         |> AppSaga.Message.paymentRequest orgId corrId
+         |> Some
       | EmailInfo.PlatformPaymentRequested _ ->
-         PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer
-         |> AppSaga.Message.platformPayment orgId corrId
+         PaymentRequestSagaEvent.PaymentRequestNotificationSentToPayer
+         |> AppSaga.Message.paymentRequest orgId corrId
          |> Some
       | EmailInfo.PlatformPaymentDeclined _ ->
-         PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee
-         |> AppSaga.Message.platformPayment orgId corrId
+         PaymentRequestSagaEvent.PaymentDeclinedNotificationSentToPayee
+         |> AppSaga.Message.paymentRequest orgId corrId
          |> Some
       | EmailInfo.BillingStatement ->
          BillingSaga.BillingSagaEvent.BillingEmailSent

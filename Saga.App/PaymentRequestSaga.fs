@@ -1,4 +1,4 @@
-module PlatformPaymentSaga
+module PaymentRequestSaga
 
 open System
 open Akkling
@@ -22,29 +22,29 @@ let shouldSchedulePaymentReminder (dueAt: DateTime) =
       None
 
 [<RequireQualifiedAccess>]
-type PlatformPaymentSagaStartEvent =
-   | PaymentRequested of BankEvent<PlatformPaymentRequested>
+type PaymentRequestSagaStartEvent =
+   | PaymentRequested of BankEvent<PaymentRequested>
 
 [<RequireQualifiedAccess>]
-type PlatformPaymentSagaEvent =
+type PaymentRequestSagaEvent =
    | PaymentRequestCancelled
    | PaymentRequestDeclined
-   | PaymentFulfilled of PaymentFulfilled
-   | PaymentFailed of TransferId * PlatformPaymentFailReason
+   | PaymentFulfilled of PaymentFulfillment
+   | PaymentFailed of TransferId * PaymentFailReason
    | PaymentRequestNotificationSentToPayer
    | PaymentDeclinedNotificationSentToPayee
    | ScheduledPaymentReminderActivated
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
-type private StartEvent = PlatformPaymentSagaStartEvent
-type private Event = PlatformPaymentSagaEvent
+type private StartEvent = PaymentRequestSagaStartEvent
+type private Event = PaymentRequestSagaEvent
 
 [<RequireQualifiedAccess>]
-type PlatformPaymentSagaStatus =
+type PaymentRequestSagaStatus =
    | InProgress of PaymentRequestStatus
    | Completed
-   | Failed of PlatformPaymentFailReason
+   | Failed of PaymentFailReason
 
 [<RequireQualifiedAccess; CustomEquality; NoComparison>]
 type Activity =
@@ -81,23 +81,23 @@ type Activity =
          hash "WaitForScheduledPaymentReminder"
       | _ -> hash (string x)
 
-type PlatformPaymentSaga = {
-   StartEvent: PlatformPaymentSagaStartEvent
-   Events: PlatformPaymentSagaEvent list
-   Status: PlatformPaymentSagaStatus
-   PaymentInfo: PlatformPaymentBaseInfo
+type PaymentRequestSaga = {
+   StartEvent: PaymentRequestSagaStartEvent
+   Events: PaymentRequestSagaEvent list
+   Status: PaymentRequestSagaStatus
+   PaymentInfo: PaymentRequested
    LifeCycle: SagaLifeCycle<Activity>
    InitiatedBy: Initiator
 }
 
-let applyStartEvent (e: PlatformPaymentSagaStartEvent) (timestamp: DateTime) =
+let applyStartEvent (e: PaymentRequestSagaStartEvent) (timestamp: DateTime) =
    match e with
    | StartEvent.PaymentRequested evt -> {
       StartEvent = e
       Events = []
       Status =
-         PlatformPaymentSagaStatus.InProgress PaymentRequestStatus.Requested
-      PaymentInfo = evt.Data.BaseInfo
+         PaymentRequestSagaStatus.InProgress PaymentRequestStatus.Requested
+      PaymentInfo = evt.Data
       InitiatedBy = evt.InitiatedBy
       LifeCycle = {
          SagaLifeCycle.empty with
@@ -105,7 +105,10 @@ let applyStartEvent (e: PlatformPaymentSagaStartEvent) (timestamp: DateTime) =
                ActivityLifeCycle.init timestamp Activity.NotifyPayerOfRequest
                ActivityLifeCycle.init timestamp Activity.WaitForPayment
 
-               match shouldSchedulePaymentReminder evt.Data.Expiration with
+               match
+                  shouldSchedulePaymentReminder
+                     evt.Data.SharedDetails.Expiration
+               with
                | Some timeUntil ->
                   ActivityLifeCycle.init
                      timestamp
@@ -116,8 +119,8 @@ let applyStartEvent (e: PlatformPaymentSagaStartEvent) (timestamp: DateTime) =
      }
 
 let applyEvent
-   (saga: PlatformPaymentSaga)
-   (evt: PlatformPaymentSagaEvent)
+   (saga: PaymentRequestSaga)
+   (evt: PaymentRequestSagaEvent)
    (timestamp: DateTime)
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
@@ -146,13 +149,13 @@ let applyEvent
      }
    | Event.PaymentRequestCancelled -> {
       saga with
-         Status = PlatformPaymentSagaStatus.Completed
+         Status = PaymentRequestSagaStatus.Completed
          LifeCycle = finishWaitingForPayment saga.LifeCycle
      }
    | Event.PaymentRequestDeclined -> {
       saga with
          Status =
-            PlatformPaymentSagaStatus.InProgress PaymentRequestStatus.Declined
+            PaymentRequestSagaStatus.InProgress PaymentRequestStatus.Declined
          LifeCycle =
             saga.LifeCycle
             |> finishWaitingForPayment
@@ -161,11 +164,11 @@ let applyEvent
    | Event.PaymentFulfilled _ -> {
       saga with
          LifeCycle = finishWaitingForPayment saga.LifeCycle
-         Status = PlatformPaymentSagaStatus.Completed
+         Status = PaymentRequestSagaStatus.Completed
      }
    | Event.PaymentFailed(_, reason) -> {
       saga with
-         Status = PlatformPaymentSagaStatus.Failed reason
+         Status = PaymentRequestSagaStatus.Failed reason
          LifeCycle =
             saga.LifeCycle
             |> failActivity Activity.WaitForPayment
@@ -182,7 +185,7 @@ let applyEvent
       saga with
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.NotifyPayeeOfDecline
-         Status = PlatformPaymentSagaStatus.Completed
+         Status = PaymentRequestSagaStatus.Completed
      }
    | Event.EvaluateRemainingWork -> {
       saga with
@@ -197,53 +200,118 @@ let applyEvent
      }
 
 let stateTransitionStart
-   (evt: PlatformPaymentSagaStartEvent)
+   (evt: PaymentRequestSagaStartEvent)
    (timestamp: DateTime)
-   : Result<PlatformPaymentSaga, SagaStateTransitionError>
+   : Result<PaymentRequestSaga, SagaStateTransitionError>
    =
    Ok(applyStartEvent evt timestamp)
 
 let stateTransition
-   (saga: PlatformPaymentSaga)
-   (evt: PlatformPaymentSagaEvent)
+   (saga: PaymentRequestSaga)
+   (evt: PaymentRequestSagaEvent)
    (timestamp: DateTime)
-   : Result<PlatformPaymentSaga, SagaStateTransitionError>
+   : Result<PaymentRequestSaga, SagaStateTransitionError>
    =
    let activityIsDone = saga.LifeCycle.ActivityIsInProgress >> not
 
    let invalidStepProgression =
       match evt with
-      | PlatformPaymentSagaEvent.EvaluateRemainingWork
-      | PlatformPaymentSagaEvent.ResetInProgressActivityAttempts -> false
-      | PlatformPaymentSagaEvent.PaymentRequestDeclined
-      | PlatformPaymentSagaEvent.PaymentRequestCancelled
-      | PlatformPaymentSagaEvent.PaymentFailed _
-      | PlatformPaymentSagaEvent.PaymentFulfilled _ ->
+      | PaymentRequestSagaEvent.EvaluateRemainingWork
+      | PaymentRequestSagaEvent.ResetInProgressActivityAttempts -> false
+      | PaymentRequestSagaEvent.PaymentRequestDeclined
+      | PaymentRequestSagaEvent.PaymentRequestCancelled
+      | PaymentRequestSagaEvent.PaymentFailed _
+      | PaymentRequestSagaEvent.PaymentFulfilled _ ->
          activityIsDone Activity.WaitForPayment
-      | PlatformPaymentSagaEvent.PaymentRequestNotificationSentToPayer ->
+      | PaymentRequestSagaEvent.PaymentRequestNotificationSentToPayer ->
          activityIsDone Activity.NotifyPayerOfRequest
-      | PlatformPaymentSagaEvent.PaymentDeclinedNotificationSentToPayee ->
+      | PaymentRequestSagaEvent.PaymentDeclinedNotificationSentToPayee ->
          activityIsDone Activity.NotifyPayeeOfDecline
-      | PlatformPaymentSagaEvent.ScheduledPaymentReminderActivated ->
+      | PaymentRequestSagaEvent.ScheduledPaymentReminderActivated ->
          activityIsDone (Activity.WaitForScheduledPaymentReminder TimeSpan.Zero)
 
-   if saga.Status = PlatformPaymentSagaStatus.Completed then
+   if saga.Status = PaymentRequestSagaStatus.Completed then
       Error SagaStateTransitionError.HasAlreadyCompleted
    elif invalidStepProgression then
       Error SagaStateTransitionError.InvalidStepProgression
    else
       Ok(applyEvent saga evt timestamp)
 
-let notifyPayerOfPaymentRequest emailRef (payment: PlatformPaymentBaseInfo) =
+let private notifyPayerOfPaymentRequest emailRef (payment: PaymentRequested) =
+   let corrId = PaymentRequestId.toCorrelationId payment.SharedDetails.Id
+   let payeeOrgName = payment.SharedDetails.Payee.OrgName
+   let amount = payment.SharedDetails.Amount
+
+   let msg =
+      match payment with
+      | PaymentRequested.Platform info ->
+         EmailMessage.create
+            info.Payer.OrgId
+            corrId
+            (EmailInfo.PlatformPaymentRequested {
+               Amount = amount
+               PayeeBusinessName = payeeOrgName
+               PayerBusinessName = info.Payer.OrgName
+            })
+      | PaymentRequested.ThirdParty info ->
+         EmailMessage.create
+            payment.SharedDetails.Payee.OrgId
+            corrId
+            (EmailInfo.ThirdPartyPaymentRequested {
+               Amount = amount
+               PayeeBusinessName = payeeOrgName
+               PayerEmail = info.Payer.Email
+               SecurePaymentFormUrl = info.SecurePaymentFormUrl
+            })
+
+   emailRef <! msg
+
+let private notifyPayeeOfPaymentDecline
+   (payment: PaymentRequested)
+   (emailRef: IActorRef<EmailMessage>)
+   =
+   let shared = payment.SharedDetails
+
    let msg =
       EmailMessage.create
-         payment.Payer.OrgId
-         (PaymentRequestId.toCorrelationId payment.Id)
-         (EmailInfo.PlatformPaymentRequested {
-            Amount = payment.Amount
-            PayeeBusinessName = payment.Payee.OrgName
-            PayerBusinessName = payment.Payer.OrgName
+         shared.Payee.OrgId
+         (PaymentRequestId.toCorrelationId shared.Id)
+         (EmailInfo.PlatformPaymentDeclined {
+            Amount = shared.Amount
+            PayeeBusinessName = shared.Payee.OrgName
+            PayerBusinessName = payment.PayerName
          })
+
+   emailRef <! msg
+
+let private remindPayerOfPaymentRequest
+   (payment: PaymentRequested)
+   (emailRef: IActorRef<EmailMessage>)
+   =
+   let shared = payment.SharedDetails
+   let corrId = PaymentRequestId.toCorrelationId shared.Id
+
+   let msg =
+      match payment with
+      | PaymentRequested.Platform info ->
+         EmailMessage.create
+            info.Payer.OrgId
+            corrId
+            (EmailInfo.PlatformPaymentReminder {
+               Amount = shared.Amount
+               PayeeBusinessName = shared.Payee.OrgName
+               PayerBusinessName = info.Payer.OrgName
+            })
+      | PaymentRequested.ThirdParty info ->
+         EmailMessage.create
+            shared.Payee.OrgId
+            corrId
+            (EmailInfo.ThirdPartyPaymentReminder {
+               Amount = shared.Amount
+               PayeeBusinessName = shared.Payee.OrgName
+               PayerEmail = info.Payer.Email
+               SecurePaymentFormUrl = info.SecurePaymentFormUrl
+            })
 
    emailRef <! msg
 
@@ -253,55 +321,30 @@ let onStartEventPersisted
    =
    match evt with
    | StartEvent.PaymentRequested e ->
-      notifyPayerOfPaymentRequest (getEmailRef ()) e.Data.BaseInfo
+      notifyPayerOfPaymentRequest (getEmailRef ()) e.Data
 
 type PersistenceHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
    getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
-   sendEventToSelf: PlatformPaymentBaseInfo -> PlatformPaymentSagaEvent -> unit
+   sendEventToSelf: PaymentRequested -> PaymentRequestSagaEvent -> unit
 }
 
 let onEventPersisted
    (dep: PersistenceHandlerDependencies)
-   (previousState: PlatformPaymentSaga)
-   (state: PlatformPaymentSaga)
+   (previousState: PaymentRequestSaga)
+   (state: PaymentRequestSaga)
    (evt: Event)
    =
    let payment = state.PaymentInfo
-   let correlationId = PaymentRequestId.toCorrelationId payment.Id
    let emailRef = dep.getEmailRef ()
 
-   let notifyPayeeOfPaymentDecline () =
-      let msg =
-         EmailMessage.create
-            payment.Payee.OrgId
-            correlationId
-            (EmailInfo.PlatformPaymentRequested {
-               Amount = payment.Amount
-               PayeeBusinessName = payment.Payee.OrgName
-               PayerBusinessName = payment.Payer.OrgName
-            })
-
-      emailRef <! msg
-
-   let remindPayerOfPaymentRequest () =
-      let msg =
-         EmailMessage.create
-            payment.Payer.OrgId
-            correlationId
-            (EmailInfo.PlatformPaymentReminder {
-               Amount = payment.Amount
-               PayeeBusinessName = payment.Payee.OrgName
-               PayerBusinessName = payment.Payer.OrgName
-            })
-
-      emailRef <! msg
-
    match evt with
-   | Event.ScheduledPaymentReminderActivated -> remindPayerOfPaymentRequest ()
+   | Event.ScheduledPaymentReminderActivated ->
+      remindPayerOfPaymentRequest payment emailRef
    | Event.PaymentRequestCancelled -> ()
-   | Event.PaymentRequestDeclined -> notifyPayeeOfPaymentDecline ()
+   | Event.PaymentRequestDeclined ->
+      notifyPayeeOfPaymentDecline payment emailRef
    | Event.PaymentFulfilled _ -> ()
    | Event.PaymentFailed _ -> ()
    | Event.ResetInProgressActivityAttempts
@@ -315,6 +358,7 @@ let onEventPersisted
          | Activity.WaitForScheduledPaymentReminder _ ->
             dep.sendEventToSelf
                payment
-               PlatformPaymentSagaEvent.ScheduledPaymentReminderActivated
-         | Activity.NotifyPayeeOfDecline -> notifyPayeeOfPaymentDecline ()
+               PaymentRequestSagaEvent.ScheduledPaymentReminderActivated
+         | Activity.NotifyPayeeOfDecline ->
+            notifyPayeeOfPaymentDecline payment emailRef
          | Activity.WaitForPayment -> ()

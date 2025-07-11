@@ -4,7 +4,6 @@ open System
 open Lib.SharedTypes
 open Bank.Employee.Domain
 open Bank.Account.Domain
-open Bank.Transfer.Domain
 
 type OrgOnboardingEmailInfo = { Email: Email; BusinessName: string }
 
@@ -53,6 +52,13 @@ type PlatformPaymentEmailInfo = {
    Amount: decimal
 }
 
+type ThirdPartyPaymentEmailInfo = {
+   PayerEmail: Email
+   PayeeBusinessName: string
+   Amount: decimal
+   SecurePaymentFormUrl: string
+}
+
 type DomesticTransferEmailInfo = {
    SenderAccountName: string
    RecipientName: string
@@ -98,6 +104,8 @@ type EmailInfo =
    | PlatformPaymentRequested of PlatformPaymentEmailInfo
    | PlatformPaymentReminder of PlatformPaymentEmailInfo
    | PlatformPaymentDeclined of PlatformPaymentEmailInfo
+   | ThirdPartyPaymentRequested of ThirdPartyPaymentEmailInfo
+   | ThirdPartyPaymentReminder of ThirdPartyPaymentEmailInfo
    | DomesticTransfer of DomesticTransferEmailInfo
    | ScheduledTransferInsufficientBalanceWarning of
       ScheduledTransferInsufficientBalanceWarning

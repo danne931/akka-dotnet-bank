@@ -4,7 +4,7 @@ open Lib.SharedTypes
 open Lib.Saga
 open PurchaseSaga
 open DomesticTransferSaga
-open PlatformPaymentSaga
+open PaymentRequestSaga
 open PlatformTransferSaga
 open OrgOnboardingSaga
 open EmployeeOnboardingSaga
@@ -65,7 +65,7 @@ module Writer =
          | AppSaga.Saga.Purchase _ -> "Purchase"
          | AppSaga.Saga.DomesticTransfer _ -> "DomesticTransfer"
          | AppSaga.Saga.PlatformTransfer _ -> "PlatformTransfer"
-         | AppSaga.Saga.PlatformPayment _ -> "PlatformPayment"
+         | AppSaga.Saga.PaymentRequest _ -> "PaymentRequest"
          | AppSaga.Saga.Billing _ -> "BillingStatement"
 
       Sql.string name
@@ -125,11 +125,11 @@ module Writer =
             | PlatformTransferSagaStatus.InProgress -> inProgressOrExhausted
             | PlatformTransferSagaStatus.Completed -> "Completed"
             | PlatformTransferSagaStatus.Failed _ -> compensatingOrFailed
-         | AppSaga.Saga.PlatformPayment s ->
+         | AppSaga.Saga.PaymentRequest s ->
             match s.Status with
-            | PlatformPaymentSagaStatus.InProgress _ -> inProgressOrExhausted
-            | PlatformPaymentSagaStatus.Completed -> "Completed"
-            | PlatformPaymentSagaStatus.Failed _ -> compensatingOrFailed
+            | PaymentRequestSagaStatus.InProgress _ -> inProgressOrExhausted
+            | PaymentRequestSagaStatus.Completed -> "Completed"
+            | PaymentRequestSagaStatus.Failed _ -> compensatingOrFailed
          | AppSaga.Saga.Billing s ->
             match s.Status with
             | BillingSagaStatus.InProgress -> inProgressOrExhausted

@@ -264,30 +264,25 @@ let onPersisted
             let initiatorOfPaymentDecline = e.InitiatedBy
 
             let msg =
-               DeclinePlatformPaymentRequestCommand.create
-                  initiatorOfPaymentDecline
-                  {
-                     Reason =
-                        Some
-                           $"Outgoing payment declined by {e.Data.DeclinedBy.EmployeeName}"
-                     BaseInfo = {
-                        Payer = {
-                           OrgId = info.Sender.OrgId
-                           OrgName = info.Sender.Name
-                           ParentAccountId = info.Sender.ParentAccountId
-                        }
-                        Payee = {
-                           OrgId = info.Recipient.OrgId
-                           OrgName = info.Recipient.Name
-                           ParentAccountId = info.Recipient.ParentAccountId
-                           AccountId = info.Recipient.AccountId
-                        }
-                        Amount = info.Amount
-                        InitiatedById = initiatorOfPaymentRequest.Id
-                        Id = paymentId
+               DeclinePaymentRequestCommand.create initiatorOfPaymentDecline {
+                  Reason =
+                     Some
+                        $"Outgoing payment declined by {e.Data.DeclinedBy.EmployeeName}"
+                  PayerName = info.Sender.Name
+                  SharedDetails = {
+                     Payee = {
+                        OrgId = info.Recipient.OrgId
+                        OrgName = info.Recipient.Name
+                        ParentAccountId = info.Recipient.ParentAccountId
+                        AccountId = info.Recipient.AccountId
                      }
+                     Amount = info.Amount
+                     Id = paymentId
+                     Expiration = DateTime.UtcNow
+                     Memo = ""
                   }
-               |> AccountCommand.DeclinePlatformPayment
+               }
+               |> AccountCommand.DeclinePaymentRequest
                |> AccountMessage.StateChange
                |> GuaranteedDelivery.message (
                   ParentAccountId.get info.Recipient.ParentAccountId

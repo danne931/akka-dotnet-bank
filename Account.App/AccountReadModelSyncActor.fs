@@ -43,23 +43,29 @@ type SqlParamsDerivedFromAccountEvents = {
    DomesticTransferRecipientUpdate: SqlParams
 }
 
-let private platformPaymentBaseSqlParams (p: PlatformPaymentBaseInfo) = [
-   "paymentId", PaymentSqlWriter.paymentId p.Id
+let private paymentRequestBaseSqlParams (p: PaymentRequested) =
+   let requestType =
+      match p with
+      | PaymentRequested.Platform _ -> "Platform"
+      | PaymentRequested.ThirdParty _ -> "ThirdParty"
 
-   "initiatedById", PaymentSqlWriter.initiatedById p.InitiatedById
+   let shared = p.SharedDetails
 
-   "payeeOrgId", PaymentSqlWriter.payeeOrgId p.Payee.OrgId
+   [
+      "paymentId", PaymentSqlWriter.paymentId shared.Id
 
-   "payeeAccountId", PaymentSqlWriter.payeeAccountId p.Payee.AccountId
+      "payeeOrgId", PaymentSqlWriter.payeeOrgId shared.Payee.OrgId
 
-   "payeeParentAccountId",
-   PaymentSqlWriter.payeeParentAccountId p.Payee.ParentAccountId
+      "payeeAccountId", PaymentSqlWriter.payeeAccountId shared.Payee.AccountId
 
-   "payerOrgId", PaymentSqlWriter.Platform.payerOrgId p.Payer.OrgId
+      "payeeParentAccountId",
+      PaymentSqlWriter.payeeParentAccountId shared.Payee.ParentAccountId
 
-   "payerParentAccountId",
-   PaymentSqlWriter.Platform.payerParentAccountId p.Payer.ParentAccountId
-]
+      "amount", PaymentSqlWriter.amount shared.Amount
+      "requestType", Sql.string requestType
+      "expiration", PaymentSqlWriter.expiration shared.Expiration
+      "memo", PaymentSqlWriter.memo shared.Memo
+   ]
 
 let private internalTransferWithinOrgBaseSqlParams
    (o: BaseInternalTransferWithinOrgInfo)
@@ -799,34 +805,46 @@ let sqlParamReducer
                   qParams :: acc.DomesticTransferRecipientUpdate
          }
       | _ -> acc
-   | AccountEvent.PlatformPaymentRequested e ->
-      let pInfo = e.Data.BaseInfo
+   | AccountEvent.PaymentRequested e ->
+      let shared = e.Data.SharedDetails
       let status = PaymentRequestStatus.Requested
 
       let payParams =
-         platformPaymentBaseSqlParams pInfo
-         @ [
-            "amount", PaymentSqlWriter.amount pInfo.Amount
-            "requestType", Sql.string "Platform"
-            "expiration", PaymentSqlWriter.expiration e.Data.Expiration
-            "memo", PaymentSqlWriter.memo e.Data.Memo
+         [
+            "initiatedById", PaymentSqlWriter.initiatedById e.InitiatedBy.Id
             "status", PaymentSqlWriter.status status
             "statusDetail", PaymentSqlWriter.statusDetail status
          ]
+         @ paymentRequestBaseSqlParams e.Data
 
-
-      let platformPayParams = platformPaymentBaseSqlParams pInfo
-
-      {
+      let acc = {
          acc with
             Payment = payParams :: acc.Payment
-            PlatformPayment = platformPayParams :: acc.PlatformPayment
       }
-   | AccountEvent.PlatformPaymentRequestCancelled e ->
+
+      match e.Data with
+      | Platform info ->
+         let payer = info.Payer
+
+         let platformPayParams = [
+            "paymentId", PaymentSqlWriter.paymentId shared.Id
+            "payerOrgId", PaymentSqlWriter.Platform.payerOrgId payer.OrgId
+            "payerParentAccountId",
+            PaymentSqlWriter.Platform.payerParentAccountId payer.ParentAccountId
+         ]
+
+         {
+            acc with
+               PlatformPayment = platformPayParams :: acc.PlatformPayment
+         }
+      | ThirdParty info ->
+         // TODO
+         acc
+   | AccountEvent.PaymentRequestCancelled e ->
       let status = PaymentRequestStatus.Cancelled
 
       let pParams = [
-         "paymentId", PaymentSqlWriter.paymentId e.Data.BaseInfo.Id
+         "paymentId", PaymentSqlWriter.paymentId e.Data.SharedDetails.Id
          "status", PaymentSqlWriter.status status
          "statusDetail", PaymentSqlWriter.statusDetail status
       ]
@@ -835,11 +853,11 @@ let sqlParamReducer
          acc with
             PaymentUpdate = pParams :: acc.PaymentUpdate
       }
-   | AccountEvent.PlatformPaymentRequestDeclined e ->
+   | AccountEvent.PaymentRequestDeclined e ->
       let status = PaymentRequestStatus.Declined
 
       let pParams = [
-         "paymentId", PaymentSqlWriter.paymentId e.Data.BaseInfo.Id
+         "paymentId", PaymentSqlWriter.paymentId e.Data.SharedDetails.Id
          "status", PaymentSqlWriter.status status
          "statusDetail", PaymentSqlWriter.statusDetail status
       ]

@@ -116,9 +116,9 @@ let applyEvent (account: Account) (evt: AccountEvent) =
          PendingDeductions =
             account.PendingDeductions.Remove e.Data.BaseInfo.Amount
      }
-   | PlatformPaymentRequested _ -> account
-   | PlatformPaymentRequestCancelled _ -> account
-   | PlatformPaymentRequestDeclined _ -> account
+   | PaymentRequested _ -> account
+   | PaymentRequestCancelled _ -> account
+   | PaymentRequestDeclined _ -> account
    | AutoTransferRuleConfigured e -> {
       account with
          AutoTransferRule = Some e.Data.Config
@@ -364,41 +364,35 @@ module private StateTransition =
          map InternalTransferBetweenOrgsDeposited account
          <| DepositInternalTransferBetweenOrgsCommand.toEvent cmd
 
-   let requestPlatformPayment
-      (account: Account)
-      (cmd: RequestPlatformPaymentCommand)
-      =
+   let requestPayment (account: Account) (cmd: RequestPaymentCommand) =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
       else
-         map
-            PlatformPaymentRequested
-            account
-            (RequestPlatformPaymentCommand.toEvent cmd)
+         map PaymentRequested account (RequestPaymentCommand.toEvent cmd)
 
-   let cancelPlatformPaymentRequest
+   let cancelPaymentRequest
       (account: Account)
-      (cmd: CancelPlatformPaymentRequestCommand)
+      (cmd: CancelPaymentRequestCommand)
       =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
       else
          map
-            PlatformPaymentRequestCancelled
+            PaymentRequestCancelled
             account
-            (CancelPlatformPaymentRequestCommand.toEvent cmd)
+            (CancelPaymentRequestCommand.toEvent cmd)
 
-   let declinePlatformPaymentRequest
+   let declinePaymentRequest
       (account: Account)
-      (cmd: DeclinePlatformPaymentRequestCommand)
+      (cmd: DeclinePaymentRequestCommand)
       =
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account
       else
          map
-            PlatformPaymentRequestDeclined
+            PaymentRequestDeclined
             account
-            (DeclinePlatformPaymentRequestCommand.toEvent cmd)
+            (DeclinePaymentRequestCommand.toEvent cmd)
 
    let closeAccount (account: Account) (cmd: CloseAccountCommand) =
       map AccountEvent.AccountClosed account (CloseAccountCommand.toEvent cmd)
@@ -503,12 +497,12 @@ let stateTransition (account: Account) (command: AccountCommand) =
    | AccountCommand.UpdateDomesticTransferProgress cmd ->
       StateTransition.domesticTransferProgress account cmd
    | AccountCommand.CloseAccount cmd -> StateTransition.closeAccount account cmd
-   | AccountCommand.RequestPlatformPayment cmd ->
-      StateTransition.requestPlatformPayment account cmd
-   | AccountCommand.CancelPlatformPayment cmd ->
-      StateTransition.cancelPlatformPaymentRequest account cmd
-   | AccountCommand.DeclinePlatformPayment cmd ->
-      StateTransition.declinePlatformPaymentRequest account cmd
+   | AccountCommand.RequestPayment cmd ->
+      StateTransition.requestPayment account cmd
+   | AccountCommand.CancelPaymentRequest cmd ->
+      StateTransition.cancelPaymentRequest account cmd
+   | AccountCommand.DeclinePaymentRequest cmd ->
+      StateTransition.declinePaymentRequest account cmd
    | AccountCommand.ConfigureAutoTransferRule cmd ->
       StateTransition.configureAutoTransferRule account cmd
    | AccountCommand.DeleteAutoTransferRule cmd ->

@@ -29,12 +29,9 @@ let start (app: WebApplication) =
    app
       .MapPost(
          PaymentPath.RequestPayment,
-         Func<ActorSystem, RequestPlatformPaymentCommand, Task<IResult>>
-            (fun sys cmd ->
-               processAccountCommand
-                  sys
-                  (AccountCommand.RequestPlatformPayment cmd)
-               |> RouteUtil.unwrapTaskResult)
+         Func<ActorSystem, RequestPaymentCommand, Task<IResult>>(fun sys cmd ->
+            processAccountCommand sys (AccountCommand.RequestPayment cmd)
+            |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)
    |> ignore
@@ -42,11 +39,11 @@ let start (app: WebApplication) =
    app
       .MapPost(
          PaymentPath.CancelPayment,
-         Func<ActorSystem, CancelPlatformPaymentRequestCommand, Task<IResult>>
+         Func<ActorSystem, CancelPaymentRequestCommand, Task<IResult>>
             (fun sys cmd ->
                processAccountCommand
                   sys
-                  (AccountCommand.CancelPlatformPayment cmd)
+                  (AccountCommand.CancelPaymentRequest cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)
@@ -55,11 +52,11 @@ let start (app: WebApplication) =
    app
       .MapPost(
          PaymentPath.DeclinePayment,
-         Func<ActorSystem, DeclinePlatformPaymentRequestCommand, Task<IResult>>
+         Func<ActorSystem, DeclinePaymentRequestCommand, Task<IResult>>
             (fun sys cmd ->
                processAccountCommand
                   sys
-                  (AccountCommand.DeclinePlatformPayment cmd)
+                  (AccountCommand.DeclinePaymentRequest cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)
