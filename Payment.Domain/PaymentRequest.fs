@@ -111,10 +111,20 @@ module PlatformPaymentRequest =
          OriginatedFromPaymentRequest = Some shared.Id
       }
 
+type PaymentPortalShortId =
+   | ShortId of string
+
+   override x.ToString() =
+      match x with
+      | ShortId s -> s
+
+   member x.AsUrl = $"/payment/{x}"
+
 [<RequireQualifiedAccess>]
 type ThirdPartyPaymentRequest = {
    SharedDetails: PaymentRequestSharedDetails
    Payer: ThirdPartyPayer
+   ShortId: PaymentPortalShortId
 }
 
 [<RequireQualifiedAccess>]
@@ -164,6 +174,6 @@ type PaymentRequest =
 type PaymentRequestSummary = {
    // Payment requests to orgs on the platform or outside the platform.
    OutgoingRequests: PaymentRequest list
-   // Payment request from orgs on the platform.
-   IncomingRequests: PlatformPaymentRequest list
+   // Payment request from orgs on the platform (TODO: or entities outside the platform)
+   IncomingRequests: PaymentRequest list
 }

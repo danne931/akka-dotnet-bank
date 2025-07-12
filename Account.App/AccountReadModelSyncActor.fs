@@ -32,6 +32,7 @@ type SqlParamsDerivedFromAccountEvents = {
    Payment: SqlParams
    PaymentUpdate: SqlParams
    PlatformPayment: SqlParams
+   ThirdPartyPayment: SqlParams
    Transfer: SqlParams
    InternalTransferWithinOrg: SqlParams
    InternalTransferBetweenOrgs: SqlParams
@@ -838,8 +839,18 @@ let sqlParamReducer
                PlatformPayment = platformPayParams :: acc.PlatformPayment
          }
       | ThirdParty info ->
-         // TODO
-         acc
+         let thirdPartyPayParams = [
+            "paymentId", PaymentSqlWriter.paymentId shared.Id
+            "payerEmail",
+            PaymentSqlWriter.ThirdParty.payerEmail info.Payer.Email
+            "payerName", PaymentSqlWriter.ThirdParty.payerName info.Payer.Name
+            "shortId", PaymentSqlWriter.ThirdParty.shortId info.ShortId
+         ]
+
+         {
+            acc with
+               ThirdPartyPayment = thirdPartyPayParams :: acc.ThirdPartyPayment
+         }
    | AccountEvent.PaymentRequestCancelled e ->
       let status = PaymentRequestStatus.Cancelled
 
@@ -947,6 +958,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          Payment = []
          PaymentUpdate = []
          PlatformPayment = []
+         ThirdPartyPayment = []
          Transfer = []
          InternalTransferWithinOrg = []
          InternalTransferBetweenOrgs = []
@@ -1150,6 +1162,22 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       DO NOTHING;
       """,
       sqlParamsDerivedFromAccountEvents.PlatformPayment
+
+      $"""
+      INSERT into {PaymentSqlMapper.Table.thirdPartyPayment}
+         ({PaymentFields.paymentId},
+          {PaymentFields.ThirdParty.payerEmail},
+          {PaymentFields.ThirdParty.payerName},
+          {PaymentFields.ThirdParty.shortId})
+      VALUES
+         (@paymentId,
+          @payerEmail,
+          @payerName,
+          @shortId)
+      ON CONFLICT ({PaymentFields.paymentId})
+      DO NOTHING;
+      """,
+      sqlParamsDerivedFromAccountEvents.ThirdPartyPayment
 
       $"""
       INSERT into {TransferSqlMapper.Table.transfer}

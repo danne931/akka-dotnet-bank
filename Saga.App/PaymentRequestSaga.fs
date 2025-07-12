@@ -261,7 +261,7 @@ let private notifyPayerOfPaymentRequest emailRef (payment: PaymentRequested) =
                Amount = amount
                PayeeBusinessName = payeeOrgName
                PayerEmail = info.Payer.Email
-               SecurePaymentFormUrl = info.SecurePaymentFormUrl
+               SecurePaymentFormUrl = info.ShortId.AsUrl
             })
 
    emailRef <! msg
@@ -310,7 +310,7 @@ let private remindPayerOfPaymentRequest
                Amount = shared.Amount
                PayeeBusinessName = shared.Payee.OrgName
                PayerEmail = info.Payer.Email
-               SecurePaymentFormUrl = info.SecurePaymentFormUrl
+               SecurePaymentFormUrl = info.ShortId.AsUrl
             })
 
    emailRef <! msg

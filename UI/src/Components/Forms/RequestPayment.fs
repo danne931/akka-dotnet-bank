@@ -13,11 +13,14 @@ open UIDomain.Account
 open Lib.Validators
 open Bank.Forms.FormContainer
 open Lib.SharedTypes
+open Lib.Time
 
 type Values = {
    Amount: string
    PayeeAccountId: string
    PayerOrgId: string
+   PayerName: string
+   PayerEmail: string
    Memo: string
    Expiration: string
 }
@@ -72,6 +75,32 @@ let expirationField =
 
 let expirationForm = Form.succeed id |> Form.append expirationField
 
+let fieldPayeeAccountSelect
+   (payeeDestinationAccounts: Map<AccountId, Account>)
+   =
+   let payeeAccountOptions =
+      payeeDestinationAccounts
+      |> Map.toList
+      |> List.map (fun (accountId, a) ->
+         string accountId, $"{a.Name} ({Money.format a.AvailableBalance})")
+      |> List.sortBy snd
+
+   Form.selectField {
+      Parser = Ok
+      Value = _.PayeeAccountId
+      Update =
+         fun newValue values -> {
+            values with
+               PayeeAccountId = newValue
+         }
+      Error = fun _ -> None
+      Attributes = {
+         Label = "Payee Destination Account:"
+         Placeholder = "No account selected"
+         Options = payeeAccountOptions
+      }
+   }
+
 let formPlatformPayment
    (payeeOrg: Org)
    (payeeDestinationAccounts: Map<AccountId, Account>)
@@ -96,30 +125,6 @@ let formPlatformPayment
             Label = "Payer Organization:"
             Placeholder = "No organization selected"
             Options = orgPayerOptions
-         }
-      }
-
-   let payeeAccountOptions =
-      payeeDestinationAccounts
-      |> Map.toList
-      |> List.map (fun (accountId, a) ->
-         string accountId, $"{a.Name} ({Money.format a.AvailableBalance})")
-      |> List.sortBy snd
-
-   let fieldPayeeAccountSelect =
-      Form.selectField {
-         Parser = Ok
-         Value = _.PayeeAccountId
-         Update =
-            fun newValue values -> {
-               values with
-                  PayeeAccountId = newValue
-            }
-         Error = fun _ -> None
-         Attributes = {
-            Label = "Payee Destination Account:"
-            Placeholder = "No account selected"
-            Options = payeeAccountOptions
          }
       }
 
@@ -148,7 +153,7 @@ let formPlatformPayment
             SharedDetails = {
                Id = Guid.NewGuid() |> PaymentRequestId
                Amount = amount
-               Expiration = expiration.ToUniversalTime()
+               Expiration = expiration
                Payee = {
                   OrgId = payeeOrg.OrgId
                   OrgName = payeeOrg.Name
@@ -171,7 +176,85 @@ let formPlatformPayment
    |> Form.append amountField
    |> Form.append memoField
    |> Form.append expirationForm
-   |> Form.append fieldPayeeAccountSelect
+   |> Form.append (fieldPayeeAccountSelect payeeDestinationAccounts)
+
+let formThirdPartyPayment
+   (payeeOrg: Org)
+   (payeeDestinationAccounts: Map<AccountId, Account>)
+   (initiatedBy: Initiator)
+   : Form.Form<Values, Msg<Values>, IReactProperty>
+   =
+   let fieldPayerName =
+      Form.textField {
+         Parser = Ok
+         Value = _.PayerName
+         Update = fun newValue values -> { values with PayerName = newValue }
+         Error = fun _ -> None
+         Attributes = {
+            Label = "Payer Name:"
+            Placeholder = "Payer Name"
+            HtmlAttributes = []
+         }
+      }
+
+   let fieldPayerEmail =
+      Form.textField {
+         Parser = Email.ofString "Payer Email" >> validationErrorsHumanFriendly
+         Value = _.PayerEmail
+         Update = fun newValue values -> { values with PayerEmail = newValue }
+         Error = fun _ -> None
+         Attributes = {
+            Label = "Payer Email:"
+            Placeholder = "Payer Email"
+            HtmlAttributes = []
+         }
+      }
+
+   let onSubmit
+      amount
+      memo
+      expiration
+      (selectedDestinationAccountId: string)
+      payerName
+      payerEmail
+      =
+      let payeeAccountId =
+         selectedDestinationAccountId |> Guid.Parse |> AccountId
+
+      let payeeAccount = payeeDestinationAccounts[payeeAccountId]
+
+      let info =
+         PaymentRequested.ThirdParty {
+            Payer = { Name = payerName; Email = payerEmail }
+            ShortId = PaymentPortalShortId.ShortId ""
+            SharedDetails = {
+               Id = Guid.NewGuid() |> PaymentRequestId
+               Amount = amount
+               Expiration = expiration
+               Memo = memo
+               Payee = {
+                  OrgId = payeeOrg.OrgId
+                  OrgName = payeeOrg.Name
+                  AccountId = payeeAccountId
+                  ParentAccountId = payeeAccount.ParentAccountId
+               }
+            }
+         }
+
+      let cmd =
+         RequestPaymentCommand.create initiatedBy info
+         |> AccountCommand.RequestPayment
+         |> FormCommand.Account
+
+      Msg.GetAndSubmit(FormEntityId.Account payeeAccountId, cmd)
+
+   Form.succeed onSubmit
+   |> Form.append amountField
+   |> Form.append memoField
+   |> Form.append expirationForm
+   |> Form.append (fieldPayeeAccountSelect payeeDestinationAccounts)
+   |> Form.append fieldPayerName
+   |> Form.append fieldPayerEmail
 
 [<ReactComponent>]
 let PaymentRequestFormComponent
@@ -195,8 +278,10 @@ let PaymentRequestFormComponent
       Amount = ""
       PayeeAccountId = defaultDestinationAccount
       PayerOrgId = ""
+      PayerName = ""
+      PayerEmail = ""
       Memo = ""
-      Expiration = (DateTime.Now.AddMonths 1).ToString "MM/dd/yyyy"
+      Expiration = DateTime.format (DateTime.Now.AddMonths 1)
    }
 
    let initiatedBy = session.AsInitiator
@@ -220,10 +305,17 @@ let PaymentRequestFormComponent
             Html.option [
                attr.value (string PaymentRequestType.ThirdParty)
                attr.text "To org/person outside the platform"
-               attr.disabled true
             ]
          ]
       ]
+
+      let useEventSubscription = Some [ SignalREventProvider.EventType.Account ]
+      let componentName = "RequestPaymentForm"
+
+      let onSubmit =
+         function
+         | FormSubmitReceipt.Account receipt -> onSubmit receipt
+         | _ -> ()
 
       match selectedPaymentType with
       | PaymentRequestType.Platform ->
@@ -251,17 +343,26 @@ let PaymentRequestFormComponent
                            orgs
                            initiatedBy
                      Action = None
-                     OnSubmit =
-                        function
-                        | FormSubmitReceipt.Account receipt -> onSubmit receipt
-                        | _ -> ()
+                     OnSubmit = onSubmit
                      Session = session
-                     ComponentName = "RequestPaymentForm"
-                     UseEventSubscription =
-                        Some [ SignalREventProvider.EventType.Account ]
+                     ComponentName = componentName
+                     UseEventSubscription = useEventSubscription
                   |}
                | Deferred.Resolved(Ok None) ->
                   Html.p $"No orgs found by search query {searchInput}."
                | _ -> Html.none)
-      | PaymentRequestType.ThirdParty -> Html.p "Not implemented."
+      | PaymentRequestType.ThirdParty ->
+         FormContainer {|
+            InitialValues = initValues
+            Form =
+               formThirdPartyPayment
+                  payeeOrg
+                  payeeDestinationAccounts
+                  initiatedBy
+            Action = None
+            OnSubmit = onSubmit
+            Session = session
+            ComponentName = componentName
+            UseEventSubscription = useEventSubscription
+         |}
    ]

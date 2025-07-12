@@ -33,7 +33,7 @@ type PlatformPaymentRequested = {
 type ThirdPartyPaymentRequested = {
    SharedDetails: PaymentRequestSharedEventDetails
    Payer: ThirdPartyPayer
-   SecurePaymentFormUrl: string
+   ShortId: PaymentPortalShortId
 }
 
 type PaymentRequested =
@@ -73,6 +73,7 @@ module PaymentRequested =
          PaymentRequest.ThirdParty {
             SharedDetails = sharedDetails
             Payer = p.Payer
+            ShortId = p.ShortId
          }
 
 type PaymentRequestCancelled = {

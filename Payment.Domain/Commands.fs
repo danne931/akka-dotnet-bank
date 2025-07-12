@@ -2,6 +2,10 @@ namespace Bank.Payment.Domain
 
 open Validus
 
+#if !FABLE_COMPILER
+open NanoidDotNet
+#endif
+
 open Lib.SharedTypes
 
 type RequestPaymentCommand = Command<PaymentRequested>
@@ -25,10 +29,10 @@ module RequestPaymentCommand =
          let shared = cmd.Data.SharedDetails
          let! _ = Check.String.notEmpty "memo" shared.Memo
 
+         let expiration = shared.Expiration.ToUniversalTime()
+
          let! _ =
-            Lib.Validators.datePresentOrFutureValidator
-               "due date"
-               shared.Expiration
+            Lib.Validators.datePresentOrFutureValidator "due date" expiration
 
          match cmd.Data with
          | Platform info ->
@@ -44,12 +48,33 @@ module RequestPaymentCommand =
                   "Payer org = Payee org"
                   payeeOrgId
 
+            let info = {
+               info with
+                  SharedDetails.Expiration = expiration
+            }
+
+            let cmd = { cmd with Data = Platform info }
             return BankEvent.create<PaymentRequested> cmd
          | ThirdParty info ->
-            // TODO: validate info.SecurePaymentFormUrl
-            // TODO: validate info.Payer.Email
             let! _ =
                Lib.Validators.amountValidator "Payment amount" shared.Amount
+
+            // Generate nanoid on server but not in browser.
+#if FABLE_COMPILER
+            let shortId = PaymentPortalShortId.ShortId ""
+#else
+            let shortId =
+               Nanoid.Generate(Nanoid.Alphabets.LowercaseLettersAndDigits, 10)
+               |> PaymentPortalShortId.ShortId
+#endif
+
+            let info = {
+               info with
+                  SharedDetails.Expiration = expiration
+                  ShortId = shortId
+            }
+
+            let cmd = { cmd with Data = ThirdParty info }
 
             return BankEvent.create<PaymentRequested> cmd
       }

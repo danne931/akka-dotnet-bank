@@ -41,6 +41,7 @@ module PaymentFields =
    module ThirdParty =
       let payerEmail = "payer_email"
       let payerName = "payer_name"
+      let shortId = "payment_short_id"
 
 module PaymentSqlReader =
    let paymentId (read: RowReader) =
@@ -101,6 +102,11 @@ module PaymentSqlReader =
       let payerName (read: RowReader) =
          PaymentFields.ThirdParty.payerName |> read.string
 
+      let shortId (read: RowReader) =
+         PaymentFields.ThirdParty.shortId
+         |> read.string
+         |> PaymentPortalShortId.ShortId
+
 module PaymentSqlWriter =
    let paymentId (paymentId: PaymentRequestId) =
       let (PaymentRequestId id) = paymentId
@@ -156,3 +162,5 @@ module PaymentSqlWriter =
    module ThirdParty =
       let payerEmail (email: Email) = email |> string |> Sql.string
       let payerName = Sql.string
+
+      let shortId (PaymentPortalShortId.ShortId shortId) = Sql.string shortId

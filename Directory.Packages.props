@@ -4,7 +4,6 @@
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
-
   <PropertyGroup Label="SharedVersions">
     <AkkaVersion>1.5.45</AkkaVersion>
     <AkklingVersion>0.17.0</AkklingVersion>
@@ -12,7 +11,6 @@
     <QuartzVersion>3.8.1</QuartzVersion>
     <FontAwesomeVersion>3.0.0</FontAwesomeVersion>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageVersion Include="Akka" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Cluster" Version="$(AkkaVersion)" />
@@ -47,6 +45,7 @@
     <PackageVersion Include="FSharp.SystemTextJson" Version="1.3.13" />
     <PackageVersion Include="FsToolkit.ErrorHandling.TaskResult" Version="4.18.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="9.0.1" />
+    <PackageVersion Include="Nanoid" Version="3.1.0" />
     <PackageVersion Include="Npgsql.FSharp" Version="8.0.0" />
     <PackageVersion Include="Petabridge.Cmd.Cluster" Version="$(PbmVersion)" />
     <PackageVersion Include="Petabridge.Cmd.Cluster.Sharding" Version="$(PbmVersion)" />

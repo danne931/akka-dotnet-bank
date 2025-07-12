@@ -822,6 +822,7 @@ a payment to them for services rendered.';
 --- THIRD PARTY PAYMENTS ---
 CREATE TABLE payment_request_third_party(
    payment_id UUID PRIMARY KEY REFERENCES payment_request,
+   payment_short_id VARCHAR(10) NOT NULL,
    payer_email VARCHAR(255) NOT NULL,
    payer_name VARCHAR(100) NOT NULL
 );

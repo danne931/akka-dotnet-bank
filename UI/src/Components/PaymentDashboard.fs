@@ -43,17 +43,18 @@ type Msg =
 let init () =
    { Payments = Deferred.Idle }, Cmd.ofMsg (LoadPayments Started)
 
-let updatePlatformPaymentStatus
+let updatePaymentStatus
    (targetId: PaymentRequestId)
    (status: PaymentRequestStatus)
-   (payment: PlatformPaymentRequest)
-   : PlatformPaymentRequest
+   (payment: PaymentRequest)
+   : PaymentRequest
    =
    if payment.SharedDetails.Id = targetId then
-      {
-         payment with
-            SharedDetails.Status = status
-      }
+      match payment with
+      | PaymentRequest.Platform p ->
+         PaymentRequest.Platform { p with SharedDetails.Status = status }
+      | PaymentRequest.ThirdParty p ->
+         PaymentRequest.ThirdParty { p with SharedDetails.Status = status }
    else
       payment
 
@@ -99,23 +100,16 @@ let update orgId msg state =
                               OutgoingRequests =
                                  payment :: paymentSummary.OutgoingRequests
                         }
-                     | AccountEvent.PaymentRequestCancelled e ->
-                        let updateStatus =
-                           updatePlatformPaymentStatus
-                              e.Data.SharedDetails.Id
-                              PaymentRequestStatus.Cancelled
-
-                        {
-                           paymentSummary with
-                              OutgoingRequests =
-                                 paymentSummary.OutgoingRequests
-                                 |> List.map (function
-                                    | PaymentRequest.Platform p ->
-                                       PaymentRequest.Platform(updateStatus p)
-                                    // NOT yet implemented
-                                    | PaymentRequest.ThirdParty p ->
-                                       PaymentRequest.ThirdParty p)
-                        }
+                     | AccountEvent.PaymentRequestCancelled e -> {
+                        paymentSummary with
+                           OutgoingRequests =
+                              paymentSummary.OutgoingRequests
+                              |> List.map (
+                                 updatePaymentStatus
+                                    e.Data.SharedDetails.Id
+                                    PaymentRequestStatus.Cancelled
+                              )
+                       }
                      | AccountEvent.InternalTransferBetweenOrgsPending e ->
                         match e.Data.BaseInfo.FromPaymentRequest with
                         | Some paymentId ->
@@ -130,28 +124,28 @@ let update orgId msg state =
                                  IncomingRequests =
                                     paymentSummary.IncomingRequests
                                     |> List.map (
-                                       updatePlatformPaymentStatus
-                                          paymentId
-                                          status
+                                       updatePaymentStatus paymentId status
                                     )
                            }
                         | None -> paymentSummary
-                     | AccountEvent.PaymentRequestDeclined e ->
-                        let updateStatus =
-                           updatePlatformPaymentStatus
-                              e.Data.SharedDetails.Id
-                              PaymentRequestStatus.Declined
-
-                        {
-                           paymentSummary with
-                              IncomingRequests =
-                                 paymentSummary.IncomingRequests
-                                 |> List.map updateStatus
-                        }
+                     | AccountEvent.PaymentRequestDeclined e -> {
+                        paymentSummary with
+                           IncomingRequests =
+                              paymentSummary.IncomingRequests
+                              |> List.map (
+                                 updatePaymentStatus
+                                    e.Data.SharedDetails.Id
+                                    PaymentRequestStatus.Declined
+                              )
+                       }
                      | _ -> paymentSummary)
                   state.Payments
       },
-      Cmd.none
+      match receipt.PendingEvent with
+      | AccountEvent.PaymentRequested e ->
+         Alerts.toastSuccessCommand
+            $"Payment requested from {e.Data.PayerName}."
+      | _ -> Cmd.none
 
 let selectedPayment
    (payments: Deferred<PaymentsMaybe>)
@@ -162,7 +156,6 @@ let selectedPayment
    | Deferred.Resolved(Ok(Some payments)) ->
       payments.IncomingRequests
       |> List.tryFind (fun p -> p.SharedDetails.Id = selectedId)
-      |> Option.map PaymentRequest.Platform
       |> Option.orElse (
          payments.OutgoingRequests
          |> List.tryFind (fun p -> p.SharedDetails.Id = selectedId)
@@ -171,12 +164,12 @@ let selectedPayment
 
 let renderIncomingTableRow
    (progress: CommandApprovalProgress.T seq)
-   (payment: PlatformPaymentRequest)
+   (payment: PaymentRequest)
    (selectedId: PaymentRequestId option)
    =
    let sharedDetails = payment.SharedDetails
    let paymentId = sharedDetails.Id
-   let statusDisplay = Payment.statusDisplay (PaymentRequest.Platform payment)
+   let statusDisplay = Payment.statusDisplay payment
 
    let paymentPendingApproval =
       paymentFulfillmentPendingApproval progress paymentId
@@ -214,7 +207,7 @@ let renderIncomingTableRow
 
 let renderIncomingTable
    (progress: CommandApprovalProgress.T seq)
-   (payments: PlatformPaymentRequest list)
+   (payments: PaymentRequest list)
    (selectedId: PaymentRequestId option)
    =
    Html.table [
@@ -234,9 +227,7 @@ let renderIncomingTable
          ]
 
          Html.tbody [
-            let payments =
-               payments
-               |> List.sortBy (PaymentRequest.Platform >> _.DisplayPriority)
+            let payments = payments |> List.sortBy _.DisplayPriority
 
             for payment in payments ->
                renderIncomingTableRow progress payment selectedId
@@ -265,6 +256,8 @@ let renderTableRow
       attr.children [
          Html.td (DateTime.formatShort sharedDetails.CreatedAt)
 
+         Html.td (DateTime.formatShort sharedDetails.Expiration)
+
          match payment with
          | PaymentRequest.Platform p -> Html.td p.Payer.OrgName
          | PaymentRequest.ThirdParty p -> Html.td p.Payer.Name
@@ -292,6 +285,8 @@ let renderTable
          Html.thead [
             Html.tr [
                Html.th [ attr.scope "col"; attr.text "Requested on" ]
+
+               Html.th [ attr.scope "col"; attr.text "Due on" ]
 
                Html.th [ attr.scope "col"; attr.text "To" ]
 

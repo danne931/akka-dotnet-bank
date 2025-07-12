@@ -92,6 +92,14 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
 
       state, SweetAlert.Run confirm
    | ConfirmCancelPaymentRequest(initiator, reason, payment, Started) ->
+      let confirmCancel result =
+         ConfirmCancelPaymentRequest(
+            initiator,
+            reason,
+            payment,
+            Finished result
+         )
+
       let cancel = async {
          let! accountMaybe = getAccount payment
 
@@ -107,24 +115,12 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
                |> AccountCommand.CancelPaymentRequest
 
             let! res = AccountService.submitCommand account cmd
-
-            return
-               ConfirmCancelPaymentRequest(
-                  initiator,
-                  reason,
-                  payment,
-                  Finished res
-               )
+            return confirmCancel res
          | _ ->
-            let err = Err.UnexpectedError "Error" |> Error
-
             return
-               ConfirmCancelPaymentRequest(
-                  initiator,
-                  reason,
-                  payment,
-                  Finished err
-               )
+               Err.UnexpectedError "Error getting account"
+               |> Error
+               |> confirmCancel
       }
 
       state, Cmd.fromAsync cancel
@@ -137,24 +133,19 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
       Log.error (string err)
       state, Alerts.toastCommand err
    | ConfirmDeclinePaymentRequest(initiator, reason, payment, Started) ->
+      let confirmDecline result =
+         ConfirmDeclinePaymentRequest(
+            initiator,
+            reason,
+            payment,
+            Finished result
+         )
+
       let decline = async {
          let! accountOpt = getAccount payment
 
-         match payment, accountOpt with
-         | PaymentRequest.ThirdParty _, _ ->
-            let err =
-               NotImplementedException "third party payment"
-               |> Err.NotImplementedError
-               |> Error
-
-            return
-               ConfirmDeclinePaymentRequest(
-                  initiator,
-                  reason,
-                  payment,
-                  Finished err
-               )
-         | PaymentRequest.Platform p, Ok(Some account) ->
+         match accountOpt with
+         | Ok(Some account) ->
             let cmd =
                DeclinePaymentRequestCommand.create initiator {
                   Reason = reason
@@ -165,24 +156,12 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
                |> AccountCommand.DeclinePaymentRequest
 
             let! res = AccountService.submitCommand account cmd
-
-            return
-               ConfirmDeclinePaymentRequest(
-                  initiator,
-                  reason,
-                  payment,
-                  Finished res
-               )
+            return confirmDecline res
          | _ ->
-            let err = Err.UnexpectedError "Error" |> Error
-
             return
-               ConfirmDeclinePaymentRequest(
-                  initiator,
-                  reason,
-                  payment,
-                  Finished err
-               )
+               Err.UnexpectedError "Error getting account"
+               |> Error
+               |> confirmDecline
       }
 
       state, Cmd.fromAsync decline
@@ -199,6 +178,15 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
          Alerts.toastSuccessCommand "Submitted payment for approval."
          Cmd.navigate Routes.PaymentUrl.BasePath
       ]
+
+let private renderInfoRow (label: string) (value: string) =
+   Html.div [
+      Html.small label
+      Html.p [
+         attr.style [ style.marginLeft 10; style.display.inlineElement ]
+         attr.text value
+      ]
+   ]
 
 [<ReactComponent>]
 let PaymentDetailComponent
@@ -262,73 +250,39 @@ let PaymentDetailComponent
       Html.br []
 
       if isPaymentRequestOutgoing then
-         Html.div [
-            Html.small "Request sent to:"
-            Html.p [
-               attr.style [ style.marginLeft 10; style.display.inlineElement ]
-               attr.text payment.Payer
-            ]
-         ]
+         renderInfoRow "Request sent to:" payment.Payer
 
-         Html.div [
-            Html.small "Destination Account:"
-            Html.p [
-               attr.style [ style.marginLeft 10; style.display.inlineElement ]
+         renderInfoRow
+            "Destination Account:"
+            (accounts
+             |> Map.tryFind sharedDetails.Payee.AccountId
+             |> Option.map _.FullName
+             |> Option.defaultValue sharedDetails.Payee.OrgName)
 
-               attr.text (
-                  accounts
-                  |> Map.tryFind sharedDetails.Payee.AccountId
-                  |> Option.map _.FullName
-                  |> Option.defaultValue sharedDetails.Payee.OrgName
-               )
-            ]
-         ]
+         renderInfoRow "Memo:" sharedDetails.Memo
 
-         Html.div [
-            Html.small "Memo:"
-            Html.p [
-               attr.style [ style.marginLeft 10; style.display.inlineElement ]
-               attr.text sharedDetails.Memo
-            ]
-         ]
+         match payment with
+         | PaymentRequest.ThirdParty p -> renderInfoRow "Link:" p.ShortId.AsUrl
+         | _ -> ()
       else
-         Html.div [
-            Html.small "Request sent from:"
-            Html.p [
-               attr.style [ style.marginLeft 10; style.display.inlineElement ]
-               attr.text payee.OrgName
-            ]
-         ]
-
-         Html.div [
-            Html.small "Memo:"
-            Html.p [
-               attr.style [ style.marginLeft 10; style.display.inlineElement ]
-               attr.text sharedDetails.Memo
-            ]
-         ]
+         renderInfoRow "Request sent from:" payee.OrgName
+         renderInfoRow "Memo:" sharedDetails.Memo
 
       Html.br []
 
-      classyNode Html.div [ "grid" ] [
-         Html.div [
-            Html.small "Requested on:"
-            Html.p (DateTime.format sharedDetails.CreatedAt)
-         ]
+      renderInfoRow "Requested on:" (DateTime.format sharedDetails.CreatedAt)
 
-         Html.div [
-            Html.small (
-               if
-                  sharedDetails.Expiration.ToUniversalTime().Date > DateTime.UtcNow.Date
-               then
-                  "Due:"
-               else
-                  "Expired on:"
-            )
-            Html.p (DateTime.format sharedDetails.Expiration)
-         ]
-      ]
+      renderInfoRow
+         (if
+             sharedDetails.Expiration.ToUniversalTime().Date > DateTime.UtcNow.Date
+          then
+             "Due:"
+          else
+             "Expired on:")
+         (DateTime.format sharedDetails.Expiration)
 
+      Html.br []
+      Html.br []
 
       match payment.Status with
       | PaymentRequestStatus.Fulfilled f ->

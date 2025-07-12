@@ -17,35 +17,39 @@ let getPayments
    taskResultOption {
       let query =
          $"""
-      SELECT
-         {Table.payment}.*,
-         payeeOrg.{OrganizationSqlMapper.OrgFields.name} as payee_org_name,
-         payerOrg.{OrganizationSqlMapper.OrgFields.name} as payer_org_name,
-         {Table.platformPayment}.{PaymentFields.Platform.payerParentAccountId},
-         {Table.platformPayment}.{PaymentFields.Platform.payerOrgId}
-      FROM {Table.payment} 
-      JOIN {Table.platformPayment} using({PaymentFields.paymentId})
-      JOIN {OrganizationSqlMapper.table} payeeOrg ON payeeOrg.org_id = {PaymentFields.payeeOrgId}
-      JOIN {OrganizationSqlMapper.table} payerOrg ON payerOrg.org_id = {PaymentFields.Platform.payerOrgId}
-      """
+         SELECT
+            {Table.payment}.*,
+            payeeOrg.{OrganizationSqlMapper.OrgFields.name} as payee_org_name,
+            payerOrg.{OrganizationSqlMapper.OrgFields.name} as payer_org_name,
+            {Table.platformPayment}.{PaymentFields.Platform.payerParentAccountId},
+            {Table.platformPayment}.{PaymentFields.Platform.payerOrgId},
+            {Table.thirdPartyPayment}.{PaymentFields.ThirdParty.payerName},
+            {Table.thirdPartyPayment}.{PaymentFields.ThirdParty.payerEmail},
+            {Table.thirdPartyPayment}.{PaymentFields.ThirdParty.shortId}
+         FROM {Table.payment}
+         LEFT JOIN {Table.platformPayment} using({PaymentFields.paymentId})
+         LEFT JOIN {Table.thirdPartyPayment} using({PaymentFields.paymentId})
+         JOIN {OrganizationSqlMapper.table} payeeOrg ON payeeOrg.org_id = {PaymentFields.payeeOrgId}
+         LEFT JOIN {OrganizationSqlMapper.table} payerOrg ON payerOrg.org_id = {PaymentFields.Platform.payerOrgId}
+         """
 
       let query =
          $"""
-      SELECT * FROM ({query})
-      WHERE {PaymentFields.payeeOrgId} = @payeeOrgId
+         SELECT * FROM ({query})
+         WHERE {PaymentFields.payeeOrgId} = @payeeOrgId
 
-      UNION ALL
+         UNION ALL
 
-      SELECT * FROM ({query})
-      WHERE {PaymentFields.Platform.payerOrgId} = @payeeOrgId
-      """
+         SELECT * FROM ({query})
+         WHERE {PaymentFields.Platform.payerOrgId} = @payeeOrgId
+         """
 
       let! payments =
-         pgQuery<PlatformPaymentRequest option>
+         pgQuery<PaymentRequest option>
             query
             (Some [ "payeeOrgId", PaymentSqlWriter.payeeOrgId orgId ])
             (fun read ->
-               let baseInfo = {
+               let shared = {
                   Id = Reader.paymentId read
                   InitiatedBy = Reader.initiatedById read
                   Amount = Reader.amount read
@@ -63,16 +67,28 @@ let getPayments
 
                match Reader.requestType read with
                | PaymentRequestType.Platform ->
-                  Some {
-                     SharedDetails = baseInfo
-                     Payer = {
-                        OrgName = read.string "payer_org_name"
-                        OrgId = Reader.Platform.payerOrgId read
-                        ParentAccountId =
-                           Reader.Platform.payerParentAccountId read
+                  Some(
+                     PaymentRequest.Platform {
+                        SharedDetails = shared
+                        Payer = {
+                           OrgName = read.string "payer_org_name"
+                           OrgId = Reader.Platform.payerOrgId read
+                           ParentAccountId =
+                              Reader.Platform.payerParentAccountId read
+                        }
                      }
-                  }
-               | PaymentRequestType.ThirdParty -> None) // Not implemented yet
+                  )
+               | PaymentRequestType.ThirdParty ->
+                  Some(
+                     PaymentRequest.ThirdParty {
+                        SharedDetails = shared
+                        ShortId = Reader.ThirdParty.shortId read
+                        Payer = {
+                           Name = Reader.ThirdParty.payerName read
+                           Email = Reader.ThirdParty.payerEmail read
+                        }
+                     }
+                  ))
 
       let paymentSummary =
          payments
@@ -82,9 +98,7 @@ let getPayments
                if payment.SharedDetails.Payee.OrgId = orgId then
                   {
                      acc with
-                        OutgoingRequests =
-                           PaymentRequest.Platform payment
-                           :: acc.OutgoingRequests
+                        OutgoingRequests = payment :: acc.OutgoingRequests
                   }
                else
                   {
