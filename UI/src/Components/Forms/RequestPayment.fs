@@ -226,7 +226,7 @@ let formThirdPartyPayment
       let info =
          PaymentRequested.ThirdParty {
             Payer = { Name = payerName; Email = payerEmail }
-            ShortId = PaymentPortalShortId.ShortId ""
+            ShortId = PaymentPortalShortId.create ()
             SharedDetails = {
                Id = Guid.NewGuid() |> PaymentRequestId
                Amount = amount

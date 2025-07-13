@@ -118,6 +118,8 @@ type PaymentPortalShortId =
       match x with
       | ShortId s -> s
 
+   static member create() = NanoId.nanoid () |> ShortId
+
    member x.AsUrl = $"/payment/{x}"
 
 [<RequireQualifiedAccess>]

@@ -814,6 +814,37 @@ let seedPayments
 
          accountRef <! msg
 
+      let request3rdPartyPaymentMsg =
+         RequestPaymentCommand.create
+            mockAccountOwner
+            (PaymentRequested.ThirdParty {
+               Payer = {
+                  Name = "Pornchai"
+                  Email = Email.deserialize "pornchai@whitelotus.com"
+               }
+               ShortId = PaymentPortalShortId.create ()
+               SharedDetails = {
+                  Id = Guid.NewGuid() |> PaymentRequestId
+                  Amount = 1337m
+                  Expiration = DateTime.UtcNow.AddDays 30
+                  Memo =
+                     "Robes, slippers, massage oils, massage tables, face cradle cushions"
+                  Payee = {
+                     OrgId = myOrg.OrgId
+                     OrgName = myOrg.BusinessName
+                     AccountId = arCheckingAccountId
+                     ParentAccountId = myOrg.ParentAccountId
+                  }
+               }
+            })
+         |> AccountCommand.RequestPayment
+         |> AccountMessage.StateChange
+         |> GuaranteedDelivery.message (
+            ParentAccountId.get myOrg.ParentAccountId
+         )
+
+      accountRef <! request3rdPartyPaymentMsg
+
       do! Async.Sleep 2000
 
       // Some payment requests fulfilled

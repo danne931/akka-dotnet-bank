@@ -268,8 +268,6 @@ let PaymentDetailComponent
          renderInfoRow "Request sent from:" payee.OrgName
          renderInfoRow "Memo:" sharedDetails.Memo
 
-      Html.br []
-
       renderInfoRow "Requested on:" (DateTime.format sharedDetails.CreatedAt)
 
       renderInfoRow

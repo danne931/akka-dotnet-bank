@@ -2,10 +2,6 @@ namespace Bank.Payment.Domain
 
 open Validus
 
-#if !FABLE_COMPILER
-open NanoidDotNet
-#endif
-
 open Lib.SharedTypes
 
 type RequestPaymentCommand = Command<PaymentRequested>
@@ -59,19 +55,9 @@ module RequestPaymentCommand =
             let! _ =
                Lib.Validators.amountValidator "Payment amount" shared.Amount
 
-            // Generate nanoid on server but not in browser.
-#if FABLE_COMPILER
-            let shortId = PaymentPortalShortId.ShortId ""
-#else
-            let shortId =
-               Nanoid.Generate(Nanoid.Alphabets.LowercaseLettersAndDigits, 10)
-               |> PaymentPortalShortId.ShortId
-#endif
-
             let info = {
                info with
                   SharedDetails.Expiration = expiration
-                  ShortId = shortId
             }
 
             let cmd = { cmd with Data = ThirdParty info }

@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="NanoId.fs" />
     <Compile Include="Validators.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Constants.fs" />
@@ -18,5 +19,6 @@
     <PackageReference Include="Thoth.Json" />
     <PackageReference Include="Thoth.Json.Net" />
     <PackageReference Include="Validus" />
+    <PackageReference Include="Nanoid" />
   </ItemGroup>
 </Project>
