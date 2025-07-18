@@ -31,7 +31,7 @@ let private options = [
 let employeeRoleSelect (onSelect: Role -> unit) =
    Form.selectField {
       Parser = Role.fromStringUnsafe >> Ok
-      Value = fun values -> values.Role
+      Value = _.Role
       Update =
          fun newValue values ->
             onSelect (Role.fromStringUnsafe newValue)
@@ -152,7 +152,7 @@ let EmployeeRoleFormComponent
             (InitiatedById session.EmployeeId)
             org.Org.CommandApprovalRules
 
-      let customAction =
+      let customAction _ =
          Form.View.Action.Custom(fun state _ ->
             if selectedRole = employee.Role then
                Form.View.cancelButton onCancel state

@@ -24,7 +24,6 @@ type RecurrenceValues = {
    TerminationType: string
    EndDate: string
    MaxPayments: int
-   RecurrenceSettings: RecurrenceSettings option
 }
 
 let private recurrenceRepeatEveryForm
@@ -267,22 +266,20 @@ let private recurrenceTerminationForm =
       | "date" -> endDateField
       | "maxPayments" -> maxPaymentsField
       | _ -> Form.succeed RecurrenceTerminationCondition.Never)
+   |> Form.group
 
 let recurringPaymentForm
    (values: RecurrenceValues)
-   : Form.Form<RecurrenceValues, RecurrenceValues, IReactProperty>
+   : Form.Form<RecurrenceValues, RecurrenceSettings option, IReactProperty>
    =
    if values.IsRecurring then
-      Form.succeed (fun (pattern: RecurrencePattern) termination -> {
-         values with
-            RecurrenceSettings =
-               Some {
-                  Id = RecurrenceScheduleId(Guid.NewGuid())
-                  Pattern = pattern
-                  Termination = termination
-                  PaymentsRequestedCount = 1
-               }
-      })
+      Form.succeed (fun (pattern: RecurrencePattern) termination ->
+         Some {
+            Id = RecurrenceScheduleId(Guid.NewGuid())
+            Pattern = pattern
+            Termination = termination
+            PaymentsRequestedCount = 1
+         })
       |> Form.append (
          recurrenceRepeatEveryForm
          |> Form.andThen (fun (unit: SelectedUnit, repeatEvery: int) ->
@@ -302,10 +299,7 @@ let recurringPaymentForm
       )
       |> Form.append recurrenceTerminationForm
    else
-      Form.succeed {
-         values with
-            RecurrenceSettings = None
-      }
+      Form.succeed None
 
 let defaultRecurringPaymentValues = {
    IsRecurring = false
@@ -317,23 +311,20 @@ let defaultRecurringPaymentValues = {
    DayOfWeek = DayOfWeek.Monday
    TerminationType = "never"
    EndDate = DateTime.Now.AddMonths 12 |> DateTime.format
-   MaxPayments = 3
-   RecurrenceSettings = None
+   MaxPayments = 12
 }
 
 /// Recurring payment form conditionally displayed
 /// based on "Repeat this payment" checkbox.
-let recurringPaymentFormOptional =
-   Form.succeed id
-   |> Form.append (
-      Form.checkboxField {
-         Parser = Ok
-         Value = _.IsRecurring
-         Update = fun newValue values -> { values with IsRecurring = newValue }
-         Error = fun _ -> None
-         Attributes = { Text = "Repeat payment" }
-      }
-   )
+let recurringPaymentFormOptional
+   : Form.Form<RecurrenceValues, RecurrenceSettings option, IReactProperty> =
+   Form.checkboxField {
+      Parser = Ok
+      Value = _.IsRecurring
+      Update = fun newValue values -> { values with IsRecurring = newValue }
+      Error = fun _ -> None
+      Attributes = { Text = "Repeat payment" }
+   }
    |> Form.andThen (fun isRecurring ->
       recurringPaymentForm {
          defaultRecurringPaymentValues with

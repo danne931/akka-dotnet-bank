@@ -46,8 +46,22 @@ module DateTime =
          12, "Dec"
       ]
 
+   let dayOfWeekDisplay (dayOfWeek: System.DayOfWeek) =
+      match dayOfWeek with
+      | DayOfWeek.Sunday -> "Sunday"
+      | DayOfWeek.Monday -> "Monday"
+      | DayOfWeek.Tuesday -> "Tuesday"
+      | DayOfWeek.Wednesday -> "Wednesday"
+      | DayOfWeek.Thursday -> "Thursday"
+      | DayOfWeek.Friday -> "Friday"
+      | _ -> "Saturday"
+
    let formatShort (date: DateTime) =
       $"{numberToDisplayMonth[date.Month]} {date.Day}"
+
+   let formatShortWithDayOfWeek (date: DateTime) =
+      let day = dayOfWeekDisplay date.DayOfWeek |> _.Substring(0, 3)
+      formatShort date + $" {day}"
 
    let format (date: DateTime) = formatShort date + $", {date.Year}"
 

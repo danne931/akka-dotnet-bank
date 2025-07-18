@@ -29,17 +29,18 @@ type Values = {
    RecurrenceValues: RecurrenceValues
 }
 
+let amountParser =
+   amountValidatorFromString "Payment amount" >> validationErrorsHumanFriendly
+
 let amountField =
    Form.textField {
-      Parser =
-         amountValidatorFromString "Payment amount"
-         >> validationErrorsHumanFriendly
+      Parser = amountParser
       Value = _.Amount
       Update = fun newValue values -> { values with Amount = newValue }
       Error = fun _ -> None
       Attributes = {
          Label = "Amount:"
-         Placeholder = "1300"
+         Placeholder = "1337"
          HtmlAttributes = []
       }
    }
@@ -57,16 +58,15 @@ let memoField =
       }
    }
 
+let dateParser =
+   CustomDateInterpreter.validate CustomDateInterpreter.DateSignifier.Single
+   >> Result.bind (
+      snd >> dateInFutureValidator "Due on" >> validationErrorsHumanFriendly
+   )
+
 let dueAtField =
    Form.dateField {
-      Parser =
-         CustomDateInterpreter.validate
-            CustomDateInterpreter.DateSignifier.Single
-         >> Result.bind (
-            snd
-            >> dateInFutureValidator "Due on"
-            >> validationErrorsHumanFriendly
-         )
+      Parser = dateParser
       Value = _.DueAt
       Update = fun newValue values -> { values with DueAt = newValue }
       Error = fun _ -> None
@@ -192,18 +192,15 @@ let formPlatformPayment
    |> Form.append memoField
    |> Form.append (fieldPayeeAccountSelect payeeDestinationAccounts)
    |> Form.append (
-      Form.succeed _.RecurrenceSettings
-      |> Form.append (
-         recurringPaymentFormOptional
-         |> Form.mapValues {
-            Value = _.RecurrenceValues
-            Update =
-               fun (a: RecurrenceValues) (b: Values) -> {
-                  b with
-                     RecurrenceValues = a
-               }
-         }
-      )
+      recurringPaymentFormOptional
+      |> Form.mapValues {
+         Value = _.RecurrenceValues
+         Update =
+            fun (a: RecurrenceValues) (b: Values) -> {
+               b with
+                  RecurrenceValues = a
+            }
+      }
    )
 
 let formThirdPartyPayment
@@ -296,18 +293,15 @@ let formThirdPartyPayment
    |> Form.append fieldPayerName
    |> Form.append fieldPayerEmail
    |> Form.append (
-      Form.succeed _.RecurrenceSettings
-      |> Form.append (
-         recurringPaymentFormOptional
-         |> Form.mapValues {
-            Value = _.RecurrenceValues
-            Update =
-               fun (a: RecurrenceValues) (b: Values) -> {
-                  b with
-                     RecurrenceValues = a
-               }
-         }
-      )
+      recurringPaymentFormOptional
+      |> Form.mapValues {
+         Value = _.RecurrenceValues
+         Update =
+            fun (a: RecurrenceValues) (b: Values) -> {
+               b with
+                  RecurrenceValues = a
+            }
+      }
    )
 
 [<ReactComponent>]
@@ -373,6 +367,29 @@ let PaymentRequestFormComponent
          | FormSubmitReceipt.Account receipt -> onSubmit receipt
          | _ -> ()
 
+      let customAction (model: Form.View.Model<Values>) =
+         Form.View.Action.Custom(fun state _ ->
+            let parsedSettings =
+               Form.fill
+                  recurringPaymentFormOptional
+                  model.Values.RecurrenceValues
+
+            let parsedDueDate = dateParser model.Values.DueAt
+            let parsedAmount = amountParser model.Values.Amount
+
+            React.fragment [
+               match parsedSettings.Result, parsedDueDate, parsedAmount with
+               | Ok(Some settings), Ok dueAt, Ok paymentAmount ->
+                  RecurringPaymentScheduleComponent.render {|
+                     Settings = settings
+                     DueAt = dueAt
+                     PaymentAmount = paymentAmount
+                  |}
+               | _ -> ()
+
+               Form.View.submitButton "Submit Payment Request" state
+            ])
+
       match selectedPaymentType with
       | PaymentRequestType.Platform ->
          OrgSocialTransferDiscovery.OrgSearchComponent
@@ -398,7 +415,7 @@ let PaymentRequestFormComponent
                            payeeDestinationAccounts
                            orgs
                            initiatedBy
-                     Action = None
+                     Action = Some customAction
                      OnSubmit = onSubmit
                      Session = session
                      ComponentName = componentName
@@ -415,7 +432,7 @@ let PaymentRequestFormComponent
                   payeeOrg
                   payeeDestinationAccounts
                   initiatedBy
-            Action = None
+            Action = Some customAction
             OnSubmit = onSubmit
             Session = session
             ComponentName = componentName

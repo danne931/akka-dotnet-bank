@@ -135,7 +135,8 @@ let PaymentFulfillmentFormComponent
                InitialValues = initValues
                Form =
                   formPlatformPayment payerAccounts payment session.AsInitiator
-               Action = Some(Form.View.Action.SubmitOnly "Submit Payment")
+               Action =
+                  Some(fun _ -> Form.View.Action.SubmitOnly "Submit Payment")
                Session = session
                ComponentName = "FulfillPaymentForm"
                UseEventSubscription =

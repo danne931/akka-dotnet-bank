@@ -211,7 +211,7 @@ let update
       {
          state with
             CommandInProgress = None
-            FormModel.State = Form.View.State.Error(err.HumanFriendly)
+            FormModel.State = Form.View.State.Error err.HumanFriendly
       },
       Alerts.toastCommand err
    | ErrorReceivedViaSignalR err ->
@@ -220,7 +220,7 @@ let update
       {
          state with
             CommandInProgress = None
-            FormModel.State = Form.View.State.Error(err.HumanFriendly)
+            FormModel.State = Form.View.State.Error err.HumanFriendly
       },
       Alerts.toastCommand err
    | SignalREventReceived correlationId ->
@@ -313,7 +313,8 @@ let FormContainer
       {|
          InitialValues: 'Values
          Form: Form.Form<'Values, Msg<'Values>, IReactProperty>
-         Action: Form.View.Action<Msg<'Values>> option
+         Action:
+            (Form.View.Model<'Values> -> Form.View.Action<Msg<'Values>>) option
          OnSubmit: FormSubmitReceipt -> unit
          Session: UserSession
          ComponentName: string
@@ -357,7 +358,7 @@ let FormContainer
          OnError =
             React.useCallbackRef (fun err ->
                match state.FormModel.State, state.CommandInProgress with
-               | Form.View.State.Loading, (Some cmd) when
+               | Form.View.State.Loading, Some cmd when
                   cmd.Envelope.CorrelationId = err.CorrelationId
                   ->
                   dispatch (Msg.ErrorReceivedViaSignalR err.Error)
@@ -387,6 +388,7 @@ let FormContainer
          OnChange = FormChanged
          Action =
             props.Action
+            |> Option.map (fun customAction -> customAction state.FormModel)
             |> Option.defaultValue (Form.View.Action.SubmitOnly "Submit")
          Validation = Form.View.ValidateOnSubmit
       }

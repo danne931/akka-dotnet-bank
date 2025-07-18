@@ -394,7 +394,7 @@ let private ruleEditForm
          |> Form.append (approverListForm employees)
    )
 
-let customFormSubmit onCancel =
+let customFormSubmit onCancel _ =
    Form.View.Action.Custom(fun state _ ->
       Form.View.submitAndCancelButton "Save" onCancel state)
 

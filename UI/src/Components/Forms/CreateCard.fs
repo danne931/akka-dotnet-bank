@@ -170,10 +170,9 @@ let CreateCardFormComponent
          InitialValues = formProps
          Form = form session employee org.CheckingAccounts
          Action =
-            Some(
+            Some(fun _ ->
                Form.View.Action.Custom(fun state _ ->
-                  Form.View.submitButton "Create Card" state)
-            )
+                  Form.View.submitButton "Create Card" state))
          OnSubmit =
             function
             | FormSubmitReceipt.Employee receipt -> onSubmit receipt

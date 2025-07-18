@@ -202,12 +202,11 @@ let EmployeeCreateFormComponent
                (InitiatedById session.EmployeeId)
                org.Org.CommandApprovalRules
 
-         let customAction =
+         let customAction _ =
             match employeeInviteRequiresApproval with
             | Some _ -> "Request Approval for Employee Invite"
             | None -> "Invite Employee"
             |> Form.View.Action.SubmitOnly
-            |> Some
 
          FormContainer {|
             InitialValues = formProps
@@ -217,7 +216,7 @@ let EmployeeCreateFormComponent
                   org.CheckingAccounts
                   employeeInviteRequiresApproval
                   setRole
-            Action = customAction
+            Action = Some customAction
             Session = session
             ComponentName = "EmployeeCreateForm"
             UseEventSubscription =

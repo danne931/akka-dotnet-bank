@@ -46,6 +46,7 @@
     <Compile Include="Components/EmployeePermissions.fs" />
     <Compile Include="Components/OrgSocialTransferDiscovery.fs" />
     <Compile Include="Components/AccountSelection.fs" />
+    <Compile Include="Components/RecurringPaymentSchedule.fs" />
     <Compile Include="Components/Forms/Util.fs" />
     <Compile Include="Components/Forms/FormContainer.fs" />
     <Compile Include="Components/Forms/AccountProfile.fs" />

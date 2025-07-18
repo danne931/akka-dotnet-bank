@@ -244,7 +244,7 @@ let applyEvent
       let nextPaymentDueDateOpt =
          saga.PaymentInfo.RecurringPaymentReference
          |> Option.bind (fun info ->
-            RecurrenceSettings.hasNextPaymentDueDate
+            RecurringPaymentSchedule.hasNextPaymentDueDate
                info.Settings
                saga.PaymentInfo.SharedDetails.DueAt)
 
