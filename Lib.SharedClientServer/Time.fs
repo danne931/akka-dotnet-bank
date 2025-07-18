@@ -62,3 +62,7 @@ module DateTime =
          if withYear then $"{formatted}/{date.Year}" else formatted
 
       format dateStart, format dateEnd
+
+   let asEndOfDayUtc (date: DateTime) =
+      let utc = date.ToUniversalTime()
+      DateTime(utc.Year, utc.Month, utc.Day, 23, 59, 59, DateTimeKind.Utc)

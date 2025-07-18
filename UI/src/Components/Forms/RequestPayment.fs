@@ -14,6 +14,8 @@ open Lib.Validators
 open Bank.Forms.FormContainer
 open Lib.SharedTypes
 open Lib.Time
+open RecurringPaymentSchedule
+open RecurringPaymentForm
 
 type Values = {
    Amount: string
@@ -22,7 +24,9 @@ type Values = {
    PayerName: string
    PayerEmail: string
    Memo: string
-   Expiration: string
+   DueAt: string
+   IsRecurringPayment: bool
+   RecurrenceValues: RecurrenceValues
 }
 
 let amountField =
@@ -53,27 +57,25 @@ let memoField =
       }
    }
 
-let expirationField =
+let dueAtField =
    Form.dateField {
       Parser =
          CustomDateInterpreter.validate
             CustomDateInterpreter.DateSignifier.Single
          >> Result.bind (
             snd
-            >> dateInFutureValidator "Expiration"
+            >> dateInFutureValidator "Due on"
             >> validationErrorsHumanFriendly
          )
-      Value = _.Expiration
-      Update = fun newValue values -> { values with Expiration = newValue }
+      Value = _.DueAt
+      Update = fun newValue values -> { values with DueAt = newValue }
       Error = fun _ -> None
       Attributes = {
-         Label = "Expiration:"
-         Placeholder = "Payment request expires on"
+         Label = "Due on:"
+         Placeholder = "Payment due on"
          HtmlAttributes = []
       }
    }
-
-let expirationForm = Form.succeed id |> Form.append expirationField
 
 let fieldPayeeAccountSelect
    (payeeDestinationAccounts: Map<AccountId, Account>)
@@ -130,10 +132,10 @@ let formPlatformPayment
 
    let onSubmit
       (selectedPayerOrgId: string)
-      (amount: decimal)
+      (amount, dueAt)
       (memo: string)
-      (expiration: DateTime)
       (selectedDestinationAccountId: string)
+      (recurrenceSettings: RecurrenceSettings option)
       =
       let payerOrg =
          orgs |> List.find (fun o -> string o.OrgId = selectedPayerOrgId)
@@ -143,6 +145,8 @@ let formPlatformPayment
 
       let payeeAccount = payeeDestinationAccounts[payeeAccountId]
 
+      let paymentId = Guid.NewGuid() |> PaymentRequestId
+
       let info =
          PaymentRequested.Platform {
             Payer = {
@@ -151,9 +155,9 @@ let formPlatformPayment
                ParentAccountId = payerOrg.ParentAccountId
             }
             SharedDetails = {
-               Id = Guid.NewGuid() |> PaymentRequestId
+               Id = paymentId
                Amount = amount
-               Expiration = expiration
+               DueAt = dueAt
                Payee = {
                   OrgId = payeeOrg.OrgId
                   OrgName = payeeOrg.Name
@@ -162,6 +166,12 @@ let formPlatformPayment
                }
                Memo = memo
             }
+            RecurringPaymentReference =
+               recurrenceSettings
+               |> Option.map (fun settings -> {
+                  Settings = settings
+                  OriginPaymentId = paymentId
+               })
          }
 
       let cmd =
@@ -173,10 +183,28 @@ let formPlatformPayment
 
    Form.succeed onSubmit
    |> Form.append fieldOrgPayerSelect
-   |> Form.append amountField
+   |> Form.append (
+      Form.succeed (fun amount dueAt -> amount, dueAt)
+      |> Form.append amountField
+      |> Form.append dueAtField
+      |> Form.group
+   )
    |> Form.append memoField
-   |> Form.append expirationForm
    |> Form.append (fieldPayeeAccountSelect payeeDestinationAccounts)
+   |> Form.append (
+      Form.succeed _.RecurrenceSettings
+      |> Form.append (
+         recurringPaymentFormOptional
+         |> Form.mapValues {
+            Value = _.RecurrenceValues
+            Update =
+               fun (a: RecurrenceValues) (b: Values) -> {
+                  b with
+                     RecurrenceValues = a
+               }
+         }
+      )
+   )
 
 let formThirdPartyPayment
    (payeeOrg: Org)
@@ -211,26 +239,34 @@ let formThirdPartyPayment
       }
 
    let onSubmit
-      amount
+      (amount, dueAt)
       memo
-      expiration
       (selectedDestinationAccountId: string)
       payerName
       payerEmail
+      (recurrenceSettings: RecurrenceSettings option)
       =
       let payeeAccountId =
          selectedDestinationAccountId |> Guid.Parse |> AccountId
 
       let payeeAccount = payeeDestinationAccounts[payeeAccountId]
 
+      let paymentId = Guid.NewGuid() |> PaymentRequestId
+
       let info =
          PaymentRequested.ThirdParty {
             Payer = { Name = payerName; Email = payerEmail }
             ShortId = PaymentPortalShortId.create ()
+            RecurringPaymentReference =
+               recurrenceSettings
+               |> Option.map (fun settings -> {
+                  Settings = settings
+                  OriginPaymentId = paymentId
+               })
             SharedDetails = {
-               Id = Guid.NewGuid() |> PaymentRequestId
+               Id = paymentId
                Amount = amount
-               Expiration = expiration
+               DueAt = dueAt
                Memo = memo
                Payee = {
                   OrgId = payeeOrg.OrgId
@@ -249,12 +285,30 @@ let formThirdPartyPayment
       Msg.GetAndSubmit(FormEntityId.Account payeeAccountId, cmd)
 
    Form.succeed onSubmit
-   |> Form.append amountField
+   |> Form.append (
+      Form.succeed (fun amount dueAt -> amount, dueAt)
+      |> Form.append amountField
+      |> Form.append dueAtField
+      |> Form.group
+   )
    |> Form.append memoField
-   |> Form.append expirationForm
    |> Form.append (fieldPayeeAccountSelect payeeDestinationAccounts)
    |> Form.append fieldPayerName
    |> Form.append fieldPayerEmail
+   |> Form.append (
+      Form.succeed _.RecurrenceSettings
+      |> Form.append (
+         recurringPaymentFormOptional
+         |> Form.mapValues {
+            Value = _.RecurrenceValues
+            Update =
+               fun (a: RecurrenceValues) (b: Values) -> {
+                  b with
+                     RecurrenceValues = a
+               }
+         }
+      )
+   )
 
 [<ReactComponent>]
 let PaymentRequestFormComponent
@@ -281,7 +335,9 @@ let PaymentRequestFormComponent
       PayerName = ""
       PayerEmail = ""
       Memo = ""
-      Expiration = DateTime.format (DateTime.Now.AddMonths 1)
+      DueAt = DateTime.format (DateTime.Now.AddMonths 1)
+      IsRecurringPayment = false
+      RecurrenceValues = defaultRecurringPaymentValues
    }
 
    let initiatedBy = session.AsInitiator

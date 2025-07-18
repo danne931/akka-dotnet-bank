@@ -272,12 +272,12 @@ let PaymentDetailComponent
 
       renderInfoRow
          (if
-             sharedDetails.Expiration.ToUniversalTime().Date > DateTime.UtcNow.Date
+             sharedDetails.DueAt.ToUniversalTime().Date > DateTime.UtcNow.Date
           then
              "Due:"
           else
              "Expired on:")
-         (DateTime.format sharedDetails.Expiration)
+         (DateTime.format sharedDetails.DueAt)
 
       Html.br []
       Html.br []

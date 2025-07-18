@@ -25,6 +25,12 @@ let parseDecimal: Validator<string, decimal> =
       with _ ->
          Error <| ValidationErrors.create field [ $"Invalid {field}" ]
 
+let parseDate: Validator<string, DateTime> =
+   fun field input ->
+      match Lib.Time.DateTime.parseOptional input with
+      | None -> Error <| ValidationErrors.create field [ $"Invalid {field}" ]
+      | Some date -> Ok date
+
 let amountValidator = Check.Decimal.greaterThan 0m
 
 let amountValidatorFromString = parseDecimal >=> amountValidator
@@ -37,6 +43,8 @@ let dateNotDefaultValidator propName =
    let msg = sprintf "%s should not be missing"
    Check.WithMessage.DateTime.notEquals DateTime.MinValue msg propName
 
+let dateNotDefaultValidatorFromString = parseDate >=> dateNotDefaultValidator
+
 let dateInFutureValidator propName (date: DateTime) =
    let msg = sprintf "%s should be in the future"
 
@@ -46,6 +54,8 @@ let dateInFutureValidator propName (date: DateTime) =
       propName
       (date.ToUniversalTime())
 
+let dateInFutureValidatorFromString = parseDate >=> dateInFutureValidator
+
 let datePresentOrFutureValidator propName (date: DateTime) =
    let msg = sprintf "%s should be today or the future"
 
@@ -54,6 +64,9 @@ let datePresentOrFutureValidator propName (date: DateTime) =
       msg
       propName
       (date.ToUniversalTime())
+
+let datePresentOrFutureValidatorFromString =
+   parseDate >=> datePresentOrFutureValidator
 
 let transferRecipientIdValidator senderId =
    let msg = sprintf "%s should not equal sender id"

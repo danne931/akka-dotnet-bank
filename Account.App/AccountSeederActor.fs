@@ -26,6 +26,7 @@ open Bank.Payment.Domain
 open Bank.Employee.Domain
 open ActorUtil
 open AutomaticTransfer
+open RecurringPaymentSchedule
 
 module aeFields = AccountEventSqlMapper.Fields
 
@@ -773,15 +774,41 @@ let seedPayments
    task {
       let buffer = DateTime.UtcNow.AddDays -2
 
+      let mutable requestedAsRecurringPayment = false
+
       // Payment requests from main demo org to other orgs
       let requestsFromDemoAccount = [
          for payer in paymentPayers ->
+            let paymentId = Guid.NewGuid() |> PaymentRequestId
+
+            let recurringPaymentReference =
+               if not requestedAsRecurringPayment then
+                  requestedAsRecurringPayment <- true
+
+                  Some {
+                     Settings = {
+                        Id = RecurrenceScheduleId(Guid.NewGuid())
+                        Pattern = {
+                           RepeatEvery = 1
+                           Interval =
+                              RecurrenceInterval.Monthly(
+                                 RecurrenceIntervalMonthly.DayOfMonth 13
+                              )
+                        }
+                        Termination = RecurrenceTerminationCondition.Never
+                        PaymentsRequestedCount = 1
+                     }
+                     OriginPaymentId = paymentId
+                  }
+               else
+                  None
+
             let cmd =
                RequestPaymentCommand.create
                   mockAccountOwner
                   (PaymentRequested.Platform {
                      SharedDetails = {
-                        Id = Guid.NewGuid() |> PaymentRequestId
+                        Id = paymentId
                         Amount = randomAmount 3000 5000
                         Payee = {
                            OrgId = myOrg.OrgId
@@ -790,13 +817,14 @@ let seedPayments
                            ParentAccountId = myOrg.ParentAccountId
                         }
                         Memo = "Services rendered..."
-                        Expiration = DateTime.UtcNow.AddDays 15
+                        DueAt = DateTime.UtcNow.AddDays 15
                      }
                      Payer = {
                         OrgId = payer.OrgId
                         OrgName = payer.BusinessName
                         ParentAccountId = payer.ParentAccountId
                      }
+                     RecurringPaymentReference = recurringPaymentReference
                   })
 
             payer, { cmd with Timestamp = buffer }
@@ -823,10 +851,11 @@ let seedPayments
                   Email = Email.deserialize "pornchai@whitelotus.com"
                }
                ShortId = PaymentPortalShortId.create ()
+               RecurringPaymentReference = None
                SharedDetails = {
                   Id = Guid.NewGuid() |> PaymentRequestId
                   Amount = 1337m
-                  Expiration = DateTime.UtcNow.AddDays 30
+                  DueAt = DateTime.UtcNow.AddDays 30
                   Memo =
                      "Robes, slippers, massage oils, massage tables, face cradle cushions"
                   Payee = {
@@ -847,8 +876,14 @@ let seedPayments
 
       do! Async.Sleep 2000
 
-      // Some payment requests fulfilled
-      let payerStub, request = List.head requestsFromDemoAccount
+      // Fulfill the recurring payment request
+      let payerStub, request =
+         requestsFromDemoAccount
+         |> List.find (fun (_, request) ->
+            match request.Data with
+            | Platform p -> p.RecurringPaymentReference.IsSome
+            | ThirdParty p -> p.RecurringPaymentReference.IsSome)
+
       let shared = request.Data.SharedDetails
       let (PaymentRequested.Platform payRequest) = request.Data
       let payer = payRequest.Payer
@@ -909,9 +944,10 @@ let seedPayments
                         AccountId = payee.PrimaryAccountId
                         ParentAccountId = payee.ParentAccountId
                      }
-                     Expiration = DateTime.UtcNow.AddDays 13
+                     DueAt = DateTime.UtcNow.AddDays 13
                      Memo = "Services rendered..."
                   }
+                  RecurringPaymentReference = None
                   Payer = {
                      OrgId = myOrg.OrgId
                      OrgName = myOrg.BusinessName

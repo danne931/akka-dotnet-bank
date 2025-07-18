@@ -23,6 +23,7 @@ DROP TABLE IF EXISTS transfer_internal_between_orgs;
 DROP TABLE IF EXISTS transfer_domestic;
 DROP TABLE IF EXISTS transfer;
 DROP TABLE IF EXISTS transfer_domestic_recipient;
+DROP TABLE IF EXISTS recurring_payment_schedule;
 DROP TABLE IF EXISTS merchant;
 DROP TABLE IF EXISTS saga;
 DROP TABLE IF EXISTS ancillary_transaction_info;
@@ -66,6 +67,9 @@ DROP TYPE IF EXISTS transfer_category;
 DROP TYPE IF EXISTS approvable_command;
 DROP TYPE IF EXISTS command_approval_criteria;
 DROP TYPE IF EXISTS command_approval_status;
+DROP TYPE IF EXISTS recurrence_unit;
+DROP TYPE IF EXISTS recurrence_pattern_type;
+DROP TYPE IF EXISTS recurrence_termination_type;
 DROP TYPE IF EXISTS saga_type;
 DROP TYPE IF EXISTS saga_status;
 
@@ -308,6 +312,21 @@ SELECT prevent_update('billing_statement');
 CREATE INDEX billing_statement_org_id_idx ON billing_statement(org_id);
 CREATE INDEX billing_statement_account_id_idx ON billing_statement(account_id);
 
+CREATE TYPE recurrence_termination_type AS ENUM ('EndDate', 'MaxPayments', 'Never');
+
+CREATE TABLE recurring_payment_schedule (
+   pattern_detail JSONB NOT NULL,
+   termination_type recurrence_termination_type NOT NULL,
+   termination_detail JSONB NOT NULL,
+   payments_requested_count INTEGER NOT NULL,
+   recurring_payment_schedule_id UUID PRIMARY KEY,
+   org_id UUID NOT NULL REFERENCES organization
+);
+
+SELECT add_created_at_column('recurring_payment_schedule');
+SELECT add_updated_at_column_and_trigger('recurring_payment_schedule');
+
+CREATE INDEX recurring_payment_schedule_org_id_idx ON recurring_payment_schedule(org_id);
 
 --- PURCHASE CATEGORIES ---
 CREATE TABLE purchase_category (
@@ -778,12 +797,13 @@ CREATE TABLE payment_request(
    status_detail JSONB NOT NULL,
    memo TEXT NOT NULL,
    request_type payment_request_type NOT NULL,
-   expiration TIMESTAMPTZ NOT NULL,
+   due_at TIMESTAMPTZ NOT NULL,
    payee_org_id UUID NOT NULL REFERENCES organization(org_id),
    payee_parent_account_id UUID NOT NULL REFERENCES partner_bank_parent_account(parent_account_id),
    payee_account_id UUID NOT NULL REFERENCES account(account_id),
    fulfilled_by_transfer_id UUID REFERENCES transfer(transfer_id),
-   fulfilled_at TIMESTAMPTZ
+   fulfilled_at TIMESTAMPTZ,
+   recurring_payment_schedule_id UUID REFERENCES recurring_payment_schedule
 );
 
 SELECT add_created_at_column('payment_request');

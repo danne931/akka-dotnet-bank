@@ -260,7 +260,6 @@ let onPersisted
 
          match info.OriginatedFromPaymentRequest with
          | Some paymentId ->
-            let initiatorOfPaymentRequest = cmd.InitiatedBy
             let initiatorOfPaymentDecline = e.InitiatedBy
 
             let msg =
@@ -278,7 +277,7 @@ let onPersisted
                      }
                      Amount = info.Amount
                      Id = paymentId
-                     Expiration = DateTime.UtcNow
+                     DueAt = DateTime.UtcNow
                      Memo = ""
                   }
                }

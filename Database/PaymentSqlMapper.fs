@@ -24,12 +24,13 @@ module PaymentFields =
    let statusDetail = "status_detail"
    let memo = "memo"
    let requestType = "request_type"
-   let expiration = "expiration"
+   let dueAt = "due_at"
    let payeeOrgId = "payee_org_id"
    let payeeParentAccountId = "payee_parent_account_id"
    let payeeAccountId = "payee_account_id"
    let fulfilledByTransferId = "fulfilled_by_transfer_id"
    let fulfilledAt = "fulfilled_at"
+   let recurringPaymentScheduleId = "recurring_payment_schedule_id"
    let createdAt = "created_at"
 
    // Specific to payment_request_platform table
@@ -64,8 +65,7 @@ module PaymentSqlReader =
       |> read.string
       |> PaymentRequestType.fromStringUnsafe
 
-   let expiration (read: RowReader) =
-      PaymentFields.expiration |> read.dateTime
+   let dueAt (read: RowReader) = PaymentFields.dueAt |> read.dateTime
 
    let payeeOrgId (read: RowReader) =
       PaymentFields.payeeOrgId |> read.uuid |> OrgId
@@ -83,6 +83,11 @@ module PaymentSqlReader =
 
    let fulfilledAt (read: RowReader) =
       PaymentFields.fulfilledAt |> read.dateTimeOrNone
+
+   let recurringPaymentScheduleId (read: RowReader) =
+      PaymentFields.recurringPaymentScheduleId
+      |> read.uuidOrNone
+      |> Option.map RecurringPaymentSchedule.RecurrenceScheduleId
 
    let createdAt (read: RowReader) = read.dateTime PaymentFields.createdAt
 
@@ -135,7 +140,7 @@ module PaymentSqlWriter =
    let requestType (requestType: PaymentRequestType) =
       Sql.string (string requestType)
 
-   let expiration (date: DateTime) = Sql.timestamptz date
+   let dueAt (date: DateTime) = Sql.timestamptz date
 
    let payeeOrgId = OrgSqlWriter.orgId
    let payeeParentAccountId (ParentAccountId id) = Sql.uuid id
@@ -152,6 +157,11 @@ module PaymentSqlWriter =
       | PaymentRequestStatus.Fulfilled p -> Some p.FulfilledAt
       | _ -> None
       >> Sql.timestamptzOrNone
+
+   let recurringPaymentScheduleId
+      (idOpt: RecurringPaymentSchedule.RecurrenceScheduleId option)
+      =
+      idOpt |> Option.map _.Value |> Sql.uuidOrNone
 
    let createdAt (date: DateTime) = Sql.timestamptz date
 

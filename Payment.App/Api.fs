@@ -18,17 +18,24 @@ let getPayments
       let query =
          $"""
          SELECT
-            {Table.payment}.*,
+            pay.*,
             payeeOrg.{OrganizationSqlMapper.OrgFields.name} as payee_org_name,
             payerOrg.{OrganizationSqlMapper.OrgFields.name} as payer_org_name,
-            {Table.platformPayment}.{PaymentFields.Platform.payerParentAccountId},
-            {Table.platformPayment}.{PaymentFields.Platform.payerOrgId},
-            {Table.thirdPartyPayment}.{PaymentFields.ThirdParty.payerName},
-            {Table.thirdPartyPayment}.{PaymentFields.ThirdParty.payerEmail},
-            {Table.thirdPartyPayment}.{PaymentFields.ThirdParty.shortId}
-         FROM {Table.payment}
-         LEFT JOIN {Table.platformPayment} using({PaymentFields.paymentId})
-         LEFT JOIN {Table.thirdPartyPayment} using({PaymentFields.paymentId})
+            platformPay.{PaymentFields.Platform.payerParentAccountId},
+            platformPay.{PaymentFields.Platform.payerOrgId},
+            thirdPartyPay.{PaymentFields.ThirdParty.payerName},
+            thirdPartyPay.{PaymentFields.ThirdParty.payerEmail},
+            thirdPartyPay.{PaymentFields.ThirdParty.shortId},
+            recurrence.{RecurringPaymentScheduleSqlMapper.Fields.pattern},
+            recurrence.{RecurringPaymentScheduleSqlMapper.Fields.terminationDetail},
+            recurrence.{RecurringPaymentScheduleSqlMapper.Fields.paymentsRequestedCount}
+         FROM {Table.payment} pay
+         LEFT JOIN {Table.platformPayment} platformPay using({PaymentFields.paymentId})
+         LEFT JOIN {Table.thirdPartyPayment} thirdPartyPay using({PaymentFields.paymentId})
+         LEFT JOIN {RecurringPaymentScheduleSqlMapper.table} recurrence
+            ON
+               pay.{PaymentFields.recurringPaymentScheduleId} IS NOT NULL
+               AND pay.{PaymentFields.recurringPaymentScheduleId} = recurrence.{RecurringPaymentScheduleSqlMapper.Fields.id}
          JOIN {OrganizationSqlMapper.table} payeeOrg ON payeeOrg.org_id = {PaymentFields.payeeOrgId}
          LEFT JOIN {OrganizationSqlMapper.table} payerOrg ON payerOrg.org_id = {PaymentFields.Platform.payerOrgId}
          """
@@ -61,8 +68,14 @@ let getPayments
                   }
                   Status = Reader.status read
                   CreatedAt = Reader.createdAt read
-                  Expiration = Reader.expiration read
+                  DueAt = Reader.dueAt read
                   Memo = Reader.memo read
+                  RecurrenceSettings =
+                     PaymentFields.recurringPaymentScheduleId
+                     |> read.uuidOrNone
+                     |> Option.map (fun _ ->
+                        RecurringPaymentScheduleSqlMapper.Reader.recurrenceSettings
+                           read)
                }
 
                match Reader.requestType read with

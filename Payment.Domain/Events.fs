@@ -8,7 +8,7 @@ type PaymentRequestSharedEventDetails = {
    Id: PaymentRequestId
    Amount: decimal
    Payee: Payee
-   Expiration: DateTime
+   DueAt: DateTime
    Memo: string
 }
 
@@ -21,19 +21,28 @@ module PaymentRequestSharedEventDetails =
          Id = p.SharedDetails.Id
          Amount = p.SharedDetails.Amount
          Payee = p.SharedDetails.Payee
-         Expiration = p.SharedDetails.Expiration
+         DueAt = p.SharedDetails.DueAt
          Memo = p.SharedDetails.Memo
       }
+
+type RecurringPaymentReference = {
+   // The existing payment request that this next
+   // recurring payment will be based on.
+   OriginPaymentId: PaymentRequestId
+   Settings: RecurringPaymentSchedule.RecurrenceSettings
+}
 
 type PlatformPaymentRequested = {
    SharedDetails: PaymentRequestSharedEventDetails
    Payer: PlatformPayer
+   RecurringPaymentReference: RecurringPaymentReference option
 }
 
 type ThirdPartyPaymentRequested = {
    SharedDetails: PaymentRequestSharedEventDetails
    Payer: ThirdPartyPayer
    ShortId: PaymentPortalShortId
+   RecurringPaymentReference: RecurringPaymentReference option
 }
 
 type PaymentRequested =
@@ -50,6 +59,11 @@ type PaymentRequested =
       | Platform p -> p.Payer.OrgName
       | ThirdParty p -> p.Payer.Name
 
+   member x.RecurringPaymentReference =
+      match x with
+      | Platform p -> p.RecurringPaymentReference
+      | ThirdParty p -> p.RecurringPaymentReference
+
 module PaymentRequested =
    let toPaymentRequest (e: BankEvent<PaymentRequested>) : PaymentRequest =
       let sharedDetails: PaymentRequestSharedDetails = {
@@ -57,10 +71,12 @@ module PaymentRequested =
          InitiatedBy = e.InitiatedBy.Id
          Amount = e.Data.SharedDetails.Amount
          Payee = e.Data.SharedDetails.Payee
-         Expiration = e.Data.SharedDetails.Expiration
+         DueAt = e.Data.SharedDetails.DueAt
          Memo = e.Data.SharedDetails.Memo
          CreatedAt = e.Timestamp
          Status = PaymentRequestStatus.Requested
+         RecurrenceSettings =
+            e.Data.RecurringPaymentReference |> Option.map _.Settings
       }
 
       match e.Data with
@@ -74,6 +90,24 @@ module PaymentRequested =
             SharedDetails = sharedDetails
             Payer = p.Payer
             ShortId = p.ShortId
+         }
+
+   let updateRecurrenceSettings
+      (transform: RecurringPaymentReference -> RecurringPaymentReference)
+      (pay: PaymentRequested)
+      =
+      match pay with
+      | PaymentRequested.Platform p ->
+         PaymentRequested.Platform {
+            p with
+               RecurringPaymentReference =
+                  p.RecurringPaymentReference |> Option.map transform
+         }
+      | PaymentRequested.ThirdParty p ->
+         PaymentRequested.ThirdParty {
+            p with
+               RecurringPaymentReference =
+                  p.RecurringPaymentReference |> Option.map transform
          }
 
 type PaymentRequestCancelled = {

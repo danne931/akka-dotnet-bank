@@ -33,6 +33,7 @@ type SqlParamsDerivedFromAccountEvents = {
    PaymentUpdate: SqlParams
    PlatformPayment: SqlParams
    ThirdPartyPayment: SqlParams
+   RecurringPaymentSchedule: SqlParams
    Transfer: SqlParams
    InternalTransferWithinOrg: SqlParams
    InternalTransferBetweenOrgs: SqlParams
@@ -64,7 +65,7 @@ let private paymentRequestBaseSqlParams (p: PaymentRequested) =
 
       "amount", PaymentSqlWriter.amount shared.Amount
       "requestType", Sql.string requestType
-      "expiration", PaymentSqlWriter.expiration shared.Expiration
+      "dueAt", PaymentSqlWriter.dueAt shared.DueAt
       "memo", PaymentSqlWriter.memo shared.Memo
    ]
 
@@ -815,6 +816,11 @@ let sqlParamReducer
             "initiatedById", PaymentSqlWriter.initiatedById e.InitiatedBy.Id
             "status", PaymentSqlWriter.status status
             "statusDetail", PaymentSqlWriter.statusDetail status
+
+            "recurringPaymentScheduleId",
+            PaymentSqlWriter.recurringPaymentScheduleId (
+               e.Data.RecurringPaymentReference |> Option.map _.Settings.Id
+            )
          ]
          @ paymentRequestBaseSqlParams e.Data
 
@@ -822,6 +828,34 @@ let sqlParamReducer
          acc with
             Payment = payParams :: acc.Payment
       }
+
+      let acc =
+         match e.Data.RecurringPaymentReference with
+         | None -> acc
+         | Some info ->
+            let settings = info.Settings
+
+            let recurrenceParams = [
+               "id", RecurringPaymentScheduleSqlMapper.Writer.id settings.Id
+               "orgId", RecurringPaymentScheduleSqlMapper.Writer.orgId e.OrgId
+               "pattern",
+               RecurringPaymentScheduleSqlMapper.Writer.pattern settings.Pattern
+               "terminationType",
+               RecurringPaymentScheduleSqlMapper.Writer.terminationType
+                  settings.Termination
+               "termination",
+               RecurringPaymentScheduleSqlMapper.Writer.termination
+                  settings.Termination
+               "paymentsRequestedCount",
+               RecurringPaymentScheduleSqlMapper.Writer.paymentsRequestedCount
+                  settings.PaymentsRequestedCount
+            ]
+
+            {
+               acc with
+                  RecurringPaymentSchedule =
+                     recurrenceParams :: acc.RecurringPaymentSchedule
+            }
 
       match e.Data with
       | Platform info ->
@@ -959,6 +993,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          PaymentUpdate = []
          PlatformPayment = []
          ThirdPartyPayment = []
+         RecurringPaymentSchedule = []
          Transfer = []
          InternalTransferWithinOrg = []
          InternalTransferBetweenOrgs = []
@@ -1117,6 +1152,30 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       """,
       sqlParamsDerivedFromAccountEvents.ParentAccountEvent
 
+      $"""
+      INSERT into {RecurringPaymentScheduleSqlMapper.table}
+         ({RecurringPaymentScheduleSqlMapper.Fields.id},
+          {RecurringPaymentScheduleSqlMapper.Fields.orgId},
+          {RecurringPaymentScheduleSqlMapper.Fields.pattern},
+          {RecurringPaymentScheduleSqlMapper.Fields.terminationType},
+          {RecurringPaymentScheduleSqlMapper.Fields.terminationDetail},
+          {RecurringPaymentScheduleSqlMapper.Fields.paymentsRequestedCount})
+      VALUES
+         (@id,
+          @orgId,
+          @pattern,
+          @terminationType::{RecurringPaymentScheduleSqlMapper.Typecast.terminationType},
+          @termination,
+          @paymentsRequestedCount)
+      ON CONFLICT ({RecurringPaymentScheduleSqlMapper.Fields.id})
+      DO UPDATE SET
+         {RecurringPaymentScheduleSqlMapper.Fields.pattern} = @pattern,
+         {RecurringPaymentScheduleSqlMapper.Fields.terminationType} = @terminationType::{RecurringPaymentScheduleSqlMapper.Typecast.terminationType},
+         {RecurringPaymentScheduleSqlMapper.Fields.terminationDetail} = @termination,
+         {RecurringPaymentScheduleSqlMapper.Fields.paymentsRequestedCount} = @paymentsRequestedCount;
+      """,
+      sqlParamsDerivedFromAccountEvents.RecurringPaymentSchedule
+
       let paymentTable = PaymentSqlMapper.Table.payment
 
       $"""
@@ -1128,10 +1187,11 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {PaymentFields.statusDetail},
           {PaymentFields.memo},
           {PaymentFields.requestType},
-          {PaymentFields.expiration},
+          {PaymentFields.dueAt},
           {PaymentFields.payeeOrgId},
           {PaymentFields.payeeAccountId},
-          {PaymentFields.payeeParentAccountId})
+          {PaymentFields.payeeParentAccountId},
+          {PaymentFields.recurringPaymentScheduleId})
       VALUES
          (@paymentId,
           @initiatedById,
@@ -1140,10 +1200,11 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           @statusDetail,
           @memo,
           @requestType::{PaymentTypeCast.requestType},
-          @expiration,
+          @dueAt,
           @payeeOrgId,
           @payeeAccountId,
-          @payeeParentAccountId)
+          @payeeParentAccountId,
+          @recurringPaymentScheduleId)
       ON CONFLICT ({PaymentFields.paymentId})
       DO NOTHING;
       """,

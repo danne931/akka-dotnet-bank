@@ -245,6 +245,8 @@ type Event =
          | PaymentRequestSagaEvent.PaymentFulfilled _ -> "PaymentFulfilled"
          | PaymentRequestSagaEvent.PaymentDeclinedNotificationSentToPayee ->
             "PaymentDeclinedNotificationSentToPayee"
+         | PaymentRequestSagaEvent.PaymentSagaStartedForNextRecurringPayment ->
+            "PaymentSagaStartedForNextRecurringPayment"
          | PaymentRequestSagaEvent.EvaluateRemainingWork ->
             "PaymentEvaluateRemainingWork"
          | PaymentRequestSagaEvent.ResetInProgressActivityAttempts ->
@@ -474,8 +476,14 @@ let sagaHandler
    (getPartnerBankServiceRef:
       ActorSystem -> IActorRef<PartnerBankServiceMessage>)
    (getCardIssuerServiceRef: ActorSystem -> IActorRef<CardIssuerMessage>)
+   (getSagaRef: CorrelationId -> IEntityRef<AppSagaMessage>)
    : SagaActor.SagaHandler<Saga, StartEvent, Event>
    =
+   let sendMessageToPaymentSaga orgId paymentId evt =
+      let corrId = PaymentRequestId.toCorrelationId paymentId
+      let msg = Message.paymentRequest orgId corrId evt
+      getSagaRef corrId <! msg
+
    {
       getEvaluateRemainingWorkEvent =
          function
@@ -679,10 +687,14 @@ let sagaHandler
                else
                   notHandled ()
             | StartEvent.PaymentRequest evt ->
-               if state.IsPaymentRequest then
-                  PaymentRequestSaga.onStartEventPersisted getEmailRef evt
-               else
-                  notHandled ()
+               match state with
+               | Saga.PaymentRequest saga ->
+                  PaymentRequestSaga.onStartEventPersisted
+                     saga
+                     getEmailRef
+                     sendMessageToPaymentSaga
+                     evt
+               | _ -> notHandled ()
             | StartEvent.Billing e ->
                if state.IsBilling then
                   BillingSaga.onStartEventPersisted
@@ -858,16 +870,7 @@ let sagaHandler
                   getAccountRef = getAccountRef
                   getEmailRef = getEmailRef
                   getPartnerBankServiceRef = getPartnerBankServiceRef
-                  sendEventToSelf =
-                     fun payment evt ->
-                        let msg =
-                           Message.paymentRequest
-                              payment.SharedDetails.Payee.OrgId
-                              (PaymentRequestId.toCorrelationId
-                                 payment.SharedDetails.Id)
-                              evt
-
-                        mailbox.Parent() <! msg
+                  sendEventToPaymentSaga = sendMessageToPaymentSaga
                }
 
                match priorState, state with
@@ -908,6 +911,7 @@ let getGuaranteedDeliveryProducerRef
       .Get<ActorUtil.ActorMetadata.SagaGuaranteedDeliveryProducerMarker>()
 
 let initProps
+   (system: ActorSystem)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
@@ -939,4 +943,5 @@ let initProps
          getSchedulingRef
          getKYCServiceRef
          getPartnerBankServiceRef
-         getCardIssuerServiceRef)
+         getCardIssuerServiceRef
+         (getEntityRef system))

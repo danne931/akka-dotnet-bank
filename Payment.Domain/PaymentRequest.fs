@@ -3,6 +3,7 @@ namespace Bank.Payment.Domain
 open System
 
 open Lib.SharedTypes
+open RecurringPaymentSchedule
 
 [<RequireQualifiedAccess>]
 type PaymentRequestType =
@@ -70,10 +71,11 @@ type PaymentRequestSharedDetails = {
    InitiatedBy: InitiatedById
    Amount: decimal
    Payee: Payee
-   Expiration: DateTime
    Memo: string
+   DueAt: DateTime
    CreatedAt: DateTime
    Status: PaymentRequestStatus
+   RecurrenceSettings: RecurrenceSettings option
 }
 
 type PlatformPaymentRequest = {
@@ -148,8 +150,8 @@ type PaymentRequest =
 
    member x.IsExpired =
       match x with
-      | Platform p -> p.SharedDetails.Expiration <= DateTime.UtcNow
-      | ThirdParty p -> p.SharedDetails.Expiration <= DateTime.UtcNow
+      | Platform p -> p.SharedDetails.DueAt <= DateTime.UtcNow
+      | ThirdParty p -> p.SharedDetails.DueAt <= DateTime.UtcNow
 
    member x.IsUnpaid = x.Status = PaymentRequestStatus.Requested
 

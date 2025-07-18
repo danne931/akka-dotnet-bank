@@ -192,6 +192,7 @@ builder.Services.AddAkka(
                   system
                   (fun controllerRef ->
                      AppSaga.initProps
+                        system
                         (OrgActor.get system)
                         (EmployeeActor.get system)
                         (AccountActor.get system)

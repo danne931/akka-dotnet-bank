@@ -50,7 +50,7 @@ let manageVisibility (url: Routes.IndexUrl) =
          | _ -> None
       | Routes.IndexUrl.Payments url ->
          match url with
-         | Routes.PaymentUrl.RequestPayment
+         | Routes.PaymentUrl.RequestPayment -> Some OverlaySize.Wide
          | Routes.PaymentUrl.ViewPayment _ -> Some OverlaySize.Standard
          | _ -> None
       | _ -> None

@@ -10,16 +10,7 @@ open Bank.Account.Domain
 open Bank.Payment.Domain
 open Email
 open PartnerBank.Service.Domain
-
-// If payment due date is 24+ hours in the future then schedule a
-// reminder notification to be sent 24 hours before the due date.
-let shouldSchedulePaymentReminder (dueAt: DateTime) =
-   if dueAt > DateTime.UtcNow.AddHours 24 then
-      let reminderTime = dueAt.AddHours -24
-      let timeUntil = reminderTime - DateTime.UtcNow
-      Some timeUntil
-   else
-      None
+open RecurringPaymentSchedule
 
 [<RequireQualifiedAccess>]
 type PaymentRequestSagaStartEvent =
@@ -34,6 +25,7 @@ type PaymentRequestSagaEvent =
    | PaymentRequestNotificationSentToPayer
    | PaymentDeclinedNotificationSentToPayee
    | ScheduledPaymentReminderActivated
+   | PaymentSagaStartedForNextRecurringPayment
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
@@ -52,6 +44,7 @@ type Activity =
    | NotifyPayeeOfDecline
    | WaitForScheduledPaymentReminder of TimeSpan
    | WaitForPayment
+   | ScheduleNextRecurringPayment of nextDueDate: DateTime
 
    interface IActivity with
       member x.MaxAttempts =
@@ -66,10 +59,8 @@ type Activity =
          | WaitForScheduledPaymentReminder time -> Some time
          | NotifyPayerOfRequest
          | NotifyPayeeOfDecline -> Some(TimeSpan.FromMinutes 4.)
+         | ScheduleNextRecurringPayment _ -> Some(TimeSpan.FromSeconds 10.)
 
-   // Custom equality check so we can check for completeness
-   // of WaitForScheduledPaymentReminder without comparing the inner value.
-   // Ex: activityIsDone (Activity.WaitForScheduledPaymentReminder TimeSpan.Zero)
    override x.Equals compareTo =
       match compareTo with
       | :? Activity as compareTo -> x.GetHashCode() = compareTo.GetHashCode()
@@ -77,9 +68,84 @@ type Activity =
 
    override x.GetHashCode() =
       match x with
-      | WaitForScheduledPaymentReminder _ ->
-         hash "WaitForScheduledPaymentReminder"
+      | ScheduleNextRecurringPayment _ -> hash "ScheduleNextRecurringPayment"
       | _ -> hash (string x)
+
+let computedNotificationTimesMappedToActivity
+   props
+   : ActivityLifeCycle<Activity> list
+   =
+   RecurringPaymentSchedule.computePaymentRequestNotificationSchedule props
+   |> List.map (fun time ->
+      let activity =
+         if time = TimeSpan.Zero then
+            Activity.NotifyPayerOfRequest
+         else
+            Activity.WaitForScheduledPaymentReminder time
+
+      ActivityLifeCycle.init props.Now activity)
+
+/// Cancel sending of all scheduled payment request reminder notifications.
+let abortScheduledPaymentReminders
+   (timestamp: DateTime)
+   (state: SagaLifeCycle<Activity>)
+   : SagaLifeCycle<Activity>
+   =
+   let activitiesToAbort =
+      state.InProgress
+      |> List.filter _.Activity.IsWaitForScheduledPaymentReminder
+      |> List.map (fun w -> w.finish timestamp)
+
+   let aborted = activitiesToAbort @ state.Aborted
+
+   let wip =
+      state.InProgress
+      |> List.filter (_.Activity.IsWaitForScheduledPaymentReminder >> not)
+
+   {
+      state with
+         InProgress = wip
+         Aborted = aborted
+   }
+
+// If multiple payment reminders scheduled then will mark
+// the most recent one as finished.
+// (Most recent = smallest InactivityTimeout TimeSpan)
+let finishPaymentReminderActivity
+   (timestamp: DateTime)
+   (state: SagaLifeCycle<Activity>)
+   : SagaLifeCycle<Activity>
+   =
+   let reminders =
+      state.InProgress
+      |> List.filter _.Activity.IsWaitForScheduledPaymentReminder
+
+   let reminderOpt =
+      match reminders with
+      | [] -> None
+      | _ ->
+         reminders
+         |> List.mapi (fun index ts -> index, ts)
+         |> List.minBy (fun (_, ts) ->
+            let (Activity.WaitForScheduledPaymentReminder time) = ts.Activity
+            time)
+         |> Some
+
+   let complete =
+      match reminderOpt with
+      | Some(_, activity) -> activity.finish timestamp :: state.Completed
+      | None -> state.Completed
+
+   let wip =
+      match reminderOpt with
+      | Some(index, _) -> state.InProgress |> List.removeAt index
+      | None -> state.InProgress
+
+   {
+      state with
+         InProgress = wip
+         Completed = complete
+   }
 
 type PaymentRequestSaga = {
    StartEvent: PaymentRequestSagaStartEvent
@@ -88,7 +154,21 @@ type PaymentRequestSaga = {
    PaymentInfo: PaymentRequested
    LifeCycle: SagaLifeCycle<Activity>
    InitiatedBy: Initiator
-}
+} with
+
+   member x.NextRecurringPaymentDueDate =
+      x.LifeCycle.InProgress
+      |> List.tryPick (fun activity ->
+         match activity.Activity with
+         | Activity.ScheduleNextRecurringPayment dueDate -> Some dueDate
+         | _ -> None)
+
+   member x.NotifyPayerOfRequest =
+      x.LifeCycle.InProgress
+      |> List.exists (fun activity ->
+         match activity.Activity with
+         | Activity.NotifyPayerOfRequest -> true
+         | _ -> false)
 
 let applyStartEvent (e: PaymentRequestSagaStartEvent) (timestamp: DateTime) =
    match e with
@@ -102,18 +182,17 @@ let applyStartEvent (e: PaymentRequestSagaStartEvent) (timestamp: DateTime) =
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
-               ActivityLifeCycle.init timestamp Activity.NotifyPayerOfRequest
                ActivityLifeCycle.init timestamp Activity.WaitForPayment
 
-               match
-                  shouldSchedulePaymentReminder
-                     evt.Data.SharedDetails.Expiration
-               with
-               | Some timeUntil ->
-                  ActivityLifeCycle.init
-                     timestamp
-                     (Activity.WaitForScheduledPaymentReminder timeUntil)
-               | None -> ()
+               yield!
+                  computedNotificationTimesMappedToActivity {
+                     DueAt = evt.Data.SharedDetails.DueAt
+                     Now = timestamp
+                     IsSubsequentRecurringPayment =
+                        match evt.Data.RecurringPaymentReference with
+                        | Some info -> info.Settings.PaymentsRequestedCount > 1
+                        | None -> false
+                  }
             ]
       }
      }
@@ -126,12 +205,11 @@ let applyEvent
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
-   let abortActivity = SagaLifeCycle.abortActivity timestamp
 
    // Finishes waiting for payment and aborts the payment reminder, if any.
    let finishWaitingForPayment =
       finishActivity Activity.WaitForPayment
-      >> abortActivity (Activity.WaitForScheduledPaymentReminder TimeSpan.Zero)
+      >> abortScheduledPaymentReminders timestamp
 
    let saga = {
       saga with
@@ -141,11 +219,7 @@ let applyEvent
    match evt with
    | Event.ScheduledPaymentReminderActivated -> {
       saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity (
-               Activity.WaitForScheduledPaymentReminder TimeSpan.Zero
-            )
+         LifeCycle = finishPaymentReminderActivity timestamp saga.LifeCycle
      }
    | Event.PaymentRequestCancelled -> {
       saga with
@@ -161,20 +235,40 @@ let applyEvent
             |> finishWaitingForPayment
             |> addActivity Activity.NotifyPayeeOfDecline
      }
-   | Event.PaymentFulfilled _ -> {
-      saga with
-         LifeCycle = finishWaitingForPayment saga.LifeCycle
-         Status = PaymentRequestSagaStatus.Completed
-     }
+   | Event.PaymentFulfilled fulfillment ->
+      let saga = {
+         saga with
+            LifeCycle = finishWaitingForPayment saga.LifeCycle
+      }
+
+      let nextPaymentDueDateOpt =
+         saga.PaymentInfo.RecurringPaymentReference
+         |> Option.bind (fun info ->
+            RecurrenceSettings.hasNextPaymentDueDate
+               info.Settings
+               saga.PaymentInfo.SharedDetails.DueAt)
+
+      match nextPaymentDueDateOpt with
+      | Some dueDate -> {
+         saga with
+            Status =
+               PaymentRequestStatus.Fulfilled fulfillment
+               |> PaymentRequestSagaStatus.InProgress
+            LifeCycle =
+               saga.LifeCycle
+               |> addActivity (Activity.ScheduleNextRecurringPayment dueDate)
+        }
+      | _ -> {
+         saga with
+            Status = PaymentRequestSagaStatus.Completed
+        }
    | Event.PaymentFailed(_, reason) -> {
       saga with
          Status = PaymentRequestSagaStatus.Failed reason
          LifeCycle =
             saga.LifeCycle
             |> failActivity Activity.WaitForPayment
-            |> abortActivity (
-               Activity.WaitForScheduledPaymentReminder TimeSpan.Zero
-            )
+            |> abortScheduledPaymentReminders timestamp
      }
    | Event.PaymentRequestNotificationSentToPayer -> {
       saga with
@@ -185,6 +279,14 @@ let applyEvent
       saga with
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.NotifyPayeeOfDecline
+         Status = PaymentRequestSagaStatus.Completed
+     }
+   | Event.PaymentSagaStartedForNextRecurringPayment -> {
+      saga with
+         LifeCycle =
+            finishActivity
+               (Activity.ScheduleNextRecurringPayment DateTime.UtcNow)
+               saga.LifeCycle
          Status = PaymentRequestSagaStatus.Completed
      }
    | Event.EvaluateRemainingWork -> {
@@ -229,6 +331,8 @@ let stateTransition
          activityIsDone Activity.NotifyPayeeOfDecline
       | PaymentRequestSagaEvent.ScheduledPaymentReminderActivated ->
          activityIsDone (Activity.WaitForScheduledPaymentReminder TimeSpan.Zero)
+      | PaymentRequestSagaEvent.PaymentSagaStartedForNextRecurringPayment ->
+         activityIsDone (Activity.ScheduleNextRecurringPayment DateTime.UtcNow)
 
    if saga.Status = PaymentRequestSagaStatus.Completed then
       Error SagaStateTransitionError.HasAlreadyCompleted
@@ -316,18 +420,30 @@ let private remindPayerOfPaymentRequest
    emailRef <! msg
 
 let onStartEventPersisted
+   (saga: PaymentRequestSaga)
    (getEmailRef: unit -> IActorRef<EmailMessage>)
+   (sendEventToPaymentSaga:
+      OrgId -> PaymentRequestId -> PaymentRequestSagaEvent -> unit)
    (evt: StartEvent)
    =
    match evt with
    | StartEvent.PaymentRequested e ->
-      notifyPayerOfPaymentRequest (getEmailRef ()) e.Data
+      if saga.NotifyPayerOfRequest then
+         notifyPayerOfPaymentRequest (getEmailRef ()) e.Data
+
+      e.Data.RecurringPaymentReference
+      |> Option.iter (fun info ->
+         sendEventToPaymentSaga
+            e.OrgId
+            info.OriginPaymentId
+            PaymentRequestSagaEvent.PaymentSagaStartedForNextRecurringPayment)
 
 type PersistenceHandlerDependencies = {
    getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
    getEmailRef: unit -> IActorRef<EmailMessage>
    getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
-   sendEventToSelf: PaymentRequested -> PaymentRequestSagaEvent -> unit
+   sendEventToPaymentSaga:
+      OrgId -> PaymentRequestId -> PaymentRequestSagaEvent -> unit
 }
 
 let onEventPersisted
@@ -339,26 +455,41 @@ let onEventPersisted
    let payment = state.PaymentInfo
    let emailRef = dep.getEmailRef ()
 
+   let scheduleNextRecurringPayment (dueDate: DateTime) =
+      let nextPaymentRequestMsg =
+         RequestPaymentCommand.fromRecurring state.InitiatedBy payment dueDate
+         |> AccountCommand.RequestPayment
+         |> AccountMessage.StateChange
+
+      dep.getAccountRef payment.SharedDetails.Payee.ParentAccountId
+      <! nextPaymentRequestMsg
+
    match evt with
    | Event.ScheduledPaymentReminderActivated ->
       remindPayerOfPaymentRequest payment emailRef
    | Event.PaymentRequestCancelled -> ()
    | Event.PaymentRequestDeclined ->
       notifyPayeeOfPaymentDecline payment emailRef
-   | Event.PaymentFulfilled _ -> ()
-   | Event.PaymentFailed _ -> ()
+   | Event.PaymentFulfilled _ ->
+      state.NextRecurringPaymentDueDate
+      |> Option.iter scheduleNextRecurringPayment
+   | Event.PaymentSagaStartedForNextRecurringPayment
+   | Event.PaymentFailed _
    | Event.ResetInProgressActivityAttempts
    | Event.PaymentDeclinedNotificationSentToPayee
-   | Event.PaymentRequestNotificationSentToPayer
+   | Event.PaymentRequestNotificationSentToPayer -> ()
    | Event.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
          | Activity.NotifyPayerOfRequest ->
             notifyPayerOfPaymentRequest emailRef payment
          | Activity.WaitForScheduledPaymentReminder _ ->
-            dep.sendEventToSelf
-               payment
+            dep.sendEventToPaymentSaga
+               payment.SharedDetails.Payee.OrgId
+               payment.SharedDetails.Id
                PaymentRequestSagaEvent.ScheduledPaymentReminderActivated
          | Activity.NotifyPayeeOfDecline ->
             notifyPayeeOfPaymentDecline payment emailRef
          | Activity.WaitForPayment -> ()
+         | Activity.ScheduleNextRecurringPayment nextDate ->
+            scheduleNextRecurringPayment nextDate

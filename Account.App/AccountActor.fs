@@ -238,10 +238,6 @@ let onPersisted
          |> AppSaga.Message.paymentRequest e.OrgId e.CorrelationId
 
       getSagaRef e.CorrelationId <! msg
-   (*
-   | AccountEvent.ThirdPartyPaymentRequested e ->
-      // TODO: Send email requesting payment
-   *)
    | AccountEvent.InternalTransferBetweenOrgsPending e ->
       if e.Data.FromSchedule then
          let msg =

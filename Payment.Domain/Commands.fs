@@ -1,6 +1,7 @@
 namespace Bank.Payment.Domain
 
 open Validus
+open System
 
 open Lib.SharedTypes
 
@@ -17,6 +18,45 @@ module RequestPaymentCommand =
          initiatedBy
          data
 
+   let fromRecurring
+      (initiatedBy: Initiator)
+      (previousPaymentRequest: PaymentRequested)
+      (dueAt: DateTime)
+      =
+      let updateRecurringSchedule schedule =
+         schedule
+         |> Option.map (fun info -> {
+            info with
+               OriginPaymentId = previousPaymentRequest.SharedDetails.Id
+               Settings.PaymentsRequestedCount =
+                  info.Settings.PaymentsRequestedCount + 1
+         })
+
+      let sharedForNewPaymentRequest = {
+         previousPaymentRequest.SharedDetails with
+            Id = Guid.NewGuid() |> PaymentRequestId
+            DueAt = dueAt
+      }
+
+      let pay =
+         match previousPaymentRequest with
+         | PaymentRequested.Platform p ->
+            PaymentRequested.Platform {
+               p with
+                  SharedDetails = sharedForNewPaymentRequest
+                  RecurringPaymentReference =
+                     updateRecurringSchedule p.RecurringPaymentReference
+            }
+         | PaymentRequested.ThirdParty p ->
+            PaymentRequested.ThirdParty {
+               p with
+                  SharedDetails = sharedForNewPaymentRequest
+                  RecurringPaymentReference =
+                     updateRecurringSchedule p.RecurringPaymentReference
+            }
+
+      create initiatedBy pay
+
    let toEvent
       (cmd: RequestPaymentCommand)
       : ValidationResult<BankEvent<PaymentRequested>>
@@ -25,10 +65,9 @@ module RequestPaymentCommand =
          let shared = cmd.Data.SharedDetails
          let! _ = Check.String.notEmpty "memo" shared.Memo
 
-         let expiration = shared.Expiration.ToUniversalTime()
+         let dueAt = Lib.Time.DateTime.asEndOfDayUtc shared.DueAt
 
-         let! _ =
-            Lib.Validators.datePresentOrFutureValidator "due date" expiration
+         let! _ = Lib.Validators.datePresentOrFutureValidator "due date" dueAt
 
          match cmd.Data with
          | Platform info ->
@@ -46,7 +85,7 @@ module RequestPaymentCommand =
 
             let info = {
                info with
-                  SharedDetails.Expiration = expiration
+                  SharedDetails.DueAt = dueAt
             }
 
             let cmd = { cmd with Data = Platform info }
@@ -57,7 +96,7 @@ module RequestPaymentCommand =
 
             let info = {
                info with
-                  SharedDetails.Expiration = expiration
+                  SharedDetails.DueAt = dueAt
             }
 
             let cmd = { cmd with Data = ThirdParty info }

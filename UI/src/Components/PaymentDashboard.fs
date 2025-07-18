@@ -185,7 +185,7 @@ let renderIncomingTableRow
          paymentId |> PaymentActionView.ViewPayment |> Some |> actionNav)
 
       attr.children [
-         Html.td (DateTime.formatShort sharedDetails.Expiration)
+         Html.td (DateTime.formatShort sharedDetails.DueAt)
 
          Html.td sharedDetails.Payee.OrgName
 
@@ -256,7 +256,7 @@ let renderTableRow
       attr.children [
          Html.td (DateTime.formatShort sharedDetails.CreatedAt)
 
-         Html.td (DateTime.formatShort sharedDetails.Expiration)
+         Html.td (DateTime.formatShort sharedDetails.DueAt)
 
          match payment with
          | PaymentRequest.Platform p -> Html.td p.Payer.OrgName
