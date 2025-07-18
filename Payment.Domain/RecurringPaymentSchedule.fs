@@ -129,11 +129,14 @@ let computePaymentSchedule (opts: PaymentScheduleComputeProps) : DateTime list =
 
    (0, opts.DueAt)
    |> List.unfold (fun (counter, currDueDate) ->
-      if counter = num then
+      let agg due = due, (counter + 1, due)
+
+      if counter = 0 then
+         Some(agg currDueDate)
+      elif counter = num then
          None
       else
-         hasNextPaymentDueDate opts.Settings currDueDate
-         |> Option.map (fun due -> due, (counter + 1, due)))
+         hasNextPaymentDueDate opts.Settings currDueDate |> Option.map agg)
 
 type PaymentRequestNotificationScheduleProps = {
    Now: DateTime
