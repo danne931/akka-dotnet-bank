@@ -93,11 +93,13 @@ let nextPaymentDueDate (settings: RecurrenceSettings) (dueAt: DateTime) =
 
 let canSendAnotherPaymentRequest
    (settings: RecurrenceSettings)
-   (dueDate: DateTime)
+   (previousDueDate: DateTime)
    =
    match settings.Termination with
    | RecurrenceTerminationCondition.Never -> true
-   | RecurrenceTerminationCondition.EndDate endDate -> dueDate < endDate
+   | RecurrenceTerminationCondition.EndDate endDate ->
+      let nextDue = nextPaymentDueDate settings previousDueDate
+      nextDue.Date <= endDate.Date
    | RecurrenceTerminationCondition.MaxPayments maxPayments ->
       settings.PaymentsRequestedCount < maxPayments
 
@@ -124,8 +126,11 @@ type PaymentScheduleComputeProps = {
    MaxPayments: int
 }
 
-let computePaymentSchedule (opts: PaymentScheduleComputeProps) : DateTime list =
-   let num = min opts.MaxPayments 100
+let computePaymentDueDateSchedule
+   (opts: PaymentScheduleComputeProps)
+   : DateTime list
+   =
+   let maxPaymentsDueDates = min opts.MaxPayments 100
 
    (0, opts.DueAt)
    |> List.unfold (fun (counter, currDueDate) ->
@@ -133,7 +138,7 @@ let computePaymentSchedule (opts: PaymentScheduleComputeProps) : DateTime list =
 
       if counter = 0 then
          Some(agg currDueDate)
-      elif counter = num then
+      elif counter = maxPaymentsDueDates then
          None
       else
          hasNextPaymentDueDate opts.Settings currDueDate |> Option.map agg)

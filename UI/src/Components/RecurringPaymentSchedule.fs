@@ -18,7 +18,7 @@ let render
       |})
    =
    let scheduleRows =
-      RecurringPaymentSchedule.computePaymentSchedule {
+      RecurringPaymentSchedule.computePaymentDueDateSchedule {
          Settings = props.Settings
          DueAt = props.DueAt
          MaxPayments =
@@ -31,11 +31,11 @@ let render
       |> List.chunkBySize 6
 
    Html.details [
-      attr.name "payment schedule"
+      attr.name "payment due dates"
       attr.isOpen true
       attr.classes [ "payment-schedule" ]
       attr.children [
-         Html.summary "Payment Schedule"
+         Html.summary "Payment Due Date Schedule"
 
          for row in scheduleRows do
             classyNode Html.div [ "grid" ] [
@@ -62,7 +62,7 @@ let render
             | RecurrenceTerminationCondition.MaxPayments num ->
                $"Ends after {num} payments"
             | RecurrenceTerminationCondition.EndDate date ->
-               $"Ends by {DateTime.format date}"
+               $"No payments due after {DateTime.format date}"
          )
 
          Html.br []

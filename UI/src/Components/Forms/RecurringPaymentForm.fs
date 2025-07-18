@@ -102,7 +102,7 @@ let private dayOfWeekField =
       Error = fun _ -> None
       Attributes = {
          Label = "Day of week:"
-         Placeholder = "Select day"
+         Placeholder = ""
          Options = [
             "1", "Monday"
             "2", "Tuesday"
@@ -161,7 +161,7 @@ let private recurrenceIntervalMonthlyForm
          Error = fun _ -> None
          Attributes = {
             Label = "On the:"
-            Placeholder = "Select week"
+            Placeholder = ""
             Options = [
                "0", "1st"
                "1", "2nd"
@@ -186,7 +186,7 @@ let private recurrenceIntervalMonthlyForm
          Error = fun _ -> None
          Attributes = {
             Label = "Repeats on:"
-            Placeholder = "Select pattern type"
+            Placeholder = ""
             Options = [
                "day_of_month", "Specific day of month (e.g., 15th)"
                "day_of_week", "Specific day of week (e.g., 2nd Wednesday)"
@@ -202,7 +202,7 @@ let private recurrenceIntervalMonthlyForm
    |> Form.group
 
 let private recurrenceTerminationForm =
-   let endDateField =
+   let lastDueDateByField =
       Form.dateField {
          Parser =
             CustomDateInterpreter.validate
@@ -217,8 +217,8 @@ let private recurrenceTerminationForm =
          Update = fun newValue values -> { values with EndDate = newValue }
          Error = fun _ -> None
          Attributes = {
-            Label = "End date:"
-            Placeholder = "Select end date"
+            Label = "No more payments due after:"
+            Placeholder = ""
             HtmlAttributes = []
          }
       }
@@ -252,9 +252,9 @@ let private recurrenceTerminationForm =
          Error = fun _ -> None
          Attributes = {
             Label = "Ends:"
-            Placeholder = "Select end condition"
+            Placeholder = ""
             Options = [
-               "date", "On a specific date"
+               "lastDueDateBy", "After a specific date"
                "maxPayments", "After a number of payments"
                "never", "Never (until cancelled)"
             ]
@@ -263,7 +263,7 @@ let private recurrenceTerminationForm =
 
    terminationTypeField
    |> Form.andThen (function
-      | "date" -> endDateField
+      | "lastDueDateBy" -> lastDueDateByField
       | "maxPayments" -> maxPaymentsField
       | _ -> Form.succeed RecurrenceTerminationCondition.Never)
    |> Form.group
