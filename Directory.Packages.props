@@ -36,7 +36,7 @@
     <PackageVersion Include="Elmish.SweetAlert" Version="3.4.0" />
     <PackageVersion Include="Fable.FontAwesome" Version="$(FontAwesomeVersion)" />
     <PackageVersion Include="Fable.FontAwesome.Free" Version="$(FontAwesomeVersion)" />
-    <PackageVersion Include="Fable.Form.Simple" Version="4.1.0" />
+    <PackageVersion Include="Fable.Form.Simple" Version="5.0.1" />
     <PackageVersion Include="Fable.Mocha" Version="2.17.0" />
     <PackageVersion Include="Fable.SimpleHttp" Version="3.6.0" />
     <PackageVersion Include="Feliz.Recharts" Version="4.3.0" />
