@@ -69,6 +69,24 @@ module RequestPaymentCommand =
 
          let! _ = Lib.Validators.datePresentOrFutureValidator "due date" dueAt
 
+         let! recurringPaymentReference =
+            match cmd.Data.RecurringPaymentReference with
+            | Some info ->
+               match info.Settings.Termination with
+               | RecurringPaymentSchedule.RecurrenceTerminationCondition.EndDate date ->
+                  Lib.Validators.dateInFutureValidator
+                     "Recurring payment termination end date"
+                     date
+                  |> Result.map (fun date ->
+                     Some {
+                        info with
+                           Settings.Termination =
+                              Lib.Time.DateTime.asEndOfDayUtc date
+                              |> RecurringPaymentSchedule.RecurrenceTerminationCondition.EndDate
+                     })
+               | _ -> Ok cmd.Data.RecurringPaymentReference
+            | _ -> Ok None
+
          match cmd.Data with
          | Platform info ->
             let payerOrgId = OrgId.get info.Payer.OrgId
@@ -86,6 +104,7 @@ module RequestPaymentCommand =
             let info = {
                info with
                   SharedDetails.DueAt = dueAt
+                  RecurringPaymentReference = recurringPaymentReference
             }
 
             let cmd = { cmd with Data = Platform info }
@@ -97,6 +116,7 @@ module RequestPaymentCommand =
             let info = {
                info with
                   SharedDetails.DueAt = dueAt
+                  RecurringPaymentReference = recurringPaymentReference
             }
 
             let cmd = { cmd with Data = ThirdParty info }
