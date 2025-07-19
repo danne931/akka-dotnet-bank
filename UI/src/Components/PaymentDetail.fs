@@ -280,6 +280,18 @@ let PaymentDetailComponent
          (DateTime.format sharedDetails.DueAt)
 
       Html.br []
+
+      match sharedDetails.RecurrenceSettings with
+      | Some settings ->
+         RecurringPaymentScheduleComponent.render {|
+            Settings = settings
+            DueAt = sharedDetails.DueAt
+            PaymentAmount = sharedDetails.Amount
+            MaxPaymentsToDisplay = 6
+            MaxColumns = 3
+         |}
+      | None -> ()
+
       Html.br []
 
       match payment.Status with

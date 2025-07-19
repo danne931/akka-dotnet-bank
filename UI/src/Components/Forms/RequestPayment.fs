@@ -384,6 +384,8 @@ let PaymentRequestFormComponent
                      Settings = settings
                      DueAt = dueAt
                      PaymentAmount = paymentAmount
+                     MaxPaymentsToDisplay = 12
+                     MaxColumns = 6
                   |}
                | _ -> ()
 

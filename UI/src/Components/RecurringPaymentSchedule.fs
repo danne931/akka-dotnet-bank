@@ -7,16 +7,19 @@ open Lib.Time
 open System
 open Feliz
 
-let private numberOfPaymentsToDisplayAtMost = 12
-
 let render
    (props:
       {|
          Settings: RecurrenceSettings
          DueAt: DateTime
          PaymentAmount: decimal
+         MaxPaymentsToDisplay: int
+         MaxColumns: int
       |})
    =
+   let maxColumns = max 1 props.MaxColumns
+   let maxPaymentsToDisplay = max 1 props.MaxPaymentsToDisplay
+
    let scheduleRows =
       RecurringPaymentSchedule.computePaymentDueDateSchedule {
          Settings = props.Settings
@@ -24,11 +27,11 @@ let render
          MaxPayments =
             match props.Settings.Termination with
             | RecurrenceTerminationCondition.MaxPayments num ->
-               min num numberOfPaymentsToDisplayAtMost
-            | _ -> numberOfPaymentsToDisplayAtMost
+               min num maxPaymentsToDisplay
+            | _ -> maxPaymentsToDisplay
       }
       |> List.mapi (fun ind v -> ind + 1, v)
-      |> List.chunkBySize 6
+      |> List.chunkBySize maxColumns
 
    Html.details [
       attr.name "payment due dates"
