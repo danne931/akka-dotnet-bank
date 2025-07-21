@@ -4,6 +4,9 @@ open System
 open Validus
 open Validus.Operators
 
+/// Trim money symbols such as ($, %) typically present in forms.
+let trimMoneySymbols (input: string) = input.Replace("%", "").Replace("$", "")
+
 let parseInt: Validator<string, int> =
    fun field input ->
       try
@@ -21,7 +24,7 @@ let parseInt64: Validator<string, int64> =
 let parseDecimal: Validator<string, decimal> =
    fun field input ->
       try
-         decimal input |> Ok
+         input |> trimMoneySymbols |> decimal |> Ok
       with _ ->
          Error <| ValidationErrors.create field [ $"Invalid {field}" ]
 

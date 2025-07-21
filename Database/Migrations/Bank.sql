@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS transfer_domestic;
 DROP TABLE IF EXISTS transfer;
 DROP TABLE IF EXISTS transfer_domestic_recipient;
 DROP TABLE IF EXISTS recurring_payment_schedule;
+DROP TABLE IF EXISTS invoice;
 DROP TABLE IF EXISTS merchant;
 DROP TABLE IF EXISTS saga;
 DROP TABLE IF EXISTS ancillary_transaction_info;
@@ -311,6 +312,17 @@ SELECT prevent_update('billing_statement');
 
 CREATE INDEX billing_statement_org_id_idx ON billing_statement(org_id);
 CREATE INDEX billing_statement_account_id_idx ON billing_statement(account_id);
+
+CREATE TABLE invoice (
+   invoice_id UUID PRIMARY KEY,
+   line_items JSONB NOT NULL,
+   tax_percent NUMERIC(4,2) NOT NULL,
+   subtotal MONEY NOT NULL,
+   total MONEY NOT NULL
+);
+
+SELECT add_created_at_column('invoice');
+SELECT add_updated_at_column_and_trigger('invoice');
 
 CREATE TYPE recurrence_termination_type AS ENUM ('EndDate', 'MaxPayments', 'Never');
 
@@ -802,6 +814,7 @@ CREATE TABLE payment_request(
    payee_parent_account_id UUID NOT NULL REFERENCES partner_bank_parent_account(parent_account_id),
    payee_account_id UUID NOT NULL REFERENCES account(account_id),
    fulfilled_by_transfer_id UUID REFERENCES transfer(transfer_id),
+   invoice_id UUID REFERENCES invoice(invoice_id),
    fulfilled_at TIMESTAMPTZ,
    recurring_payment_schedule_id UUID REFERENCES recurring_payment_schedule
 );

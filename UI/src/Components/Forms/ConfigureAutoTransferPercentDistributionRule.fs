@@ -54,7 +54,7 @@ let fieldFrequency =
             match Frequency.fromString input with
             | Some f -> Ok f
             | None -> Error $"Invalid frequency {input}"
-      Value = fun values -> values.Frequency
+      Value = _.Frequency
       Update = fun newValue values -> { values with Frequency = newValue }
       Error = fun _ -> None
       Attributes = {
@@ -76,7 +76,11 @@ let destinationAccountForm
    (accounts: Map<AccountId, Account>)
    (values: Values)
    (index: int)
-   : Form.Form<DestinationAccountValues, _, _>
+   : Form.Form<
+        DestinationAccountValues,
+        UnvalidatedDistributionDestinationAccount,
+        _
+      >
    =
    let optionIsTarget (account: Account) =
       string account.AccountId = values.TargetAccountId
@@ -95,7 +99,7 @@ let destinationAccountForm
          Parser =
             Form.Util.accountParser accounts "Destination account"
             >> validationErrorsHumanFriendly
-         Value = fun values -> values.AccountId
+         Value = _.AccountId
          Update = fun newValue values -> { values with AccountId = newValue }
          Error = fun _ -> None
          Attributes = {
@@ -192,7 +196,7 @@ let form
                   AccountId = ""
                   PercentToAllocate = "1"
                }
-               Value = fun values -> values.Destinations
+               Value = _.Destinations
                Update =
                   fun newValue values -> {
                      values with

@@ -16,6 +16,7 @@ open Lib.SharedTypes
 open Lib.Time
 open RecurringPaymentSchedule
 open RecurringPaymentForm
+open InvoiceForm
 
 type Values = {
    Amount: string
@@ -25,22 +26,27 @@ type Values = {
    PayerEmail: string
    Memo: string
    DueAt: string
+   IsInvoice: bool
+   InvoiceValues: InvoiceValues
    IsRecurringPayment: bool
    RecurrenceValues: RecurrenceValues
 }
 
-let amountParser =
+let moneyParser =
    amountValidatorFromString "Payment amount" >> validationErrorsHumanFriendly
 
-let amountField =
+let paymentAmountField =
    Form.textField {
-      Parser = amountParser
-      Value = _.Amount
+      Parser = moneyParser
+      Value =
+         fun values ->
+            Form.Util.formattedMoney values.Amount
+            |> Option.defaultValue values.Amount
       Update = fun newValue values -> { values with Amount = newValue }
       Error = fun _ -> None
       Attributes = {
          Label = "Amount:"
-         Placeholder = "1337"
+         Placeholder = ""
          HtmlAttributes = []
       }
    }
@@ -103,6 +109,47 @@ let fieldPayeeAccountSelect
       }
    }
 
+// Include invoice-specific form fields or just simple payment amount
+let asInvoiceFormMaybe: Form.Form<Values, decimal * Invoice option, _> =
+   Form.checkboxField {
+      Parser = Ok
+      Value = _.IsInvoice
+      Update =
+         fun isInvoice values -> {
+            values with
+               IsInvoice = isInvoice
+               // Reset total if user toggled between invoice mode & non-invoice
+               // mode.  Retain invoice values if toggled from invoice mode to
+               // standard mode and then back to invoice mode.
+               Amount =
+                  if isInvoice then
+                     values.InvoiceValues
+                     |> parsedInvoiceFromInvoiceValues
+                     |> _.Total
+                     |> string
+                  else
+                     "0"
+         }
+      Error = fun _ -> None
+      Attributes = { Text = "Attach invoice" }
+   }
+   |> Form.andThen (fun asInvoice ->
+      if asInvoice then
+         Form.succeed (fun (invoice: Invoice) -> invoice.Total, Some invoice)
+         |> Form.append invoiceForm
+         |> Form.mapValues {
+            Value = _.InvoiceValues
+            Update =
+               fun (a: InvoiceValues) (b: Values) -> {
+                  b with
+                     InvoiceValues = a
+                     Amount = string (parsedInvoiceFromInvoiceValues a).Total
+               }
+         }
+      else
+         Form.succeed (fun amount -> amount, None)
+         |> Form.append paymentAmountField)
+
 let formPlatformPayment
    (payeeOrg: Org)
    (payeeDestinationAccounts: Map<AccountId, Account>)
@@ -132,7 +179,8 @@ let formPlatformPayment
 
    let onSubmit
       (selectedPayerOrgId: string)
-      (amount, dueAt)
+      (amount: decimal, invoiceOpt: Invoice option)
+      (dueAt: DateTime)
       (memo: string)
       (selectedDestinationAccountId: string)
       (recurrenceSettings: RecurrenceSettings option)
@@ -172,6 +220,7 @@ let formPlatformPayment
                   Settings = settings
                   OriginPaymentId = paymentId
                })
+            Invoice = invoiceOpt
          }
 
       let cmd =
@@ -183,12 +232,8 @@ let formPlatformPayment
 
    Form.succeed onSubmit
    |> Form.append fieldOrgPayerSelect
-   |> Form.append (
-      Form.succeed (fun amount dueAt -> amount, dueAt)
-      |> Form.append amountField
-      |> Form.append dueAtField
-      |> Form.group
-   )
+   |> Form.append asInvoiceFormMaybe
+   |> Form.append dueAtField
    |> Form.append memoField
    |> Form.append (fieldPayeeAccountSelect payeeDestinationAccounts)
    |> Form.append (
@@ -236,11 +281,12 @@ let formThirdPartyPayment
       }
 
    let onSubmit
-      (amount, dueAt)
-      memo
+      (amount, invoiceOpt: Invoice option)
+      (dueAt: DateTime)
+      (memo: string)
       (selectedDestinationAccountId: string)
-      payerName
-      payerEmail
+      (payerName: string)
+      (payerEmail: Email)
       (recurrenceSettings: RecurrenceSettings option)
       =
       let payeeAccountId =
@@ -260,6 +306,7 @@ let formThirdPartyPayment
                   Settings = settings
                   OriginPaymentId = paymentId
                })
+            Invoice = invoiceOpt
             SharedDetails = {
                Id = paymentId
                Amount = amount
@@ -282,12 +329,8 @@ let formThirdPartyPayment
       Msg.GetAndSubmit(FormEntityId.Account payeeAccountId, cmd)
 
    Form.succeed onSubmit
-   |> Form.append (
-      Form.succeed (fun amount dueAt -> amount, dueAt)
-      |> Form.append amountField
-      |> Form.append dueAtField
-      |> Form.group
-   )
+   |> Form.append asInvoiceFormMaybe
+   |> Form.append dueAtField
    |> Form.append memoField
    |> Form.append (fieldPayeeAccountSelect payeeDestinationAccounts)
    |> Form.append fieldPayerName
@@ -323,7 +366,7 @@ let PaymentRequestFormComponent
       |> Option.defaultValue ""
 
    let initValues = {
-      Amount = ""
+      Amount = "1337"
       PayeeAccountId = defaultDestinationAccount
       PayerOrgId = ""
       PayerName = ""
@@ -331,6 +374,8 @@ let PaymentRequestFormComponent
       Memo = ""
       DueAt = DateTime.format (DateTime.Now.AddMonths 1)
       IsRecurringPayment = false
+      IsInvoice = false
+      InvoiceValues = defaultInvoiceValues
       RecurrenceValues = defaultRecurringPaymentValues
    }
 
@@ -375,7 +420,7 @@ let PaymentRequestFormComponent
                   model.Values.RecurrenceValues
 
             let parsedDueDate = dateParser model.Values.DueAt
-            let parsedAmount = amountParser model.Values.Amount
+            let parsedAmount = moneyParser model.Values.Amount
 
             React.fragment [
                match parsedSettings.Result, parsedDueDate, parsedAmount with

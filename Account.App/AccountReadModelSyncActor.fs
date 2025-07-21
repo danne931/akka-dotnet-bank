@@ -34,6 +34,7 @@ type SqlParamsDerivedFromAccountEvents = {
    PlatformPayment: SqlParams
    ThirdPartyPayment: SqlParams
    RecurringPaymentSchedule: SqlParams
+   Invoice: SqlParams
    Transfer: SqlParams
    InternalTransferWithinOrg: SqlParams
    InternalTransferBetweenOrgs: SqlParams
@@ -821,6 +822,9 @@ let sqlParamReducer
             PaymentSqlWriter.recurringPaymentScheduleId (
                e.Data.RecurringPaymentReference |> Option.map _.Settings.Id
             )
+
+            "invoiceId",
+            PaymentSqlWriter.invoiceId (e.Data.Invoice |> Option.map _.Id)
          ]
          @ paymentRequestBaseSqlParams e.Data
 
@@ -855,6 +859,24 @@ let sqlParamReducer
                acc with
                   RecurringPaymentSchedule =
                      recurrenceParams :: acc.RecurringPaymentSchedule
+            }
+
+      let acc =
+         match e.Data.Invoice with
+         | None -> acc
+         | Some invoice ->
+            let invoiceParams = [
+               "invoiceId", InvoiceSqlMapper.Writer.invoiceId invoice.Id
+               "lineItems", InvoiceSqlMapper.Writer.lineItems invoice.LineItems
+               "taxPercent",
+               InvoiceSqlMapper.Writer.taxPercent invoice.TaxPercent
+               "subtotal", InvoiceSqlMapper.Writer.subtotal invoice.SubTotal
+               "total", InvoiceSqlMapper.Writer.total invoice.Total
+            ]
+
+            {
+               acc with
+                  Invoice = invoiceParams :: acc.Invoice
             }
 
       match e.Data with
@@ -994,6 +1016,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          PlatformPayment = []
          ThirdPartyPayment = []
          RecurringPaymentSchedule = []
+         Invoice = []
          Transfer = []
          InternalTransferWithinOrg = []
          InternalTransferBetweenOrgs = []
@@ -1176,6 +1199,24 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       """,
       sqlParamsDerivedFromAccountEvents.RecurringPaymentSchedule
 
+      $"""
+      INSERT into {InvoiceSqlMapper.table}
+         ({InvoiceSqlMapper.Fields.invoiceId},
+          {InvoiceSqlMapper.Fields.lineItems},
+          {InvoiceSqlMapper.Fields.taxPercent},
+          {InvoiceSqlMapper.Fields.subtotal},
+          {InvoiceSqlMapper.Fields.total})
+      VALUES
+         (@invoiceId,
+          @lineItems,
+          @taxPercent,
+          @subtotal,
+          @total)
+      ON CONFLICT ({InvoiceSqlMapper.Fields.invoiceId})
+      DO NOTHING;
+      """,
+      sqlParamsDerivedFromAccountEvents.Invoice
+
       let paymentTable = PaymentSqlMapper.Table.payment
 
       $"""
@@ -1191,7 +1232,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {PaymentFields.payeeOrgId},
           {PaymentFields.payeeAccountId},
           {PaymentFields.payeeParentAccountId},
-          {PaymentFields.recurringPaymentScheduleId})
+          {PaymentFields.recurringPaymentScheduleId},
+          {PaymentFields.invoiceId})
       VALUES
          (@paymentId,
           @initiatedById,
@@ -1204,7 +1246,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           @payeeOrgId,
           @payeeAccountId,
           @payeeParentAccountId,
-          @recurringPaymentScheduleId)
+          @recurringPaymentScheduleId,
+          @invoiceId)
       ON CONFLICT ({PaymentFields.paymentId})
       DO NOTHING;
       """,

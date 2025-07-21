@@ -825,6 +825,7 @@ let seedPayments
                         ParentAccountId = payer.ParentAccountId
                      }
                      RecurringPaymentReference = recurringPaymentReference
+                     Invoice = None
                   })
 
             payer, { cmd with Timestamp = buffer }
@@ -852,6 +853,7 @@ let seedPayments
                }
                ShortId = PaymentPortalShortId.create ()
                RecurringPaymentReference = None
+               Invoice = None
                SharedDetails = {
                   Id = Guid.NewGuid() |> PaymentRequestId
                   Amount = 1337m
@@ -947,6 +949,7 @@ let seedPayments
                      DueAt = DateTime.UtcNow.AddDays 13
                      Memo = "Services rendered..."
                   }
+                  Invoice = None
                   RecurringPaymentReference = None
                   Payer = {
                      OrgId = myOrg.OrgId

@@ -25,9 +25,9 @@ module PaymentRequestSharedEventDetails =
          Memo = p.SharedDetails.Memo
       }
 
+/// The existing PaymentRequestId & recurrence settings
+/// that this next recurring payment will be based on.
 type RecurringPaymentReference = {
-   // The existing payment request that this next
-   // recurring payment will be based on.
    OriginPaymentId: PaymentRequestId
    Settings: RecurringPaymentSchedule.RecurrenceSettings
 }
@@ -36,6 +36,7 @@ type PlatformPaymentRequested = {
    SharedDetails: PaymentRequestSharedEventDetails
    Payer: PlatformPayer
    RecurringPaymentReference: RecurringPaymentReference option
+   Invoice: Invoice option
 }
 
 type ThirdPartyPaymentRequested = {
@@ -43,6 +44,7 @@ type ThirdPartyPaymentRequested = {
    Payer: ThirdPartyPayer
    ShortId: PaymentPortalShortId
    RecurringPaymentReference: RecurringPaymentReference option
+   Invoice: Invoice option
 }
 
 type PaymentRequested =
@@ -64,6 +66,11 @@ type PaymentRequested =
       | Platform p -> p.RecurringPaymentReference
       | ThirdParty p -> p.RecurringPaymentReference
 
+   member x.Invoice =
+      match x with
+      | Platform p -> p.Invoice
+      | ThirdParty p -> p.Invoice
+
 module PaymentRequested =
    let toPaymentRequest (e: BankEvent<PaymentRequested>) : PaymentRequest =
       let sharedDetails: PaymentRequestSharedDetails = {
@@ -77,6 +84,7 @@ module PaymentRequested =
          Status = PaymentRequestStatus.Requested
          RecurrenceSettings =
             e.Data.RecurringPaymentReference |> Option.map _.Settings
+         Invoice = e.Data.Invoice
       }
 
       match e.Data with

@@ -16,6 +16,7 @@
     <Compile Include="PaymentSqlMapper.fs" />
     <Compile Include="TransferSqlMapper.fs" />
     <Compile Include="RecurringPaymentScheduleSqlMapper.fs" />
+    <Compile Include="InvoiceSqlMapper.fs" />
     <Compile Include="CommandApprovalRuleSqlMapper.fs" />
     <Compile Include="CommandApprovalProgressSqlMapper.fs" />
   </ItemGroup>

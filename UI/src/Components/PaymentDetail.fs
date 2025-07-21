@@ -188,6 +188,36 @@ let private renderInfoRow (label: string) (value: string) =
       ]
    ]
 
+let renderInvoice (invoice: Invoice) =
+   Html.details [
+      attr.name "invoice line items"
+      attr.isOpen true
+      attr.classes [ "invoice" ]
+      attr.children [
+         Html.summary "Invoice"
+         Html.article [
+            classyNode Html.div [ "grid" ] [
+               renderInfoRow "Subtotal:" (Money.format invoice.SubTotal)
+               renderInfoRow "Tax:" (string invoice.TaxPercent + "%")
+            ]
+            renderInfoRow "Total:" (Money.format invoice.Total)
+
+
+            Html.hr []
+
+            yield!
+               invoice.LineItems
+               |> List.mapi (fun ind lineItem ->
+                  let lineItemTotal =
+                     decimal lineItem.Quantity * lineItem.UnitPrice
+
+                  renderInfoRow
+                     $"Item {ind + 1}:"
+                     $"{lineItem.Quantity} {lineItem.Name} for {Money.format lineItem.UnitPrice} each = {Money.format lineItemTotal}")
+         ]
+      ]
+   ]
+
 [<ReactComponent>]
 let PaymentDetailComponent
    (session: UserSession)
@@ -290,9 +320,15 @@ let PaymentDetailComponent
             MaxPaymentsToDisplay = 6
             MaxColumns = 3
          |}
+
+         Html.br []
       | None -> ()
 
-      Html.br []
+      match sharedDetails.Invoice with
+      | Some invoice ->
+         renderInvoice invoice
+         Html.br []
+      | None -> ()
 
       match payment.Status with
       | PaymentRequestStatus.Fulfilled f ->

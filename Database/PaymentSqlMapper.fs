@@ -31,6 +31,7 @@ module PaymentFields =
    let fulfilledByTransferId = "fulfilled_by_transfer_id"
    let fulfilledAt = "fulfilled_at"
    let recurringPaymentScheduleId = "recurring_payment_schedule_id"
+   let invoiceId = "invoice_id"
    let createdAt = "created_at"
 
    // Specific to payment_request_platform table
@@ -88,6 +89,9 @@ module PaymentSqlReader =
       PaymentFields.recurringPaymentScheduleId
       |> read.uuidOrNone
       |> Option.map RecurringPaymentSchedule.RecurrenceScheduleId
+
+   let invoiceId (read: RowReader) =
+      PaymentFields.invoiceId |> read.uuidOrNone |> Option.map InvoiceId
 
    let createdAt (read: RowReader) = read.dateTime PaymentFields.createdAt
 
@@ -161,6 +165,9 @@ module PaymentSqlWriter =
    let recurringPaymentScheduleId
       (idOpt: RecurringPaymentSchedule.RecurrenceScheduleId option)
       =
+      idOpt |> Option.map _.Value |> Sql.uuidOrNone
+
+   let invoiceId (idOpt: InvoiceId option) =
       idOpt |> Option.map _.Value |> Sql.uuidOrNone
 
    let createdAt (date: DateTime) = Sql.timestamptz date

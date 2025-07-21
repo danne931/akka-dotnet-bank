@@ -57,15 +57,17 @@ let positiveAmountParser
    )
 
 let rec trimLeadingZeros (input: string) : string =
-   if input <> "0" && input.StartsWith("0") then
-      trimLeadingZeros <| input.Substring(1)
+   if input <> "0" && input.StartsWith "0" then
+      trimLeadingZeros (input.Substring 1)
    else
       input
 
 let trimNegativeSign (input: string) : string =
-   if input.StartsWith("-") then input.Substring(1) else input
+   if input.StartsWith "-" then input.Substring 1 else input
 
 let formattedPositiveDecimal (input: string) : string option =
+   let input = trimMoneySymbols input
+
    if input = "0" || String.IsNullOrWhiteSpace input then
       Some "0"
    else
@@ -74,3 +76,9 @@ let formattedPositiveDecimal (input: string) : string option =
          input |> trimNegativeSign |> trimLeadingZeros |> Some
       with _ ->
          None
+
+let formattedPercent (input: string) : string option =
+   formattedPositiveDecimal input |> Option.map (fun str -> str + "%")
+
+let formattedMoney (input: string) : string option =
+   formattedPositiveDecimal input |> Option.map ((+) "$")

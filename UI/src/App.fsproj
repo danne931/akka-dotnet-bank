@@ -50,6 +50,7 @@
     <Compile Include="Components/Forms/Util.fs" />
     <Compile Include="Components/Forms/FormContainer.fs" />
     <Compile Include="Components/Forms/AccountProfile.fs" />
+    <Compile Include="Components/Forms/InvoiceForm.fs" />
     <Compile Include="Components/Forms/RecurringPaymentForm.fs" />
     <Compile Include="Components/Forms/ConfigureAutoTransferRuleContainer.fs" />
     <Compile Include="Components/Forms/ConfigureAutoTransferZeroBalanceRule.fs" />

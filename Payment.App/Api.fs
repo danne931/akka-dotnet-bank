@@ -28,7 +28,9 @@ let getPayments
             thirdPartyPay.{PaymentFields.ThirdParty.shortId},
             recurrence.{RecurringPaymentScheduleSqlMapper.Fields.pattern},
             recurrence.{RecurringPaymentScheduleSqlMapper.Fields.terminationDetail},
-            recurrence.{RecurringPaymentScheduleSqlMapper.Fields.paymentsRequestedCount}
+            recurrence.{RecurringPaymentScheduleSqlMapper.Fields.paymentsRequestedCount},
+            invoice.{InvoiceSqlMapper.Fields.lineItems},
+            invoice.{InvoiceSqlMapper.Fields.taxPercent}
          FROM {Table.payment} pay
          LEFT JOIN {Table.platformPayment} platformPay using({PaymentFields.paymentId})
          LEFT JOIN {Table.thirdPartyPayment} thirdPartyPay using({PaymentFields.paymentId})
@@ -36,6 +38,10 @@ let getPayments
             ON
                pay.{PaymentFields.recurringPaymentScheduleId} IS NOT NULL
                AND pay.{PaymentFields.recurringPaymentScheduleId} = recurrence.{RecurringPaymentScheduleSqlMapper.Fields.id}
+         LEFT JOIN {InvoiceSqlMapper.table} invoice
+            ON
+               pay.{PaymentFields.invoiceId} IS NOT NULL
+               AND pay.{PaymentFields.invoiceId} = invoice.{InvoiceSqlMapper.Fields.invoiceId}
          JOIN {OrganizationSqlMapper.table} payeeOrg ON payeeOrg.org_id = {PaymentFields.payeeOrgId}
          LEFT JOIN {OrganizationSqlMapper.table} payerOrg ON payerOrg.org_id = {PaymentFields.Platform.payerOrgId}
          """
@@ -76,6 +82,11 @@ let getPayments
                      |> Option.map (fun _ ->
                         RecurringPaymentScheduleSqlMapper.Reader.recurrenceSettings
                            read)
+                  Invoice =
+                     PaymentFields.invoiceId
+                     |> read.uuidOrNone
+                     |> Option.map (fun _ ->
+                        InvoiceSqlMapper.Reader.invoice read)
                }
 
                match Reader.requestType read with

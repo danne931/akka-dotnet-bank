@@ -76,6 +76,7 @@ type PaymentRequestSharedDetails = {
    CreatedAt: DateTime
    Status: PaymentRequestStatus
    RecurrenceSettings: RecurrenceSettings option
+   Invoice: Invoice option
 }
 
 type PlatformPaymentRequest = {
