@@ -256,7 +256,12 @@ let renderTableRow
       attr.children [
          Html.td (DateTime.formatShort sharedDetails.CreatedAt)
 
-         Html.td (DateTime.formatShort sharedDetails.DueAt)
+         Html.td (
+            match payment.SharedDetails.Status with
+            | PaymentRequestStatus.Requested ->
+               DateTime.futureTimeUIFriendly payment.SharedDetails.DueAt
+            | _ -> "-"
+         )
 
          match payment with
          | PaymentRequest.Platform p -> Html.td p.Payer.OrgName
@@ -270,6 +275,12 @@ let renderTableRow
          |> Option.map _.FullName
          |> Option.defaultValue ""
          |> Html.td
+
+         Html.td (
+            match payment.SharedDetails.RecurrenceSettings with
+            | None -> "-"
+            | Some settings -> settings.Pattern.Display
+         )
       ]
    ]
 
@@ -284,9 +295,9 @@ let renderTable
       attr.children [
          Html.thead [
             Html.tr [
-               Html.th [ attr.scope "col"; attr.text "Requested on" ]
+               Html.th [ attr.scope "col"; attr.text "Requested" ]
 
-               Html.th [ attr.scope "col"; attr.text "Due on" ]
+               Html.th [ attr.scope "col"; attr.text "Due" ]
 
                Html.th [ attr.scope "col"; attr.text "To" ]
 
@@ -295,6 +306,8 @@ let renderTable
                Html.th [ attr.scope "col"; attr.text "Status" ]
 
                Html.th [ attr.scope "col"; attr.text "Account" ]
+
+               Html.th [ attr.scope "col"; attr.text "Schedule" ]
             ]
          ]
 

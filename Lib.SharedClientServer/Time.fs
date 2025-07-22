@@ -46,6 +46,22 @@ module DateTime =
          12, "Dec"
       ]
 
+   /// 5 = 5th; 31 = 31st
+   let dayWithOrdinal (day: int) =
+      let suffix =
+         match day with
+         | 11
+         | 12
+         | 13 -> "th"
+         | _ ->
+            match day % 10 with
+            | 1 -> "st"
+            | 2 -> "nd"
+            | 3 -> "rd"
+            | _ -> "th"
+
+      string day + suffix
+
    let dayOfWeekDisplay (dayOfWeek: System.DayOfWeek) =
       match dayOfWeek with
       | DayOfWeek.Sunday -> "Sunday"
@@ -55,6 +71,8 @@ module DateTime =
       | DayOfWeek.Thursday -> "Thursday"
       | DayOfWeek.Friday -> "Friday"
       | _ -> "Saturday"
+
+   let dayOfWeekDisplayShort = dayOfWeekDisplay >> _.Substring(0, 3)
 
    let formatShort (date: DateTime) =
       $"{numberToDisplayMonth[date.Month]} {date.Day}"
@@ -80,3 +98,27 @@ module DateTime =
    let asEndOfDayUtc (date: DateTime) =
       let utc = date.ToUniversalTime()
       DateTime(utc.Year, utc.Month, utc.Day, 23, 59, 59, DateTimeKind.Utc)
+
+   let futureTimeUIFriendly (futureDate: DateTime) =
+      let time = futureDate.ToUniversalTime() - DateTime.UtcNow
+      let futureDate = futureDate.ToLocalTime()
+
+      if time.TotalDays >= 1.0 then
+         if time.TotalDays < 7.0 then
+            $"{floor time.TotalDays} days"
+         else
+            formatShort futureDate
+      elif time.TotalHours >= 1.0 then
+         let hours = int time.TotalHours
+         let timeUnit = if hours > 1 then "hours" else "hour"
+         $"{hours} {timeUnit}"
+      elif time.TotalMinutes >= 1.0 then
+         let minutes = int time.TotalMinutes
+         let timeUnit = if minutes > 1 then "minutes" else "minute"
+         $"{minutes} {timeUnit}"
+      elif time.TotalSeconds >= 1.0 then
+         let seconds = int time.TotalSeconds
+         let timeUnit = if seconds > 1 then "seconds" else "second"
+         $"{seconds} {timeUnit}"
+      else
+         "now"

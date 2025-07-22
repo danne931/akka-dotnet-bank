@@ -202,7 +202,6 @@ let renderInvoice (invoice: Invoice) =
             ]
             renderInfoRow "Total:" (Money.format invoice.Total)
 
-
             Html.hr []
 
             yield!

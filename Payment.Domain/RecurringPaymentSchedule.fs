@@ -2,6 +2,8 @@ module RecurringPaymentSchedule
 
 open System
 
+open Lib.Time
+
 type RecurrenceScheduleId =
    | RecurrenceScheduleId of Guid
 
@@ -29,7 +31,30 @@ type RecurrenceInterval =
 type RecurrencePattern = {
    RepeatEvery: int
    Interval: RecurrenceInterval
-}
+} with
+
+   member x.Display =
+      match x.Interval with
+      | RecurrenceInterval.Weekly dayOfWeek ->
+         let timeUnit =
+            match x.RepeatEvery with
+            | 1 -> "Weekly"
+            | num -> $"Every {num} weeks"
+
+         $"{timeUnit} on {DateTime.dayOfWeekDisplay dayOfWeek}"
+      | RecurrenceInterval.Monthly interval ->
+         let timeUnit =
+            match x.RepeatEvery with
+            | 1 -> "Monthly"
+            | num -> $"Every {num} months"
+
+         match interval with
+         | RecurrenceIntervalMonthly.DayOfMonth day ->
+            $"{timeUnit} on the {DateTime.dayWithOrdinal day}"
+         | RecurrenceIntervalMonthly.WeekAndDay(weekOfMonth, dayOfWeek) ->
+            let week = (string weekOfMonth).ToLower()
+            let dayOfWeek = DateTime.dayOfWeekDisplayShort dayOfWeek
+            $"{timeUnit} on {dayOfWeek} of the {week} week"
 
 [<RequireQualifiedAccess>]
 type RecurrenceTerminationCondition =
@@ -105,20 +130,21 @@ let canSendAnotherPaymentRequest
 
 let hasNextPaymentDueDate
    (settings: RecurrenceSettings)
-   (dueAt: DateTime)
+   (previousDueDate: DateTime)
    : DateTime option
    =
-   if canSendAnotherPaymentRequest settings dueAt then
-      Some(nextPaymentDueDate settings dueAt)
+   if canSendAnotherPaymentRequest settings previousDueDate then
+      Some(nextPaymentDueDate settings previousDueDate)
    else
       None
 
 let hasNextPaymentDueIn
    (settings: RecurrenceSettings)
-   (dueAt: DateTime)
+   (previousDueDate: DateTime)
    : TimeSpan option
    =
-   hasNextPaymentDueDate settings dueAt |> Option.map ((-) dueAt)
+   hasNextPaymentDueDate settings previousDueDate
+   |> Option.map (fun next -> next - previousDueDate)
 
 type PaymentScheduleComputeProps = {
    Settings: RecurrenceSettings

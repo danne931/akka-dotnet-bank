@@ -169,7 +169,7 @@ type PaymentRequest =
 
    member x.StatusDisplay =
       match x.Status with
-      | PaymentRequestStatus.Requested when x.IsExpired -> "Expired"
+      | PaymentRequestStatus.Requested when x.IsExpired -> "Overdue"
       | PaymentRequestStatus.Requested -> "Requested"
       | PaymentRequestStatus.Fulfilled _ -> "Fulfilled"
       | PaymentRequestStatus.Cancelled -> "Cancelled"
