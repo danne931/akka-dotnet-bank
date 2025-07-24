@@ -10,7 +10,7 @@ type RecurrenceScheduleId =
    member x.Value = let (RecurrenceScheduleId id) = x in id
 
 [<RequireQualifiedAccess>]
-type WeekOfMonth =
+type OccurrenceOfDayInMonth =
    | First
    | Second
    | Third
@@ -21,7 +21,7 @@ type WeekOfMonth =
 type RecurrenceIntervalMonthly =
    | DayOfMonth of int
    /// Ex: (Second, Wednesday) of month
-   | WeekAndDay of WeekOfMonth * DayOfWeek
+   | OccurrenceOfDay of OccurrenceOfDayInMonth * DayOfWeek
 
 [<RequireQualifiedAccess>]
 type RecurrenceInterval =
@@ -51,10 +51,10 @@ type RecurrencePattern = {
          match interval with
          | RecurrenceIntervalMonthly.DayOfMonth day ->
             $"{timeUnit} on the {DateTime.dayWithOrdinal day}"
-         | RecurrenceIntervalMonthly.WeekAndDay(weekOfMonth, dayOfWeek) ->
-            let week = (string weekOfMonth).ToLower()
+         | RecurrenceIntervalMonthly.OccurrenceOfDay(occurrence, dayOfWeek) ->
+            let occurrence = (string occurrence).ToLower()
             let dayOfWeek = DateTime.dayOfWeekDisplayShort dayOfWeek
-            $"{timeUnit} on {dayOfWeek} of the {week} week"
+            $"{timeUnit} on the {occurrence} {dayOfWeek}"
 
 [<RequireQualifiedAccess>]
 type RecurrenceTerminationCondition =
@@ -69,16 +69,32 @@ type RecurrenceSettings = {
    PaymentsRequestedCount: int
 }
 
-let rec private shiftToTargetDayOfWeek (date: DateTime) (dayOfWeek: DayOfWeek) =
-   if date.DayOfWeek = dayOfWeek then
-      date
-   else
-      shiftToTargetDayOfWeek (date.AddDays 1) dayOfWeek
+let private shiftToTargetDayOfWeek
+   (date: DateTime)
+   (dayOfWeek: DayOfWeek)
+   // Ex: Find the third occurrence of Wednesday in the month.
+   (skip: int)
+   =
+   let skip = max 0 skip
+   let mutable occurrences = 0
+
+   let rec shift (date: DateTime) (dayOfWeek: DayOfWeek) =
+      if date.DayOfWeek = dayOfWeek then
+         occurrences <- occurrences + 1
+
+      let skipSatisfied = occurrences = skip + 1
+
+      if date.DayOfWeek = dayOfWeek && skipSatisfied then
+         date
+      else
+         shift (date.AddDays 1) dayOfWeek
+
+   shift date dayOfWeek
 
 let nextPaymentDueDate (settings: RecurrenceSettings) (dueAt: DateTime) =
    match settings.Pattern.Interval with
    | RecurrenceInterval.Weekly dayOfWeek ->
-      let date = shiftToTargetDayOfWeek dueAt dayOfWeek
+      let date = shiftToTargetDayOfWeek dueAt dayOfWeek 0
       date.AddDays(float (settings.Pattern.RepeatEvery * 7))
    | RecurrenceInterval.Monthly interval ->
       match interval with
@@ -90,31 +106,33 @@ let nextPaymentDueDate (settings: RecurrenceSettings) (dueAt: DateTime) =
 
          let date = DateTime(dueAt.Year, dueAt.Month, day)
          date.AddMonths settings.Pattern.RepeatEvery
-      | RecurrenceIntervalMonthly.WeekAndDay(weekOfMonth, dayOfWeek) ->
+      | RecurrenceIntervalMonthly.OccurrenceOfDay(occurrence, dayOfWeek) ->
          let nextMonth = dueAt.AddMonths settings.Pattern.RepeatEvery
          let year = nextMonth.Year
          let month = nextMonth.Month
 
          let firstOfMonth = DateTime(year, month, 1)
+         let shift = shiftToTargetDayOfWeek firstOfMonth dayOfWeek
 
-         let targetWeekStart =
-            match weekOfMonth with
-            | WeekOfMonth.First -> firstOfMonth
-            | WeekOfMonth.Second -> firstOfMonth.AddDays 7
-            | WeekOfMonth.Third -> firstOfMonth.AddDays 14
-            | WeekOfMonth.Fourth -> firstOfMonth.AddDays 21
-            | WeekOfMonth.Last ->
-               let daysInMonth =
-                  DateTime.DaysInMonth(nextMonth.Year, nextMonth.Month)
+         match occurrence with
+         | OccurrenceOfDayInMonth.First -> shift 0
+         | OccurrenceOfDayInMonth.Second -> shift 1
+         | OccurrenceOfDayInMonth.Third -> shift 2
+         | OccurrenceOfDayInMonth.Fourth -> shift 3
+         | OccurrenceOfDayInMonth.Last ->
+            let daysInMonth =
+               DateTime.DaysInMonth(nextMonth.Year, nextMonth.Month)
 
-               let lastOfMonth = DateTime(year, month, daysInMonth)
+            let lastOfMonth = DateTime(year, month, daysInMonth)
 
+            let lastWeekOfMonth =
                if lastOfMonth.DayOfWeek = dayOfWeek then
                   lastOfMonth
                else
                   lastOfMonth.AddDays -7
 
-         shiftToTargetDayOfWeek targetWeekStart dayOfWeek
+            shiftToTargetDayOfWeek lastWeekOfMonth dayOfWeek 0
+
 
 let canSendAnotherPaymentRequest
    (settings: RecurrenceSettings)

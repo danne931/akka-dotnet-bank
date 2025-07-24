@@ -1,11 +1,13 @@
 .payment-dashboard
   h6
     margin-bottom: 0
-  table
-    margin-bottom: 3rem
   .payment-analytics
-    > * > .grid
-      grid-template-columns: 80% 15%
+    > *
+      border: solid 1px var(--secondary)
+      &:hover
+        border-color: var(--primary)
+      > .grid
+        grid-template-columns: 80% 15%
     .count-total
       justify-self: self-end
       color: var(--primary)

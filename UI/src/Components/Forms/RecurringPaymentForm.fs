@@ -146,11 +146,11 @@ let private recurrenceIntervalMonthlyForm
       Form.selectField {
          Parser =
             function
-            | "0" -> WeekOfMonth.First
-            | "1" -> WeekOfMonth.Second
-            | "2" -> WeekOfMonth.Third
-            | "3" -> WeekOfMonth.Fourth
-            | _ -> WeekOfMonth.Last
+            | "0" -> OccurrenceOfDayInMonth.First
+            | "1" -> OccurrenceOfDayInMonth.Second
+            | "2" -> OccurrenceOfDayInMonth.Third
+            | "3" -> OccurrenceOfDayInMonth.Fourth
+            | _ -> OccurrenceOfDayInMonth.Last
             >> Ok
          Value = _.WeekOrdinal >> string
          Update =
@@ -173,8 +173,8 @@ let private recurrenceIntervalMonthlyForm
       }
 
    let weekAndDayForm =
-      Form.succeed (fun week day ->
-         RecurrenceIntervalMonthly.WeekAndDay(week, day))
+      Form.succeed (fun occurrence dayOfWeek ->
+         RecurrenceIntervalMonthly.OccurrenceOfDay(occurrence, dayOfWeek))
       |> Form.append weekOrdinalField
       |> Form.append dayOfWeekField
 

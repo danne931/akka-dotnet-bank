@@ -159,13 +159,16 @@ type PaymentRequest =
    member x.CanManage = not x.IsExpired && x.IsUnpaid
 
    member x.DisplayPriority =
-      match x.Status with
-      | PaymentRequestStatus.Requested when x.IsExpired -> 6
-      | PaymentRequestStatus.Fulfilled _ -> 5
-      | PaymentRequestStatus.Cancelled -> 4
-      | PaymentRequestStatus.Declined -> 3
-      | PaymentRequestStatus.Failed _ -> 2
-      | PaymentRequestStatus.Requested -> 1
+      let sortByStatus =
+         match x.Status with
+         | PaymentRequestStatus.Requested when x.IsExpired -> 6
+         | PaymentRequestStatus.Fulfilled _ -> 5
+         | PaymentRequestStatus.Cancelled -> 4
+         | PaymentRequestStatus.Declined -> 3
+         | PaymentRequestStatus.Failed _ -> 2
+         | PaymentRequestStatus.Requested -> 1
+
+      sortByStatus, x.SharedDetails.DueAt
 
    member x.StatusDisplay =
       match x.Status with
