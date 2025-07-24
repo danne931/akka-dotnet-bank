@@ -176,9 +176,51 @@ type PaymentRequest =
       | PaymentRequestStatus.Declined -> "Declined"
       | PaymentRequestStatus.Failed _ -> "Failed"
 
+type PaymentAnalytics = {
+   UnpaidMoney: decimal
+   UnpaidCount: int
+   OverdueMoney: decimal
+   OverdueCount: int
+}
+
 type PaymentRequestSummary = {
    // Payment requests to orgs on the platform or outside the platform.
    OutgoingRequests: PaymentRequest list
    // Payment request from orgs on the platform (TODO: or entities outside the platform)
    IncomingRequests: PaymentRequest list
-}
+} with
+
+   static member private computeAnalytics
+      (requests: PaymentRequest list)
+      : PaymentAnalytics =
+      List.fold
+         (fun acc (payment: PaymentRequest) ->
+            if payment.IsUnpaid then
+               {
+                  acc with
+                     UnpaidMoney =
+                        acc.UnpaidMoney + payment.SharedDetails.Amount
+                     UnpaidCount = acc.UnpaidCount + 1
+               }
+            elif payment.IsExpired then
+               {
+                  acc with
+                     OverdueMoney =
+                        acc.OverdueMoney + payment.SharedDetails.Amount
+                     OverdueCount = acc.OverdueCount + 1
+               }
+            else
+               acc)
+         {
+            UnpaidMoney = 0m
+            UnpaidCount = 0
+            OverdueMoney = 0m
+            OverdueCount = 0
+         }
+         requests
+
+   member x.AnalyticsOutgoing =
+      PaymentRequestSummary.computeAnalytics x.OutgoingRequests
+
+   member x.AnalyticsIncoming =
+      PaymentRequestSummary.computeAnalytics x.IncomingRequests

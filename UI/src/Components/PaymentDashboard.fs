@@ -319,6 +319,44 @@ let renderTable
       ]
    ]
 
+// NOTE: Currently fetching all payment requests at once rather than utilizing
+// pagination so just going to compute the analytics in the browser rather than
+// making a database query.  Good enough for now.
+let renderAnalytics (payments: PaymentRequestSummary) =
+   let renderAmounts moneyTotal (countTotal: int) (title: string) =
+      Html.article [
+         Html.h5 [
+            attr.text (Money.format moneyTotal)
+            attr.style [ style.marginBottom 0 ]
+         ]
+
+         classyNode Html.div [ "grid" ] [
+            Html.small [ attr.style [ style.marginBottom 0 ]; attr.text title ]
+
+            Html.p [
+               attr.text countTotal
+               attr.style [ style.marginBottom 0 ]
+               attr.classes [ "count-total" ]
+            ]
+         ]
+      ]
+
+   let incoming = payments.AnalyticsIncoming
+   let outgoing = payments.AnalyticsOutgoing
+
+   classyNode Html.div [ "grid"; "payment-analytics" ] [
+      renderAmounts incoming.UnpaidMoney incoming.UnpaidCount "Incoming Unpaid"
+      renderAmounts
+         incoming.OverdueMoney
+         incoming.OverdueCount
+         "Incoming Overdue"
+      renderAmounts outgoing.UnpaidMoney outgoing.UnpaidCount "Outgoing Unpaid"
+      renderAmounts
+         outgoing.OverdueMoney
+         outgoing.OverdueCount
+         "Outgoing Overdue"
+   ]
+
 [<ReactComponent>]
 let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
    let state, dispatch = React.useElmish (init, update session.OrgId, [||])
@@ -360,6 +398,8 @@ let PaymentDashboardComponent (url: Routes.PaymentUrl) (session: UserSession) =
                      Html.small "Uh oh. Error getting payments."
                   | _, Resolved(Ok None) -> Html.small "No payments."
                   | Resolved(Ok(Some org)), Resolved(Ok(Some payments)) ->
+                     renderAnalytics payments
+
                      Html.h6 "Incoming Requests"
 
                      if payments.IncomingRequests.IsEmpty then
