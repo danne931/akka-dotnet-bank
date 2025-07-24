@@ -24,8 +24,10 @@ type Invoice = {
       x.LineItems
       |> List.sumBy (fun item -> decimal item.Quantity * item.UnitPrice)
 
-   member x.Total =
+   member x.TaxAsMoney =
       if x.TaxPercent = 0m then
-         x.SubTotal
+         0m
       else
-         x.SubTotal + x.SubTotal * (x.TaxPercent / 100m)
+         x.SubTotal * (x.TaxPercent / 100m)
+
+   member x.Total = x.SubTotal + x.TaxAsMoney

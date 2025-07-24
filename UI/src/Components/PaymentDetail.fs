@@ -198,7 +198,11 @@ let renderInvoice (invoice: Invoice) =
          Html.article [
             classyNode Html.div [ "grid" ] [
                renderInfoRow "Subtotal:" (Money.format invoice.SubTotal)
-               renderInfoRow "Tax:" (string invoice.TaxPercent + "%")
+               let taxPercent = string invoice.TaxPercent + "%"
+
+               renderInfoRow
+                  "Tax:"
+                  $"{Money.format invoice.TaxAsMoney} ({taxPercent})"
             ]
             renderInfoRow "Total:" (Money.format invoice.Total)
 
