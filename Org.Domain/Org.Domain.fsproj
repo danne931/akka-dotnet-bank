@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="CacheSettings.fs" />
     <Compile Include="CoreTypes.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />

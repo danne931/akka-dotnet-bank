@@ -14,6 +14,7 @@ Web/snapshots/*
 Account.Service/ddata-*
 Account.Service/snapshots/*
 Account.Service/logs.json
+Account.Service/phoenix-banking-persisted-crdts/*
 Scheduler.Service/snapshots/*
 Deploy/K8s/node_modules/*
 Deploy/Azure/node_modules/*

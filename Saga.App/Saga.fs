@@ -11,6 +11,7 @@ open FSharp.Control
 open Lib.SharedTypes
 open Lib.Types
 open Lib.Saga
+open CachedOrgSettings
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Transfer.Domain
@@ -102,6 +103,8 @@ type Event =
             "OrgOnboardingLinkAccountToPartnerBankResponse"
          | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
             "OrgOnboardingInitializedPrimaryVirtualAccount"
+         | OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse _ ->
+            "OrgOnboardingInitializeOrgSettingsCacheResponse"
          | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent ->
             "OrgOnboardingApplicationAcceptedNotificationSent"
          | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent ->
@@ -465,6 +468,7 @@ module Message =
       message orgId corrId (Event.Billing evt)
 
 let sagaHandler
+   (orgSettingsCache: OrgSettingsCache)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
@@ -750,12 +754,21 @@ let sagaHandler
                | Saga.OrgOnboarding priorState, Saga.OrgOnboarding state ->
                   OrgOnboardingSaga.onEventPersisted
                      {
+                        OrgSettingsCache = orgSettingsCache
                         getOrgRef = getOrgRef
                         getAccountRef = getAccountRef
                         getEmailRef = getEmailRef
                         getKYCServiceRef =
                            fun () -> getKYCServiceRef mailbox.System
                         getPartnerBankServiceRef = getPartnerBankServiceRef
+                        logError = logError mailbox
+                        sendEventToSelf =
+                           fun orgId corrId asyncEvt ->
+                              let asyncMsg =
+                                 asyncEvt
+                                 |> Async.map (Message.orgOnboard orgId corrId)
+
+                              mailbox.Parent() <!| asyncMsg
                      }
                      priorState
                      state
@@ -912,6 +925,7 @@ let getGuaranteedDeliveryProducerRef
 
 let initProps
    (system: ActorSystem)
+   (orgSettingsCache: OrgSettingsCache)
    (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
    (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
    (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
@@ -935,6 +949,7 @@ let initProps
       persistenceId
       guaranteedDeliveryConsumerControllerRef
       (sagaHandler
+         orgSettingsCache
          getOrgRef
          getEmployeeRef
          getAccountRef

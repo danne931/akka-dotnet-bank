@@ -6,11 +6,11 @@ open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Bank.Account.Domain
-open Bank.Employee.Domain
 open Bank.Org.Domain
 open Email
 open Lib.Saga
 open PartnerBank.Service.Domain
+open CachedOrgSettings
 
 [<RequireQualifiedAccess>]
 type OrgOnboardingSagaStatus =
@@ -29,6 +29,7 @@ type OrgOnboardingSagaEvent =
    | ReceivedInfoFixDemandedByKYCService of OrgOnboardingApplicationSubmitted
    | LinkAccountToPartnerBankResponse of Result<PartnerBankAccountLink, string>
    | InitializedPrimaryVirtualAccount
+   | InitializeOrgSettingsCacheResponse of Result<unit, Err>
    | OrgActivated
    | ApplicationAcceptedNotificationSent
    | ApplicationRejectedNotificationSent
@@ -44,6 +45,7 @@ type Activity =
    | KYCVerification
    | LinkAccountToPartnerBank
    | InitializePrimaryVirtualAccount
+   | InitializeOrgSettingsCache
    | ActivateOrg
    | SendApplicationAcceptedNotification
    | SendApplicationRejectedNotification
@@ -72,6 +74,7 @@ type Activity =
          | SendApplicationAcceptedNotification
          | SendApplicationRejectedNotification -> Some(TimeSpan.FromMinutes 4.)
          | InitializePrimaryVirtualAccount
+         | InitializeOrgSettingsCache
          | ActivateOrg -> Some(TimeSpan.FromSeconds 5.)
 
 type OrgOnboardingSaga = {
@@ -235,8 +238,36 @@ let applyEvent
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.InitializePrimaryVirtualAccount
-            |> addActivity Activity.ActivateOrg
+            |> addActivity Activity.InitializeOrgSettingsCache
      }
+   | OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse res ->
+      let activity = Activity.InitializeOrgSettingsCache
+      let nextActivity = Activity.ActivateOrg
+
+      match res with
+      | Error _ ->
+         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
+            {
+               saga with
+                  LifeCycle = retryActivity activity saga.LifeCycle
+            }
+         else
+            // If cache setup fails then fail the activity but resume
+            // normal processing.
+            {
+               saga with
+                  LifeCycle =
+                     saga.LifeCycle
+                     |> failActivity activity
+                     |> addActivity nextActivity
+            }
+      | Ok _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.InitializeOrgSettingsCache
+               |> addActivity nextActivity
+        }
    | OrgOnboardingSagaEvent.OrgActivated -> {
       saga with
          LifeCycle =
@@ -318,6 +349,8 @@ let stateTransition
          activityIsDone Activity.LinkAccountToPartnerBank
       | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
          activityIsDone Activity.InitializePrimaryVirtualAccount
+      | OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse _ ->
+         activityIsDone Activity.InitializeOrgSettingsCache
       | OrgOnboardingSagaEvent.OrgActivated ->
          activityIsDone Activity.ActivateOrg
 
@@ -368,6 +401,10 @@ type PersistenceHandlerDependencies = {
    getEmailRef: unit -> IActorRef<EmailMessage>
    getKYCServiceRef: unit -> IActorRef<KYCMessage>
    getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
+   logError: string -> unit
+   sendEventToSelf:
+      OrgId -> CorrelationId -> Async<OrgOnboardingSagaEvent> -> unit
+   OrgSettingsCache: OrgSettingsCache
 }
 
 let onEventPersisted
@@ -464,6 +501,20 @@ let onEventPersisted
 
       dep.getAccountRef parentAccountId <! msg
 
+   let initOrgSettingsCache partnerBankLink =
+      let asyncEvt = async {
+         let! res =
+            dep.OrgSettingsCache.Update orgId {
+               AdminTeamEmail = application.AdminTeamEmail
+               ParentAccountId = application.ParentAccountId
+               PartnerBankAccountLink = partnerBankLink
+            }
+
+         return OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse res
+      }
+
+      dep.sendEventToSelf orgId corrId asyncEvt
+
    let activateOrg () =
       let msg =
          FinishOrgOnboardingCommand.create {
@@ -491,7 +542,7 @@ let onEventPersisted
       verifyOrg ()
    | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse res ->
       match res with
-      | Ok nums -> initializeVirtualAccount nums
+      | Ok link -> initializeVirtualAccount link
       | Error reason ->
          if
             previousState.LifeCycle.ActivityHasRemainingAttempts
@@ -509,7 +560,14 @@ let onEventPersisted
       // Support team resolved dispute with partner bank so
       // reattempt linking parent account with partner bank.
       linkAccountToPartnerBank ()
-   | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount -> activateOrg ()
+   | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
+      updatedState.LinkedAccountToPartnerBank
+      |> Option.iter initOrgSettingsCache
+   | OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse res ->
+      match res with
+      | Ok() -> activateOrg ()
+      | Error err ->
+         dep.logError $"Error initializing org settings cache {orgId} {err}"
    | OrgOnboardingSagaEvent.OrgActivated -> sendApplicationAcceptedEmail ()
    | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent
    | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent
@@ -549,4 +607,7 @@ let onEventPersisted
          | Activity.InitializePrimaryVirtualAccount ->
             updatedState.LinkedAccountToPartnerBank
             |> Option.iter initializeVirtualAccount
+         | Activity.InitializeOrgSettingsCache ->
+            updatedState.LinkedAccountToPartnerBank
+            |> Option.iter initOrgSettingsCache
          | Activity.ActivateOrg -> activateOrg ()

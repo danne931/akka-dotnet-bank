@@ -10,6 +10,7 @@ open Akka.Persistence.Extras
 open Akkling.Cluster.Sharding
 
 open Bank.Org.Domain
+open CachedOrgSettings
 open Bank.Employee.Domain
 open Bank.Account.Domain
 open PartnerBank.Service.Domain
@@ -152,6 +153,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? ConfirmableMessageEnvelope -> "ConfirmableMessageEnvelope"
       | :? Lib.ReadModelSyncActor.State -> "ReadModelSyncState"
       | :? CommandApprovalDailyAccrual -> "CommandApprovalDailyAccrual"
+      | :? CachedOrgSettings -> "CachedOrgSettings"
       | :? OrgSnapshot -> "OrgSnapshot"
       | :? Option<Org> -> "OrgOption"
       | :? OrgEvent -> "OrgEvent"
@@ -302,6 +304,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? PartnerBankServiceMessage
       // Card issuer third party api message serialized for RabbitMq
       | :? CardIssuerMessage
+      // Cached org settings stored in Akka.DistributedData CRDTs
+      | :? CachedOrgSettings
       // OrgMessage.GetOrg response serialized for message sent
       // from org cluster nodes to Web node.
       | :? Option<Org>
@@ -336,6 +340,7 @@ type BankSerializer(system: ExtendedActorSystem) =
             typeof<AccountLoadTestTypes.AccountLoadTestMessage>
          | "ReadModelSyncState" -> typeof<Lib.ReadModelSyncActor.State>
          | "CommandApprovalDailyAccrual" -> typeof<CommandApprovalDailyAccrual>
+         | "CachedOrgSettings" -> typeof<CachedOrgSettings>
          | "OrgSnapshot" -> typeof<OrgSnapshot>
          | "OrgOption" -> typeof<Org option>
          | "OrgEvent" -> typeof<OrgEvent>

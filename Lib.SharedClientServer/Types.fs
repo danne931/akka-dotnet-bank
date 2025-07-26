@@ -370,6 +370,7 @@ type EmployeeStateTransitionError =
 
 type Err =
    | DatabaseError of exn
+   | CacheError of exn
    | ValidationError of ValidationErrors
    | OrgStateTransitionError of OrgStateTransitionError
    | AccountStateTransitionError of AccountStateTransitionError
@@ -384,6 +385,7 @@ type Err =
    override x.ToString() =
       match x with
       | DatabaseError e -> $"DatabaseError: %s{e.Message}"
+      | CacheError e -> $"CacheError: %s{e.Message}"
       | ValidationError e -> $"ValidationError: {ValidationErrors.toList e}"
       | OrgStateTransitionError e -> $"OrgStateTransitionError: {e}"
       | AccountStateTransitionError e -> $"AccountStateTransitionError: {e}"
@@ -399,6 +401,7 @@ type Err =
    member x.HumanFriendly =
       match x with
       | DatabaseError _ -> "Database Error"
+      | CacheError _ -> "Cache Error"
       | SerializationError _ -> "Serialization Error"
       | SignalRError _ -> "SignalR Error"
       | NetworkError _ -> "Network Error"

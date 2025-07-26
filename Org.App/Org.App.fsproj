@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="Environment.fs" />
+    <Compile Include="OrgSettingsCache.fs" />
     <Compile Include="CircuitBreakerActor.fs" />
     <Compile Include="OrgReadModelSyncActor.fs" />
     <Compile Include="KnowYourCustomerServiceActor.fs" />

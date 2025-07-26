@@ -57,12 +57,19 @@ module PubSub =
    let publishToTopic (pubSub: DistributedPubSub) (topic: string) (msg: obj) =
       pubSub.Mediator.Tell(Publish(topic, msg))
 
+module CRDT =
+   /// Include this in the key you create for adding
+   /// CRDTs via Akka.DistributedData if you want to
+   /// ensure they are persisted.  Any data without
+   /// this key will not exist after cluster restart.
+   let PersistableKey = "durable"
+
 let getChildActorRef<'t, 'r>
    (actorCtx: Actor<'t>)
    (name: string)
    : IActorRef<'r> option
    =
-   let accountRef = actorCtx.UntypedContext.Child(name)
+   let accountRef = actorCtx.UntypedContext.Child name
 
    match accountRef = ActorRefs.Nobody with
    | true -> None
@@ -126,6 +133,7 @@ module ClusterMetadata =
       scheduling = "scheduling-role"
       employee = "employee-role"
       saga = "saga-role"
+      crdt = "crdt-role"
    |}
 
 module ActorMetadata =

@@ -25,6 +25,7 @@ open PlatformTransferSaga
 open PaymentRequestSaga
 open PurchaseSaga
 open DomesticTransferSaga
+open CachedOrgSettings
 
 module EmailRequest =
    type PreliminaryT = {
@@ -303,19 +304,20 @@ let private createClient (bearerToken: string) =
 // If no specified Email then formulate an EmailRequest for each
 // admin of the organization.
 let private queueMessageToActionRequest
-   (getOrgTeamEmail: OrgId -> Task<Result<Email option, Err>>)
+   (getTeamEmail: Actor<_> -> OrgId -> Task<Result<Email option, Err>>)
    (mailbox: Actor<_>)
    (msg: EmailMessage)
    : EmailRequest.T option Task
    =
    task {
       let preliminaryInfo = emailPropsFromMessage msg
+      let orgId = preliminaryInfo.OrgId
 
       match EmailRequest.create preliminaryInfo with
       | Some email -> return Some email
       | None ->
          let! email =
-            getOrgTeamEmail preliminaryInfo.OrgId
+            getTeamEmail mailbox orgId
             |> TaskResult.map (
                Option.bind (fun email ->
                   EmailRequest.create {
@@ -421,7 +423,7 @@ let actorProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getTeamEmailForOrg: OrgId -> Task<Result<Email option, Err>>)
+   (getTeamEmail: Actor<_> -> OrgId -> Task<Result<Email option, Err>>)
    (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (sendEmail: EmailRequest.T -> TaskResult<HttpResponseMessage, Err>)
    : Props<obj>
@@ -435,8 +437,7 @@ let actorProps
       Service = CircuitBreakerService.Email
       onCircuitBreakerEvent = broadcaster.circuitBreaker
       protectedAction = fun _ emailData -> sendEmail emailData
-      queueMessageToActionRequest =
-         queueMessageToActionRequest getTeamEmailForOrg
+      queueMessageToActionRequest = queueMessageToActionRequest getTeamEmail
       onSuccessFlow =
          Flow.map
             (fun (mailbox, queueMessage, response) ->
@@ -458,7 +459,7 @@ module Fields = OrganizationSqlMapper.OrgFields
 module Reader = OrganizationSqlMapper.OrgSqlReader
 module Writer = OrganizationSqlMapper.OrgSqlWriter
 
-let getOrgTeamEmail (orgId: OrgId) =
+let getOrgTeamEmailFromDB (orgId: OrgId) =
    pgQuerySingle<Email>
       $"""
       SELECT {Fields.adminTeamEmail} FROM {OrganizationSqlMapper.table}
@@ -468,6 +469,7 @@ let getOrgTeamEmail (orgId: OrgId) =
       Reader.adminTeamEmail
 
 let initProps
+   (orgSettingsCache: OrgSettingsCache)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (queueConnection: AmqpConnectionDetails)
@@ -478,6 +480,17 @@ let initProps
    =
    let client = bearerToken |> Option.map createClient
 
+   let getTeamEmailFromCacheOrDB (mailbox: Actor<_>) (orgId: OrgId) = taskResult {
+      let! foundInCache =
+         orgSettingsCache.Get orgId |> AsyncResultOption.map _.AdminTeamEmail
+
+      if foundInCache.IsSome then
+         return foundInCache
+      else
+         logDebug mailbox $"Team email not found in cache. {orgId}"
+         return! getOrgTeamEmailFromDB orgId
+   }
+
    let actorProps =
       actorProps
          queueConnection
@@ -485,7 +498,7 @@ let initProps
          streamRestartSettings
          breaker
          broadcaster
-         getOrgTeamEmail
+         getTeamEmailFromCacheOrDB
          getSagaRef
 
    match client with

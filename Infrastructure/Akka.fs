@@ -26,7 +26,7 @@ module AkkaInfra =
 
       journalOpts.ProviderName <- Env.config.AkkaPersistence.DbProvider
       journalOpts.AutoInitialize <- true
-      let jdo = JournalDatabaseOptions(DatabaseMapping.Default)
+      let jdo = JournalDatabaseOptions DatabaseMapping.Default
       let jto = JournalTableOptions()
       jto.TableName <- Env.config.AkkaPersistence.JournalTableName
       jto.UseWriterUuidColumn <- true
@@ -42,7 +42,7 @@ module AkkaInfra =
 
       snapshotOpts.ProviderName <- Env.config.AkkaPersistence.DbProvider
       snapshotOpts.AutoInitialize <- true
-      let sdo = SnapshotDatabaseOptions(DatabaseMapping.Default)
+      let sdo = SnapshotDatabaseOptions DatabaseMapping.Default
       let sto = SnapshotTableOptions()
       sto.TableName <- Env.config.AkkaPersistence.SnapshotTableName
       sdo.SnapshotTable <- sto
@@ -88,7 +88,7 @@ module AkkaInfra =
                   |> List.toArray
 
                let li = System.Collections.Generic.List<Service>()
-               li.Add(service)
+               li.Add service
                opts.Services <- li)
             .WithRemoting(remote.Host, remote.Port)
             .WithClustering(clusterOpts)
@@ -141,14 +141,14 @@ module AkkaInfra =
       builder
          .AddHocon(hocon, HoconAddMode.Prepend)
          .AddPetabridgeCmd(fun cmd ->
-            cmd.RegisterCommandPalette(ClusterCommands.Instance) |> ignore
+            cmd.RegisterCommandPalette ClusterCommands.Instance |> ignore
 
-            cmd.RegisterCommandPalette(ClusterShardingCommands.Instance)
+            cmd.RegisterCommandPalette ClusterShardingCommands.Instance
             |> ignore)
 
    let withHealthCheck (builder: AkkaConfigurationBuilder) =
       builder.WithHealthCheck(fun opts ->
-         opts.AddProviders(HealthCheckType.All) |> ignore
+         opts.AddProviders HealthCheckType.All |> ignore
          opts.Liveness.Transport <- HealthCheckTransport.Tcp
          opts.Liveness.TcpPort <- Env.config.AkkaHealthCheck.LivenessPort
          opts.Readiness.Transport <- HealthCheckTransport.Tcp
@@ -162,3 +162,23 @@ module AkkaInfra =
 
          builder.WithDefaultLogMessageFormatter<SerilogLogMessageFormatter>()
          |> ignore)
+
+   let withConflictFreeReplicatedDataTypes (builder: AkkaConfigurationBuilder) =
+      builder.WithDistributedData(fun opts ->
+         opts.Name <- "phoenix-banking-distributed-data"
+         opts.Role <- ActorUtil.ClusterMetadata.roles.crdt
+
+         // Persists in background so still have CRDTs on cluster restarts.
+         let durableOpts = DurableOptions()
+         // Persists when key contains ActorUtil.CRDT.PersistableKey
+         // as part of the key.
+         durableOpts.Keys <- [| ActorUtil.CRDT.PersistableKey + "*" |]
+
+         let lmdbOpts = LmdbOptions()
+         // Need to specify the directory. If not then a new directory
+         // will be created on restart and you will not see the
+         // CRDTs you expected to be persisted.
+         lmdbOpts.Directory <- "phoenix-banking-persisted-crdts"
+         durableOpts.Lmdb <- lmdbOpts
+
+         opts.Durable <- durableOpts)

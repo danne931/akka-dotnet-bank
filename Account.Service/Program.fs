@@ -8,6 +8,7 @@ open Akka.Persistence.Hosting
 open Akka.Persistence.Sql.Hosting
 open Akkling
 
+open CachedOrgSettings
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
@@ -25,6 +26,15 @@ LogInfra.start builder |> ignore
 builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
    let system = provider.GetRequiredService<ActorSystem>()
    SignalRBroadcaster.init system)
+|> ignore
+
+builder.Services.AddSingleton<OrgSettingsCache>(fun provider ->
+   let system = provider.GetRequiredService<ActorSystem>()
+
+   {
+      Get = OrgSettingsCache.get system
+      Update = OrgSettingsCache.update system
+   })
 |> ignore
 
 builder.Services.AddSingleton<Lib.Queue.QueueConnectionDetails>(fun _ ->
@@ -75,7 +85,6 @@ builder.Services.AddAkka(
                   |> ignore)
                |> ignore)
 
-
       let initConfig =
          AkkaInfra.withClustering [|
             ClusterMetadata.roles.org
@@ -83,10 +92,12 @@ builder.Services.AddAkka(
             ClusterMetadata.roles.signalR
             ClusterMetadata.roles.employee
             ClusterMetadata.roles.saga
+            ClusterMetadata.roles.crdt
          |]
          << AkkaInfra.withPetabridgeCmd
          << AkkaInfra.withHealthCheck
          << AkkaInfra.withLogging
+         << AkkaInfra.withConflictFreeReplicatedDataTypes
 
       (initConfig builder)
          .WithSqlPersistence(
@@ -188,11 +199,15 @@ builder.Services.AddAkka(
             (fun persistenceId ->
                let system = provider.GetRequiredService<ActorSystem>()
 
+               let orgSettingsCache =
+                  provider.GetRequiredService<OrgSettingsCache>()
+
                GuaranteedDelivery.consumer<AppSaga.AppSagaMessage>
                   system
                   (fun controllerRef ->
                      AppSaga.initProps
                         system
+                        orgSettingsCache
                         (OrgActor.get system)
                         (EmployeeActor.get system)
                         (AccountActor.get system)
@@ -272,7 +287,7 @@ builder.Services.AddAkka(
          )
          .WithSingleton<ActorMetadata.BillingCycleMarker>(
             ActorMetadata.billingCycle.Name,
-            (fun system _ resolver ->
+            (fun system _ _ ->
                let typedProps =
                   BillingCycleActor.actorProps
                      Env.config.BillingCycleFanoutThrottle
@@ -320,7 +335,7 @@ builder.Services.AddAkka(
          )
          .WithSingleton<ActorMetadata.OrgReadModelSyncMarker>(
             ActorMetadata.orgReadModelSync.Name,
-            (fun system _ _ ->
+            (fun _ _ _ ->
                let typedProps =
                   OrgReadModelSyncActor.initProps
                      // TODO: Create org-specific Environment file & replace
@@ -334,7 +349,7 @@ builder.Services.AddAkka(
          )
          .WithSingleton<ActorMetadata.AccountReadModelSyncMarker>(
             ActorMetadata.accountReadModelSync.Name,
-            (fun system _ _ ->
+            (fun _ _ _ ->
                let typedProps =
                   AccountReadModelSyncActor.initProps
                      Env.config.AccountEventProjectionChunking
@@ -346,7 +361,7 @@ builder.Services.AddAkka(
          )
          .WithSingleton<ActorMetadata.EmployeeReadModelSyncMarker>(
             ActorMetadata.employeeReadModelSync.Name,
-            (fun system _ _ ->
+            (fun _ _ _ ->
                let typedProps =
                   EmployeeReadModelSyncActor.initProps
                      // TODO: Create employee-specific Environment file & replace
@@ -426,6 +441,7 @@ builder.Services.AddAkka(
             ActorMetadata.email.Name,
             (fun system _ _ ->
                EmailServiceActor.initProps
+                  (provider.GetRequiredService<OrgSettingsCache>())
                   (EnvNotifications.config.circuitBreaker system)
                   (provider.GetRequiredService<SignalRBroadcast>())
                   (getQueueConnection provider)
