@@ -4,7 +4,6 @@ open System
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
-open Akka.Actor
 
 open Bank.Account.Domain
 open Bank.Account.Api
@@ -12,6 +11,7 @@ open Bank.BillingCycle.Api
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
+open BankActorRegistry
 
 let start (app: WebApplication) =
    app
@@ -26,9 +26,11 @@ let start (app: WebApplication) =
    app
       .MapPost(
          AccountPath.Base,
-         Func<ActorSystem, CreateVirtualAccountCommand, Task<IResult>>
-            (fun sys cmd ->
-               processCommand sys (AccountCommand.CreateVirtualAccount cmd)
+         Func<BankActorRegistry, CreateVirtualAccountCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand
+                  registry
+                  (AccountCommand.CreateVirtualAccount cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.CreateVirtualAccount)
@@ -37,9 +39,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          AccountPath.Deposit,
-         Func<ActorSystem, DepositCashCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (AccountCommand.DepositCash cmd)
-            |> RouteUtil.unwrapTaskResult)
+         Func<BankActorRegistry, DepositCashCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (AccountCommand.DepositCash cmd)
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.Deposit)
    |> ignore
@@ -47,9 +50,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          AccountPath.CloseAccount,
-         Func<ActorSystem, CloseAccountCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (AccountCommand.CloseAccount cmd)
-            |> RouteUtil.unwrapTaskResult)
+         Func<BankActorRegistry, CloseAccountCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (AccountCommand.CloseAccount cmd)
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.CloseAccount)
    |> ignore

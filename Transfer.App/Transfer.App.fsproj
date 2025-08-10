@@ -16,9 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Database/Database.fsproj" />
-    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />
-    <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
-    <ProjectReference Include="../Transfer.Domain/Transfer.Domain.fsproj" />
-    <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Lib.CrossCutting/Lib.CrossCutting.fsproj" /> 
   </ItemGroup>
 </Project>

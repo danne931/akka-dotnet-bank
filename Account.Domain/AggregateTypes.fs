@@ -447,7 +447,8 @@ type Account = {
          AutomaticTransferRule
             -> decimal
             -> AutoTransferDerivedFromRule list option)
-      : AutoTransferDerivedFromRule list =
+      : AutoTransferDerivedFromRule list
+      =
       x.AutoTransferRule
       |> Option.bind (fun conf ->
          computedTransferFromRule conf.Info x.AvailableBalance)

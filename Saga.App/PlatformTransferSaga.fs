@@ -2,7 +2,6 @@ module PlatformTransferSaga
 
 open System
 open Akkling
-open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Lib.Saga
@@ -10,125 +9,11 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Email
 open PartnerBank.Service.Domain
-
-[<RequireQualifiedAccess>]
-type PlatformTransferSagaStatus =
-   | Scheduled
-   | InProgress
-   | Completed
-   | Failed of InternalTransferFailReason
-
-[<RequireQualifiedAccess>]
-type PlatformTransferSagaStartEvent =
-   | SenderReservedFunds of
-      BankEvent<InternalTransferBetweenOrgsPending> *
-      PartnerBankAccountLink
-   | ScheduleTransferRequest of BankEvent<InternalTransferBetweenOrgsScheduled>
-
-[<RequireQualifiedAccess>]
-type PlatformTransferSagaEvent =
-   | ScheduledTransferActivated
-   | SenderReservedFunds of PartnerBankAccountLink
-   | SenderUnableToReserveFunds of InternalTransferFailReason
-   | RecipientDepositedFunds of PartnerBankAccountLink
-   | RecipientUnableToDepositFunds of InternalTransferFailReason
-   | TransferNotificationSent
-   | TransferDepositNotificationSent
-   | PartnerBankSyncResponse of Result<SettlementId, string>
-   | SupportTeamResolvedPartnerBankSync
-   | SenderReleasedReservedFunds
-   | RecipientDepositUndo
-   | TransferSettled
-   | EvaluateRemainingWork
-   | ResetInProgressActivityAttempts
+open PlatformTransferSaga
+open BankActorRegistry
 
 type private StartEvent = PlatformTransferSagaStartEvent
 type private Event = PlatformTransferSagaEvent
-
-[<RequireQualifiedAccess; CustomEquality; NoComparison>]
-type Activity =
-   | WaitForScheduledTransferActivation of TimeSpan
-   | ReserveSenderFunds
-   | DepositToRecipientAccount
-   | SyncToPartnerBank
-   | SettleTransfer
-   | SendTransferNotification
-   | SendTransferDepositNotification
-   | ReleaseSenderFunds
-   | UndoRecipientDeposit
-   | WaitForSupportTeamToResolvePartnerBankSync
-
-   interface IActivity with
-      member x.MaxAttempts =
-         match x with
-         | WaitForScheduledTransferActivation _
-         | WaitForSupportTeamToResolvePartnerBankSync -> 0
-         | SyncToPartnerBank -> 4
-         | _ -> 3
-
-      member x.InactivityTimeout =
-         match x with
-         | SendTransferNotification
-         | SendTransferDepositNotification
-         | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4.)
-         | ReserveSenderFunds
-         | DepositToRecipientAccount
-         | SettleTransfer
-         | ReleaseSenderFunds
-         | UndoRecipientDeposit -> Some(TimeSpan.FromSeconds 5.)
-         | WaitForScheduledTransferActivation time -> Some time
-         | WaitForSupportTeamToResolvePartnerBankSync -> None
-
-   // Custom equality check so we can, for example, check for completeness
-   // of WaitForScheduledTransferActivation without comparing the inner value.
-   // Ex: activityIsDone (Activity.WaitForScheduledTransferActivation TimeSpan.Zero)
-   override x.Equals compareTo =
-      match compareTo with
-      | :? Activity as compareTo -> x.GetHashCode() = compareTo.GetHashCode()
-      | _ -> false
-
-   override x.GetHashCode() =
-      match x with
-      | WaitForScheduledTransferActivation _ ->
-         hash "WaitForScheduledTransferActivation"
-      | _ -> hash (string x)
-
-type PlatformTransferSaga = {
-   StartEvent: PlatformTransferSagaStartEvent
-   Events: PlatformTransferSagaEvent list
-   Status: PlatformTransferSagaStatus
-   TransferInfo: BaseInternalTransferBetweenOrgsInfo
-   LifeCycle: SagaLifeCycle<Activity>
-   PartnerBankSenderAccountLink: PartnerBankAccountLink option
-   PartnerBankRecipientAccountLink: PartnerBankAccountLink option
-} with
-
-   member x.SyncedToPartnerBank =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsSyncToPartnerBank
-
-   member x.IsSettled =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsSettleTransfer
-
-   member x.SettlementId =
-      x.Events
-      |> List.tryPick (function
-         | PlatformTransferSagaEvent.PartnerBankSyncResponse(Ok settlementId) ->
-            Some settlementId
-         | _ -> None)
-
-   member x.TransferNotificationSent =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsSendTransferNotification
-
-   member x.TransferDepositNotificationSent =
-      x.LifeCycle.Completed
-      |> List.exists _.Activity.IsSendTransferDepositNotification
-
-   member x.RequiresReleaseSenderFunds =
-      x.LifeCycle.InProgress |> List.exists _.Activity.IsReleaseSenderFunds
-
-   member x.IsTransferSchedulingAwaitingActivation =
-      x.LifeCycle.InProgress
-      |> List.exists _.Activity.IsWaitForScheduledTransferActivation
 
 let applyStartEvent
    (evt: PlatformTransferSagaStartEvent)
@@ -376,7 +261,7 @@ type private TransferStartEvent = PlatformTransferSagaStartEvent
 type private TransferEvent = PlatformTransferSagaEvent
 
 let private depositTransfer
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (registry: #IAccountActor)
    (transfer: BaseInternalTransferBetweenOrgsInfo)
    =
    let cmd =
@@ -390,27 +275,22 @@ let private depositTransfer
       |> AccountCommand.DepositTransferBetweenOrgs
       |> AccountMessage.StateChange
 
-   getAccountRef transfer.Recipient.ParentAccountId <! msg
+   registry.AccountActor transfer.Recipient.ParentAccountId <! msg
 
-let onStartEventPersisted
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (evt: TransferStartEvent)
-   =
+let onStartEventPersisted registry (evt: TransferStartEvent) =
    match evt with
    | TransferStartEvent.SenderReservedFunds(e, _) ->
-      depositTransfer getAccountRef e.Data.BaseInfo
+      depositTransfer registry e.Data.BaseInfo
    | TransferStartEvent.ScheduleTransferRequest _ -> ()
 
-type PersistenceHandlerDependencies = {
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
+type OperationEnv = {
    sendEventToSelf:
       BaseInternalTransferBetweenOrgsInfo -> PlatformTransferSagaEvent -> unit
 }
 
 let onEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (registry: #IAccountActor & #IEmailActor & #IPartnerBankServiceActor)
+   (operationEnv: OperationEnv)
    (previousState: PlatformTransferSaga)
    (currentState: PlatformTransferSaga)
    (evt: TransferEvent)
@@ -437,10 +317,9 @@ let onEventPersisted
          |> AccountCommand.InternalTransferBetweenOrgs
          |> AccountMessage.StateChange
 
-      dep.getAccountRef transfer.Sender.ParentAccountId <! msg
+      registry.AccountActor transfer.Sender.ParentAccountId <! msg
 
-   let depositTransfer () =
-      depositTransfer dep.getAccountRef transfer
+   let depositTransfer () = depositTransfer registry transfer
 
    let transferSentEmail () =
       let msg =
@@ -454,7 +333,7 @@ let onEventPersisted
                OriginatedFromPaymentRequest = transfer.FromPaymentRequest
             })
 
-      dep.getEmailRef () <! msg
+      registry.EmailActor() <! msg
 
    let transferDepositEmail () =
       let msg =
@@ -468,7 +347,7 @@ let onEventPersisted
                OriginatedFromPaymentRequest = transfer.FromPaymentRequest
             })
 
-      dep.getEmailRef () <! msg
+      registry.EmailActor() <! msg
 
    let syncToPartnerBank () =
       match
@@ -476,7 +355,7 @@ let onEventPersisted
          currentState.PartnerBankRecipientAccountLink
       with
       | Some sender, Some recipient ->
-         dep.getPartnerBankServiceRef ()
+         registry.PartnerBankServiceActor()
          <! PartnerBankServiceMessage.TransferBetweenOrganizations {
             Amount = transfer.Amount
             From = sender
@@ -500,7 +379,7 @@ let onEventPersisted
          |> AccountCommand.SettleInternalTransferBetweenOrgs
          |> AccountMessage.StateChange
 
-      dep.getAccountRef transfer.Sender.ParentAccountId <! msg
+      registry.AccountActor transfer.Sender.ParentAccountId <! msg
 
    match evt with
    | TransferEvent.ScheduledTransferActivated -> reserveSenderFunds ()
@@ -522,7 +401,7 @@ let onEventPersisted
                   correlationId
                   (EmailInfo.ApplicationErrorRequiresSupport reason)
 
-            dep.getEmailRef () <! msg
+            registry.EmailActor() <! msg
    | TransferEvent.TransferNotificationSent -> ()
    | TransferEvent.TransferDepositNotificationSent -> ()
    | TransferEvent.SenderUnableToReserveFunds _ -> ()
@@ -539,7 +418,7 @@ let onEventPersisted
             |> AccountCommand.FailInternalTransferBetweenOrgs
             |> AccountMessage.StateChange
 
-         dep.getAccountRef transfer.Sender.ParentAccountId <! msg
+         registry.AccountActor transfer.Sender.ParentAccountId <! msg
    | TransferEvent.SupportTeamResolvedPartnerBankSync ->
       // Support team resolved dispute with partner bank so
       // reattempt syncing transaction to partner bank.
@@ -574,10 +453,12 @@ let onEventPersisted
                   |> AccountCommand.FailInternalTransferBetweenOrgs
                   |> AccountMessage.StateChange
 
-               dep.getAccountRef transfer.Sender.ParentAccountId <! msg
+               registry.AccountActor transfer.Sender.ParentAccountId <! msg
             | _ -> ()
          | Activity.WaitForScheduledTransferActivation _ ->
-            dep.sendEventToSelf transfer Event.ScheduledTransferActivated
+            operationEnv.sendEventToSelf
+               transfer
+               Event.ScheduledTransferActivated
          | Activity.UndoRecipientDeposit
          | Activity.WaitForSupportTeamToResolvePartnerBankSync -> ()
          | Activity.SettleTransfer ->

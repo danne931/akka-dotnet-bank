@@ -12,11 +12,6 @@ open Lib.SharedTypes
 open Lib.Types
 open Lib.Saga
 open CachedOrgSettings
-open Bank.Org.Domain
-open Bank.Account.Domain
-open Bank.Transfer.Domain
-open Bank.Employee.Domain
-open Email
 open PurchaseSaga
 open DomesticTransferSaga
 open PlatformTransferSaga
@@ -24,469 +19,20 @@ open PaymentRequestSaga
 open OrgOnboardingSaga
 open EmployeeOnboardingSaga
 open CardSetupSaga
-open Bank.Scheduler
 open BillingSaga
-open PartnerBank.Service.Domain
-open CardIssuer.Service.Domain
-open TransferMessages
-
-[<RequireQualifiedAccess>]
-type StartEvent =
-   | OrgOnboarding of OrgOnboardingSagaStartEvent
-   | EmployeeOnboarding of EmployeeOnboardingSagaStartEvent
-   | CardSetup of CardSetupSagaStartEvent
-   | Purchase of PurchaseSagaStartEvent
-   | DomesticTransfer of DomesticTransferSagaStartEvent
-   | PlatformTransfer of PlatformTransferSagaStartEvent
-   | PaymentRequest of PaymentRequestSagaStartEvent
-   | Billing of BillingSagaStartEvent
-
-   member x.Name =
-      match x with
-      | OrgOnboarding e ->
-         match e with
-         | OrgOnboardingSagaStartEvent.ApplicationSubmitted _ ->
-            "OrgOnboardingApplicationSubmitted"
-      | EmployeeOnboarding e ->
-         match e with
-         | EmployeeOnboardingSagaStartEvent.AccountOwnerCreated _ ->
-            "EmployeeOnboardingAccountOwnerCreated"
-         | EmployeeOnboardingSagaStartEvent.EmployeeCreated _ ->
-            "EmployeeOnboardingEmployeeCreated"
-         | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored _ ->
-            "EmployeeOnboardingEmployeeAccessRestored"
-      | CardSetup _ -> "CardSetupStart"
-      | Purchase e ->
-         match e with
-         | PurchaseSagaStartEvent.PurchaseIntent _ -> "PurchaseIntent"
-         | PurchaseSagaStartEvent.PurchaseRejectedByCard _ ->
-            "PurchaseRejectedByCard"
-      | DomesticTransfer e ->
-         match e with
-         | DomesticTransferSagaStartEvent.SenderReservedFunds _ ->
-            "DomesticTransferSenderReservedFunds"
-         | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ ->
-            "DomesticTransferScheduleTransferRequest"
-      | PlatformTransfer e ->
-         match e with
-         | PlatformTransferSagaStartEvent.SenderReservedFunds _ ->
-            "PlatformTransferSenderReservedFunds"
-         | PlatformTransferSagaStartEvent.ScheduleTransferRequest _ ->
-            "PlatformTransferScheduleTransferRequest"
-      | PaymentRequest e ->
-         match e with
-         | PaymentRequestSagaStartEvent.PaymentRequested _ -> "PaymentRequested"
-      | Billing _ -> "BillingSagaStart"
-
-[<RequireQualifiedAccess>]
-type Event =
-   | OrgOnboarding of OrgOnboardingSagaEvent
-   | EmployeeOnboarding of EmployeeOnboardingSagaEvent
-   | CardSetup of CardSetupSagaEvent
-   | Purchase of PurchaseSagaEvent
-   | DomesticTransfer of DomesticTransferSagaEvent
-   | PlatformTransfer of PlatformTransferSagaEvent
-   | PaymentRequest of PaymentRequestSagaEvent
-   | Billing of BillingSagaEvent
-
-   member x.Name =
-      match x with
-      | Event.OrgOnboarding e ->
-         match e with
-         | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent ->
-            "OrgOnboardingApplicationProcessingNotificationSent"
-         | OrgOnboardingSagaEvent.KYCResponse _ ->
-            "OrgOnboardingKnowYourCustomerServiceResponse"
-         | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService _ ->
-            "OrgOnboardingReceivedInfoFixDemandedByKYCService"
-         | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse _ ->
-            "OrgOnboardingLinkAccountToPartnerBankResponse"
-         | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
-            "OrgOnboardingInitializedPrimaryVirtualAccount"
-         | OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse _ ->
-            "OrgOnboardingInitializeOrgSettingsCacheResponse"
-         | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent ->
-            "OrgOnboardingApplicationAcceptedNotificationSent"
-         | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent ->
-            "OrgOnboardingApplicationRejectedNotificationSent"
-         | OrgOnboardingSagaEvent.ApplicationRequiresRevisionForKYCServiceNotificationSent ->
-            "OrgOnboardingApplicationRequiresRevisionForKYCServiceNotificationSent"
-         | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink ->
-            "OrgOnboardingSupportTeamResolvedPartnerBankLink"
-         | OrgOnboardingSagaEvent.EvaluateRemainingWork ->
-            "OrgOnboardingEvaluateRemainingWork"
-         | OrgOnboardingSagaEvent.ResetInProgressActivityAttempts ->
-            "OrgOnboardingResetInProgressActivityAttempts"
-         | OrgOnboardingSagaEvent.OrgActivated -> "OrgOnboardingOrgActivated"
-      | Event.EmployeeOnboarding e ->
-         match e with
-         | EmployeeOnboardingSagaEvent.AccessRequestPending ->
-            "EmployeeOnboardingAccessRequestPending"
-         | EmployeeOnboardingSagaEvent.InviteNotificationSent ->
-            "EmployeeOnboardingInviteNotificationSent"
-         | EmployeeOnboardingSagaEvent.AccessApproved ->
-            "EmployeeOnboardingAccessApproved"
-         | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee ->
-            "EmployeeOnboardingCardAssociatedWithEmployee"
-         | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent ->
-            "EmployeeOnboardingFailNotificationSent"
-         | EmployeeOnboardingSagaEvent.CardCreateResponse _ ->
-            "EmployeeOnboardingCardCreateResponse"
-         | EmployeeOnboardingSagaEvent.InviteCancelled _ ->
-            "EmployeeOnboardingInviteCancelled"
-         | EmployeeOnboardingSagaEvent.InviteConfirmed ->
-            "EmployeeOnboardingInviteConfirmed"
-         | EmployeeOnboardingSagaEvent.InviteTokenRefreshed _ ->
-            "EmployeeOnboardingInviteTokenRefreshed"
-         | EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts ->
-            "EmployeeOnboardingResetInProgressActivityAttempts"
-         | EmployeeOnboardingSagaEvent.EvaluateRemainingWork ->
-            "EmployeeOnboardingEvaluateRemainingWork"
-      | Event.CardSetup e ->
-         match e with
-         | CardSetupSagaEvent.CardCreateResponse _ -> "CardSetupCreateResponse"
-         | CardSetupSagaEvent.CardSetupSuccessNotificationSent ->
-            "CardSetupSuccessNotificationSent"
-         | CardSetupSagaEvent.CardSetupFailNotificationSent ->
-            "CardSetupFailNotificationSent"
-         | CardSetupSagaEvent.ProviderCardIdLinked ->
-            "CardSetupProviderCardIdLinked"
-         | CardSetupSagaEvent.ResetInProgressActivityAttempts ->
-            "CardSetupResetInProgressActivityAttempts"
-         | CardSetupSagaEvent.EvaluateRemainingWork ->
-            "CardSetupEvaluateRemainingWork"
-      | Event.Purchase e ->
-         match e with
-         | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
-            "PurchaseRejectedCardNetworkResponse"
-         | PurchaseSagaEvent.CardNetworkResponse _ -> "CardNetworkResponse"
-         | PurchaseSagaEvent.PurchaseSettledWithAccount ->
-            "PurchaseSettledWithAccount"
-         | PurchaseSagaEvent.PurchaseSettledWithCard ->
-            "PurchaseSettledWithCard"
-         | PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard ->
-            "PurchaseFailureAcknowledgedByCard"
-         | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount ->
-            "PurchaseFailureAcknowledgedByAccount"
-         | PurchaseSagaEvent.AccountReservedFunds _ ->
-            "PurchaseAccountReservedFunds"
-         | PurchaseSagaEvent.PurchaseRejectedByAccount _ ->
-            "PurchaseRejectedByAccount"
-         | PurchaseSagaEvent.PurchaseNotificationSent ->
-            "PurchaseNotificationSent"
-         | PurchaseSagaEvent.PartnerBankSyncResponse _ ->
-            "PurchasePartnerBankSyncResponse"
-         | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync ->
-            "PurchaseSupportTeamResolvedPartnerBankSync"
-         | PurchaseSagaEvent.EvaluateRemainingWork ->
-            "PurchaseEvaluateRemainingWork"
-         | PurchaseSagaEvent.ResetInProgressActivityAttempts ->
-            "PurchaseResetInProgressActivityAttempts"
-      | Event.DomesticTransfer e ->
-         match e with
-         | DomesticTransferSagaEvent.ScheduledTransferActivated ->
-            "DomesticTransferScheduledTransferActivated"
-         | DomesticTransferSagaEvent.SenderReservedFunds ->
-            "DomesticTransferSenderReservedFunds"
-         | DomesticTransferSagaEvent.SenderReleasedReservedFunds ->
-            "DomesticTransferSenderReleasedReservedFunds"
-         | DomesticTransferSagaEvent.SenderUnableToReserveFunds _ ->
-            "DomesticTransferSenderUnableToReserveFunds"
-         | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
-            "DomesticTransferTransferProcessorProgressUpdate"
-         | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
-            "DomesticTransferRetryTransferServiceRequest"
-         | DomesticTransferSagaEvent.SenderDeductedFunds ->
-            "DomesticTransferSenderDeductedFunds"
-         | DomesticTransferSagaEvent.TransferInitiatedNotificationSent ->
-            "DomesticTransferInitiatedNotificationSent"
-         | DomesticTransferSagaEvent.EvaluateRemainingWork ->
-            "DomesticTransferEvaluateRemainingWork"
-         | DomesticTransferSagaEvent.ResetInProgressActivityAttempts ->
-            "DomesticTransferResetInProgressActivityAttempts"
-      | Event.PlatformTransfer e ->
-         match e with
-         | PlatformTransferSagaEvent.ScheduledTransferActivated ->
-            "PlatformTransferScheduledTransferActivated"
-         | PlatformTransferSagaEvent.SenderReservedFunds _ ->
-            "PlatformTransferSenderReservedFunds"
-         | PlatformTransferSagaEvent.SenderUnableToReserveFunds _ ->
-            "PlatformTransferSenderUnableToReserveFunds"
-         | PlatformTransferSagaEvent.RecipientDepositedFunds _ ->
-            "PlatformTransferRecipientDepositedFunds"
-         | PlatformTransferSagaEvent.RecipientUnableToDepositFunds _ ->
-            "PlatformTransferRecipientUnableToDepositFunds"
-         | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
-            "PlatformTransferPartnerBankSyncResponse"
-         | PlatformTransferSagaEvent.TransferSettled ->
-            "PlatformTransferSettled"
-         | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
-            "PlatformTransferSupportTeamResolvedPartnerBankSync"
-         | PlatformTransferSagaEvent.SenderReleasedReservedFunds ->
-            "PlatformTransferSenderReleasedReservedFunds"
-         | PlatformTransferSagaEvent.RecipientDepositUndo ->
-            "PlatformTransferRecipientDepositUndo"
-         | PlatformTransferSagaEvent.TransferNotificationSent ->
-            "PlatformTransferNotificationSent"
-         | PlatformTransferSagaEvent.TransferDepositNotificationSent ->
-            "PlatformTransferDepositNotificationSent"
-         | PlatformTransferSagaEvent.EvaluateRemainingWork ->
-            "PlatformTransferEvaluateRemainingWork"
-         | PlatformTransferSagaEvent.ResetInProgressActivityAttempts ->
-            "PlatformTransferResetInProgressActivityAttempts"
-      | Event.PaymentRequest e ->
-         match e with
-         | PaymentRequestSagaEvent.ScheduledPaymentReminderActivated ->
-            "PaymentRequestScheduledPaymentReminderActivated"
-         | PaymentRequestSagaEvent.PaymentRequestCancelled ->
-            "PaymentRequestCancelled"
-         | PaymentRequestSagaEvent.PaymentRequestDeclined ->
-            "PaymentRequestDeclined"
-         | PaymentRequestSagaEvent.PaymentRequestNotificationSentToPayer ->
-            "PaymentRequestNotificationSentToPayer"
-         | PaymentRequestSagaEvent.PaymentFailed _ -> "PaymentFailed"
-         | PaymentRequestSagaEvent.PaymentFulfilled _ -> "PaymentFulfilled"
-         | PaymentRequestSagaEvent.PaymentDeclinedNotificationSentToPayee ->
-            "PaymentDeclinedNotificationSentToPayee"
-         | PaymentRequestSagaEvent.PaymentSagaStartedForNextRecurringPayment ->
-            "PaymentSagaStartedForNextRecurringPayment"
-         | PaymentRequestSagaEvent.EvaluateRemainingWork ->
-            "PaymentEvaluateRemainingWork"
-         | PaymentRequestSagaEvent.ResetInProgressActivityAttempts ->
-            "PaymentResetInProgressActivityAttempts"
-      | Event.Billing e ->
-         match e with
-         | BillingSagaEvent.BillingStatementProcessing _ ->
-            "BillingStatementProcessing"
-         | BillingSagaEvent.BillingStatementPersisted ->
-            "BillingStatementPersisted"
-         | BillingSagaEvent.MaintenanceFeeProcessed ->
-            "BillingStatementMaintenanceFeeProcessed"
-         | BillingSagaEvent.BillingEmailSent -> "BillingStatementEmailSent"
-         | BillingSagaEvent.EvaluateRemainingWork ->
-            "BillingStatementEvaluateRemainingWork"
-         | BillingSagaEvent.ResetInProgressActivityAttempts ->
-            "BillingStatementResetInProgressActivityAttempts"
-
-[<RequireQualifiedAccess>]
-type Saga =
-   | OrgOnboarding of OrgOnboardingSaga
-   | EmployeeOnboarding of EmployeeOnboardingSaga
-   | CardSetup of CardSetupSaga
-   | Purchase of PurchaseSaga
-   | DomesticTransfer of DomesticTransferSaga
-   | PlatformTransfer of PlatformTransferSaga
-   | PaymentRequest of PaymentRequestSaga
-   | Billing of BillingSaga
-
-   interface ISaga with
-      member x.SagaId =
-         match x with
-         | Saga.OrgOnboarding s -> s.CorrelationId
-         | Saga.EmployeeOnboarding s -> s.CorrelationId
-         | Saga.CardSetup s -> s.CorrelationId
-         | Saga.Purchase s -> s.PurchaseInfo.CorrelationId
-         | Saga.DomesticTransfer s ->
-            TransferId.toCorrelationId s.TransferInfo.TransferId
-         | Saga.PlatformTransfer s ->
-            TransferId.toCorrelationId s.TransferInfo.TransferId
-         | Saga.PaymentRequest s ->
-            PaymentRequestId.toCorrelationId s.PaymentInfo.SharedDetails.Id
-         | Saga.Billing s -> s.CorrelationId
-
-      member x.OrgId =
-         match x with
-         | Saga.OrgOnboarding s -> s.OrgId
-         | Saga.EmployeeOnboarding s -> s.OrgId
-         | Saga.CardSetup s -> s.OrgId
-         | Saga.Purchase s -> s.PurchaseInfo.OrgId
-         | Saga.DomesticTransfer s -> s.TransferInfo.Sender.OrgId
-         | Saga.PlatformTransfer s -> s.TransferInfo.Sender.OrgId
-         | Saga.PaymentRequest s -> s.PaymentInfo.SharedDetails.Payee.OrgId
-         | Saga.Billing s -> s.OrgId
-
-      member x.ActivityInProgressCount =
-         match x with
-         | Saga.OrgOnboarding s -> s.LifeCycle.InProgress.Length
-         | Saga.EmployeeOnboarding s -> s.LifeCycle.InProgress.Length
-         | Saga.CardSetup s -> s.LifeCycle.InProgress.Length
-         | Saga.Purchase s -> s.LifeCycle.InProgress.Length
-         | Saga.DomesticTransfer s -> s.LifeCycle.InProgress.Length
-         | Saga.PlatformTransfer s -> s.LifeCycle.InProgress.Length
-         | Saga.PaymentRequest s -> s.LifeCycle.InProgress.Length
-         | Saga.Billing s -> s.LifeCycle.InProgress.Length
-
-      member x.ActivityAttemptsExhaustedCount =
-         match x with
-         | Saga.OrgOnboarding s ->
-            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-         | Saga.EmployeeOnboarding s ->
-            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-         | Saga.CardSetup s ->
-            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-         | Saga.Purchase s -> s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-         | Saga.DomesticTransfer s ->
-            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-         | Saga.PlatformTransfer s ->
-            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-         | Saga.PaymentRequest s ->
-            s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-         | Saga.Billing s -> s.LifeCycle.ActivitiesWithAttemptsExhausted.Length
-
-      member x.ActivityRetryableAfterInactivityCount =
-         match x with
-         | Saga.OrgOnboarding s ->
-            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-         | Saga.EmployeeOnboarding s ->
-            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-         | Saga.CardSetup s ->
-            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-         | Saga.Purchase s ->
-            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-         | Saga.DomesticTransfer s ->
-            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-         | Saga.PlatformTransfer s ->
-            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-         | Saga.PaymentRequest s ->
-            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-         | Saga.Billing s ->
-            s.LifeCycle.ActivitiesRetryableAfterInactivity.Length
-
-      member x.ExhaustedAllAttempts =
-         match x with
-         | Saga.OrgOnboarding s -> s.LifeCycle.SagaExhaustedAttempts
-         | Saga.EmployeeOnboarding s -> s.LifeCycle.SagaExhaustedAttempts
-         | Saga.CardSetup s -> s.LifeCycle.SagaExhaustedAttempts
-         | Saga.Purchase s -> s.LifeCycle.SagaExhaustedAttempts
-         | Saga.DomesticTransfer s -> s.LifeCycle.SagaExhaustedAttempts
-         | Saga.PlatformTransfer s -> s.LifeCycle.SagaExhaustedAttempts
-         | Saga.PaymentRequest s -> s.LifeCycle.SagaExhaustedAttempts
-         | Saga.Billing s -> s.LifeCycle.SagaExhaustedAttempts
-
-      member x.InactivityTimeout =
-         match x with
-         | Saga.OrgOnboarding s -> s.LifeCycle.InactivityTimeout
-         | Saga.EmployeeOnboarding s -> s.LifeCycle.InactivityTimeout
-         | Saga.CardSetup s -> s.LifeCycle.InactivityTimeout
-         | Saga.Purchase s -> s.LifeCycle.InactivityTimeout
-         | Saga.DomesticTransfer s -> s.LifeCycle.InactivityTimeout
-         | Saga.PlatformTransfer s -> s.LifeCycle.InactivityTimeout
-         | Saga.PaymentRequest s -> s.LifeCycle.InactivityTimeout
-         | Saga.Billing s -> s.LifeCycle.InactivityTimeout
-
-type AppSagaPersistableEvent = SagaPersistableEvent<StartEvent, Event>
-
-type AppSagaMessage = SagaMessage<StartEvent, Event>
-
-module Message =
-   // NOTE:
-   // Saga start messages are sent with AtLeastOnceDelivery using Akka's GuaranteedDelivery module.
-   // It is up to the consumer to decide whether they want to include the extra overhead cost for
-   // non-start messages.
-   //
-   // For non-start messages to saga actors it is likely not necessary to use GuaranteedDelivery
-   // as Lib/Saga/SagaActor.fs will reattempt activities for which it does not receive a response before
-   // the Saga activity's inactivity timeout.
-   let private startMessage
-      orgId
-      corrId
-      (startEvent: StartEvent)
-      : GuaranteedDelivery.Message<AppSagaMessage>
-      =
-      SagaEvent.create orgId corrId startEvent
-      |> SagaMessage.Start
-      |> GuaranteedDelivery.message (CorrelationId.get corrId)
-
-   let private message orgId corrId (evt: Event) : AppSagaMessage =
-      SagaEvent.create orgId corrId evt |> SagaMessage.Event
-
-   let guaranteedDelivery
-      corrId
-      (msg: AppSagaMessage)
-      : GuaranteedDelivery.Message<AppSagaMessage>
-      =
-      GuaranteedDelivery.message (CorrelationId.get corrId) msg
-
-   let orgOnboardStart orgId corrId (evt: OrgOnboardingSagaStartEvent) =
-      startMessage orgId corrId (StartEvent.OrgOnboarding evt)
-
-   let orgOnboard orgId corrId (evt: OrgOnboardingSagaEvent) =
-      message orgId corrId (Event.OrgOnboarding evt)
-
-   let employeeOnboardStart
-      orgId
-      corrId
-      (evt: EmployeeOnboardingSagaStartEvent)
-      =
-      startMessage orgId corrId (StartEvent.EmployeeOnboarding evt)
-
-   let employeeOnboard orgId corrId (evt: EmployeeOnboardingSagaEvent) =
-      message orgId corrId (Event.EmployeeOnboarding evt)
-
-   let purchaseStart orgId corrId (evt: PurchaseSagaStartEvent) =
-      startMessage orgId corrId (StartEvent.Purchase evt)
-
-   let purchase orgId corrId (evt: PurchaseSagaEvent) =
-      message orgId corrId (Event.Purchase evt)
-
-   let cardSetupStart orgId corrId (evt: CardSetupSagaStartEvent) =
-      startMessage orgId corrId (StartEvent.CardSetup evt)
-
-   let cardSetup orgId corrId (evt: CardSetupSagaEvent) =
-      message orgId corrId (Event.CardSetup evt)
-
-   let domesticTransferStart
-      orgId
-      corrId
-      (evt: DomesticTransferSagaStartEvent)
-      =
-      startMessage orgId corrId (StartEvent.DomesticTransfer evt)
-
-   let domesticTransfer orgId corrId (evt: DomesticTransferSagaEvent) =
-      message orgId corrId (Event.DomesticTransfer evt)
-
-   let platformTransferStart
-      orgId
-      corrId
-      (evt: PlatformTransferSagaStartEvent)
-      =
-      startMessage orgId corrId (StartEvent.PlatformTransfer evt)
-
-   let platformTransfer orgId corrId (evt: PlatformTransferSagaEvent) =
-      message orgId corrId (Event.PlatformTransfer evt)
-
-   let paymentRequestStart orgId corrId (evt: PaymentRequestSagaStartEvent) =
-      startMessage orgId corrId (StartEvent.PaymentRequest evt)
-
-   let paymentRequest orgId corrId (evt: PaymentRequestSagaEvent) =
-      message orgId corrId (Event.PaymentRequest evt)
-
-   let billingStart orgId corrId (evt: BillingSagaStartEvent) =
-      startMessage orgId corrId (StartEvent.Billing evt)
-
-   let billing orgId corrId (evt: BillingSagaEvent) =
-      message orgId corrId (Event.Billing evt)
+open AppSaga
+open BankActorRegistry
 
 let sagaHandler
+   (registry:
+      #IOrgActor & #IEmployeeActor & #IAccountActor & #IEmailActor & #IDomesticTransferActor & #ISchedulerActor & #IKYCServiceActor & #IPartnerBankServiceActor & #ICardIssuerServiceActor & #ISagaActor)
    (orgSettingsCache: OrgSettingsCache)
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
-   (getDomesticTransferRef:
-      ActorSystem -> IActorRef<DomesticTransferServiceMessage>)
-   (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
-   (getKYCServiceRef: ActorSystem -> IActorRef<KYCMessage>)
-   (getPartnerBankServiceRef:
-      ActorSystem -> IActorRef<PartnerBankServiceMessage>)
-   (getCardIssuerServiceRef: ActorSystem -> IActorRef<CardIssuerMessage>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSagaMessage>)
    : SagaActor.SagaHandler<Saga, StartEvent, Event>
    =
    let sendMessageToPaymentSaga orgId paymentId evt =
       let corrId = PaymentRequestId.toCorrelationId paymentId
       let msg = Message.paymentRequest orgId corrId evt
-      getSagaRef corrId <! msg
+      registry.SagaActor corrId <! msg
 
    {
       getEvaluateRemainingWorkEvent =
@@ -642,8 +188,6 @@ let sagaHandler
             | _ -> state
       onStartEventPersisted =
          fun mailbox evt state ->
-            let getEmailRef () = getEmailRef mailbox.System
-
             let notHandled () =
                logError
                   mailbox
@@ -652,42 +196,27 @@ let sagaHandler
             match evt with
             | StartEvent.OrgOnboarding e ->
                if state.IsOrgOnboarding then
-                  OrgOnboardingSaga.onStartEventPersisted
-                     {
-                        getEmailRef = getEmailRef
-                        getKYCServiceRef =
-                           fun () -> getKYCServiceRef mailbox.System
-                     }
-                     e
+                  OrgOnboardingSaga.onStartEventPersisted registry e
                else
                   notHandled ()
             | StartEvent.EmployeeOnboarding e ->
                if state.IsEmployeeOnboarding then
-                  EmployeeOnboardingSaga.onStartEventPersisted
-                     {
-                        getOrgRef = getOrgRef
-                        getEmailRef = getEmailRef
-                     }
-                     e
+                  EmployeeOnboardingSaga.onStartEventPersisted registry e
                else
                   notHandled ()
             | StartEvent.CardSetup e ->
                if state.IsCardSetup then
-                  CardSetupSaga.onStartEventPersisted
-                     (fun () -> getCardIssuerServiceRef mailbox.System)
-                     e
+                  CardSetupSaga.onStartEventPersisted registry e
                else
                   notHandled ()
             | StartEvent.DomesticTransfer evt ->
                if state.IsDomesticTransfer then
-                  DomesticTransferSaga.onStartEventPersisted
-                     (fun () -> getDomesticTransferRef mailbox.System)
-                     evt
+                  DomesticTransferSaga.onStartEventPersisted registry evt
                else
                   notHandled ()
             | StartEvent.PlatformTransfer evt ->
                if state.IsPlatformTransfer then
-                  PlatformTransferSaga.onStartEventPersisted getAccountRef evt
+                  PlatformTransferSaga.onStartEventPersisted registry evt
                else
                   notHandled ()
             | StartEvent.PaymentRequest evt ->
@@ -695,26 +224,20 @@ let sagaHandler
                | Saga.PaymentRequest saga ->
                   PaymentRequestSaga.onStartEventPersisted
                      saga
-                     getEmailRef
+                     registry
                      sendMessageToPaymentSaga
                      evt
                | _ -> notHandled ()
             | StartEvent.Billing e ->
                if state.IsBilling then
-                  BillingSaga.onStartEventPersisted
-                     {
-                        getAccountRef = getAccountRef
-                        getEmailRef = getEmailRef
-                     }
-                     e
+                  BillingSaga.onStartEventPersisted registry e
                else
                   notHandled ()
             | StartEvent.Purchase e ->
                if state.IsPurchase then
                   PurchaseSaga.onStartEventPersisted
+                     registry
                      {
-                        getAccountRef = getAccountRef
-                        getEmailRef = getEmailRef
                         cardNetworkRejectPurchase =
                            PurchaseSaga.cardNetworkRejectPurchase
                         sendMessageToSelf =
@@ -734,15 +257,6 @@ let sagaHandler
                   notHandled ()
       onEventPersisted =
          fun mailbox evt priorState state ->
-            let getEmailRef () = getEmailRef mailbox.System
-            let getSchedulingRef () = getSchedulingRef mailbox.System
-
-            let getCardIssuerServiceRef =
-               fun () -> getCardIssuerServiceRef mailbox.System
-
-            let getPartnerBankServiceRef () =
-               getPartnerBankServiceRef mailbox.System
-
             let notHandled () =
                logError
                   mailbox
@@ -753,14 +267,9 @@ let sagaHandler
                match priorState, state with
                | Saga.OrgOnboarding priorState, Saga.OrgOnboarding state ->
                   OrgOnboardingSaga.onEventPersisted
+                     registry
                      {
                         OrgSettingsCache = orgSettingsCache
-                        getOrgRef = getOrgRef
-                        getAccountRef = getAccountRef
-                        getEmailRef = getEmailRef
-                        getKYCServiceRef =
-                           fun () -> getKYCServiceRef mailbox.System
-                        getPartnerBankServiceRef = getPartnerBankServiceRef
                         logError = logError mailbox
                         sendEventToSelf =
                            fun orgId corrId asyncEvt ->
@@ -779,33 +288,18 @@ let sagaHandler
                | Saga.EmployeeOnboarding priorState,
                  Saga.EmployeeOnboarding state ->
                   EmployeeOnboardingSaga.onEventPersisted
-                     {
-                        getOrgRef = getOrgRef
-                        getEmployeeRef = getEmployeeRef
-                        getEmailRef = getEmailRef
-                        getCardIssuerServiceRef = getCardIssuerServiceRef
-                     }
+                     registry
                      priorState
                      state
                      e
                | _ -> notHandled ()
             | Event.CardSetup e ->
-               let deps: CardSetupSaga.PersistenceHandlerDependencies = {
-                  getEmployeeRef = getEmployeeRef
-                  getEmailRef = getEmailRef
-                  getCardIssuerServiceRef = getCardIssuerServiceRef
-               }
-
                match priorState, state with
                | Saga.CardSetup priorState, Saga.CardSetup state ->
-                  CardSetupSaga.onEventPersisted deps priorState state e
+                  CardSetupSaga.onEventPersisted registry priorState state e
                | _ -> notHandled ()
             | Event.Purchase e ->
-               let purchaseDeps: PurchaseSaga.PersistenceHandlerDependencies = {
-                  getEmployeeRef = getEmployeeRef
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  getPartnerBankServiceRef = getPartnerBankServiceRef
+               let purchaseOperationEnv: PurchaseSaga.OperationEnv = {
                   cardNetworkConfirmPurchase =
                      PurchaseSaga.cardNetworkConfirmPurchase
                   cardNetworkRejectPurchase =
@@ -825,15 +319,15 @@ let sagaHandler
 
                match priorState, state with
                | Saga.Purchase priorState, Saga.Purchase state ->
-                  PurchaseSaga.onEventPersisted purchaseDeps priorState state e
+                  PurchaseSaga.onEventPersisted
+                     registry
+                     purchaseOperationEnv
+                     priorState
+                     state
+                     e
                | _ -> notHandled ()
             | Event.DomesticTransfer evt ->
-               let deps: DomesticTransferSaga.PersistenceHandlerDependencies = {
-                  getSchedulingRef = getSchedulingRef
-                  getDomesticTransferRef =
-                     fun () -> getDomesticTransferRef mailbox.System
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
+               let OperationEnv: DomesticTransferSaga.OperationEnv = {
                   logError = logError mailbox
                   sendEventToSelf =
                      fun transfer evt ->
@@ -849,16 +343,14 @@ let sagaHandler
                match priorState, state with
                | Saga.DomesticTransfer priorState, Saga.DomesticTransfer state ->
                   DomesticTransferSaga.onEventPersisted
-                     deps
+                     registry
+                     OperationEnv
                      priorState
                      state
                      evt
                | _ -> notHandled ()
             | Event.PlatformTransfer evt ->
-               let deps: PlatformTransferSaga.PersistenceHandlerDependencies = {
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  getPartnerBankServiceRef = getPartnerBankServiceRef
+               let OperationEnv: PlatformTransferSaga.OperationEnv = {
                   sendEventToSelf =
                      fun transfer evt ->
                         let msg =
@@ -873,36 +365,33 @@ let sagaHandler
                match priorState, state with
                | Saga.PlatformTransfer priorState, Saga.PlatformTransfer state ->
                   PlatformTransferSaga.onEventPersisted
-                     deps
+                     registry
+                     OperationEnv
                      priorState
                      state
                      evt
                | _ -> notHandled ()
             | Event.PaymentRequest evt ->
-               let deps: PaymentRequestSaga.PersistenceHandlerDependencies = {
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-                  getPartnerBankServiceRef = getPartnerBankServiceRef
+               let OperationEnv: PaymentRequestSaga.OperationEnv = {
                   sendEventToPaymentSaga = sendMessageToPaymentSaga
                }
 
                match priorState, state with
                | Saga.PaymentRequest priorState, Saga.PaymentRequest state ->
-                  PaymentRequestSaga.onEventPersisted deps priorState state evt
+                  PaymentRequestSaga.onEventPersisted
+                     registry
+                     OperationEnv
+                     priorState
+                     state
+                     evt
                | _ -> notHandled ()
             | Event.Billing evt ->
-               let deps: BillingSaga.PersistenceHandlerDependencies = {
-                  getAccountRef = getAccountRef
-                  getEmailRef = getEmailRef
-               }
-
                match priorState, state with
                | Saga.Billing priorState, Saga.Billing state ->
-                  BillingSaga.onEventPersisted deps priorState state evt
+                  BillingSaga.onEventPersisted registry priorState state evt
                | _ -> notHandled ()
    }
 
-// Send a message to a cluster sharded saga actor with AtMostOnceDelivery
 let getEntityRef
    (sys: ActorSystem)
    (correlationId: CorrelationId)
@@ -913,30 +402,9 @@ let getEntityRef
       ActorUtil.ClusterMetadata.sagaShardRegion
       (CorrelationId.get correlationId)
 
-/// Send a message to a cluster sharded saga actor with AtLeastOnceDelivery
-let getGuaranteedDeliveryProducerRef
-   (system: ActorSystem)
-   : IActorRef<GuaranteedDelivery.Message<AppSagaMessage>>
-   =
-   typed
-   <| Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.SagaGuaranteedDeliveryProducerMarker>()
-
 let initProps
-   (system: ActorSystem)
+   registry
    (orgSettingsCache: OrgSettingsCache)
-   (getOrgRef: OrgId -> IEntityRef<OrgMessage>)
-   (getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getEmailActor: ActorSystem -> IActorRef<EmailMessage>)
-   (getDomesticTransferRef:
-      ActorSystem -> IActorRef<DomesticTransferServiceMessage>)
-   (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
-   (getKYCServiceRef: ActorSystem -> IActorRef<KYCMessage>)
-   (getPartnerBankServiceRef:
-      ActorSystem -> IActorRef<PartnerBankServiceMessage>)
-   (getCardIssuerServiceRef: ActorSystem -> IActorRef<CardIssuerMessage>)
    (persistenceSupervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
@@ -948,15 +416,4 @@ let initProps
       sagaPassivateIdleEntityAfter
       persistenceId
       guaranteedDeliveryConsumerControllerRef
-      (sagaHandler
-         orgSettingsCache
-         getOrgRef
-         getEmployeeRef
-         getAccountRef
-         getEmailActor
-         getDomesticTransferRef
-         getSchedulingRef
-         getKYCServiceRef
-         getPartnerBankServiceRef
-         getCardIssuerServiceRef
-         (getEntityRef system))
+      (sagaHandler registry orgSettingsCache)

@@ -2,25 +2,23 @@
 module AutomaticTransferSchedulingActor
 
 open Akka.Actor
-open Akka.Hosting
 open Akka.Streams
 open Akkling.Streams
 open Akkling
-open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
 open Bank.Account.Domain
-open ActorUtil
 open Lib.Types
 open Lib.Postgres
 open AccountSqlMapper
 open AutomaticTransfer
 open TransferMessages
+open BankActorRegistry
 
 let actorProps
+   (registry: #IAccountActor)
    (system: ActorSystem)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (getOrgIds:
       CronSchedule
          -> Async<Result<(AccountId * ParentAccountId) list option, Err>>)
@@ -64,7 +62,7 @@ let actorProps
                   accountId
                )
 
-            getAccountRef parentAccountId <! msg)
+            registry.AccountActor parentAccountId <! msg)
 
       logInfo ctx $"Finished running {schedule} balance management."
 
@@ -72,12 +70,6 @@ let actorProps
    }
 
    props handler
-
-let get (system: ActorSystem) : IActorRef<AutoTransferMessage> =
-   typed
-   <| ActorRegistry
-      .For(system)
-      .Get<ActorMetadata.AutoTransferSchedulingMarker>()
 
 let getAccountsWithScheduledAutoTransfer (schedule: CronSchedule) = asyncResultOption {
    let field = AccountFields.autoTransferRuleFrequency
@@ -106,8 +98,8 @@ let getAccountsWithScheduledAutoTransfer (schedule: CronSchedule) = asyncResultO
 }
 
 let initProps
+   registry
    (system: ActorSystem)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
    (throttle: StreamThrottleEnvConfig)
    =
-   actorProps system getAccountRef getAccountsWithScheduledAutoTransfer throttle
+   actorProps registry system getAccountsWithScheduledAutoTransfer throttle

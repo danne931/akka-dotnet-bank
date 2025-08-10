@@ -3,9 +3,7 @@ module PartnerBankServiceActor
 
 open System.Threading.Tasks
 open Akkling
-open Akkling.Cluster.Sharding
 open Akkling.Streams
-open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
 open FsToolkit.ErrorHandling
 
@@ -17,6 +15,7 @@ open OrgOnboardingSaga
 open PurchaseSaga
 open PlatformTransferSaga
 open PartnerBank.Service.Domain
+open BankActorRegistry
 
 let protectedAction
    (networkRequest:
@@ -31,6 +30,7 @@ let protectedAction
    }
 
 let actorProps
+   (registry: #ISagaActor)
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
@@ -38,7 +38,6 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (networkRequest:
       PartnerBankServiceMessage -> Task<Result<PartnerBankResponse, Err>>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -67,7 +66,7 @@ let actorProps
                      |> OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse
                      |> AppSaga.Message.orgOnboard orgId corrId
 
-                  getSagaRef corrId <! msg
+                  registry.SagaActor corrId <! msg
                | PartnerBankServiceMessage.Purchase req,
                  PartnerBankResponse.Purchase res ->
                   let msg =
@@ -75,7 +74,7 @@ let actorProps
                      |> PurchaseSagaEvent.PartnerBankSyncResponse
                      |> AppSaga.Message.purchase orgId corrId
 
-                  getSagaRef corrId <! msg
+                  registry.SagaActor corrId <! msg
                | PartnerBankServiceMessage.TransferBetweenOrganizations req,
                  PartnerBankResponse.TransferBetweenOrganizations res ->
                   let msg =
@@ -83,7 +82,7 @@ let actorProps
                      |> PlatformTransferSagaEvent.PartnerBankSyncResponse
                      |> AppSaga.Message.platformTransfer orgId corrId
 
-                  getSagaRef corrId <! msg
+                  registry.SagaActor corrId <! msg
                | _ -> logError mailbox "Partner Bank Sync: Mixed req/res."
 
                response)
@@ -135,25 +134,19 @@ let private networkRequestToPartnerBankService
    }
 
 let initProps
+   registry
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps
+      registry
       queueConnection
       queueSettings
       streamRestartSettings
       breaker
       broadcaster
       networkRequestToPartnerBankService
-      getSagaRef
-
-let getProducer (system: ActorSystem) : IActorRef<PartnerBankServiceMessage> =
-   Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.PartnerBankServiceProducerMarker>()
-   |> typed

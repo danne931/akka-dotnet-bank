@@ -16,5 +16,6 @@
     <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
     <ProjectReference Include="../Billing.Domain/Billing.Domain.fsproj" />
     <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Lib.CrossCutting/Lib.CrossCutting.fsproj" /> 
   </ItemGroup>
 </Project>

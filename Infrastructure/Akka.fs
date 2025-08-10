@@ -149,6 +149,7 @@ module AkkaInfra =
    let withHealthCheck (builder: AkkaConfigurationBuilder) =
       builder.WithHealthCheck(fun opts ->
          opts.AddProviders HealthCheckType.All |> ignore
+
          opts.Liveness.Transport <- HealthCheckTransport.Tcp
          opts.Liveness.TcpPort <- Env.config.AkkaHealthCheck.LivenessPort
          opts.Readiness.Transport <- HealthCheckTransport.Tcp
@@ -158,6 +159,7 @@ module AkkaInfra =
       builder.ConfigureLoggers(fun builder ->
          builder.LogLevel <- LogLevel.InfoLevel
          builder.LogConfigOnStart <- true
+
          builder.AddLogger<SerilogLogger>() |> ignore
 
          builder.WithDefaultLogMessageFormatter<SerilogLogMessageFormatter>()

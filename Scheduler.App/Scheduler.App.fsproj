@@ -18,7 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="../Database/Database.fsproj" />
     <ProjectReference Include="../Lib/Lib.fsproj" />
-    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />  
+    <ProjectReference Include="../Saga.Domain/Saga.Domain.fsproj" />  
     <ProjectReference Include="../Billing.Domain/Billing.Domain.fsproj" />
     <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
     <ProjectReference Include="../Scheduler.Domain/Scheduler.Domain.fsproj" />

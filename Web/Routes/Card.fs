@@ -4,7 +4,6 @@ open System
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
-open Akka.Actor
 open Akkling
 open FsToolkit.ErrorHandling
 
@@ -16,6 +15,7 @@ open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
 open Lib.NetworkQuery
+open BankActorRegistry
 
 let start (app: WebApplication) =
    app.MapGet(
@@ -50,9 +50,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          CardPath.Base,
-         Func<ActorSystem, CreateCardCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (EmployeeCommand.CreateCard cmd)
-            |> RouteUtil.unwrapTaskResult)
+         Func<BankActorRegistry, CreateCardCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (EmployeeCommand.CreateCard cmd)
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.CreateCard)
    |> ignore
@@ -60,9 +61,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          CardPath.Purchase,
-         Func<ActorSystem, PurchaseIntentCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (EmployeeCommand.PurchaseIntent cmd)
-            |> RouteUtil.unwrapTaskResult)
+         Func<BankActorRegistry, PurchaseIntentCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (EmployeeCommand.PurchaseIntent cmd)
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.DebitRequest)
    |> ignore
@@ -70,10 +72,14 @@ let start (app: WebApplication) =
    app
       .MapPost(
          CardPath.PurchaseLimit,
-         Func<ActorSystem, ConfigureRollingPurchaseLimitCommand, Task<IResult>>
-            (fun sys cmd ->
+         Func<
+            BankActorRegistry,
+            ConfigureRollingPurchaseLimitCommand,
+            Task<IResult>
+          >
+            (fun registry cmd ->
                processCommand
-                  sys
+                  registry
                   (EmployeeCommand.ConfigureRollingPurchaseLimit cmd)
                |> RouteUtil.unwrapTaskResult)
       )
@@ -83,9 +89,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          CardPath.LockCard,
-         Func<ActorSystem, LockCardCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (EmployeeCommand.LockCard cmd)
-            |> RouteUtil.unwrapTaskResult)
+         Func<BankActorRegistry, LockCardCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (EmployeeCommand.LockCard cmd)
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.LockCard)
    |> ignore
@@ -93,25 +100,29 @@ let start (app: WebApplication) =
    app
       .MapPost(
          CardPath.UnlockCard,
-         Func<ActorSystem, UnlockCardCommand, Task<IResult>>(fun sys cmd ->
-            taskResult {
-               let validation =
-                  cmd
-                  |> UnlockCardCommand.toEvent
-                  |> Result.map EmployeeEnvelope.get
+         Func<BankActorRegistry, UnlockCardCommand, Task<IResult>>
+            (fun registry cmd ->
+               taskResult {
+                  let validation =
+                     cmd
+                     |> UnlockCardCommand.toEvent
+                     |> Result.map EmployeeEnvelope.get
 
-               let! res = validation |> Result.mapError Err.ValidationError
+                  let! res = validation |> Result.mapError Err.ValidationError
 
-               let msg =
-                  cmd
-                  |> UnlockCard
-                  |> ApprovableCommand.PerCommand
-                  |> OrgMessage.ApprovableRequest
+                  let msg =
+                     cmd
+                     |> UnlockCard
+                     |> ApprovableCommand.PerCommand
+                     |> OrgMessage.ApprovableRequest
+                     |> GuaranteedDelivery.message (OrgId.get cmd.OrgId)
 
-               (OrgActor.get sys cmd.OrgId) <! msg
-               return res
-            }
-            |> RouteUtil.unwrapTaskResult)
+                  let registry: IOrgGuaranteedDeliveryActor = registry
+                  registry.OrgGuaranteedDeliveryActor() <! msg
+
+                  return res
+               }
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.UnlockCard)
    |> ignore
@@ -119,9 +130,9 @@ let start (app: WebApplication) =
    app
       .MapPost(
          CardPath.UpdateNickname,
-         Func<ActorSystem, EditCardNicknameCommand, Task<IResult>>
-            (fun sys cmd ->
-               processCommand sys (EmployeeCommand.EditCardNickname cmd)
+         Func<BankActorRegistry, EditCardNicknameCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (EmployeeCommand.EditCardNickname cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.EditCardNickname)

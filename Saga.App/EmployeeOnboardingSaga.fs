@@ -2,7 +2,6 @@ module EmployeeOnboardingSaga
 
 open System
 open Akkling
-open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
@@ -11,96 +10,8 @@ open CommandApproval
 open Email
 open Lib.Saga
 open CardIssuer.Service.Domain
-
-[<RequireQualifiedAccess>]
-type OnboardingFailureReason = | CardProviderCardCreateFail
-
-[<RequireQualifiedAccess>]
-type EmployeeOnboardingSagaStatus =
-   | InProgress
-   | Completed
-   | Failed of OnboardingFailureReason
-   | Aborted of reason: string option
-
-[<RequireQualifiedAccess>]
-type EmployeeOnboardingSagaStartEvent =
-   | AccountOwnerCreated of BankEvent<CreatedAccountOwner>
-   | EmployeeCreated of BankEvent<CreatedEmployee>
-   | EmployeeAccessRestored of
-      {|
-         Event: BankEvent<AccessRestored>
-         EmployeeName: string
-         EmployeeEmail: Email
-         InviteToken: InviteToken
-      |}
-
-[<RequireQualifiedAccess>]
-type EmployeeOnboardingSagaEvent =
-   | AccessRequestPending
-   | AccessApproved
-   | InviteNotificationSent
-   | InviteTokenRefreshed of InviteToken
-   | OnboardingFailNotificationSent
-   | InviteConfirmed
-   | InviteCancelled of reason: string option
-   | CardCreateResponse of Result<ThirdPartyProviderCardId, string>
-   | CardAssociatedWithEmployee
-   | EvaluateRemainingWork
-   | ResetInProgressActivityAttempts
-
-[<RequireQualifiedAccess>]
-type Activity =
-   | CreateEmployee
-   | RestoreEmployeeAccess
-   | RequestAccessApproval
-   | WaitForAccessApproval
-   | SendEmployeeInviteNotification
-   | WaitForInviteConfirmation
-   | CreateCardViaThirdPartyProvider
-   | AssociateCardWithEmployee
-   | SendEmployeeOnboardingFailNotification
-
-   interface IActivity with
-      member x.MaxAttempts =
-         match x with
-         | WaitForAccessApproval
-         | WaitForInviteConfirmation -> 0
-         | CreateEmployee -> 1
-         | _ -> 3
-
-      member x.InactivityTimeout =
-         match x with
-         | CreateEmployee
-         | RestoreEmployeeAccess
-         | WaitForAccessApproval
-         | WaitForInviteConfirmation -> None
-         | CreateCardViaThirdPartyProvider -> Some(TimeSpan.FromMinutes 2.)
-         | SendEmployeeInviteNotification
-         | SendEmployeeOnboardingFailNotification ->
-            Some(TimeSpan.FromMinutes 4.)
-         | RequestAccessApproval
-         | AssociateCardWithEmployee -> Some(TimeSpan.FromSeconds 5.)
-
-type EmployeeOnboardingSaga = {
-   EmployeeId: EmployeeId
-   OrgId: OrgId
-   CorrelationId: CorrelationId
-   InitiatedBy: Initiator
-   EmployeeName: string
-   EmployeeEmail: Email
-   CardInfo: EmployeeInviteSupplementaryCardInfo option
-   InviteToken: InviteToken
-   StartEvent: EmployeeOnboardingSagaStartEvent
-   Events: EmployeeOnboardingSagaEvent list
-   Status: EmployeeOnboardingSagaStatus
-   LifeCycle: SagaLifeCycle<Activity>
-   ProviderCardId: ThirdPartyProviderCardId option
-} with
-
-   member x.IsWaitingForInviteConfirmation =
-      x.LifeCycle.InProgress
-      |> List.exists _.Activity.IsWaitForInviteConfirmation
-
+open EmployeeOnboardingSaga
+open BankActorRegistry
 
 let applyStartEvent
    (start: EmployeeOnboardingSagaStartEvent)
@@ -385,15 +296,10 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type PersistenceStartHandlerDependencies = {
-   getOrgRef: OrgId -> IEntityRef<OrgMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-}
-
 // Org onboarding saga is started by a submitted application
 // event coming from the Org actor.
 let onStartEventPersisted
-   (dep: PersistenceStartHandlerDependencies)
+   (registry: #IOrgActor & #IEmailActor)
    (evt: EmployeeOnboardingSagaStartEvent)
    =
    match evt with
@@ -406,7 +312,7 @@ let onStartEventPersisted
          }
          |> EmailMessage.create e.OrgId e.CorrelationId
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
    | EmployeeOnboardingSagaStartEvent.EmployeeCreated e ->
       if e.Data.OrgRequiresEmployeeInviteApproval.IsSome then
          let msg =
@@ -422,7 +328,7 @@ let onStartEventPersisted
             |> ApprovableCommand.PerCommand
             |> OrgMessage.ApprovableRequest
 
-         dep.getOrgRef e.OrgId <! msg
+         registry.OrgActor e.OrgId <! msg
       else
          let emailMsg =
             EmailInfo.EmployeeInvite {
@@ -432,7 +338,7 @@ let onStartEventPersisted
             }
             |> EmailMessage.create e.OrgId e.CorrelationId
 
-         dep.getEmailRef () <! emailMsg
+         registry.EmailActor() <! emailMsg
    | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored o ->
       let emailMsg =
          EmailInfo.EmployeeInvite {
@@ -442,17 +348,11 @@ let onStartEventPersisted
          }
          |> EmailMessage.create o.Event.OrgId o.Event.CorrelationId
 
-      dep.getEmailRef () <! emailMsg
-
-type PersistenceHandlerDependencies = {
-   getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
-   getOrgRef: OrgId -> IEntityRef<OrgMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>
-}
+      registry.EmailActor() <! emailMsg
 
 let onEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (registry:
+      #IEmployeeActor & #IOrgActor & #IEmailActor & #ICardIssuerServiceActor)
    (previousState: EmployeeOnboardingSaga)
    (updatedState: EmployeeOnboardingSaga)
    (evt: EmployeeOnboardingSagaEvent)
@@ -471,7 +371,7 @@ let onEventPersisted
          }
          |> EmailMessage.create orgId corrId
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let requestAccessApproval () =
       let msg =
@@ -487,7 +387,7 @@ let onEventPersisted
          |> ApprovableCommand.PerCommand
          |> OrgMessage.ApprovableRequest
 
-      dep.getOrgRef orgId <! msg
+      registry.OrgActor orgId <! msg
 
    let associateCardWithEmployee
       (providerCardId: ThirdPartyProviderCardId)
@@ -513,7 +413,7 @@ let onEventPersisted
          |> EmployeeCommand.CreateCard
          |> EmployeeMessage.StateChange
 
-      dep.getEmployeeRef employeeId <! msg
+      registry.EmployeeActor employeeId <! msg
 
    let sendEmployeeOnboardingFailEmail (reason: OnboardingFailureReason) =
       let emailMsg =
@@ -523,7 +423,7 @@ let onEventPersisted
          }
          |> EmailMessage.create orgId corrId
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let createCardViaThirdPartyProvider
       (info: EmployeeInviteSupplementaryCardInfo)
@@ -538,7 +438,7 @@ let onEventPersisted
          ReplyTo = SagaReplyTo.EmployeeOnboard
       }
 
-      dep.getCardIssuerServiceRef () <! CardIssuerMessage.CreateCard request
+      registry.CardIssuerServiceActor() <! CardIssuerMessage.CreateCard request
 
    match evt with
    | EmployeeOnboardingSagaEvent.InviteTokenRefreshed _ ->

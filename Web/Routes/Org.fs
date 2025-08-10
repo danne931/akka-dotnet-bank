@@ -4,7 +4,6 @@ open System
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
-open Akka.Actor
 
 open Bank.Org.Domain
 open CommandApproval
@@ -13,6 +12,7 @@ open Bank.CommandApproval.Api
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
+open BankActorRegistry
 
 let start (app: WebApplication) =
    app
@@ -73,12 +73,12 @@ let start (app: WebApplication) =
       .MapPost(
          OrgPath.ConfigureCommandApprovalRule,
          Func<
-            ActorSystem,
+            BankActorRegistry,
             CommandApprovalRule.ConfigureApprovalRuleCommand,
             Task<IResult>
           >
-            (fun sys cmd ->
-               processCommand sys (OrgCommand.ConfigureApprovalRule cmd)
+            (fun registry cmd ->
+               processCommand registry (OrgCommand.ConfigureApprovalRule cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageCommandApprovalRule)
@@ -89,12 +89,12 @@ let start (app: WebApplication) =
          OrgPath.DeleteCommandApprovalRule,
 
          Func<
-            ActorSystem,
+            BankActorRegistry,
             CommandApprovalRule.DeleteApprovalRuleCommand,
             Task<IResult>
           >
-            (fun sys cmd ->
-               processCommand sys (OrgCommand.DeleteApprovalRule cmd)
+            (fun registry cmd ->
+               processCommand registry (OrgCommand.DeleteApprovalRule cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageCommandApprovalRule)
@@ -104,12 +104,12 @@ let start (app: WebApplication) =
       .MapPost(
          OrgPath.RequestCommandApproval,
          Func<
-            ActorSystem,
+            BankActorRegistry,
             CommandApprovalProgress.RequestCommandApproval,
             Task<IResult>
           >
-            (fun sys cmd ->
-               processCommand sys (OrgCommand.RequestCommandApproval cmd)
+            (fun registry cmd ->
+               processCommand registry (OrgCommand.RequestCommandApproval cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageCommandApprovalProgress)
@@ -119,12 +119,12 @@ let start (app: WebApplication) =
       .MapPost(
          OrgPath.AcquireCommandApproval,
          Func<
-            ActorSystem,
+            BankActorRegistry,
             CommandApprovalProgress.AcquireCommandApproval,
             Task<IResult>
           >
-            (fun sys cmd ->
-               processCommand sys (OrgCommand.AcquireCommandApproval cmd)
+            (fun registry cmd ->
+               processCommand registry (OrgCommand.AcquireCommandApproval cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageCommandApprovalProgress)
@@ -134,12 +134,12 @@ let start (app: WebApplication) =
       .MapPost(
          OrgPath.DeclineCommandApproval,
          Func<
-            ActorSystem,
+            BankActorRegistry,
             CommandApprovalProgress.DeclineCommandApproval,
             Task<IResult>
           >
-            (fun sys cmd ->
-               processCommand sys (OrgCommand.DeclineCommandApproval cmd)
+            (fun registry cmd ->
+               processCommand registry (OrgCommand.DeclineCommandApproval cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageCommandApprovalProgress)
@@ -147,10 +147,10 @@ let start (app: WebApplication) =
 
    app.MapGet(
       OrgPath.CommandApprovalDailyAccrual,
-      Func<ActorSystem, Guid, Guid, Task<IResult>>
-         (fun sys orgId initiatedById ->
+      Func<BankActorRegistry, Guid, Guid, Task<IResult>>
+         (fun registry orgId initiatedById ->
             getTodaysCommandApprovalDailyAccrualByInitiatedBy
-               sys
+               registry
                (OrgId orgId)
                (InitiatedById(EmployeeId initiatedById))
             |> RouteUtil.unwrapTask)

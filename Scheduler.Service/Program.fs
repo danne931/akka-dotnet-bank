@@ -1,4 +1,5 @@
 open Microsoft.Extensions.DependencyInjection
+open Akka.Actor
 open Akka.Hosting
 open Akka.Cluster.Hosting
 open Akka.Quartz.Actor
@@ -11,8 +12,14 @@ open Bank.Account.Domain
 open BillingStatement
 open ActorUtil
 open Bank.Scheduler
+open BankActorRegistry
 
 let builder = Env.builder
+
+builder.Services.AddSingleton<BankActorRegistry>(fun provider ->
+   let system = provider.GetRequiredService<ActorSystem>()
+   BankActorRegistry system)
+|> ignore
 
 builder.Services.AddQuartzHostedService(fun opts ->
    // Interrupt shutdown & wait for executing jobs to finish first.
@@ -77,7 +84,7 @@ builder.Services.AddSingleton<IScheduler>(
 
 builder.Services.AddAkka(
    Env.config.AkkaSystemName,
-   (fun builder _ ->
+   (fun builder provider ->
       let initConfig =
          AkkaInfra.withClustering [| ClusterMetadata.roles.scheduling |]
          << AkkaInfra.withPetabridgeCmd
@@ -93,7 +100,7 @@ builder.Services.AddAkka(
                typedefof<AccountClosureMessage>
                typedefof<TransferMessages.AutoTransferMessage>
                typedefof<TransferMessages.ScheduledTransfersLowBalanceMessage>
-               typedefof<SagaAlarmClockActor.Message>
+               typedefof<AppSaga.SagaAlarmClockMessage>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka
                //       ShardingEnvelope so need to explicitly add it for
@@ -107,35 +114,33 @@ builder.Services.AddAkka(
             [ typedefof<obj> ],
             (fun system -> QuartzSerializer system)
          )
-         .WithShardRegionProxy<ActorMetadata.SagaMarker>(
+         .WithShardRegionProxy<ActorMarker.Saga>(
             ClusterMetadata.sagaShardRegion.name,
             ClusterMetadata.roles.saga,
             ClusterMetadata.sagaShardRegion.messageExtractor
          )
-         .WithSingletonProxy<ActorMetadata.SagaAlarmClockMarker>(
+         .WithSingletonProxy<ActorMarker.SagaAlarmClock>(
             ActorMetadata.sagaAlarmClock.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
          )
-         .WithShardRegionProxy<ActorMetadata.AccountMarker>(
+         .WithShardRegionProxy<ActorMarker.Account>(
             ClusterMetadata.accountShardRegion.name,
             ClusterMetadata.roles.account,
             ClusterMetadata.accountShardRegion.messageExtractor
          )
-         .WithSingletonProxy<ActorMetadata.AccountClosureMarker>(
+         .WithSingletonProxy<ActorMarker.AccountClosure>(
             ActorMetadata.accountClosure.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingletonProxy<ActorMetadata.BillingCycleMarker>(
+         .WithSingletonProxy<ActorMarker.BillingCycle>(
             ActorMetadata.billingCycle.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingletonProxy<ActorMetadata.AutoTransferSchedulingMarker>(
+         .WithSingletonProxy<ActorMarker.AutoTransferScheduling>(
             ActorMetadata.autoTransferScheduling.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingletonProxy<
-            ActorMetadata.ScheduledTransfersLowBalanceWarningMarker
-           >(
+         .WithSingletonProxy<ActorMarker.ScheduledTransfersLowBalanceWarning>(
             ActorMetadata.scheduledTransfersLowBalanceWarning.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
@@ -148,7 +153,7 @@ builder.Services.AddAkka(
                   QuartzPersistentActor scheduler)),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.scheduling)
          )
-         .WithSingleton<ActorMetadata.SchedulingMarker>(
+         .WithSingleton<ActorMarker.Scheduling>(
             ActorMetadata.scheduling.Name,
             (fun _ registry _ ->
                let typedProps =
@@ -159,8 +164,11 @@ builder.Services.AddAkka(
             ClusterSingletonOptions(Role = ClusterMetadata.roles.scheduling)
          )
          .AddStartup(
-            StartupTask(fun system _ -> task {
-               let schedulingActor = SchedulingActor.get system
+            StartupTask(fun _ _ -> task {
+               let registry: ISchedulerActor =
+                  provider.GetRequiredService<BankActorRegistry>()
+
+               let schedulingActor = registry.SchedulerActor()
 
                schedulingActor <! SchedulerMessage.BillingCycleCronJobSchedule
 

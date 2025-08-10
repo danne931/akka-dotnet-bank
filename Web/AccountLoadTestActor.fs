@@ -5,12 +5,12 @@ open System
 open Akka.Hosting
 open Akka.Actor
 open Akkling
-open Akkling.Cluster.Sharding
 
 open ActorUtil
 open Lib.SharedTypes
 open Bank.Account.Domain
 open AccountLoadTestTypes
+open BankActorRegistry
 
 // NOTE:
 // Dev/staging facility to flood the system with
@@ -121,7 +121,7 @@ let private prepareTestData () = {
    UnexpectedBalances = Map.empty
 }
 
-let actorProps (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>) =
+let actorProps (registry: #IAccountActor) =
    let handler (mailbox: Actor<AccountLoadTestMessage>) =
       PubSub.subscribePointToPoint (PubSub.get mailbox.System) mailbox.Self
 
@@ -173,7 +173,7 @@ let actorProps (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>) =
             | StartLoadTest ->
                for test in state.AccountTests.Values do
                   let accountId = test.AccountId
-                  let ref = getAccountRef Stub.parentAccountId
+                  let ref = registry.AccountActor Stub.parentAccountId
                   ref <! Stub.createAccountMessage accountId
                   ref <! Stub.depositMessage accountId
                   ref <! Stub.depositMessage accountId
@@ -197,7 +197,7 @@ let actorProps (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>) =
                logInfo "Commence teardown."
 
                for test in state.AccountTests.Values do
-                  let ref = getAccountRef Stub.parentAccountId
+                  let ref = registry.AccountActor Stub.parentAccountId
                   ref <! Stub.closeAccountMessage test.AccountId
 
                ignored ()
@@ -278,4 +278,4 @@ let actorProps (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>) =
    props handler
 
 let get (system: ActorSystem) : IActorRef<AccountLoadTestMessage> =
-   typed <| ActorRegistry.For(system).Get<ActorMetadata.AccountLoadTestMarker>()
+   typed <| ActorRegistry.For(system).Get<ActorMarker.AccountLoadTest>()

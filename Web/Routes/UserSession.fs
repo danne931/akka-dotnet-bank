@@ -12,6 +12,7 @@ open Bank.Employee.Domain
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
+open BankActorRegistry
 
 let private getValidInviteFromQuery (token: string) = taskResultOption {
    let lift = Ok >> Task.FromResult
@@ -21,7 +22,7 @@ let private getValidInviteFromQuery (token: string) = taskResultOption {
 }
 
 let private authorizeInvite
-   (system: ActorSystem)
+   (registry: BankActorRegistry)
    (invite: EmployeePendingInviteConfirmation)
    (authProviderUserId: Guid)
    =
@@ -40,7 +41,7 @@ let private authorizeInvite
          }
       |> EmployeeCommand.ConfirmInvitation
 
-   processCommand system cmd
+   processCommand registry cmd
 
 let private setUserSessionContext
    (context: HttpContext)
@@ -101,8 +102,8 @@ let start (app: WebApplication) =
 
    app.MapGet(
       UserSessionPath.AuthorizeInvite,
-      Func<ActorSystem, string, Task<IResult>>
-         (fun system ([<FromQuery>] token) -> task {
+      Func<ActorSystem, BankActorRegistry, string, Task<IResult>>
+         (fun system registry ([<FromQuery>] token) -> task {
             let! opt = getValidInviteFromQuery token
 
             match opt with
@@ -113,7 +114,7 @@ let start (app: WebApplication) =
                // route handler.
                let authProviderUserId = Guid.NewGuid()
 
-               match! authorizeInvite system invite authProviderUserId with
+               match! authorizeInvite registry invite authProviderUserId with
                | Ok _ -> return Results.Ok()
                | Error err ->
                   let msg = $"Error authorizing invite: {err}"
@@ -133,7 +134,7 @@ let start (app: WebApplication) =
 
    app.MapGet(
       UserSessionPath.AuthorizationCallback,
-      Func<ActorSystem, Task<IResult>>(fun system -> task {
+      Func<BankActorRegistry, Task<IResult>>(fun registry -> task {
          // TODO: Expect auth provider to set session info on login.
          //       Get user email from session
          // let email = session.Email
@@ -142,7 +143,7 @@ let start (app: WebApplication) =
 
          match! getEmployeeInviteByEmail authProviderEmail with
          | Ok(Some invite) ->
-            match! authorizeInvite system invite authProviderUserId with
+            match! authorizeInvite registry invite authProviderUserId with
             | Ok _ -> return Results.Ok()
             | _ ->
                // TODO: replace notfound with forbid once auth configured

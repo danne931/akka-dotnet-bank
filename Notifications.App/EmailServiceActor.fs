@@ -1,11 +1,9 @@
 [<RequireQualifiedAccess>]
 module EmailServiceActor
 
-open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
 open Akkling
 open Akkling.Streams
-open Akkling.Cluster.Sharding
 open System
 open System.Net.Http
 open System.Net.Http.Json
@@ -26,6 +24,7 @@ open PaymentRequestSaga
 open PurchaseSaga
 open DomesticTransferSaga
 open CachedOrgSettings
+open BankActorRegistry
 
 module EmailRequest =
    type PreliminaryT = {
@@ -340,7 +339,7 @@ let private queueMessageToActionRequest
    }
 
 let onSuccessfulServiceResponse
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (registry: #ISagaActor)
    (mailbox: Actor<_>)
    (msg: EmailMessage)
    =
@@ -415,7 +414,7 @@ let onSuccessfulServiceResponse
          |> Some
       | _ -> None
 
-   txnSagaMessage |> Option.iter (fun msg -> getSagaRef corrId <! msg)
+   txnSagaMessage |> Option.iter (fun msg -> registry.SagaActor corrId <! msg)
 
 let actorProps
    (queueConnection: AmqpConnectionDetails)
@@ -424,7 +423,7 @@ let actorProps
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (getTeamEmail: Actor<_> -> OrgId -> Task<Result<Email option, Err>>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   registry
    (sendEmail: EmailRequest.T -> TaskResult<HttpResponseMessage, Err>)
    : Props<obj>
    =
@@ -441,7 +440,7 @@ let actorProps
       onSuccessFlow =
          Flow.map
             (fun (mailbox, queueMessage, response) ->
-               onSuccessfulServiceResponse getSagaRef mailbox queueMessage
+               onSuccessfulServiceResponse registry mailbox queueMessage
 
                response)
             Flow.id
@@ -476,7 +475,7 @@ let initProps
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (bearerToken: string option)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   registry
    =
    let client = bearerToken |> Option.map createClient
 
@@ -499,7 +498,7 @@ let initProps
          breaker
          broadcaster
          getTeamEmailFromCacheOrDB
-         getSagaRef
+         registry
 
    match client with
    | Some client -> actorProps (sendEmail client)
@@ -524,15 +523,3 @@ let initProps
             unhandled ()
 
       props (actorOf2 handler)
-
-let getProducer (system: ActorSystem) : IActorRef<Email.EmailMessage> =
-   Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.EmailProducerMarker>()
-   |> typed
-
-let getProducerProxy (system: ActorSystem) : IActorRef<Email.EmailMessage> =
-   Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.EmailProxyMarker>()
-   |> typed

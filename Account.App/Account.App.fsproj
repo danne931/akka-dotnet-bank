@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="AccountReadModelSyncActor.fs" />
     <Compile Include="AccountClosureActor.fs" />
@@ -28,6 +28,7 @@
     <ProjectReference Include="../Billing.App/Billing.App.fsproj" />
     <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" />
     <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
-    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />
+    <ProjectReference Include="../Saga.Domain/Saga.Domain.fsproj" />
+    <ProjectReference Include="../Lib.CrossCutting/Lib.CrossCutting.fsproj" />
   </ItemGroup>
 </Project>

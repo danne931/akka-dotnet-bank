@@ -22,16 +22,19 @@ open CommandApproval
 open SignalRBroadcast
 open OrgOnboardingSaga
 open EmployeeOnboardingSaga
+open BankActorRegistry
 
 // Sends the ApprovableCommand to the appropriate Account or Employee actor
 // when the approval process is complete or no approval required.
 let private sendApprovedCommand
-   (getEmployeeRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
-   (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
+   (registry:
+      #IEmployeeGuaranteedDeliveryActor & #IAccountGuaranteedDeliveryActor)
    (orgRef: IActorRef<OrgMessage>)
    (cmd: ApprovableCommand)
    =
+   let getEmployeeRef = registry.EmployeeGuaranteedDeliveryActor
+   let getAccountRef = registry.AccountGuaranteedDeliveryActor
+
    match cmd with
    | ApprovableCommand.PerCommand c ->
       match c with
@@ -166,19 +169,13 @@ let private terminateProgressAssociatedWithRule
       mailbox <! OrgMessage.StateChange cmd
 
 let onPersisted
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getSagaGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
-   (getEmployeeRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
-   (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
+   (registry: #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (mailbox: Eventsourced<obj>)
    (previousState: OrgSnapshot)
    (state: OrgSnapshot)
    (evt: OrgEvent)
    =
-   let sendApprovedCommand =
-      sendApprovedCommand getEmployeeRef getAccountRef (mailbox.Parent())
+   let sendApprovedCommand = sendApprovedCommand registry (mailbox.Parent())
 
    match evt with
    | OnboardingApplicationSubmitted e ->
@@ -186,13 +183,13 @@ let onPersisted
          OrgOnboardingSagaStartEvent.ApplicationSubmitted e
          |> AppSaga.Message.orgOnboardStart e.OrgId e.CorrelationId
 
-      getSagaGuaranteedDeliveryRef () <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | OnboardingFinished e ->
       let msg =
          OrgOnboardingSagaEvent.OrgActivated
          |> AppSaga.Message.orgOnboard e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      registry.SagaActor e.CorrelationId <! msg
    | CommandApprovalRuleConfigured e ->
       let newRuleConfig = e.Data.Rule
       let approversCnt = newRuleConfig.Approvers.Length
@@ -233,7 +230,7 @@ let onPersisted
             EmployeeOnboardingSagaEvent.AccessRequestPending
             |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
-         getSagaRef e.CorrelationId <! msg
+         registry.SagaActor e.CorrelationId <! msg
       | _ -> ()
    | CommandApprovalProcessCompleted e -> sendApprovedCommand e.Data.Command
    | CommandApprovalTerminated e -> sendApprovedCommand e.Data.Command
@@ -254,7 +251,7 @@ let onPersisted
             |> EmployeeMessage.StateChange
             |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-         getEmployeeRef () <! msg
+         registry.EmployeeGuaranteedDeliveryActor() <! msg
       | ApprovableCommand.AmountBased(InternalTransferBetweenOrgs cmd) ->
          let info = cmd.Data
 
@@ -287,27 +284,21 @@ let onPersisted
                   ParentAccountId.get info.Recipient.ParentAccountId
                )
 
-            getAccountRef () <! msg
+            registry.AccountGuaranteedDeliveryActor() <! msg
          | None -> ()
       | _ -> ()
    | _ -> ()
 
 let actorProps
+   registry
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getSagaGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
-   (getEmployeeRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
-   (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
    (guaranteedDeliveryConsumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<OrgMessage>>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
 
-      let sendApprovedCommand =
-         sendApprovedCommand getEmployeeRef getAccountRef (mailbox.Parent())
+      let sendApprovedCommand = sendApprovedCommand registry (mailbox.Parent())
 
       let handleValidationError orgId (cmd: OrgCommand) (err: Err) =
          broadcaster.orgEventError orgId cmd.Envelope.CorrelationId err
@@ -330,15 +321,7 @@ let actorProps
 
             broadcaster.orgEventPersisted evt state.Info
 
-            onPersisted
-               getSagaRef
-               getSagaGuaranteedDeliveryRef
-               getEmployeeRef
-               getAccountRef
-               mailbox
-               previousState
-               state
-               evt
+            onPersisted registry mailbox previousState state evt
 
             let state =
                match evt with
@@ -480,39 +463,16 @@ let actorProps
 
    propsPersist handler
 
-let get (sys: ActorSystem) (orgId: OrgId) : IEntityRef<OrgMessage> =
-   getEntityRef sys ClusterMetadata.orgShardRegion (OrgId.get orgId)
-
-let getGuaranteedDeliveryProducerRef
-   (system: ActorSystem)
-   : IActorRef<GuaranteedDelivery.Message<OrgMessage>>
-   =
-   typed
-   <| Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.OrgGuaranteedDeliveryProducerMarker>()
-
 let initProps
+   registry
    (broadcaster: SignalRBroadcast)
    (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (persistenceId: string)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getSagaGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
-   (getAccountRef: unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
-   (getEmployeeRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
    (guaranteedDeliveryConsumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<OrgMessage>>)
    =
    let childProps =
-      actorProps
-         broadcaster
-         getSagaRef
-         getSagaGuaranteedDeliveryRef
-         getEmployeeRef
-         getAccountRef
-         guaranteedDeliveryConsumerControllerRef
+      actorProps registry broadcaster guaranteedDeliveryConsumerControllerRef
 
    PersistenceSupervisor.create {
       EnvConfig = supervisorEnvConfig

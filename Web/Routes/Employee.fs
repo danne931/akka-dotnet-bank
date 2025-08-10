@@ -16,6 +16,7 @@ open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
 open Email
+open BankActorRegistry
 
 let start (app: WebApplication) =
    app
@@ -70,9 +71,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          EmployeePath.Base,
-         Func<ActorSystem, CreateEmployeeCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (EmployeeCommand.CreateEmployee cmd)
-            |> RouteUtil.unwrapTaskResult)
+         Func<BankActorRegistry, CreateEmployeeCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (EmployeeCommand.CreateEmployee cmd)
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.CreateEmployee)
    |> ignore
@@ -80,25 +82,26 @@ let start (app: WebApplication) =
    app
       .MapPost(
          EmployeePath.UpdateRole,
-         Func<ActorSystem, UpdateRoleCommand, Task<IResult>>(fun sys cmd ->
-            taskResult {
-               let validation =
-                  cmd
-                  |> UpdateRoleCommand.toEvent
-                  |> Result.map EmployeeEnvelope.get
+         Func<BankActorRegistry, UpdateRoleCommand, Task<IResult>>
+            (fun registry cmd ->
+               taskResult {
+                  let validation =
+                     cmd
+                     |> UpdateRoleCommand.toEvent
+                     |> Result.map EmployeeEnvelope.get
 
-               let! res = validation |> Result.mapError Err.ValidationError
+                  let! res = validation |> Result.mapError Err.ValidationError
 
-               let msg =
-                  cmd
-                  |> UpdateEmployeeRole
-                  |> ApprovableCommand.PerCommand
-                  |> OrgMessage.ApprovableRequest
+                  let msg =
+                     cmd
+                     |> UpdateEmployeeRole
+                     |> ApprovableCommand.PerCommand
+                     |> OrgMessage.ApprovableRequest
 
-               (OrgActor.get sys cmd.OrgId) <! msg
-               return res
-            }
-            |> RouteUtil.unwrapTaskResult)
+                  (registry :> IOrgActor).OrgActor cmd.OrgId <! msg
+                  return res
+               }
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.UpdateRole)
    |> ignore
@@ -106,9 +109,9 @@ let start (app: WebApplication) =
    app
       .MapPost(
          EmployeePath.CancelEmployeeInvitation,
-         Func<ActorSystem, CancelInvitationCommand, Task<IResult>>
-            (fun sys cmd ->
-               processCommand sys (EmployeeCommand.CancelInvitation cmd)
+         Func<BankActorRegistry, CancelInvitationCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (EmployeeCommand.CancelInvitation cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageEmployeeAccess)
@@ -117,9 +120,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          EmployeePath.RestoreAccess,
-         Func<ActorSystem, RestoreAccessCommand, Task<IResult>>(fun sys cmd ->
-            processCommand sys (EmployeeCommand.RestoreAccess cmd)
-            |> RouteUtil.unwrapTaskResult)
+         Func<BankActorRegistry, RestoreAccessCommand, Task<IResult>>
+            (fun registry cmd ->
+               processCommand registry (EmployeeCommand.RestoreAccess cmd)
+               |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageEmployeeAccess)
    |> ignore
@@ -127,8 +131,14 @@ let start (app: WebApplication) =
    app
       .MapPost(
          EmployeePath.ResendInviteNotification,
-         Func<ActorSystem, Employee, HttpContext, Task<IResult>>
-            (fun sys employee context -> task {
+         Func<
+            ActorSystem,
+            BankActorRegistry,
+            Employee,
+            HttpContext,
+            Task<IResult>
+          >
+            (fun sys registry employee context -> task {
                match employee.Status with
                | EmployeeStatus.PendingInviteConfirmation invite ->
                   if invite.Token.IsExpired() then
@@ -149,7 +159,7 @@ let start (app: WebApplication) =
                            { Reason = None }
                         |> EmployeeCommand.RefreshInvitationToken
 
-                     match! processCommand sys cmd with
+                     match! processCommand registry cmd with
                      | Ok _ -> return Results.Ok()
                      | Error e -> return RouteUtil.badRequest e
                   else
@@ -163,7 +173,7 @@ let start (app: WebApplication) =
                               Token = invite.Token
                            })
 
-                     EmailServiceActor.getProducerProxy sys <! msg
+                     (registry :> IEmailProxyActor).EmailProxyActor() <! msg
 
                      return Results.Ok()
                | _ ->

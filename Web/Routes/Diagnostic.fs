@@ -15,13 +15,15 @@ open AccountLoadTestTypes
 open RoutePaths
 open Bank.UserSession.Middleware
 open Lib.CircuitBreaker
+open BankActorRegistry
 
 let start (app: WebApplication) =
    app
       .MapGet(
          DiagnosticPath.Account,
-         Func<ActorSystem, Guid, Task<IResult>>(fun sys id ->
-            let ref = AccountActor.get sys (ParentAccountId id)
+         Func<BankActorRegistry, Guid, Task<IResult>>(fun registry id ->
+            let ref =
+               (registry :> IAccountActor).AccountActor(ParentAccountId id)
 
             let askTask: ParentAccountSnapshot option Task =
                ref.Ask(
@@ -38,8 +40,8 @@ let start (app: WebApplication) =
    app
       .MapGet(
          DiagnosticPath.CircuitBreaker,
-         Func<ActorSystem, Task<IResult>>(fun sys ->
-            let ref = CircuitBreakerActor.get sys
+         Func<BankActorRegistry, Task<IResult>>(fun registry ->
+            let ref = (registry :> ICircuitBreakerActor).CircuitBreakerActor()
 
             let lookup: CircuitBreakerState Task =
                ref <? CircuitBreakerMessage.Lookup |> Async.toTask

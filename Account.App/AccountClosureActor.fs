@@ -17,6 +17,7 @@ open ActorUtil
 open Bank.Account.Domain
 open Email
 open Bank.Scheduler
+open BankActorRegistry
 
 // TODO:
 // This was created before scope was expanded into the business banking
@@ -25,7 +26,7 @@ open Bank.Scheduler
 
 let deleteAccounts
    (system: ActorSystem)
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
+   (registry: #IAccountActor)
    (throttle: StreamThrottleEnvConfig)
    (accounts: Map<AccountId, Account>)
    =
@@ -36,14 +37,12 @@ let deleteAccounts
          throttle.Count
          throttle.Duration
    |> Source.runForEach (system.Materializer()) (fun account ->
-      getAccountRef account.ParentAccountId <! AccountMessage.Delete)
+      registry.AccountActor account.ParentAccountId <! AccountMessage.Delete)
 
 let initState: Map<AccountId, Account> = Map.empty
 
 let actorProps
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
-   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
+   (registry: #IEmailActor & #ISchedulerActor)
    (deleteHistoricalRecords:
       AccountId list -> TaskResultOption<AccountNumber list, Err>)
    (throttle: StreamThrottleEnvConfig)
@@ -51,7 +50,7 @@ let actorProps
    let handler (mailbox: Eventsourced<obj>) =
       let system = mailbox.System
       let logInfo, logError = logInfo mailbox, logError mailbox
-      let deleteAccounts = deleteAccounts system getAccountRef throttle
+      let deleteAccounts = deleteAccounts system registry throttle
 
       let rec loop (accounts: Map<AccountId, Account>) = actor {
          let! msg = mailbox.Receive()
@@ -88,7 +87,7 @@ let actorProps
                            (System.Guid.NewGuid() |> CorrelationId)
                            (EmailInfo.AccountClose account.FullName)
 
-                     getEmailRef system <! msg
+                     registry.EmailActor() <! msg
 
                   let accountIds = accounts |> Map.keys |> List.ofSeq
 
@@ -96,7 +95,7 @@ let actorProps
                      $"Scheduling deletion of billing records for accounts: {accountIds}"
 
                   // Schedule deletion of historical/legal records for 3 months later.
-                  getSchedulingRef system
+                  registry.SchedulerActor()
                   <! SchedulerMessage.DeleteAccountsJobSchedule accountIds
 
                   return! loop initState <@> SaveSnapshot initState
@@ -159,18 +158,5 @@ let deleteHistoricalRecords (accountIds: AccountId list) =
          ])
          AccountSqlReader.accountNumber
 
-let initProps
-   (getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getEmailRef: ActorSystem -> IActorRef<EmailMessage>)
-   (getSchedulingRef: ActorSystem -> IActorRef<SchedulerMessage>)
-   (throttle: StreamThrottleEnvConfig)
-   =
-   actorProps
-      getAccountRef
-      getSchedulingRef
-      getEmailRef
-      deleteHistoricalRecords
-      throttle
-
-let get (system: ActorSystem) : IActorRef<AccountClosureMessage> =
-   typed <| ActorRegistry.For(system).Get<ActorMetadata.AccountClosureMarker>()
+let initProps registry (throttle: StreamThrottleEnvConfig) =
+   actorProps registry deleteHistoricalRecords throttle

@@ -1,21 +1,18 @@
 [<RequireQualifiedAccess>]
 module ScheduledTransfersLowBalanceWarningActor
 
-open System
 open Akka.Actor
-open Akka.Hosting
-open Akka.Streams
 open Akkling.Streams
 open Akkling
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
 open Email
-open ActorUtil
 open Lib.Postgres
 open AccountSqlMapper
 open TransferSqlMapper
 open TransferMessages
+open BankActorRegistry
 
 type private InsufficientBalance =
    OrgId * ScheduledTransferInsufficientBalanceWarning
@@ -24,8 +21,8 @@ type private InsufficientBalance =
 // associated accounts do not have enough available balance to cover the
 // amount due within 3 days.
 let actorProps
+   (registry: #IEmailActor)
    (system: ActorSystem)
-   (getEmailRef: unit -> IActorRef<EmailMessage>)
    (getInsufficientBalanceWarnings:
       unit -> Async<Result<InsufficientBalance list option, Err>>)
    =
@@ -65,7 +62,7 @@ let actorProps
                   (EmailInfo.ScheduledTransferInsufficientBalanceWarning
                      emailInfo)
 
-            getEmailRef () <! msg)
+            registry.EmailActor() <! msg)
 
       logInfo ctx $"Finished running scheduled transfer low balance check."
 
@@ -73,12 +70,6 @@ let actorProps
    }
 
    props handler
-
-let get (system: ActorSystem) : IActorRef<ScheduledTransfersLowBalanceMessage> =
-   typed
-   <| ActorRegistry
-      .For(system)
-      .Get<ActorMetadata.ScheduledTransfersLowBalanceWarningMarker>()
 
 // Get scheduled transfers in the next 3 days where the total amount of those
 // transfers is greater than the available balance in an associated account.
@@ -132,11 +123,8 @@ let getAccountsWithInsufficientBalanceToCoverScheduledTransfers () = asyncResult
    return info
 }
 
-let initProps
-   (system: ActorSystem)
-   (getEmailRef: unit -> IActorRef<EmailMessage>)
-   =
+let initProps registry (system: ActorSystem) =
    actorProps
+      registry
       system
-      getEmailRef
       getAccountsWithInsufficientBalanceToCoverScheduledTransfers

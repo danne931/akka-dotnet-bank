@@ -1,7 +1,6 @@
 module Bank.Employee.Api
 
 open Akkling
-open Akka.Actor
 open FsToolkit.ErrorHandling
 open Validus
 open System
@@ -10,6 +9,7 @@ open Lib.Postgres
 open Lib.SharedTypes
 open Bank.Employee.Domain
 open Lib.NetworkQuery
+open BankActorRegistry
 
 module AccountFields = AccountSqlMapper.AccountFields
 module Fields = EmployeeSqlMapper.EmployeeFields
@@ -75,48 +75,55 @@ let searchEmployees (orgId: OrgId) (searchQuery: string) = taskResultOption {
          { employee with Cards = cards })
 }
 
-let processCommand (system: ActorSystem) (command: EmployeeCommand) = taskResult {
-   let validation =
-      match command with
-      | EmployeeCommand.CreateEmployee cmd ->
-         CreateEmployeeCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.CreateCard cmd ->
-         CreateCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.PurchaseIntent cmd ->
-         PurchaseIntentCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.ConfigureRollingPurchaseLimit cmd ->
-         ConfigureRollingPurchaseLimitCommand.toEvent cmd
-         |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.LockCard cmd ->
-         LockCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.EditCardNickname cmd ->
-         EditCardNicknameCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.CancelInvitation cmd ->
-         CancelInvitationCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.RefreshInvitationToken cmd ->
-         RefreshInvitationTokenCommand.toEvent cmd
-         |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.ConfirmInvitation cmd ->
-         ConfirmInvitationCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | EmployeeCommand.RestoreAccess cmd ->
-         RestoreAccessCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-      | cmd ->
-         Error
-         <| ValidationErrors.create "" [
-            $"API-based command processing not allowed for {cmd}"
-         ]
+let processCommand
+   (registry: #IEmployeeGuaranteedDeliveryActor)
+   (command: EmployeeCommand)
+   =
+   taskResult {
+      let validation =
+         match command with
+         | EmployeeCommand.CreateEmployee cmd ->
+            CreateEmployeeCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.CreateCard cmd ->
+            CreateCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.PurchaseIntent cmd ->
+            PurchaseIntentCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.ConfigureRollingPurchaseLimit cmd ->
+            ConfigureRollingPurchaseLimitCommand.toEvent cmd
+            |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.LockCard cmd ->
+            LockCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.EditCardNickname cmd ->
+            EditCardNicknameCommand.toEvent cmd
+            |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.CancelInvitation cmd ->
+            CancelInvitationCommand.toEvent cmd
+            |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.RefreshInvitationToken cmd ->
+            RefreshInvitationTokenCommand.toEvent cmd
+            |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.ConfirmInvitation cmd ->
+            ConfirmInvitationCommand.toEvent cmd
+            |> Result.map EmployeeEnvelope.get
+         | EmployeeCommand.RestoreAccess cmd ->
+            RestoreAccessCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
+         | cmd ->
+            Error
+            <| ValidationErrors.create "" [
+               $"API-based command processing not allowed for {cmd}"
+            ]
 
-   let! envelope = validation |> Result.mapError Err.ValidationError
+      let! envelope = validation |> Result.mapError Err.ValidationError
 
-   let msg =
-      GuaranteedDelivery.message
-         (EntityId.get envelope.EntityId)
-         (EmployeeMessage.StateChange command)
+      let msg =
+         GuaranteedDelivery.message
+            (EntityId.get envelope.EntityId)
+            (EmployeeMessage.StateChange command)
 
-   EmployeeActor.getGuaranteedDeliveryProducerRef system <! msg
+      registry.EmployeeGuaranteedDeliveryActor() <! msg
 
-   return envelope
-}
+      return envelope
+   }
 
 let getEmployee (id: EmployeeId) =
    pgQuerySingle<Employee>

@@ -2,7 +2,6 @@
 module SagaAlarmClockActor
 
 open Akka.Actor
-open Akka.Hosting
 open Akka.Streams
 open Akkling.Streams
 open Akkling
@@ -10,14 +9,10 @@ open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
-open ActorUtil
 open Lib.Types
 open Lib.Postgres
 open Lib.Saga
 open AppSagaSqlMapper
-
-[<RequireQualifiedAccess>]
-type Message = | WakeUpIfUnfinishedBusiness
 
 let actorProps
    (system: ActorSystem)
@@ -27,7 +22,7 @@ let actorProps
    =
    let mat = system.Materializer()
 
-   let handler (ctx: Actor<Message>) = actor {
+   let handler (ctx: Actor<AppSaga.SagaAlarmClockMessage>) = actor {
       let! _ = ctx.Receive()
 
       logInfo
@@ -65,9 +60,6 @@ let actorProps
    }
 
    props handler
-
-let get (system: ActorSystem) : IActorRef<Message> =
-   typed <| ActorRegistry.For(system).Get<ActorMetadata.SagaAlarmClockMarker>()
 
 (*
 Indicates that a saga actor will not attempt to retry any unfinished work

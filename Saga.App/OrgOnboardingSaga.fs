@@ -2,7 +2,6 @@ module OrgOnboardingSaga
 
 open System
 open Akkling
-open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Bank.Account.Domain
@@ -11,90 +10,8 @@ open Email
 open Lib.Saga
 open PartnerBank.Service.Domain
 open CachedOrgSettings
-
-[<RequireQualifiedAccess>]
-type OrgOnboardingSagaStatus =
-   | InProgress
-   | Completed
-   | Failed of OrgOnboardingFailureReason
-
-[<RequireQualifiedAccess>]
-type OrgOnboardingSagaStartEvent =
-   | ApplicationSubmitted of BankEvent<OrgOnboardingApplicationSubmitted>
-
-[<RequireQualifiedAccess>]
-type OrgOnboardingSagaEvent =
-   | ApplicationProcessingNotificationSent
-   | KYCResponse of Result<unit, OrgOnboardingVerificationError>
-   | ReceivedInfoFixDemandedByKYCService of OrgOnboardingApplicationSubmitted
-   | LinkAccountToPartnerBankResponse of Result<PartnerBankAccountLink, string>
-   | InitializedPrimaryVirtualAccount
-   | InitializeOrgSettingsCacheResponse of Result<unit, Err>
-   | OrgActivated
-   | ApplicationAcceptedNotificationSent
-   | ApplicationRejectedNotificationSent
-   | ApplicationRequiresRevisionForKYCServiceNotificationSent
-   | SupportTeamResolvedPartnerBankLink
-   | EvaluateRemainingWork
-   | ResetInProgressActivityAttempts
-
-[<RequireQualifiedAccess>]
-type Activity =
-   | SubmitApplication
-   | SendApplicationProcessingNotification
-   | KYCVerification
-   | LinkAccountToPartnerBank
-   | InitializePrimaryVirtualAccount
-   | InitializeOrgSettingsCache
-   | ActivateOrg
-   | SendApplicationAcceptedNotification
-   | SendApplicationRejectedNotification
-   | WaitForInfoFixDemandedByKYCService
-   | SendApplicationRequiresRevisionForKYCServiceNotification
-   | WaitForSupportTeamToResolvePartnerBankLink
-
-   interface IActivity with
-      member x.MaxAttempts =
-         match x with
-         | WaitForInfoFixDemandedByKYCService
-         | WaitForSupportTeamToResolvePartnerBankLink -> 0
-         | SubmitApplication -> 1
-         | LinkAccountToPartnerBank -> 4
-         | _ -> 3
-
-      member x.InactivityTimeout =
-         match x with
-         | SubmitApplication
-         | WaitForInfoFixDemandedByKYCService
-         | WaitForSupportTeamToResolvePartnerBankLink -> None
-         | KYCVerification
-         | LinkAccountToPartnerBank -> Some(TimeSpan.FromMinutes 2.)
-         | SendApplicationProcessingNotification
-         | SendApplicationRequiresRevisionForKYCServiceNotification
-         | SendApplicationAcceptedNotification
-         | SendApplicationRejectedNotification -> Some(TimeSpan.FromMinutes 4.)
-         | InitializePrimaryVirtualAccount
-         | InitializeOrgSettingsCache
-         | ActivateOrg -> Some(TimeSpan.FromSeconds 5.)
-
-type OrgOnboardingSaga = {
-   OrgId: OrgId
-   CorrelationId: CorrelationId
-   Application: OrgOnboardingApplicationSubmitted
-   StartEvent: OrgOnboardingSagaStartEvent
-   Events: OrgOnboardingSagaEvent list
-   Status: OrgOnboardingSagaStatus
-   LifeCycle: SagaLifeCycle<Activity>
-   ApplicationRequiresRevision:
-      OrgOnboardingApplicationRequiresUpdateInfo option
-} with
-
-   member x.LinkedAccountToPartnerBank =
-      x.Events
-      |> List.tryPick (function
-         | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse res ->
-            Result.toOption res
-         | _ -> None)
+open OrgOnboardingSaga
+open BankActorRegistry
 
 let applyStartEvent
    (start: OrgOnboardingSagaStartEvent)
@@ -361,15 +278,10 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type PersistenceStartHandlerDependencies = {
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getKYCServiceRef: unit -> IActorRef<KYCMessage>
-}
-
 // Org onboarding saga is started by a submitted application
 // event coming from the Org actor.
 let onStartEventPersisted
-   (dep: PersistenceStartHandlerDependencies)
+   (registry: #IEmailActor & #IKYCServiceActor)
    (evt: OrgOnboardingSagaStartEvent)
    =
    match evt with
@@ -386,21 +298,16 @@ let onStartEventPersisted
             }
       }
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
-      dep.getKYCServiceRef ()
+      registry.KYCServiceActor()
       <! KYCMessage.VerifyApplication {
          OrgId = evt.OrgId
          CorrelationId = evt.CorrelationId
          Application = info
       }
 
-type PersistenceHandlerDependencies = {
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getOrgRef: OrgId -> IEntityRef<OrgMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getKYCServiceRef: unit -> IActorRef<KYCMessage>
-   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
+type OperationEnv = {
    logError: string -> unit
    sendEventToSelf:
       OrgId -> CorrelationId -> Async<OrgOnboardingSagaEvent> -> unit
@@ -408,7 +315,9 @@ type PersistenceHandlerDependencies = {
 }
 
 let onEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (registry:
+      #IAccountActor & #IOrgActor & #IEmailActor & #IKYCServiceActor & #IPartnerBankServiceActor)
+   (operationEnv: OperationEnv)
    (previousState: OrgOnboardingSaga)
    (updatedState: OrgOnboardingSaga)
    (evt: OrgOnboardingSagaEvent)
@@ -428,7 +337,7 @@ let onEventPersisted
             }
       }
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let sendApplicationRejectedEmail
       (reason: OrgOnboardingApplicationRejectedReason)
@@ -446,7 +355,7 @@ let onEventPersisted
             }
       }
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let sendApplicationRequiresRevisionForKYCServiceEmail
       (reason: OrgOnboardingApplicationRequiresUpdateInfo)
@@ -464,10 +373,10 @@ let onEventPersisted
             }
       }
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let verifyOrg () =
-      dep.getKYCServiceRef ()
+      registry.KYCServiceActor()
       <! KYCMessage.VerifyApplication {
          OrgId = orgId
          CorrelationId = corrId
@@ -475,7 +384,7 @@ let onEventPersisted
       }
 
    let linkAccountToPartnerBank () =
-      dep.getPartnerBankServiceRef ()
+      registry.PartnerBankServiceActor()
       <! PartnerBankServiceMessage.LinkAccount {
          LegalBusinessName = application.LegalBusinessName
          EmployerIdentificationNumber = application.EmployerIdentificationNumber
@@ -499,12 +408,12 @@ let onEventPersisted
          |> AccountCommand.InitializePrimaryCheckingAccount
          |> AccountMessage.StateChange
 
-      dep.getAccountRef parentAccountId <! msg
+      registry.AccountActor parentAccountId <! msg
 
    let initOrgSettingsCache partnerBankLink =
       let asyncEvt = async {
          let! res =
-            dep.OrgSettingsCache.Update orgId {
+            operationEnv.OrgSettingsCache.Update orgId {
                AdminTeamEmail = application.AdminTeamEmail
                ParentAccountId = application.ParentAccountId
                PartnerBankAccountLink = partnerBankLink
@@ -513,7 +422,7 @@ let onEventPersisted
          return OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse res
       }
 
-      dep.sendEventToSelf orgId corrId asyncEvt
+      operationEnv.sendEventToSelf orgId corrId asyncEvt
 
    let activateOrg () =
       let msg =
@@ -526,7 +435,7 @@ let onEventPersisted
          |> OrgCommand.FinishOrgOnboarding
          |> OrgMessage.StateChange
 
-      dep.getOrgRef orgId <! msg
+      registry.OrgActor orgId <! msg
 
    match evt with
    | OrgOnboardingSagaEvent.KYCResponse res ->
@@ -550,7 +459,7 @@ let onEventPersisted
          then
             linkAccountToPartnerBank ()
          else
-            dep.getEmailRef ()
+            registry.EmailActor()
             <! {
                   OrgId = orgId
                   CorrelationId = corrId
@@ -567,7 +476,8 @@ let onEventPersisted
       match res with
       | Ok() -> activateOrg ()
       | Error err ->
-         dep.logError $"Error initializing org settings cache {orgId} {err}"
+         operationEnv.logError
+            $"Error initializing org settings cache {orgId} {err}"
    | OrgOnboardingSagaEvent.OrgActivated -> sendApplicationAcceptedEmail ()
    | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent
    | OrgOnboardingSagaEvent.ApplicationAcceptedNotificationSent
@@ -591,7 +501,7 @@ let onEventPersisted
                   }
             }
 
-            dep.getEmailRef () <! emailMsg
+            registry.EmailActor() <! emailMsg
          | Activity.SendApplicationRejectedNotification ->
             match updatedState.Status with
             | OrgOnboardingSagaStatus.Failed(OrgOnboardingFailureReason.KYCRejectedReason reason) ->

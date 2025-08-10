@@ -1,8 +1,6 @@
 [<RequireQualifiedAccess>]
 module CircuitBreakerActor
 
-open Akka.Actor
-open Akka.Hosting
 open Akka.Pattern
 open Akkling
 open Akkling.Persistence
@@ -113,6 +111,3 @@ let initProps (opts: BackoffSupervisorEnvConfig) =
          )
          .WithAutoReset(opts.ResetCounterAfter)
    )
-
-let get (system: ActorSystem) : IActorRef<CircuitBreakerMessage> =
-   ActorRegistry.For(system).Get<ActorMetadata.CircuitBreakerMarker>() |> typed

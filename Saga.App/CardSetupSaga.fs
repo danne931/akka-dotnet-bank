@@ -2,77 +2,14 @@ module CardSetupSaga
 
 open System
 open Akkling
-open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
 open Email
 open Lib.Saga
 open CardIssuer.Service.Domain
-
-[<RequireQualifiedAccess>]
-type CardSetupFailureReason = | CardProviderCardCreateFail
-
-[<RequireQualifiedAccess>]
-type CardSetupSagaStatus =
-   | InProgress
-   | Completed
-   | Failed of CardSetupFailureReason
-
-[<RequireQualifiedAccess>]
-type CardSetupSagaStartEvent = {
-   EmployeeName: string
-   EmployeeEmail: Email
-   Event: BankEvent<CreatedCard>
-}
-
-[<RequireQualifiedAccess>]
-type CardSetupSagaEvent =
-   | CardSetupSuccessNotificationSent
-   | CardSetupFailNotificationSent
-   | CardCreateResponse of Result<ThirdPartyProviderCardId, string>
-   | ProviderCardIdLinked
-   | EvaluateRemainingWork
-   | ResetInProgressActivityAttempts
-
-[<RequireQualifiedAccess>]
-type Activity =
-   | InitializeCard
-   | SendCardSetupSuccessNotification
-   | SendCardSetupFailNotification
-   | CreateCardViaThirdPartyProvider
-   | LinkProviderCardId
-
-   interface IActivity with
-      member x.MaxAttempts =
-         match x with
-         | InitializeCard -> 1
-         | _ -> 3
-
-      member x.InactivityTimeout =
-         match x with
-         | InitializeCard -> None
-         | CreateCardViaThirdPartyProvider -> Some(TimeSpan.FromMinutes 2.)
-         | SendCardSetupSuccessNotification
-         | SendCardSetupFailNotification -> Some(TimeSpan.FromMinutes 4.)
-         | LinkProviderCardId -> Some(TimeSpan.FromSeconds 5.)
-
-type CardSetupSaga = {
-   CardId: CardId
-   CardNumberLast4: string
-   EmployeeId: EmployeeId
-   OrgId: OrgId
-   CorrelationId: CorrelationId
-   InitiatedBy: Initiator
-   EmployeeName: string
-   EmployeeEmail: Email
-   CardType: CardType
-   StartEvent: CardSetupSagaStartEvent
-   Events: CardSetupSagaEvent list
-   Status: CardSetupSagaStatus
-   LifeCycle: SagaLifeCycle<Activity>
-   ProviderCardId: ThirdPartyProviderCardId option
-}
+open CardSetupSaga
+open BankActorRegistry
 
 let applyStartEvent
    (start: CardSetupSagaStartEvent)
@@ -221,7 +158,7 @@ let stateTransition
       Ok(applyEvent saga evt timestamp)
 
 let onStartEventPersisted
-   (getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>)
+   (registry: #ICardIssuerServiceActor)
    (evt: CardSetupSagaStartEvent)
    =
    let request = {
@@ -234,16 +171,10 @@ let onStartEventPersisted
       ReplyTo = SagaReplyTo.CardSetup
    }
 
-   getCardIssuerServiceRef () <! CardIssuerMessage.CreateCard request
-
-type PersistenceHandlerDependencies = {
-   getEmployeeRef: EmployeeId -> IEntityRef<EmployeeMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>
-}
+   registry.CardIssuerServiceActor() <! CardIssuerMessage.CreateCard request
 
 let onEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (registry: #ICardIssuerServiceActor & #IEmailActor & #IEmployeeActor)
    (previousState: CardSetupSaga)
    (updatedState: CardSetupSaga)
    (evt: CardSetupSagaEvent)
@@ -259,7 +190,7 @@ let onEventPersisted
          }
          |> EmailMessage.create orgId corrId
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let sendCardSetupFailEmail (reason: CardSetupFailureReason) =
       let emailMsg =
@@ -269,7 +200,7 @@ let onEventPersisted
          }
          |> EmailMessage.create orgId corrId
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let linkProviderCardId (providerCardId: ThirdPartyProviderCardId) =
       let msg =
@@ -285,7 +216,7 @@ let onEventPersisted
          |> EmployeeCommand.LinkThirdPartyProviderCard
          |> EmployeeMessage.StateChange
 
-      dep.getEmployeeRef updatedState.EmployeeId <! msg
+      registry.EmployeeActor updatedState.EmployeeId <! msg
 
    match evt with
    | CardSetupSagaEvent.CardCreateResponse res ->
@@ -319,7 +250,7 @@ let onEventPersisted
                ReplyTo = SagaReplyTo.CardSetup
             }
 
-            dep.getCardIssuerServiceRef ()
+            registry.CardIssuerServiceActor()
             <! CardIssuerMessage.CreateCard request
          | Activity.LinkProviderCardId ->
             updatedState.ProviderCardId |> Option.iter linkProviderCardId

@@ -6,6 +6,7 @@ open Akka.Hosting
 open Akka.Cluster.Hosting
 open Akka.HealthCheck.Hosting
 open Akka.HealthCheck.Hosting.Web
+open Akka.Actor
 open Akkling
 open Serilog
 open System.Text.Json.Serialization
@@ -19,10 +20,16 @@ open Bank.Employee.Domain
 open Bank.Hubs
 open ActorUtil
 open Lib.CircuitBreaker
+open BankActorRegistry
 
 let builder = Env.builder
 
 LogInfra.start builder |> ignore
+
+builder.Services.AddSingleton<BankActorRegistry>(fun provider ->
+   let system = provider.GetRequiredService<ActorSystem>()
+   BankActorRegistry system)
+|> ignore
 
 // Endpoint serialization
 builder.Services.ConfigureHttpJsonOptions(fun opts ->
@@ -79,67 +86,60 @@ builder.Services.AddAkka(
             fun system -> BankSerializer system
          )
          .WithDistributedPubSub(ClusterMetadata.roles.signalR)
-         .WithShardRegionProxy<ActorMetadata.OrgMarker>(
+         .WithShardRegionProxy<ActorMarker.Org>(
             ClusterMetadata.orgShardRegion.name,
             ClusterMetadata.roles.org,
             ClusterMetadata.orgShardRegion.messageExtractor
          )
-         .WithShardRegionProxy<ActorMetadata.AccountMarker>(
+         .WithShardRegionProxy<ActorMarker.Account>(
             ClusterMetadata.accountShardRegion.name,
             ClusterMetadata.roles.account,
             ClusterMetadata.accountShardRegion.messageExtractor
          )
-         .WithShardRegionProxy<ActorMetadata.EmployeeMarker>(
+         .WithShardRegionProxy<ActorMarker.Employee>(
             ClusterMetadata.employeeShardRegion.name,
             ClusterMetadata.roles.employee,
             ClusterMetadata.employeeShardRegion.messageExtractor
          )
-         .WithSingletonProxy<ActorMetadata.CircuitBreakerMarker>(
+         .WithSingletonProxy<ActorMarker.CircuitBreaker>(
             ActorMetadata.circuitBreaker.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingletonProxy<ActorMetadata.EmailProxyMarker>(
+         .WithSingletonProxy<ActorMarker.EmailProxy>(
             ActorMetadata.emailProxy.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.AccountLoadTestMarker>(
+         .WithSingleton<ActorMarker.AccountLoadTest>(
             ActorMetadata.accountLoadTest.Name,
-            (fun system _ _ ->
-               let typedProps =
-                  AccountLoadTestActor.actorProps <| AccountActor.get system
-
+            (fun _ _ _ ->
+               let registry = provider.GetRequiredService<BankActorRegistry>()
+               let typedProps = AccountLoadTestActor.actorProps registry
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.web)
          )
          .WithActors(fun system registry ->
-            registry.Register<
-               ActorMetadata.OrgGuaranteedDeliveryProducerMarker
-             >(
+            registry.Register<ActorMarker.OrgGuaranteedDeliveryProducer>(
                GuaranteedDelivery.producer<OrgMessage> {
                   System = system
-                  ShardRegion = registry.Get<ActorMetadata.OrgMarker>()
+                  ShardRegion = registry.Get<ActorMarker.Org>()
                   ProducerName = "web-to-org-actor-proxy"
                }
                |> untyped
             )
 
-            registry.Register<
-               ActorMetadata.AccountGuaranteedDeliveryProducerMarker
-             >(
+            registry.Register<ActorMarker.AccountGuaranteedDeliveryProducer>(
                GuaranteedDelivery.producer<AccountMessage> {
                   System = system
-                  ShardRegion = registry.Get<ActorMetadata.AccountMarker>()
+                  ShardRegion = registry.Get<ActorMarker.Account>()
                   ProducerName = "web-to-account-actor-proxy"
                }
                |> untyped
             )
 
-            registry.Register<
-               ActorMetadata.EmployeeGuaranteedDeliveryProducerMarker
-             >(
+            registry.Register<ActorMarker.EmployeeGuaranteedDeliveryProducer>(
                GuaranteedDelivery.producer<EmployeeMessage> {
                   System = system
-                  ShardRegion = registry.Get<ActorMetadata.EmployeeMarker>()
+                  ShardRegion = registry.Get<ActorMarker.Employee>()
                   ProducerName = "web-to-employee-actor-proxy"
                }
                |> untyped

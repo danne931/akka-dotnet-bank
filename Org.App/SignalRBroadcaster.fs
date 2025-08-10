@@ -10,8 +10,13 @@ open Bank.Account.Domain
 open SignalRBroadcast
 open ActorUtil
 open AccountLoadTestTypes
+open BankActorRegistry
 
-let init (system: ActorSystem) : SignalRBroadcast =
+let init
+   (system: ActorSystem)
+   (registry: #ICircuitBreakerActor)
+   : SignalRBroadcast
+   =
    let pubSub = PubSub.get system
    let signalRPath = ActorMetadata.signalR.Path.ToStringWithoutAddress()
    let sendToSignalR = PubSub.sendPointToPoint pubSub signalRPath
@@ -104,8 +109,8 @@ let init (system: ActorSystem) : SignalRBroadcast =
 
       circuitBreaker =
          fun msg ->
-            let circuitBreakerAref = CircuitBreakerActor.get system
-            circuitBreakerAref <! CircuitBreakerMessage.CircuitBreaker msg
+            registry.CircuitBreakerActor()
+            <! CircuitBreakerMessage.CircuitBreaker msg
 
             sendToSignalR (SignalRActor.Msg.CircuitBreaker msg)
    }

@@ -6,9 +6,7 @@ open System.Text.Json
 open System.Threading.Tasks
 open Akkling
 open Akkling.Streams
-open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
-open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Lib.ActivePatterns
@@ -20,6 +18,7 @@ open Lib.Types
 open DomesticTransferSaga
 open DomesticTransfer.Service.Domain
 open TransferMessages
+open BankActorRegistry
 
 type private Message = DomesticTransferServiceMessage
 
@@ -72,7 +71,7 @@ let private networkRecipient
 // Notify account actor of DomesticTransfer Progress, Completed, or Failed.
 let onSuccessfulServiceResponse
    (logDebug: string -> unit)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
+   (registry: #ISagaActor)
    (txn: DomesticTransfer)
    (res: DomesticTransferServiceResponse)
    =
@@ -117,7 +116,7 @@ let onSuccessfulServiceResponse
          |> DomesticTransferSagaEvent.TransferProcessorProgressUpdate
          |> AppSaga.Message.domesticTransfer orgId corrId
 
-      getSagaRef corrId <! msg
+      registry.SagaActor corrId <! msg
    | _ ->
       logDebug (
          "No domestic transfer progress update will be saved."
@@ -159,13 +158,13 @@ let protectedAction
    }
 
 let actorProps
+   registry
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (networkRequest: NetworkRequest)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -186,7 +185,7 @@ let actorProps
                | Message.TransferRequest(_, txn) ->
                   onSuccessfulServiceResponse
                      (logDebug mailbox)
-                     getSagaRef
+                     registry
                      txn
                      transferResponse
 
@@ -234,25 +233,19 @@ let private networkRequestToTransferProcessor
    }
 
 let initProps
+   registry
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps
+      registry
       queueConnection
       queueSettings
       streamRestartSettings
       breaker
       broadcaster
       networkRequestToTransferProcessor
-      getSagaRef
-
-let getProducer (system: ActorSystem) : IActorRef<Message> =
-   Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.DomesticTransferProducerMarker>()
-   |> typed

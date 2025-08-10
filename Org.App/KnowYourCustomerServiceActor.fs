@@ -1,13 +1,9 @@
 [<RequireQualifiedAccess>]
 module KnowYourCustomerServiceActor
 
-open System.Text
-open System.Text.Json
 open System.Threading.Tasks
 open Akkling
-open Akkling.Cluster.Sharding
 open Akkling.Streams
-open Akka.Actor
 open Akka.Streams.Amqp.RabbitMq
 open FsToolkit.ErrorHandling
 
@@ -17,6 +13,7 @@ open Bank.Org.Domain
 open SignalRBroadcast
 open Lib.Types
 open OrgOnboardingSaga
+open BankActorRegistry
 
 // Onboarding know-your-customer service requests & responses
 // are based loosely on middesk.com API.
@@ -67,6 +64,7 @@ let protectedAction
    }
 
 let actorProps
+   (registry: #ISagaActor)
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
@@ -74,7 +72,6 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (networkRequest:
       KYCMessage -> Task<Result<KYCServiceVerificationResponse, Err>>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts
@@ -90,7 +87,7 @@ let actorProps
       queueMessageToActionRequest = fun _ msg -> Task.FromResult(Some msg)
       onSuccessFlow =
          Flow.map
-            (fun (mailbox, (queueMessage: KYCMessage), response) ->
+            (fun (mailbox, queueMessage, response) ->
                match queueMessage with
                | KYCMessage.VerifyApplication submission ->
                   let corrId = submission.CorrelationId
@@ -99,7 +96,7 @@ let actorProps
                      OrgOnboardingSagaEvent.KYCResponse(Ok())
                      |> AppSaga.Message.orgOnboard submission.OrgId corrId
 
-                  getSagaRef corrId <! msg
+                  registry.SagaActor corrId <! msg
 
                   response)
             Flow.id
@@ -141,25 +138,19 @@ let private networkRequestToKYCService (msg: KYCMessage) = taskResult {
 }
 
 let initProps
+   registry
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps
+      registry
       queueConnection
       queueSettings
       streamRestartSettings
       breaker
       broadcaster
       networkRequestToKYCService
-      getSagaRef
-
-let getProducer (system: ActorSystem) : IActorRef<KYCMessage> =
-   Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.KYCServiceProducerMarker>()
-   |> typed

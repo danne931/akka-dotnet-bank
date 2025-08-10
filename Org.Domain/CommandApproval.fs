@@ -271,7 +271,8 @@ type ApprovalCriteria =
 
    static member validate
       (criteria: ApprovalCriteria)
-      : Result<ApprovalCriteria, ValidationErrors> =
+      : Result<ApprovalCriteria, ValidationErrors>
+      =
       match criteria with
       | ApprovalCriteria.AmountPerCommand range ->
          match range.LowerBound, range.UpperBound with

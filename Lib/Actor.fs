@@ -137,85 +137,6 @@ module ClusterMetadata =
    |}
 
 module ActorMetadata =
-   type OrgMarker() = class end
-
-   type OrgReadModelSyncMarker() = class end
-
-   type OrgGuaranteedDeliveryProducerMarker() = class end
-
-   /// Singleton consumes partner bank messages off RabbitMq
-   type PartnerBankServiceMarker() = class end
-
-   /// Enqueues partner bank messages into RabbitMq
-   type PartnerBankServiceProducerMarker() = class end
-
-   /// Singleton consumes know-your-customer messages off RabbitMq
-   type KYCServiceMarker() = class end
-
-   /// Enqueues know-your-customer messages into RabbitMq
-   type KYCServiceProducerMarker() = class end
-
-   /// Singleton consumes card issuer messages off RabbitMq
-   type CardIssuerServiceMarker() = class end
-
-   /// Enqueues card issuer messages into RabbitMq
-   type CardIssuerServiceProducerMarker() = class end
-
-   type CircuitBreakerMarker() = class end
-
-   type AccountLoadTestMarker() = class end
-
-   type AuditorMarker() = class end
-
-   type AccountSeederMarker() = class end
-
-   /// Singleton Proxy to forward emails from web node
-   type EmailProxyMarker() = class end
-
-   /// Singleton consumes email messages off RabbitMq
-   type EmailMarker() = class end
-
-   /// Enqueues email messages into RabbitMq
-   type EmailProducerMarker() = class end
-
-   type AccountClosureMarker() = class end
-
-   /// Singleton consumes domestic transfer messages off RabbitMq
-   type DomesticTransferMarker() = class end
-
-   /// Enqueues domestic transfer messages into RabbitMq
-   type DomesticTransferProducerMarker() = class end
-
-   type AutoTransferSchedulingMarker() = class end
-
-   type ScheduledTransfersLowBalanceWarningMarker() = class end
-
-   type BillingCycleMarker() = class end
-
-   type BillingStatementMarker() = class end
-
-   type SagaMarker() = class end
-
-   type SagaGuaranteedDeliveryProducerMarker() = class end
-
-   type SagaReadModelSyncMarker() = class end
-
-   type SagaAlarmClockMarker() = class end
-
-   type AccountMarker() = class end
-
-   type AccountGuaranteedDeliveryProducerMarker() = class end
-
-   type AccountReadModelSyncMarker() = class end
-
-   type SchedulingMarker() = class end
-
-   type EmployeeMarker() = class end
-
-   type EmployeeGuaranteedDeliveryProducerMarker() = class end
-
-   type EmployeeReadModelSyncMarker() = class end
-
    type ActorMetadata = {
       Name: string
       Route: string
@@ -581,7 +502,8 @@ module PersistenceSupervisor =
          persistenceId: string,
          config: PersistenceSupervisionConfig,
          strategy: SupervisorStrategy
-      ) =
+      )
+      =
       inherit PersistenceSupervisor(childProps, persistenceId, config, strategy)
 
       override _.Receive(message: obj) =

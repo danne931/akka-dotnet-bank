@@ -27,6 +27,7 @@ open Bank.Employee.Domain
 open ActorUtil
 open AutomaticTransfer
 open RecurringPaymentSchedule
+open BankActorRegistry
 
 module aeFields = AccountEventSqlMapper.Fields
 
@@ -303,7 +304,7 @@ let enableUpdatePreventionTriggers () =
       "ALTER TABLE organization_event ENABLE TRIGGER prevent_update;", []
    ]
 
-let createOrgs (orgRef: IActorRef<GuaranteedDelivery.Message<OrgMessage>>) =
+let createOrgs (registry: #IOrgGuaranteedDeliveryActor) =
    let orgs = myOrg :: otherOrgs
 
    for org in orgs do
@@ -327,13 +328,11 @@ let createOrgs (orgRef: IActorRef<GuaranteedDelivery.Message<OrgMessage>>) =
          |> OrgMessage.StateChange
          |> GuaranteedDelivery.message (OrgId.get org.OrgId)
 
-      orgRef <! msg
+      registry.OrgGuaranteedDeliveryActor() <! msg
 
 // Enable other orgs using the platform to be discoverable for
 // InternalTransferBetweenOrgs.
-let enableOrgSocialTransferDiscovery
-   (orgRef: IActorRef<GuaranteedDelivery.Message<OrgMessage>>)
-   =
+let enableOrgSocialTransferDiscovery (registry: #IOrgGuaranteedDeliveryActor) =
    for org in otherOrgs do
       let msg =
          ConfigureFeatureFlagCommand.create org.OrgId Initiator.System {
@@ -346,7 +345,7 @@ let enableOrgSocialTransferDiscovery
          |> OrgMessage.StateChange
          |> GuaranteedDelivery.message (OrgId.get org.OrgId)
 
-      orgRef <! msg
+      registry.OrgGuaranteedDeliveryActor() <! msg
 
 // NOTE:
 // Initial employee purchase requests are configured with timestamps
@@ -768,211 +767,210 @@ let mockEmployeesPendingInviteConfirmation =
          Timestamp = mockAccountOwnerCmd.Timestamp
    })
 
-let seedPayments
-   (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
-   =
-   task {
-      let buffer = DateTime.UtcNow.AddDays -2
+let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
+   let buffer = DateTime.UtcNow.AddDays -2
+   let accountRef = registry.AccountGuaranteedDeliveryActor()
 
-      let mutable requestedAsRecurringPayment = false
+   let mutable requestedAsRecurringPayment = false
 
-      // Payment requests from main demo org to other orgs
-      let requestsFromDemoAccount = [
-         for payer in paymentPayers ->
-            let paymentId = Guid.NewGuid() |> PaymentRequestId
+   // Payment requests from main demo org to other orgs
+   let requestsFromDemoAccount = [
+      for payer in paymentPayers ->
+         let paymentId = Guid.NewGuid() |> PaymentRequestId
 
-            let recurringPaymentReference =
-               if not requestedAsRecurringPayment then
-                  requestedAsRecurringPayment <- true
+         let recurringPaymentReference =
+            if not requestedAsRecurringPayment then
+               requestedAsRecurringPayment <- true
 
-                  Some {
-                     Settings = {
-                        Id = RecurrenceScheduleId(Guid.NewGuid())
-                        Pattern = {
-                           RepeatEvery = 1
-                           Interval =
-                              RecurrenceInterval.Monthly(
-                                 RecurrenceIntervalMonthly.DayOfMonth 13
-                              )
-                        }
-                        Termination = RecurrenceTerminationCondition.Never
-                        PaymentsRequestedCount = 1
+               Some {
+                  Settings = {
+                     Id = RecurrenceScheduleId(Guid.NewGuid())
+                     Pattern = {
+                        RepeatEvery = 1
+                        Interval =
+                           RecurrenceInterval.Monthly(
+                              RecurrenceIntervalMonthly.DayOfMonth 13
+                           )
                      }
-                     OriginPaymentId = paymentId
+                     Termination = RecurrenceTerminationCondition.Never
+                     PaymentsRequestedCount = 1
                   }
-               else
-                  None
-
-            let cmd =
-               RequestPaymentCommand.create
-                  mockAccountOwner
-                  (PaymentRequested.Platform {
-                     SharedDetails = {
-                        Id = paymentId
-                        Amount = randomAmount 3000 5000
-                        Payee = {
-                           OrgId = myOrg.OrgId
-                           OrgName = myOrg.BusinessName
-                           AccountId = arCheckingAccountId
-                           ParentAccountId = myOrg.ParentAccountId
-                        }
-                        Memo = "Services rendered..."
-                        DueAt = DateTime.UtcNow.AddDays 15
-                     }
-                     Payer = {
-                        OrgId = payer.OrgId
-                        OrgName = payer.BusinessName
-                        ParentAccountId = payer.ParentAccountId
-                     }
-                     RecurringPaymentReference = recurringPaymentReference
-                     Invoice = None
-                  })
-
-            payer, { cmd with Timestamp = buffer }
-      ]
-
-      for _, request in requestsFromDemoAccount do
-         let entityId =
-            ParentAccountId.get request.Data.SharedDetails.Payee.ParentAccountId
-
-         let msg =
-            request
-            |> AccountCommand.RequestPayment
-            |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message entityId
-
-         accountRef <! msg
-
-      let request3rdPartyPaymentMsg =
-         RequestPaymentCommand.create
-            mockAccountOwner
-            (PaymentRequested.ThirdParty {
-               Payer = {
-                  Name = "Pornchai"
-                  Email = Email.deserialize "pornchai@whitelotus.com"
+                  OriginPaymentId = paymentId
                }
-               ShortId = PaymentPortalShortId.create ()
-               RecurringPaymentReference = None
-               Invoice = None
-               SharedDetails = {
-                  Id = Guid.NewGuid() |> PaymentRequestId
-                  Amount = 1337m
-                  DueAt = DateTime.UtcNow.AddDays 30
-                  Memo =
-                     "Robes, slippers, massage oils, massage tables, face cradle cushions"
-                  Payee = {
-                     OrgId = myOrg.OrgId
-                     OrgName = myOrg.BusinessName
-                     AccountId = arCheckingAccountId
-                     ParentAccountId = myOrg.ParentAccountId
+            else
+               None
+
+         let cmd =
+            RequestPaymentCommand.create
+               mockAccountOwner
+               (PaymentRequested.Platform {
+                  SharedDetails = {
+                     Id = paymentId
+                     Amount = randomAmount 3000 5000
+                     Payee = {
+                        OrgId = myOrg.OrgId
+                        OrgName = myOrg.BusinessName
+                        AccountId = arCheckingAccountId
+                        ParentAccountId = myOrg.ParentAccountId
+                     }
+                     Memo = "Services rendered..."
+                     DueAt = DateTime.UtcNow.AddDays 15
                   }
-               }
-            })
-         |> AccountCommand.RequestPayment
-         |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message (
-            ParentAccountId.get myOrg.ParentAccountId
-         )
+                  Payer = {
+                     OrgId = payer.OrgId
+                     OrgName = payer.BusinessName
+                     ParentAccountId = payer.ParentAccountId
+                  }
+                  RecurringPaymentReference = recurringPaymentReference
+                  Invoice = None
+               })
 
-      accountRef <! request3rdPartyPaymentMsg
+         payer, { cmd with Timestamp = buffer }
+   ]
 
-      do! Async.Sleep 2000
-
-      // Fulfill the recurring payment request
-      let payerStub, request =
-         requestsFromDemoAccount
-         |> List.find (fun (_, request) ->
-            match request.Data with
-            | Platform p -> p.RecurringPaymentReference.IsSome
-            | ThirdParty p -> p.RecurringPaymentReference.IsSome)
-
-      let shared = request.Data.SharedDetails
-      let (PaymentRequested.Platform payRequest) = request.Data
-      let payer = payRequest.Payer
+   for _, request in requestsFromDemoAccount do
+      let entityId =
+         ParentAccountId.get request.Data.SharedDetails.Payee.ParentAccountId
 
       let msg =
-         let ts = buffer.AddHours 2
-
-         {
-            InternalTransferBetweenOrgsCommand.create
-               {
-                  Id = InitiatedById payerStub.AccountOwnerId
-                  Name = payerStub.BusinessName
-               }
-               {
-                  Memo = None
-                  OriginatedFromSchedule = false
-                  OriginatedFromPaymentRequest = Some shared.Id
-                  Amount = shared.Amount
-                  Recipient = {
-                     OrgId = shared.Payee.OrgId
-                     AccountId = shared.Payee.AccountId
-                     ParentAccountId = shared.Payee.ParentAccountId
-                     Name = shared.Payee.OrgName
-                  }
-                  ScheduledDateSeedOverride = Some ts
-                  Sender = {
-                     Name = payer.OrgName
-                     AccountId = payerStub.PrimaryAccountId
-                     ParentAccountId = payer.ParentAccountId
-                     OrgId = payer.OrgId
-                  }
-               } with
-               Timestamp = ts
-         }
-         |> AccountCommand.InternalTransferBetweenOrgs
+         request
+         |> AccountCommand.RequestPayment
          |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message (
-            ParentAccountId.get payerStub.ParentAccountId
-         )
+         |> GuaranteedDelivery.message entityId
 
       accountRef <! msg
 
-      // Payment requests from other orgs to main demo org
-      for payee in paymentRequesters do
-         let cmd =
-            RequestPaymentCommand.create
-               {
-                  Id = InitiatedById payee.AccountOwnerId
-                  Name = payee.BusinessName
+   let request3rdPartyPaymentMsg =
+      RequestPaymentCommand.create
+         mockAccountOwner
+         (PaymentRequested.ThirdParty {
+            Payer = {
+               Name = "Pornchai"
+               Email = Email.deserialize "pornchai@whitelotus.com"
+            }
+            ShortId = PaymentPortalShortId.create ()
+            RecurringPaymentReference = None
+            Invoice = None
+            SharedDetails = {
+               Id = Guid.NewGuid() |> PaymentRequestId
+               Amount = 1337m
+               DueAt = DateTime.UtcNow.AddDays 30
+               Memo =
+                  "Robes, slippers, massage oils, massage tables, face cradle cushions"
+               Payee = {
+                  OrgId = myOrg.OrgId
+                  OrgName = myOrg.BusinessName
+                  AccountId = arCheckingAccountId
+                  ParentAccountId = myOrg.ParentAccountId
                }
-               (PaymentRequested.Platform {
-                  SharedDetails = {
-                     Id = Guid.NewGuid() |> PaymentRequestId
-                     Amount = 5000m + randomAmount 1000 3000
-                     Payee = {
-                        OrgId = payee.OrgId
-                        OrgName = payee.BusinessName
-                        AccountId = payee.PrimaryAccountId
-                        ParentAccountId = payee.ParentAccountId
-                     }
-                     DueAt = DateTime.UtcNow.AddDays 13
-                     Memo = "Services rendered..."
-                  }
-                  Invoice = None
-                  RecurringPaymentReference = None
-                  Payer = {
-                     OrgId = myOrg.OrgId
-                     OrgName = myOrg.BusinessName
-                     ParentAccountId = myOrg.ParentAccountId
-                  }
-               })
+            }
+         })
+      |> AccountCommand.RequestPayment
+      |> AccountMessage.StateChange
+      |> GuaranteedDelivery.message (ParentAccountId.get myOrg.ParentAccountId)
 
-         let msg =
-            cmd
-            |> AccountCommand.RequestPayment
-            |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message (
-               ParentAccountId.get payee.ParentAccountId
-            )
+   accountRef <! request3rdPartyPaymentMsg
 
-         accountRef <! msg
-   }
+   do! Async.Sleep 2000
+
+   // Fulfill the recurring payment request
+   let payerStub, request =
+      requestsFromDemoAccount
+      |> List.find (fun (_, request) ->
+         match request.Data with
+         | Platform p -> p.RecurringPaymentReference.IsSome
+         | ThirdParty p -> p.RecurringPaymentReference.IsSome)
+
+   let shared = request.Data.SharedDetails
+
+   let (PaymentRequested.Platform payRequest) = request.Data
+   let payer = payRequest.Payer
+
+   let msg =
+      let ts = buffer.AddHours 2
+
+      {
+         InternalTransferBetweenOrgsCommand.create
+            {
+               Id = InitiatedById payerStub.AccountOwnerId
+               Name = payerStub.BusinessName
+            }
+            {
+               Memo = None
+               OriginatedFromSchedule = false
+               OriginatedFromPaymentRequest = Some shared.Id
+               Amount = shared.Amount
+               Recipient = {
+                  OrgId = shared.Payee.OrgId
+                  AccountId = shared.Payee.AccountId
+                  ParentAccountId = shared.Payee.ParentAccountId
+                  Name = shared.Payee.OrgName
+               }
+               ScheduledDateSeedOverride = Some ts
+               Sender = {
+                  Name = payer.OrgName
+                  AccountId = payerStub.PrimaryAccountId
+                  ParentAccountId = payer.ParentAccountId
+                  OrgId = payer.OrgId
+               }
+            } with
+            Timestamp = ts
+      }
+      |> AccountCommand.InternalTransferBetweenOrgs
+      |> AccountMessage.StateChange
+      |> GuaranteedDelivery.message (
+         ParentAccountId.get payerStub.ParentAccountId
+      )
+
+   accountRef <! msg
+
+   // Payment requests from other orgs to main demo org
+   for payee in paymentRequesters do
+      let cmd =
+         RequestPaymentCommand.create
+            {
+               Id = InitiatedById payee.AccountOwnerId
+               Name = payee.BusinessName
+            }
+            (PaymentRequested.Platform {
+               SharedDetails = {
+                  Id = Guid.NewGuid() |> PaymentRequestId
+                  Amount = 5000m + randomAmount 1000 3000
+                  Payee = {
+                     OrgId = payee.OrgId
+                     OrgName = payee.BusinessName
+                     AccountId = payee.PrimaryAccountId
+                     ParentAccountId = payee.ParentAccountId
+                  }
+                  DueAt = DateTime.UtcNow.AddDays 13
+                  Memo = "Services rendered..."
+               }
+               Invoice = None
+               RecurringPaymentReference = None
+               Payer = {
+                  OrgId = myOrg.OrgId
+                  OrgName = myOrg.BusinessName
+                  ParentAccountId = myOrg.ParentAccountId
+               }
+            })
+
+      let msg =
+         cmd
+         |> AccountCommand.RequestPayment
+         |> AccountMessage.StateChange
+         |> GuaranteedDelivery.message (
+            ParentAccountId.get payee.ParentAccountId
+         )
+
+      accountRef <! msg
+}
 
 let configureAutoTransferRules
-   (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
+   (registry: #IAccountGuaranteedDeliveryActor)
    (timestamp: DateTime)
    =
+   let accountRef = registry.AccountGuaranteedDeliveryActor()
+
    // Set up percent distribution rule for demo account
    // ----------------------------------------
    let sender: InternalTransferSender = {
@@ -1172,10 +1170,12 @@ let configureAutoTransferRules
    socialTransferCandidates |> List.iter initZeroBalanceRule
 
 let seedAccountOwnerActions
-   (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
+   (registry: #IAccountGuaranteedDeliveryActor)
    (timestamp: DateTime)
    (account: Account)
    =
+   let accountRef = registry.AccountGuaranteedDeliveryActor()
+
    let domesticRecipientCmd =
       RegisterDomesticTransferRecipientCommand.create mockAccountOwner {
          AccountId = Guid.NewGuid() |> AccountId
@@ -1399,7 +1399,7 @@ let seedAccountOwnerActions
 let seedEmployeeActions
    (card: Card)
    (employee: Employee)
-   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
+   (registry: #IEmployeeGuaranteedDeliveryActor)
    (timestamp: DateTime)
    =
    let purchaseMerchants = [
@@ -1496,9 +1496,9 @@ let seedEmployeeActions
             |> EmployeeMessage.StateChange
             |> GuaranteedDelivery.message (EntityId.get purchaseCmd.EntityId)
 
-         employeeRef <! msg
+         registry.EmployeeGuaranteedDeliveryActor() <! msg
 
-let createAccountOwners employeeRef =
+let createAccountOwners (registry: #IEmployeeGuaranteedDeliveryActor) =
    let createAccountOwnerCmd (business: OrgSetup) =
       let date = DateTime.Today
       let startOfMonth = DateTime(date.Year, date.Month, 1).ToUniversalTime()
@@ -1525,12 +1525,12 @@ let createAccountOwners employeeRef =
          |> EmployeeMessage.StateChange
          |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-      employeeRef <! createMsg
+      registry.EmployeeGuaranteedDeliveryActor() <! createMsg
 
    accountOwnerCmds
 
 let confirmAccountOwnerInvites
-   employeeRef
+   (registry: #IEmployeeGuaranteedDeliveryActor)
    (accountOwnerCmds: Command<CreateAccountOwnerInput> list)
    =
    for cmd in accountOwnerCmds do
@@ -1548,11 +1548,9 @@ let confirmAccountOwnerInvites
          |> EmployeeMessage.StateChange
          |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-      employeeRef <! confirmInviteCmd
+      registry.EmployeeGuaranteedDeliveryActor() <! confirmInviteCmd
 
-let createEmployees
-   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
-   =
+let createEmployees (registry: #IEmployeeGuaranteedDeliveryActor) =
    for employeeCreateCmd in mockEmployeesPendingInviteConfirmation do
       let msg =
          employeeCreateCmd
@@ -1560,7 +1558,7 @@ let createEmployees
          |> EmployeeMessage.StateChange
          |> GuaranteedDelivery.message (EntityId.get employeeCreateCmd.EntityId)
 
-      employeeRef <! msg
+      registry.EmployeeGuaranteedDeliveryActor() <! msg
 
    for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
       let msg =
@@ -1569,11 +1567,9 @@ let createEmployees
          |> EmployeeMessage.StateChange
          |> GuaranteedDelivery.message (EmployeeId.get employeeId)
 
-      employeeRef <! msg
+      registry.EmployeeGuaranteedDeliveryActor() <! msg
 
-let confirmEmployeeInvites
-   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
-   =
+let confirmEmployeeInvites (registry: #IEmployeeGuaranteedDeliveryActor) =
    for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
       let confirmInviteCmd = {
          ConfirmInvitationCommand.create
@@ -1598,11 +1594,9 @@ let confirmEmployeeInvites
          |> EmployeeMessage.StateChange
          |> GuaranteedDelivery.message (EmployeeId.get employeeId)
 
-      employeeRef <! msg
+      registry.EmployeeGuaranteedDeliveryActor() <! msg
 
-let createEmployeeCards
-   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
-   =
+let createEmployeeCards (registry: #IEmployeeGuaranteedDeliveryActor) =
    let accountOwnerTravelCardCreateCmd, accountOwnerBusinessCardCreateCmd =
       mockAccountOwnerCards
 
@@ -1620,7 +1614,7 @@ let createEmployeeCards
          |> EmployeeMessage.StateChange
          |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
 
-      employeeRef <! msg
+      registry.EmployeeGuaranteedDeliveryActor() <! msg
 
    {|
       AccountOwnerTravelCard = accountOwnerTravelCardCreateCmd
@@ -1645,10 +1639,8 @@ let getEmployeeCardPair
 
 let seedAccountTransactions
    (mailbox: Actor<AccountSeederMessage>)
-   (accountRef: IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
-   (employeeRef: IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
-   (getAccountEntityRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getEmployeeEntityRef: EmployeeId -> IEntityRef<EmployeeMessage>)
+   (registry:
+      #IAccountGuaranteedDeliveryActor & #IEmployeeGuaranteedDeliveryActor & #IAccountActor & #IEmployeeActor)
    (command: CreateVirtualAccountCommand)
    =
    task {
@@ -1672,24 +1664,24 @@ let seedAccountTransactions
             |> AccountMessage.StateChange
             |> GuaranteedDelivery.message (EntityId.get command.EntityId)
 
-         accountRef <! msg
+         registry.AccountGuaranteedDeliveryActor() <! msg
       | None -> ()
 
       if accountId = myOrg.OpsAccountId then
-         createEmployees employeeRef
+         createEmployees registry
          do! Task.Delay 5000
-         confirmEmployeeInvites employeeRef
+         confirmEmployeeInvites registry
          do! Task.Delay 10_000
-         let cardCreateCmds = createEmployeeCards employeeRef
+         let cardCreateCmds = createEmployeeCards registry
          do! Task.Delay 10_000
 
          let businessCardCreateCmd = cardCreateCmds.AccountOwnerBusinessCard
          let timestamp = businessCardCreateCmd.Timestamp
 
-         configureAutoTransferRules accountRef timestamp
+         configureAutoTransferRules registry timestamp
 
          let! account =
-            getAccountEntityRef command.Data.ParentAccountId
+            registry.AccountActor command.Data.ParentAccountId
             <? AccountMessage.GetVirtualAccount accountId
 
          match account with
@@ -1699,7 +1691,7 @@ let seedAccountTransactions
             logError
                mailbox
                $"Can not proceed with account owner actions - eId: {accountOwnerId}"
-         | Some account -> seedAccountOwnerActions accountRef timestamp account
+         | Some account -> seedAccountOwnerActions registry timestamp account
 
          for cmd in
             cardCreateCmds.AccountOwnerTravelCard :: cardCreateCmds.Employee do
@@ -1707,7 +1699,7 @@ let seedAccountTransactions
             let cardId = cmd.Data.CardId
 
             let! employeeCardPairOpt =
-               getEmployeeCardPair (getEmployeeEntityRef employeeId) cardId
+               getEmployeeCardPair (registry.EmployeeActor employeeId) cardId
 
             match employeeCardPairOpt with
             | None ->
@@ -1715,9 +1707,9 @@ let seedAccountTransactions
                   mailbox
                   $"Can not proceed with purchases - eId: {employeeId} cId: {cardId}"
             | Some(employee, card) ->
-               seedEmployeeActions card employee employeeRef timestamp
+               seedEmployeeActions card employee registry timestamp
 
-         do! seedPayments accountRef
+         do! seedPayments registry
    }
 
 // Creates a new Map consisting of initial state of accounts to create
@@ -1770,15 +1762,7 @@ let private initState = {
       Map [ for acctId in mockAccounts.Keys -> acctId, true ]
 }
 
-let actorProps
-   (getOrgRef: unit -> IActorRef<GuaranteedDelivery.Message<OrgMessage>>)
-   (getAccountGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>)
-   (getEmployeeGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>)
-   (getAccountEntityRef: ParentAccountId -> IEntityRef<AccountMessage>)
-   (getEmployeeEntityRef: EmployeeId -> IEntityRef<EmployeeMessage>)
-   =
+let actorProps (registry: #IAccountGuaranteedDeliveryActor) =
    let handler (ctx: Actor<AccountSeederMessage>) =
       let logInfo = logInfo ctx
 
@@ -1806,18 +1790,15 @@ let actorProps
                   logInfo "Seed postgres with accounts"
                   do! disableUpdatePreventionTriggers ()
 
-                  createOrgs (getOrgRef ())
+                  createOrgs registry
 
                   do! Task.Delay 10_000
 
-                  let accountOwnerCmds =
-                     createAccountOwners (getEmployeeGuaranteedDeliveryRef ())
+                  let accountOwnerCmds = createAccountOwners registry
 
                   do! Task.Delay 5_000
 
-                  confirmAccountOwnerInvites
-                     (getEmployeeGuaranteedDeliveryRef ())
-                     accountOwnerCmds
+                  confirmAccountOwnerInvites registry accountOwnerCmds
 
                   do! Task.Delay 5_000
 
@@ -1835,7 +1816,7 @@ let actorProps
                            ParentAccountId.get command.Data.ParentAccountId
                         )
 
-                     getAccountGuaranteedDeliveryRef () <! msg
+                     registry.AccountGuaranteedDeliveryActor() <! msg
 
                   scheduleVerification ctx 5.
 
@@ -1856,10 +1837,7 @@ let actorProps
                do!
                   seedAccountTransactions
                      ctx
-                     (getAccountGuaranteedDeliveryRef ())
-                     (getEmployeeGuaranteedDeliveryRef ())
-                     getAccountEntityRef
-                     getEmployeeEntityRef
+                     registry
                      state.AccountsToCreate[acct.AccountId]
 
                ()
@@ -1873,7 +1851,7 @@ let actorProps
             if verified.Length = state.AccountsToCreate.Count then
                logInfo "Finished seeding accounts"
 
-               enableOrgSocialTransferDiscovery (getOrgRef ())
+               enableOrgSocialTransferDiscovery registry
 
                logInfo "Enabled social transfer discovery"
 
@@ -1919,4 +1897,4 @@ let actorProps
    props handler
 
 let get (registry: IActorRegistry) : IActorRef<AccountSeederMessage> =
-   typed <| registry.Get<ActorMetadata.AccountSeederMarker>()
+   typed <| registry.Get<ActorMarker.AccountSeeder>()

@@ -3,10 +3,8 @@ module CardIssuerServiceActor
 open System
 open System.Threading.Tasks
 open Akkling
-open Akka.Actor
 open Akkling.Streams
 open Akka.Streams.Amqp.RabbitMq
-open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Bank.Employee.Domain
@@ -18,6 +16,7 @@ open Lib.Queue
 open CardSetupSaga
 open EmployeeOnboardingSaga
 open CardIssuer.Service.Domain
+open BankActorRegistry
 
 let private networkRequestToCardIssuerService
    (msg: CardIssuerMessage)
@@ -56,13 +55,13 @@ let protectedAction
    }
 
 let actorProps
+   (registry: #ISagaActor)
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
    (networkRequest: CardIssuerMessage -> Task<Result<CardIssuerResponse, Err>>)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    let consumerQueueOpts = {
@@ -88,14 +87,14 @@ let actorProps
                         |> CardSetupSagaEvent.CardCreateResponse
                         |> AppSaga.Message.cardSetup orgId corrId
 
-                     getSagaRef corrId <! msg
+                     registry.SagaActor corrId <! msg
                   | SagaReplyTo.EmployeeOnboard ->
                      let onboardingMsg =
                         Ok res.ProviderCardId
                         |> EmployeeOnboardingSagaEvent.CardCreateResponse
                         |> AppSaga.Message.employeeOnboard orgId corrId
 
-                     getSagaRef corrId <! onboardingMsg
+                     registry.SagaActor corrId <! onboardingMsg
                | CardIssuerMessage.CloseCard _,
                  CardIssuerResponse.CloseCard res ->
                   logDebug mailbox $"Card detached {res.ProviderCardId}"
@@ -117,25 +116,19 @@ let actorProps
       consumerQueueOpts
 
 let initProps
+   registry
    (queueConnection: AmqpConnectionDetails)
    (queueSettings: QueueEnvConfig)
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    : Props<obj>
    =
    actorProps
+      registry
       queueConnection
       queueSettings
       streamRestartSettings
       breaker
       broadcaster
       networkRequestToCardIssuerService
-      getSagaRef
-
-let getProducer (system: ActorSystem) : IActorRef<CardIssuerMessage> =
-   Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.CardIssuerServiceProducerMarker>()
-   |> typed

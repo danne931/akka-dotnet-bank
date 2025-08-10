@@ -1,8 +1,6 @@
 [<RequireQualifiedAccess>]
 module BillingCycleActor
 
-open Akka.Actor
-open Akka.Hosting
 open Akka.Streams
 open Akkling.Streams
 open Akkling
@@ -11,10 +9,10 @@ open System
 open BillingStatement
 open Bank.Account.Domain
 open PartnerBankSqlMapper
-open ActorUtil
 open Lib.Types
 open Lib.Postgres
 open Lib.SharedTypes
+open BankActorRegistry
 
 let getBillingCycleReadyAccounts () =
    let prevCycle = Fields.lastBillingCycleDate
@@ -40,10 +38,9 @@ let getBillingCycleReadyAccounts () =
    <| fun read -> SqlReader.parentAccountId read, SqlReader.orgId read
 
 let private fanOutBillingCycleMessage
-   (ctx: Actor<_>)
+   (registry: #ISagaGuaranteedDeliveryActor)
    (throttle: StreamThrottleEnvConfig)
-   (getSagaRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
+   (ctx: Actor<_>)
    =
    task {
       let mat = ctx.System.Materializer()
@@ -87,22 +84,18 @@ let private fanOutBillingCycleMessage
                   CorrelationId = corrId
                }
 
-            getSagaRef () <! msg)
+            registry.SagaGuaranteedDeliveryActor() <! msg)
 
       return BillingCycleMessage.BillingCycleFinished
    }
 
-let actorProps
-   (throttle: StreamThrottleEnvConfig)
-   (getSagaRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
-   =
+let actorProps registry (throttle: StreamThrottleEnvConfig) =
    let handler (ctx: Actor<BillingCycleMessage>) =
       function
       | BillingCycleMessage.BillingCycleFanout ->
          logInfo ctx "Start billing cycle"
 
-         fanOutBillingCycleMessage ctx throttle getSagaRef |> Async.AwaitTask
+         fanOutBillingCycleMessage registry throttle ctx |> Async.AwaitTask
          |!> retype ctx.Self
          |> ignored
       | BillingCycleMessage.BillingCycleFinished ->
@@ -110,6 +103,3 @@ let actorProps
          ignored ()
 
    props <| actorOf2 handler
-
-let get (system: ActorSystem) : IActorRef<BillingCycleMessage> =
-   typed <| ActorRegistry.For(system).Get<ActorMetadata.BillingCycleMarker>()

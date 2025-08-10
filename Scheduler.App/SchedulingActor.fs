@@ -1,7 +1,6 @@
 [<RequireQualifiedAccess>]
 module SchedulingActor
 
-open Akka.Hosting
 open Akka.Actor
 open Akka.Quartz.Actor.Commands
 open Akkling
@@ -12,7 +11,6 @@ open BillingStatement
 open ActorUtil
 open Lib.Postgres
 open Bank.Scheduler
-open Bank.Transfer.Domain
 open TransferMessages
 
 let actorProps (quartzPersistentActorRef: IActorRef) =
@@ -143,7 +141,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
                {
                   Manifest = "SagaAlarmClockActorMessage"
                   Message =
-                     SagaAlarmClockActor.Message.WakeUpIfUnfinishedBusiness
+                     AppSaga.SagaAlarmClockMessage.WakeUpIfUnfinishedBusiness
                },
                trigger
             )
@@ -226,6 +224,3 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
    }
 
    props handler
-
-let get (system: ActorSystem) : IActorRef<SchedulerMessage> =
-   typed <| ActorRegistry.For(system).Get<ActorMetadata.SchedulingMarker>()

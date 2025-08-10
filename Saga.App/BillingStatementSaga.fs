@@ -2,77 +2,12 @@ module BillingSaga
 
 open System
 open Akkling
-open Akkling.Cluster.Sharding
 
-open Lib.SharedTypes
 open Bank.Account.Domain
-open MaintenanceFee
 open Email
 open Lib.Saga
-
-[<RequireQualifiedAccess>]
-type BillingSagaStatus =
-   | InProgress
-   | Completed
-   | Failed
-
-type BillingSagaStartEvent = {
-   BillingPeriod: BillingPeriod
-   BillingCycleDate: DateTime
-   CorrelationId: CorrelationId
-   ParentAccountId: ParentAccountId
-   OrgId: OrgId
-}
-
-type ProcessingBillingStatement = {
-   PrimaryCheckingAccountId: AccountId
-   MaintenanceFeeCriteria: MaintenanceFeeCriteria
-}
-
-[<RequireQualifiedAccess>]
-type BillingSagaEvent =
-   | BillingStatementProcessing of ProcessingBillingStatement
-   | BillingStatementPersisted
-   | MaintenanceFeeProcessed
-   | BillingEmailSent
-   | EvaluateRemainingWork
-   | ResetInProgressActivityAttempts
-
-[<RequireQualifiedAccess>]
-type Activity =
-   | StartBilling
-   | ProcessBillingStatement
-   | WaitForBillingStatementPersisted
-   | ProcessMaintenanceFee
-   | SendBillingEmail
-
-   interface IActivity with
-      member x.MaxAttempts =
-         match x with
-         | StartBilling
-         | WaitForBillingStatementPersisted -> 1
-         | _ -> 3
-
-      member x.InactivityTimeout =
-         match x with
-         | StartBilling
-         | WaitForBillingStatementPersisted -> None
-         | ProcessBillingStatement -> Some(TimeSpan.FromSeconds 10.)
-         | ProcessMaintenanceFee -> Some(TimeSpan.FromSeconds 10.)
-         | SendBillingEmail -> Some(TimeSpan.FromMinutes 4.)
-
-type BillingSaga = {
-   CorrelationId: CorrelationId
-   ParentAccountId: ParentAccountId
-   OrgId: OrgId
-   BillingPeriod: BillingPeriod
-   BillingCycleDate: DateTime
-   ProcessingBillingStatement: ProcessingBillingStatement option
-   StartEvent: BillingSagaStartEvent
-   Events: BillingSagaEvent list
-   Status: BillingSagaStatus
-   LifeCycle: SagaLifeCycle<Activity>
-}
+open BillingSaga
+open BankActorRegistry
 
 let applyStartEvent
    (start: BillingSagaStartEvent)
@@ -196,13 +131,8 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
-type PersistenceHandlerDependencies = {
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-}
-
 let onStartEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (registry: #IAccountActor)
    (start: BillingSagaStartEvent)
    =
    let msg =
@@ -211,10 +141,10 @@ let onStartEventPersisted
          start.BillingPeriod
       )
 
-   dep.getAccountRef start.ParentAccountId <! msg
+   registry.AccountActor start.ParentAccountId <! msg
 
 let onEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (registry: #IAccountActor & #IEmailActor)
    (previousState: BillingSaga)
    (updatedState: BillingSaga)
    (evt: BillingSagaEvent)
@@ -226,7 +156,7 @@ let onEventPersisted
 
    let sendBillingEmail () =
       let emailMsg = EmailMessage.create orgId corrId EmailInfo.BillingStatement
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let processMaintenanceFee (processing: ProcessingBillingStatement) =
       let criteria = processing.MaintenanceFeeCriteria
@@ -244,7 +174,7 @@ let onEventPersisted
             |> AccountCommand.SkipMaintenanceFee
             |> AccountMessage.StateChange
 
-         dep.getAccountRef parentAccountId <! msg
+         registry.AccountActor parentAccountId <! msg
       else
          let msg =
             MaintenanceFeeCommand.create
@@ -254,7 +184,7 @@ let onEventPersisted
             |> AccountCommand.MaintenanceFee
             |> AccountMessage.StateChange
 
-         dep.getAccountRef parentAccountId <! msg
+         registry.AccountActor parentAccountId <! msg
 
    match evt with
    | BillingSagaEvent.BillingStatementPersisted ->
@@ -273,7 +203,7 @@ let onEventPersisted
             let msg =
                AccountMessage.ProcessBillingStatement(corrId, billingPeriod)
 
-            dep.getAccountRef parentAccountId <! msg
+            registry.AccountActor parentAccountId <! msg
          | Activity.ProcessMaintenanceFee ->
             updatedState.ProcessingBillingStatement
             |> Option.iter processMaintenanceFee

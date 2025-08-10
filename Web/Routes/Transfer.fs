@@ -5,7 +5,6 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.FSharp.Core
 open System
 open System.Threading.Tasks
-open Akka.Actor
 open Akkling
 open FsToolkit.ErrorHandling
 
@@ -17,6 +16,7 @@ open Bank.Account.Domain
 open CommandApproval
 open RoutePaths
 open Bank.UserSession.Middleware
+open BankActorRegistry
 
 let processAccountCommand = Bank.Account.Api.processCommand
 
@@ -25,15 +25,15 @@ let start (app: WebApplication) =
       .MapPost(
          TransferPath.DomesticTransferRecipient,
          Func<
-            ActorSystem,
+            BankActorRegistry,
             RegisterDomesticTransferRecipientCommand,
             Task<IResult>
           >
-            (fun sys cmd ->
+            (fun registry cmd ->
                cmd
                |> ParentAccountCommand.RegisterDomesticTransferRecipient
                |> AccountCommand.ParentAccount
-               |> processAccountCommand sys
+               |> processAccountCommand registry
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -42,12 +42,16 @@ let start (app: WebApplication) =
    app
       .MapPost(
          TransferPath.DomesticTransferRecipientEdit,
-         Func<ActorSystem, EditDomesticTransferRecipientCommand, Task<IResult>>
-            (fun sys cmd ->
+         Func<
+            BankActorRegistry,
+            EditDomesticTransferRecipientCommand,
+            Task<IResult>
+          >
+            (fun registry cmd ->
                cmd
                |> ParentAccountCommand.EditDomesticTransferRecipient
                |> AccountCommand.ParentAccount
-               |> processAccountCommand sys
+               |> processAccountCommand registry
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -67,9 +71,11 @@ let start (app: WebApplication) =
    app
       .MapPost(
          TransferPath.InternalWithinOrg,
-         Func<ActorSystem, InternalTransferWithinOrgCommand, Task<IResult>>
-            (fun sys cmd ->
-               processAccountCommand sys (AccountCommand.InternalTransfer cmd)
+         Func<BankActorRegistry, InternalTransferWithinOrgCommand, Task<IResult>>
+            (fun registry cmd ->
+               processAccountCommand
+                  registry
+                  (AccountCommand.InternalTransfer cmd)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.SubmitTransfer)
@@ -79,8 +85,12 @@ let start (app: WebApplication) =
    app
       .MapPost(
          TransferPath.InternalBetweenOrgs,
-         Func<ActorSystem, InternalTransferBetweenOrgsCommand, Task<IResult>>
-            (fun sys cmd ->
+         Func<
+            BankActorRegistry,
+            InternalTransferBetweenOrgsCommand,
+            Task<IResult>
+          >
+            (fun registry cmd ->
                taskResult {
                   let validation =
                      cmd
@@ -94,8 +104,11 @@ let start (app: WebApplication) =
                      |> InternalTransferBetweenOrgs
                      |> ApprovableCommand.AmountBased
                      |> OrgMessage.ApprovableRequest
+                     |> GuaranteedDelivery.message (OrgId.get cmd.OrgId)
 
-                  OrgActor.get sys cmd.OrgId <! msg
+                  let registry: IOrgGuaranteedDeliveryActor = registry
+                  registry.OrgGuaranteedDeliveryActor() <! msg
+
                   return res
                }
                |> RouteUtil.unwrapTaskResult)
@@ -107,13 +120,13 @@ let start (app: WebApplication) =
       .MapPost(
          TransferPath.ScheduleInternalBetweenOrgs,
          Func<
-            ActorSystem,
+            BankActorRegistry,
             ScheduleInternalTransferBetweenOrgsCommand,
             Task<IResult>
           >
-            (fun sys cmd ->
+            (fun registry cmd ->
                processAccountCommand
-                  sys
+                  registry
                   (AccountCommand.ScheduleInternalTransferBetweenOrgs cmd)
                |> RouteUtil.unwrapTaskResult)
       )
@@ -123,8 +136,8 @@ let start (app: WebApplication) =
    app
       .MapPost(
          TransferPath.Domestic,
-         Func<ActorSystem, DomesticTransferCommand, Task<IResult>>
-            (fun sys cmd ->
+         Func<BankActorRegistry, DomesticTransferCommand, Task<IResult>>
+            (fun registry cmd ->
                taskResult {
                   let validation =
                      cmd
@@ -138,8 +151,11 @@ let start (app: WebApplication) =
                      |> DomesticTransfer
                      |> ApprovableCommand.AmountBased
                      |> OrgMessage.ApprovableRequest
+                     |> GuaranteedDelivery.message (OrgId.get cmd.OrgId)
 
-                  (OrgActor.get sys cmd.OrgId) <! msg
+                  let registry: IOrgGuaranteedDeliveryActor = registry
+                  registry.OrgGuaranteedDeliveryActor() <! msg
+
                   return res
                }
                |> RouteUtil.unwrapTaskResult)
@@ -150,10 +166,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          TransferPath.ScheduleDomestic,
-         Func<ActorSystem, ScheduleDomesticTransferCommand, Task<IResult>>
-            (fun sys cmd ->
+         Func<BankActorRegistry, ScheduleDomesticTransferCommand, Task<IResult>>
+            (fun registry cmd ->
                processAccountCommand
-                  sys
+                  registry
                   (AccountCommand.ScheduleDomesticTransfer cmd)
                |> RouteUtil.unwrapTaskResult)
       )
@@ -164,15 +180,15 @@ let start (app: WebApplication) =
       .MapPost(
          TransferPath.NicknameRecipient,
          Func<
-            ActorSystem,
+            BankActorRegistry,
             NicknameDomesticTransferRecipientCommand,
             Task<IResult>
           >
-            (fun sys cmd ->
+            (fun registry cmd ->
                cmd
                |> ParentAccountCommand.NicknameDomesticTransferRecipient
                |> AccountCommand.ParentAccount
-               |> processAccountCommand sys
+               |> processAccountCommand registry
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -181,10 +197,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          TransferPath.ConfigureAutoTransferRule,
-         Func<ActorSystem, ConfigureAutoTransferRuleCommand, Task<IResult>>
-            (fun sys cmd ->
+         Func<BankActorRegistry, ConfigureAutoTransferRuleCommand, Task<IResult>>
+            (fun registry cmd ->
                processAccountCommand
-                  sys
+                  registry
                   (AccountCommand.ConfigureAutoTransferRule cmd)
                |> RouteUtil.unwrapTaskResult)
       )
@@ -194,10 +210,10 @@ let start (app: WebApplication) =
    app
       .MapPost(
          TransferPath.DeleteAutoTransferRule,
-         Func<ActorSystem, DeleteAutoTransferRuleCommand, Task<IResult>>
-            (fun sys cmd ->
+         Func<BankActorRegistry, DeleteAutoTransferRuleCommand, Task<IResult>>
+            (fun registry cmd ->
                processAccountCommand
-                  sys
+                  registry
                   (AccountCommand.DeleteAutoTransferRule cmd)
                |> RouteUtil.unwrapTaskResult)
       )

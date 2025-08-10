@@ -4,7 +4,6 @@ module BillingStatementActor
 open System
 open System.Threading.Tasks
 open Akka.Actor
-open Akka.Hosting
 open Akkling
 open Akka.Streams
 open Akkling.Streams
@@ -17,23 +16,11 @@ open Lib.Postgres
 open Lib.SharedTypes
 open Lib.Types
 open Lib.BulkWriteStreamFlow
+open BankActorRegistry
 
 type BillingPersistence = {
    saveBillingStatements: BillingPersistable list -> Task<Result<int list, Err>>
 }
-
-// NOTE:
-// --BillingStatementActor--
-// Facilitates performant billing statement & parent account actor snapshot
-// persistence during monthly billing cycle processing for each organization.
-//
-// Collects billing statements & parent account snapshots to insert in batches.
-// Persisted in a single transaction once the batch size limit is reached or
-// after some duration in seconds from the initial BillingStatement message.
-
-let get (system: ActorSystem) : IActorRef<BillingStatementMessage> =
-   typed
-   <| ActorRegistry.For(system).Get<ActorMetadata.BillingStatementMarker>()
 
 let initQueueSource
    (system: ActorSystem)
@@ -41,8 +28,7 @@ let initQueueSource
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryAfter: TimeSpan)
-   (getSagaRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
+   (registry: #ISagaGuaranteedDeliveryActor)
    (billingStatementActorRef: IActorRef<obj>)
    =
    let flow, bulkWriteRef =
@@ -67,7 +53,7 @@ let initQueueSource
                      |> AppSaga.Message.billing s.OrgId s.CorrelationId
                      |> AppSaga.Message.guaranteedDelivery s.CorrelationId
 
-                  getSagaRef () <! msg
+                  registry.SagaGuaranteedDeliveryActor() <! msg
       }
 
    let source =
@@ -83,8 +69,7 @@ let actorProps
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
-   (getSagaRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
+   registry
    =
    let rec init (ctx: Actor<obj>) = actor {
       let! msg = ctx.Receive()
@@ -102,7 +87,7 @@ let actorProps
                   chunking
                   restartSettings
                   retryFailedPersistenceAfter
-                  getSagaRef
+                  registry
                   ctx.Self
 
             let queue =
@@ -234,13 +219,15 @@ let private saveBillingStatements (items: BillingPersistable list) =
       sqlParams.SnapshotStore
    ]
 
+/// Collects monthly billing statements & parent account snapshots to insert in batches.
+/// Persisted in a single transaction once the batch size limit is reached or
+/// after some duration in seconds from the initial BillingStatement message.
 let start
    (system: ActorSystem)
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (retryFailedPersistenceAfter: TimeSpan)
-   (getSagaRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
+   registry
    : IActorRef<BillingStatementMessage>
    =
    spawn system ActorMetadata.billingStatement.Name
@@ -252,5 +239,5 @@ let start
          chunking
          restartSettings
          retryFailedPersistenceAfter
-         getSagaRef
+         registry
    |> retype

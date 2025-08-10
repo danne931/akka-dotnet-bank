@@ -2,74 +2,18 @@ module PaymentRequestSaga
 
 open System
 open Akkling
-open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Lib.Saga
 open Bank.Account.Domain
 open Bank.Payment.Domain
 open Email
-open PartnerBank.Service.Domain
 open RecurringPaymentSchedule
-
-[<RequireQualifiedAccess>]
-type PaymentRequestSagaStartEvent =
-   | PaymentRequested of BankEvent<PaymentRequested>
-
-[<RequireQualifiedAccess>]
-type PaymentRequestSagaEvent =
-   | PaymentRequestCancelled
-   | PaymentRequestDeclined
-   | PaymentFulfilled of PaymentFulfillment
-   | PaymentFailed of TransferId * PaymentFailReason
-   | PaymentRequestNotificationSentToPayer
-   | PaymentDeclinedNotificationSentToPayee
-   | ScheduledPaymentReminderActivated
-   | PaymentSagaStartedForNextRecurringPayment
-   | EvaluateRemainingWork
-   | ResetInProgressActivityAttempts
+open PaymentRequestSaga
+open BankActorRegistry
 
 type private StartEvent = PaymentRequestSagaStartEvent
 type private Event = PaymentRequestSagaEvent
-
-[<RequireQualifiedAccess>]
-type PaymentRequestSagaStatus =
-   | InProgress of PaymentRequestStatus
-   | Completed
-   | Failed of PaymentFailReason
-
-[<RequireQualifiedAccess; CustomEquality; NoComparison>]
-type Activity =
-   | NotifyPayerOfRequest
-   | NotifyPayeeOfDecline
-   | WaitForScheduledPaymentReminder of TimeSpan
-   | WaitForPayment
-   | ScheduleNextRecurringPayment of nextDueDate: DateTime
-
-   interface IActivity with
-      member x.MaxAttempts =
-         match x with
-         | WaitForScheduledPaymentReminder _
-         | WaitForPayment -> 0
-         | _ -> 3
-
-      member x.InactivityTimeout =
-         match x with
-         | WaitForPayment -> None
-         | WaitForScheduledPaymentReminder time -> Some time
-         | NotifyPayerOfRequest
-         | NotifyPayeeOfDecline -> Some(TimeSpan.FromMinutes 4.)
-         | ScheduleNextRecurringPayment _ -> Some(TimeSpan.FromSeconds 10.)
-
-   override x.Equals compareTo =
-      match compareTo with
-      | :? Activity as compareTo -> x.GetHashCode() = compareTo.GetHashCode()
-      | _ -> false
-
-   override x.GetHashCode() =
-      match x with
-      | ScheduleNextRecurringPayment _ -> hash "ScheduleNextRecurringPayment"
-      | _ -> hash (string x)
 
 let computedNotificationTimesMappedToActivity
    props
@@ -146,29 +90,6 @@ let finishPaymentReminderActivity
          InProgress = wip
          Completed = complete
    }
-
-type PaymentRequestSaga = {
-   StartEvent: PaymentRequestSagaStartEvent
-   Events: PaymentRequestSagaEvent list
-   Status: PaymentRequestSagaStatus
-   PaymentInfo: PaymentRequested
-   LifeCycle: SagaLifeCycle<Activity>
-   InitiatedBy: Initiator
-} with
-
-   member x.NextRecurringPaymentDueDate =
-      x.LifeCycle.InProgress
-      |> List.tryPick (fun activity ->
-         match activity.Activity with
-         | Activity.ScheduleNextRecurringPayment dueDate -> Some dueDate
-         | _ -> None)
-
-   member x.NotifyPayerOfRequest =
-      x.LifeCycle.InProgress
-      |> List.exists (fun activity ->
-         match activity.Activity with
-         | Activity.NotifyPayerOfRequest -> true
-         | _ -> false)
 
 let applyStartEvent (e: PaymentRequestSagaStartEvent) (timestamp: DateTime) =
    match e with
@@ -370,10 +291,7 @@ let private notifyPayerOfPaymentRequest emailRef (payment: PaymentRequested) =
 
    emailRef <! msg
 
-let private notifyPayeeOfPaymentDecline
-   (payment: PaymentRequested)
-   (emailRef: IActorRef<EmailMessage>)
-   =
+let private notifyPayeeOfPaymentDecline (payment: PaymentRequested) emailRef =
    let shared = payment.SharedDetails
 
    let msg =
@@ -388,10 +306,7 @@ let private notifyPayeeOfPaymentDecline
 
    emailRef <! msg
 
-let private remindPayerOfPaymentRequest
-   (payment: PaymentRequested)
-   (emailRef: IActorRef<EmailMessage>)
-   =
+let private remindPayerOfPaymentRequest (payment: PaymentRequested) emailRef =
    let shared = payment.SharedDetails
    let corrId = PaymentRequestId.toCorrelationId shared.Id
 
@@ -421,7 +336,7 @@ let private remindPayerOfPaymentRequest
 
 let onStartEventPersisted
    (saga: PaymentRequestSaga)
-   (getEmailRef: unit -> IActorRef<EmailMessage>)
+   (registry: #IEmailActor)
    (sendEventToPaymentSaga:
       OrgId -> PaymentRequestId -> PaymentRequestSagaEvent -> unit)
    (evt: StartEvent)
@@ -429,7 +344,7 @@ let onStartEventPersisted
    match evt with
    | StartEvent.PaymentRequested e ->
       if saga.NotifyPayerOfRequest then
-         notifyPayerOfPaymentRequest (getEmailRef ()) e.Data
+         notifyPayerOfPaymentRequest (registry.EmailActor()) e.Data
 
       e.Data.RecurringPaymentReference
       |> Option.iter (fun info ->
@@ -438,22 +353,20 @@ let onStartEventPersisted
             info.OriginPaymentId
             PaymentRequestSagaEvent.PaymentSagaStartedForNextRecurringPayment)
 
-type PersistenceHandlerDependencies = {
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
-   getPartnerBankServiceRef: unit -> IActorRef<PartnerBankServiceMessage>
+type OperationEnv = {
    sendEventToPaymentSaga:
       OrgId -> PaymentRequestId -> PaymentRequestSagaEvent -> unit
 }
 
 let onEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (registry: #IEmailActor & #IAccountActor)
+   (operationEnv: OperationEnv)
    (previousState: PaymentRequestSaga)
    (state: PaymentRequestSaga)
    (evt: Event)
    =
    let payment = state.PaymentInfo
-   let emailRef = dep.getEmailRef ()
+   let emailRef = registry.EmailActor()
 
    let scheduleNextRecurringPayment (dueDate: DateTime) =
       let nextPaymentRequestMsg =
@@ -461,7 +374,7 @@ let onEventPersisted
          |> AccountCommand.RequestPayment
          |> AccountMessage.StateChange
 
-      dep.getAccountRef payment.SharedDetails.Payee.ParentAccountId
+      registry.AccountActor payment.SharedDetails.Payee.ParentAccountId
       <! nextPaymentRequestMsg
 
    match evt with
@@ -484,7 +397,7 @@ let onEventPersisted
          | Activity.NotifyPayerOfRequest ->
             notifyPayerOfPaymentRequest emailRef payment
          | Activity.WaitForScheduledPaymentReminder _ ->
-            dep.sendEventToPaymentSaga
+            operationEnv.sendEventToPaymentSaga
                payment.SharedDetails.Payee.OrgId
                payment.SharedDetails.Id
                PaymentRequestSagaEvent.ScheduledPaymentReminderActivated

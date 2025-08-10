@@ -13,7 +13,6 @@
   <ItemGroup>
     <ProjectReference Include="../Database/Database.fsproj" />
     <ProjectReference Include="../Lib/Lib.fsproj" />
-    <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
-    <ProjectReference Include="../Saga.App/Saga.App.fsproj" />
+    <ProjectReference Include="../Lib.CrossCutting/Lib.CrossCutting.fsproj" />
   </ItemGroup>
 </Project>

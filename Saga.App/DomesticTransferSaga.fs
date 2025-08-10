@@ -2,121 +2,20 @@ module DomesticTransferSaga
 
 open System
 open Akkling
-open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Email
 open Lib.Saga
-open Bank.Scheduler
 open TransferMessages
+open DomesticTransferSaga
+open BankActorRegistry
 
 type private ServiceMessage = DomesticTransferServiceMessage
 
 type private ServiceAction =
    DomesticTransfer.Service.Domain.DomesticTransferServiceAction
-
-[<RequireQualifiedAccess>]
-type DomesticTransferSagaStartEvent =
-   | SenderReservedFunds of BankEvent<DomesticTransferPending>
-   | ScheduleTransferRequest of BankEvent<DomesticTransferScheduled>
-
-[<RequireQualifiedAccess>]
-type DomesticTransferSagaEvent =
-   | ScheduledTransferActivated
-   | SenderReservedFunds
-   | SenderReleasedReservedFunds
-   | TransferProcessorProgressUpdate of DomesticTransferThirdPartyUpdate
-   | SenderDeductedFunds
-   | TransferInitiatedNotificationSent
-   | RetryTransferServiceRequest of
-      updatedRecipient: DomesticTransferRecipient option
-   | SenderUnableToReserveFunds of DomesticTransferFailReason
-   | EvaluateRemainingWork
-   | ResetInProgressActivityAttempts
-
-[<RequireQualifiedAccess; CustomEquality; NoComparison>]
-type Activity =
-   | WaitForScheduledTransferActivation of TimeSpan
-   | ReserveSenderFunds
-   | ReleaseSenderReservedFunds
-   | TransferServiceAck
-   | WaitForTransferServiceComplete
-   | DeductSenderFunds
-   | SendTransferInitiatedNotification
-   | WaitForDevelopmentTeamFix
-
-   interface IActivity with
-      member x.MaxAttempts =
-         match x with
-         | WaitForScheduledTransferActivation _
-         | WaitForDevelopmentTeamFix -> 0
-         // Check every 4 hours, 6 times a day for 6 days.
-         | WaitForTransferServiceComplete -> 36
-         | _ -> 3
-
-      member x.InactivityTimeout =
-         match x with
-         | WaitForScheduledTransferActivation time -> Some time
-         | WaitForDevelopmentTeamFix -> None
-         | WaitForTransferServiceComplete ->
-            Some(
-               if Env.isProd then
-                  TimeSpan.FromHours 4.
-               else
-                  TimeSpan.FromMinutes 1.
-            )
-         | TransferServiceAck
-         | SendTransferInitiatedNotification -> Some(TimeSpan.FromMinutes 4.)
-         | ReserveSenderFunds
-         | ReleaseSenderReservedFunds
-         | DeductSenderFunds -> Some(TimeSpan.FromSeconds 5.)
-
-   // Custom equality check so we can, for example, check for completeness
-   // of WaitForScheduledTransferActivation without comparing the inner value.
-   // Ex: activityIsDone (Activity.WaitForScheduledTransferActivation TimeSpan.Zero)
-   override x.Equals compareTo =
-      match compareTo with
-      | :? Activity as compareTo -> x.GetHashCode() = compareTo.GetHashCode()
-      | _ -> false
-
-   override x.GetHashCode() =
-      match x with
-      | WaitForScheduledTransferActivation _ ->
-         hash "WaitForScheduledTransferActivation"
-      | _ -> hash (string x)
-
-type DomesticTransferSaga = {
-   StartEvent: DomesticTransferSagaStartEvent
-   Events: DomesticTransferSagaEvent list
-   Status: DomesticTransferProgress
-   TransferInfo: BaseDomesticTransferInfo
-   ExpectedSettlementDate: DateTime
-   LifeCycle: SagaLifeCycle<Activity>
-   ReasonForRetryServiceAck: DomesticTransferFailReason option
-} with
-
-   member x.OriginatedFromSchedule = x.StartEvent.IsScheduleTransferRequest
-
-   member x.SenderDeductedFunds =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsDeductSenderFunds
-
-   member x.TransferInitiatedNotificationSent =
-      x.LifeCycle.Completed
-      |> List.exists _.Activity.IsSendTransferInitiatedNotification
-
-   member x.RequiresAccountRefund =
-      x.LifeCycle.InProgress
-      |> List.exists _.Activity.IsReleaseSenderReservedFunds
-
-   member x.RequiresTransferServiceDevelopmentFix =
-      x.LifeCycle.InProgress
-      |> List.exists _.Activity.IsWaitForDevelopmentTeamFix
-
-   member x.IsTransferSchedulingAwaitingActivation =
-      x.LifeCycle.InProgress
-      |> List.exists _.Activity.IsWaitForScheduledTransferActivation
 
 let applyStartEvent
    (start: DomesticTransferSagaStartEvent)
@@ -374,7 +273,7 @@ let stateTransition
       Ok(applyEvent saga evt timestamp)
 
 let onStartEventPersisted
-   (getDomesticTransferRef: unit -> IActorRef<ServiceMessage>)
+   (registry: #IDomesticTransferActor)
    (evt: DomesticTransferSagaStartEvent)
    =
    match evt with
@@ -384,21 +283,19 @@ let onStartEventPersisted
       let msg =
          ServiceMessage.TransferRequest(ServiceAction.TransferAck, transfer)
 
-      getDomesticTransferRef () <! msg
+      registry.DomesticTransferActor() <! msg
    | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ -> ()
 
-type PersistenceHandlerDependencies = {
-   getSchedulingRef: unit -> IActorRef<SchedulerMessage>
-   getDomesticTransferRef: unit -> IActorRef<ServiceMessage>
-   getAccountRef: ParentAccountId -> IEntityRef<AccountMessage>
-   getEmailRef: unit -> IActorRef<EmailMessage>
+type OperationEnv = {
    sendEventToSelf:
       BaseDomesticTransferInfo -> DomesticTransferSagaEvent -> unit
    logError: string -> unit
 }
 
 let onEventPersisted
-   (dep: PersistenceHandlerDependencies)
+   (registry:
+      #IDomesticTransferActor & #IAccountActor & #IEmailActor & #ISchedulerActor)
+   (operationEnv: OperationEnv)
    (previousState: DomesticTransferSaga)
    (currentState: DomesticTransferSaga)
    (evt: DomesticTransferSagaEvent)
@@ -432,19 +329,19 @@ let onEventPersisted
       let msg =
          cmd |> AccountCommand.DomesticTransfer |> AccountMessage.StateChange
 
-      dep.getAccountRef info.Sender.ParentAccountId <! msg
+      registry.AccountActor info.Sender.ParentAccountId <! msg
 
    let sendTransferToProcessorService () =
       let msg =
          ServiceMessage.TransferRequest(ServiceAction.TransferAck, transfer)
 
-      dep.getDomesticTransferRef () <! msg
+      registry.DomesticTransferActor() <! msg
 
    let checkOnTransferProgress () =
       let msg =
          ServiceMessage.TransferRequest(ServiceAction.ProgressCheck, transfer)
 
-      dep.getDomesticTransferRef () <! msg
+      registry.DomesticTransferActor() <! msg
 
    let updateTransferProgress (progress: DomesticTransferThirdPartyUpdate) =
       let cmd =
@@ -466,7 +363,7 @@ let onEventPersisted
          |> AccountCommand.UpdateDomesticTransferProgress
          |> AccountMessage.StateChange
 
-      dep.getAccountRef info.Sender.ParentAccountId <! msg
+      registry.AccountActor info.Sender.ParentAccountId <! msg
 
    let updateTransferAsComplete () =
       let cmd =
@@ -480,7 +377,7 @@ let onEventPersisted
          |> AccountCommand.SettleDomesticTransfer
          |> AccountMessage.StateChange
 
-      dep.getAccountRef info.Sender.ParentAccountId <! msg
+      registry.AccountActor info.Sender.ParentAccountId <! msg
 
    let sendTransferInitiatedEmail () =
       let emailMsg =
@@ -493,7 +390,7 @@ let onEventPersisted
                Amount = info.Amount
             })
 
-      dep.getEmailRef () <! emailMsg
+      registry.EmailActor() <! emailMsg
 
    let releaseSenderAccountReservedFunds reason =
       let msg =
@@ -504,7 +401,7 @@ let onEventPersisted
          |> AccountCommand.FailDomesticTransfer
          |> AccountMessage.StateChange
 
-      dep.getAccountRef info.Sender.ParentAccountId <! msg
+      registry.AccountActor info.Sender.ParentAccountId <! msg
 
    match evt with
    | DomesticTransferSagaEvent.ScheduledTransferActivated ->
@@ -528,7 +425,7 @@ let onEventPersisted
       | DomesticTransferThirdPartyUpdate.Settled -> updateTransferAsComplete ()
       | DomesticTransferThirdPartyUpdate.Failed reason ->
          if currentState.RequiresTransferServiceDevelopmentFix then
-            dep.logError $"Transfer API requires code update: {reason}"
+            operationEnv.logError $"Transfer API requires code update: {reason}"
 
             let msg =
                EmailMessage.create
@@ -536,7 +433,7 @@ let onEventPersisted
                   (TransferId.toCorrelationId info.TransferId)
                   (EmailInfo.ApplicationErrorRequiresSupport(string reason))
 
-            dep.getEmailRef () <! msg
+            registry.EmailActor() <! msg
          elif currentState.RequiresAccountRefund then
             DomesticTransferFailReason.ThirdParty reason
             |> releaseSenderAccountReservedFunds
@@ -563,7 +460,7 @@ let onEventPersisted
          | Activity.WaitForTransferServiceComplete -> checkOnTransferProgress ()
          | Activity.DeductSenderFunds -> updateTransferAsComplete ()
          | Activity.WaitForScheduledTransferActivation _ ->
-            dep.sendEventToSelf
+            operationEnv.sendEventToSelf
                currentState.TransferInfo
                DomesticTransferSagaEvent.ScheduledTransferActivated
          | Activity.WaitForDevelopmentTeamFix -> ()

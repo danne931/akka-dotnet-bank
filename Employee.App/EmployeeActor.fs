@@ -2,7 +2,6 @@
 module EmployeeActor
 
 open System
-open Akka.Actor
 open Akka.Persistence
 open Akka.Persistence.Extras
 open Akka.Delivery
@@ -15,17 +14,17 @@ open Lib.Types
 open ActorUtil
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open CardIssuer.Service.Domain
 open SignalRBroadcast
 open PurchaseSaga
 open EmployeeOnboardingSaga
 open CardSetupSaga
-open CardIssuer.Service.Domain
+open BankActorRegistry
 
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
    mailbox
-   (getSagaGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
+   (registry: #ISagaGuaranteedDeliveryActor)
    (employee: Employee)
    (cmd: EmployeeCommand)
    (err: Err)
@@ -66,11 +65,11 @@ let private handleValidationError
                purchaseInfo.OrgId
                purchaseInfo.CorrelationId
 
-      getSagaGuaranteedDeliveryRef () <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | None -> ()
 
 let private closeEmployeeCards
-   (cardIssuerServiceRef: IActorRef<CardIssuerMessage>)
+   (registry: #ICardIssuerServiceActor)
    (cards: Card seq)
    orgId
    corrId
@@ -78,7 +77,7 @@ let private closeEmployeeCards
    cards
    |> Seq.choose _.ThirdPartyProviderCardId
    |> Seq.iter (fun providerCardId ->
-      cardIssuerServiceRef
+      registry.CardIssuerServiceActor()
       <! CardIssuerMessage.CloseCard {
          ProviderCardId = providerCardId
          Metadata = {
@@ -88,10 +87,7 @@ let private closeEmployeeCards
       })
 
 let private onPersist
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getSagaGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
-   (getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>)
+   (registry: #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (mailbox: Eventsourced<obj>)
    (employee: Employee)
    evt
@@ -102,19 +98,19 @@ let private onPersist
          EmployeeOnboardingSagaStartEvent.AccountOwnerCreated e
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      getSagaGuaranteedDeliveryRef () <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.CreatedEmployee e ->
       let msg =
          EmployeeOnboardingSagaStartEvent.EmployeeCreated e
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      getSagaGuaranteedDeliveryRef () <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.AccessApproved e ->
       let msg =
          EmployeeOnboardingSagaEvent.AccessApproved
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      registry.SagaActor e.CorrelationId <! msg
    | EmployeeEvent.AccessRestored e ->
       let msg =
          EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored {|
@@ -125,26 +121,26 @@ let private onPersist
          |}
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      getSagaGuaranteedDeliveryRef () <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.InvitationTokenRefreshed e ->
       let msg =
          e.Data.InviteToken
          |> EmployeeOnboardingSagaEvent.InviteTokenRefreshed
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      registry.SagaActor e.CorrelationId <! msg
    | EmployeeEvent.InvitationCancelled e ->
       let msg =
          EmployeeOnboardingSagaEvent.InviteCancelled e.Data.Reason
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      registry.SagaActor e.CorrelationId <! msg
    | EmployeeEvent.InvitationConfirmed e ->
       let msg =
          EmployeeOnboardingSagaEvent.InviteConfirmed
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      registry.SagaActor e.CorrelationId <! msg
    | EmployeeEvent.CreatedCard e ->
       match e.Data.Card.Status with
       | CardStatus.Pending ->
@@ -155,19 +151,19 @@ let private onPersist
                EmployeeEmail = employee.Email
             }
 
-         getSagaGuaranteedDeliveryRef () <! msg
+         registry.SagaGuaranteedDeliveryActor() <! msg
       | CardStatus.Active ->
          let msg =
             EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee
             |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
 
-         getSagaRef e.CorrelationId <! msg
+         registry.SagaActor e.CorrelationId <! msg
       | _ -> ()
    | EmployeeEvent.UpdatedRole e ->
       match e.Data.Role, e.Data.CardInfo with
       | Role.Scholar, _ ->
          closeEmployeeCards
-            (getCardIssuerServiceRef ())
+            registry
             employee.Cards.Values
             e.OrgId
             e.CorrelationId
@@ -196,33 +192,30 @@ let private onPersist
          CardSetupSagaEvent.ProviderCardIdLinked
          |> AppSaga.Message.cardSetup e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      registry.SagaActor e.CorrelationId <! msg
    | EmployeeEvent.PurchasePending e ->
       let msg =
          PurchaseSagaStartEvent.PurchaseIntent e.Data.Info
          |> AppSaga.Message.purchaseStart e.OrgId e.CorrelationId
 
-      getSagaGuaranteedDeliveryRef () <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.PurchaseSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettledWithCard
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      registry.SagaActor e.CorrelationId <! msg
    | EmployeeEvent.PurchaseFailed e ->
       let msg =
          PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
-      getSagaRef e.CorrelationId <! msg
+      registry.SagaActor e.CorrelationId <! msg
    | _ -> ()
 
 let actorProps
+   registry
    (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getSagaGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
-   (getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>)
    (guaranteedDeliveryConsumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<EmployeeMessage>>)
    =
@@ -237,11 +230,7 @@ let actorProps
          let employee = state.Info
 
          let handleValidationError =
-            handleValidationError
-               broadcaster
-               mailbox
-               getSagaGuaranteedDeliveryRef
-               employee
+            handleValidationError broadcaster mailbox registry employee
 
          match box msg with
          | Deferred mailbox (:? EmployeeEvent as evt)
@@ -251,13 +240,7 @@ let actorProps
 
             broadcaster.employeeEventPersisted evt employee
 
-            onPersist
-               getSagaRef
-               getSagaGuaranteedDeliveryRef
-               getCardIssuerServiceRef
-               mailbox
-               employee
-               evt
+            onPersist registry mailbox employee evt
 
             return! loop <| Some state
          | :? SnapshotOffer as o -> return! loop <| Some(unbox o.Snapshot)
@@ -370,43 +353,15 @@ let actorProps
 
    propsPersist handler
 
-let get
-   (sys: ActorSystem)
-   (employeeId: EmployeeId)
-   : IEntityRef<EmployeeMessage>
-   =
-   getEntityRef
-      sys
-      ClusterMetadata.employeeShardRegion
-      (EmployeeId.get employeeId)
-
-let getGuaranteedDeliveryProducerRef
-   (system: ActorSystem)
-   : IActorRef<GuaranteedDelivery.Message<EmployeeMessage>>
-   =
-   typed
-   <| Akka.Hosting.ActorRegistry
-      .For(system)
-      .Get<ActorUtil.ActorMetadata.EmployeeGuaranteedDeliveryProducerMarker>()
-
 let initProps
+   registry
+   (broadcaster: SignalRBroadcast)
    (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (persistenceId: string)
-   (broadcaster: SignalRBroadcast)
-   (getSagaRef: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
-   (getSagaGuaranteedDeliveryRef:
-      unit -> IActorRef<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>)
-   (getCardIssuerServiceRef: unit -> IActorRef<CardIssuerMessage>)
    (consumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<EmployeeMessage>>)
    =
-   let childProps =
-      actorProps
-         broadcaster
-         getSagaRef
-         getSagaGuaranteedDeliveryRef
-         getCardIssuerServiceRef
-         consumerControllerRef
+   let childProps = actorProps registry broadcaster consumerControllerRef
 
    PersistenceSupervisor.create {
       EnvConfig = supervisorEnvConfig

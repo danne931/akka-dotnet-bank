@@ -2,7 +2,6 @@ module Bank.CommandApproval.Api
 
 open System
 open Akkling
-open Akka.Actor
 open FsToolkit.ErrorHandling
 open System.Threading.Tasks
 
@@ -11,13 +10,11 @@ open Lib.SharedTypes
 open Bank.Org.Domain
 open Bank.Employee.Domain
 open CommandApproval
+open BankActorRegistry
 
 open CommandApprovalRuleSqlMapper
 
-type private ApproverDB = {
-   Name: string
-   EmployeeId: System.Guid
-}
+type private ApproverDB = { Name: string; EmployeeId: Guid }
 
 let getApprovalRules
    (orgId: OrgId)
@@ -174,13 +171,13 @@ let getCommandApprovals
 /// is attempting to submit a command above the configured daily limit for that
 /// command (as specified in an org's configured command approval rules).
 let getTodaysCommandApprovalDailyAccrualByInitiatedBy
-   (system: ActorSystem)
+   (registry: #IOrgActor)
    (orgId: OrgId)
    (initiatedById: InitiatedById)
    : Task<CommandApprovalDailyAccrual>
    =
    task {
-      let ref = OrgActor.get system orgId
+      let ref = registry.OrgActor orgId
 
       let! accrual =
          ref.Ask(

@@ -165,7 +165,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? Option<Employee> -> "EmployeeOption"
       | :? EmployeeMessage -> "EmployeeMessage"
       | :? EmployeeEvent -> "EmployeeEvent"
-      | :? SagaAlarmClockActor.Message -> "SagaAlarmClockMessage"
+      | :? AppSaga.SagaAlarmClockMessage -> "SagaAlarmClockMessage"
       | :? AppSaga.AppSagaMessage -> "AppSagaMessage"
       | :? AppSaga.AppSagaPersistableEvent -> "AppSagaEvent"
       | :? AppSaga.Saga -> "AppSagaSnapshot"
@@ -292,7 +292,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       // AppSagaActor persistence snapshot.
       | :? AppSaga.Saga
       // Messages from SchedulingActor to Saga.App/SagaAlarmClockActor
-      | :? SagaAlarmClockActor.Message
+      | :? AppSaga.SagaAlarmClockMessage
       // Messages from SchedulingActor to ScheduledTransfersLowBalanceWarningActor
       | :? ScheduledTransfersLowBalanceMessage
       // OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy response
@@ -373,7 +373,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AppSagaEvent" -> typeof<AppSaga.AppSagaPersistableEvent>
          | "AppSagaShardEnvelope" -> typeof<AppSagaShardEnvelope>
          | "AppSagaSnapshot" -> typeof<AppSaga.Saga>
-         | "SagaAlarmClockMessage" -> typeof<SagaAlarmClockActor.Message>
+         | "SagaAlarmClockMessage" -> typeof<AppSaga.SagaAlarmClockMessage>
          | "ScheduledTransfersLowBalanceMessage" ->
             typeof<ScheduledTransfersLowBalanceMessage>
          | "SignalRMessage" -> typeof<SignalRActor.Msg>

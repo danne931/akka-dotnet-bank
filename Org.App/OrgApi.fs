@@ -13,6 +13,7 @@ open Bank.Org.Domain
 open Bank.Transfer.Domain
 open TransactionMerchantSqlMapper
 open CommandApproval
+open BankActorRegistry
 
 module Fields = OrganizationSqlMapper.OrgFields
 module Reader = OrganizationSqlMapper.OrgSqlReader
@@ -20,44 +21,48 @@ module Writer = OrganizationSqlMapper.OrgSqlWriter
 module TypeCast = OrganizationSqlMapper.OrgTypeCast
 let table = OrganizationSqlMapper.table
 
-let processCommand (system: ActorSystem) (command: OrgCommand) = taskResult {
-   let validation =
-      match command with
-      | OrgCommand.SubmitOnboardingApplication cmd ->
-         SubmitOrgOnboardingApplicationCommand.toEvent cmd
-         |> Result.map OrgEnvelope.get
-      | OrgCommand.ConfigureApprovalRule cmd ->
-         CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
-         |> Result.map OrgEnvelope.get
-      | OrgCommand.DeleteApprovalRule cmd ->
-         CommandApprovalRule.DeleteApprovalRuleCommand.toEvent cmd
-         |> Result.map OrgEnvelope.get
-      | OrgCommand.RequestCommandApproval cmd ->
-         CommandApprovalProgress.RequestCommandApproval.toEvent cmd
-         |> Result.map OrgEnvelope.get
-      | OrgCommand.AcquireCommandApproval cmd ->
-         CommandApprovalProgress.AcquireCommandApproval.toEvent cmd
-         |> Result.map OrgEnvelope.get
-      | OrgCommand.DeclineCommandApproval cmd ->
-         CommandApprovalProgress.DeclineCommandApproval.toEvent cmd
-         |> Result.map OrgEnvelope.get
-      | cmd ->
-         ValidationErrors.create "" [
-            $"Command processing not implemented for {cmd}"
-         ]
-         |> Error
+let processCommand
+   (registry: #IOrgGuaranteedDeliveryActor)
+   (command: OrgCommand)
+   =
+   taskResult {
+      let validation =
+         match command with
+         | OrgCommand.SubmitOnboardingApplication cmd ->
+            SubmitOrgOnboardingApplicationCommand.toEvent cmd
+            |> Result.map OrgEnvelope.get
+         | OrgCommand.ConfigureApprovalRule cmd ->
+            CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
+            |> Result.map OrgEnvelope.get
+         | OrgCommand.DeleteApprovalRule cmd ->
+            CommandApprovalRule.DeleteApprovalRuleCommand.toEvent cmd
+            |> Result.map OrgEnvelope.get
+         | OrgCommand.RequestCommandApproval cmd ->
+            CommandApprovalProgress.RequestCommandApproval.toEvent cmd
+            |> Result.map OrgEnvelope.get
+         | OrgCommand.AcquireCommandApproval cmd ->
+            CommandApprovalProgress.AcquireCommandApproval.toEvent cmd
+            |> Result.map OrgEnvelope.get
+         | OrgCommand.DeclineCommandApproval cmd ->
+            CommandApprovalProgress.DeclineCommandApproval.toEvent cmd
+            |> Result.map OrgEnvelope.get
+         | cmd ->
+            ValidationErrors.create "" [
+               $"Command processing not implemented for {cmd}"
+            ]
+            |> Error
 
-   let! envelope = validation |> Result.mapError Err.ValidationError
+      let! envelope = validation |> Result.mapError Err.ValidationError
 
-   let msg =
-      GuaranteedDelivery.message
-         (EntityId.get envelope.EntityId)
-         (OrgMessage.StateChange command)
+      let msg =
+         GuaranteedDelivery.message
+            (EntityId.get envelope.EntityId)
+            (OrgMessage.StateChange command)
 
-   OrgActor.getGuaranteedDeliveryProducerRef system <! msg
+      registry.OrgGuaranteedDeliveryActor() <! msg
 
-   return envelope
-}
+      return envelope
+   }
 
 type private OrgDBResult =
    | AccountProfilesWithOrg of (Org * AccountProfile) list option

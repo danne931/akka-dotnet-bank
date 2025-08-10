@@ -195,7 +195,8 @@ type PaymentRequestSummary = {
 
    static member private computeAnalytics
       (requests: PaymentRequest list)
-      : PaymentAnalytics =
+      : PaymentAnalytics
+      =
       List.fold
          (fun acc (payment: PaymentRequest) ->
             if payment.IsUnpaid then

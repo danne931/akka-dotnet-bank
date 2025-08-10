@@ -18,14 +18,21 @@ open Bank.Infrastructure
 open ActorUtil
 open SignalRBroadcast
 open TransferMessages
+open BankActorRegistry
 
 let builder = Env.builder
 
 LogInfra.start builder |> ignore
 
+builder.Services.AddSingleton<BankActorRegistry>(fun provider ->
+   let system = provider.GetRequiredService<ActorSystem>()
+   BankActorRegistry system)
+|> ignore
+
 builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
    let system = provider.GetRequiredService<ActorSystem>()
-   SignalRBroadcaster.init system)
+   let registry = provider.GetRequiredService<BankActorRegistry>()
+   SignalRBroadcaster.init system registry)
 |> ignore
 
 builder.Services.AddSingleton<OrgSettingsCache>(fun provider ->
@@ -41,8 +48,14 @@ builder.Services.AddSingleton<Lib.Queue.QueueConnectionDetails>(fun _ ->
    Lib.Queue.createConnection Env.config.QueueConnection)
 |> ignore
 
-let private getQueueConnection (provider: System.IServiceProvider) =
+let getQueueConnection (provider: System.IServiceProvider) =
    provider.GetRequiredService<Lib.Queue.QueueConnectionDetails>()
+
+let getBroadcaster (provider: System.IServiceProvider) =
+   provider.GetRequiredService<SignalRBroadcast>()
+
+let getActorRegistry (provider: System.IServiceProvider) =
+   provider.GetRequiredService<BankActorRegistry>()
 
 let journalOpts = AkkaInfra.getJournalOpts ()
 
@@ -112,11 +125,11 @@ builder.Services.AddAkka(
             fun system -> BankSerializer system
          )
          .WithDistributedPubSub(ClusterMetadata.roles.signalR)
-         .WithSingletonProxy<ActorMetadata.SchedulingMarker>(
+         .WithSingletonProxy<ActorMarker.Scheduling>(
             ActorMetadata.scheduling.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.scheduling)
          )
-         .WithShardRegion<ActorMetadata.OrgMarker>(
+         .WithShardRegion<ActorMarker.Org>(
             ClusterMetadata.orgShardRegion.name,
             (fun persistenceId ->
                let system = provider.GetRequiredService<ActorSystem>()
@@ -125,20 +138,12 @@ builder.Services.AddAkka(
                   system
                   (fun controllerRef ->
                      OrgActor.initProps
-                        (provider.GetRequiredService<SignalRBroadcast>())
+                        (getActorRegistry provider)
+                        (getBroadcaster provider)
                         // TODO: Create org-specific Environment file & replace
                         //       account env var here.
                         Env.config.AccountActorSupervisor
                         persistenceId
-                        (AppSaga.getEntityRef system)
-                        (fun () ->
-                           AppSaga.getGuaranteedDeliveryProducerRef system)
-                        (fun () ->
-                           AccountActor.getGuaranteedDeliveryProducerRef
-                              system)
-                        (fun () ->
-                           EmployeeActor.getGuaranteedDeliveryProducerRef
-                              system)
                         (typed controllerRef))),
             ClusterMetadata.orgShardRegion.messageExtractor,
             ShardOptions(
@@ -146,7 +151,7 @@ builder.Services.AddAkka(
                Role = ClusterMetadata.roles.org
             )
          )
-         .WithShardRegion<ActorMetadata.AccountMarker>(
+         .WithShardRegion<ActorMarker.Account>(
             ClusterMetadata.accountShardRegion.name,
             (fun persistenceId ->
                let system = provider.GetRequiredService<ActorSystem>()
@@ -155,16 +160,11 @@ builder.Services.AddAkka(
                   system
                   (fun controllerRef ->
                      AccountActor.initProps
-                        (provider.GetRequiredService<SignalRBroadcast>())
+                        (getActorRegistry provider)
+                        (getBroadcaster provider)
                         Env.config.AccountActorSupervisor
                         persistenceId
-                        BillingStatementActor.get
                         Bank.Transfer.Api.getDomesticTransfersRetryableUponRecipientCorrection
-                        (AppSaga.getEntityRef system)
-                        (fun () ->
-                           AppSaga.getGuaranteedDeliveryProducerRef system)
-                        EmailServiceActor.getProducer
-                        AccountClosureActor.get
                         (typed controllerRef))),
             ClusterMetadata.accountShardRegion.messageExtractor,
             ShardOptions(
@@ -172,7 +172,7 @@ builder.Services.AddAkka(
                Role = ClusterMetadata.roles.account
             )
          )
-         .WithShardRegion<ActorMetadata.EmployeeMarker>(
+         .WithShardRegion<ActorMarker.Employee>(
             ClusterMetadata.employeeShardRegion.name,
             (fun persistenceId ->
                let system = provider.GetRequiredService<ActorSystem>()
@@ -181,23 +181,21 @@ builder.Services.AddAkka(
                   system
                   (fun controllerRef ->
                      EmployeeActor.initProps
+                        (getActorRegistry provider)
+                        (getBroadcaster provider)
                         // TODO: Create employee-specific Environment file & replace
                         //       account env var here.
                         Env.config.AccountActorSupervisor
                         persistenceId
-                        (provider.GetRequiredService<SignalRBroadcast>())
-                        (AppSaga.getEntityRef system)
-                        (fun () ->
-                           AppSaga.getGuaranteedDeliveryProducerRef system)
-                        (fun () -> CardIssuerServiceActor.getProducer system)
                         (typed controllerRef))),
             ClusterMetadata.employeeShardRegion.messageExtractor,
             ShardOptions(Role = ClusterMetadata.roles.employee)
          )
-         .WithShardRegion<ActorMetadata.SagaMarker>(
+         .WithShardRegion<ActorMarker.Saga>(
             ClusterMetadata.sagaShardRegion.name,
             (fun persistenceId ->
                let system = provider.GetRequiredService<ActorSystem>()
+               let registry = getActorRegistry provider
 
                let orgSettingsCache =
                   provider.GetRequiredService<OrgSettingsCache>()
@@ -206,17 +204,8 @@ builder.Services.AddAkka(
                   system
                   (fun controllerRef ->
                      AppSaga.initProps
-                        system
+                        registry
                         orgSettingsCache
-                        (OrgActor.get system)
-                        (EmployeeActor.get system)
-                        (AccountActor.get system)
-                        EmailServiceActor.getProducer
-                        DomesticTransferServiceActor.getProducer
-                        SchedulingActor.get
-                        KnowYourCustomerServiceActor.getProducer
-                        PartnerBankServiceActor.getProducer
-                        CardIssuerServiceActor.getProducer
                         Env.config.AccountActorSupervisor
                         Env.config.SagaPassivateIdleEntityAfter
                         persistenceId
@@ -233,16 +222,16 @@ builder.Services.AddAkka(
          // messages from RabbitMq & interact with a third party business
          // verification API such as middesk.com.  It will notify the
          // OrgOnboardingSaga if the customer is in legal good standing.
-         .WithSingleton<ActorMetadata.KYCServiceMarker>(
+         .WithSingleton<ActorMarker.KYCService>(
             ActorMetadata.knowYourCustomer.Name,
             (fun system _ _ ->
                KnowYourCustomerServiceActor.initProps
+                  (getActorRegistry provider)
                   (getQueueConnection provider)
                   EnvOrg.config.KnowYourCustomerServiceQueue
                   Env.config.QueueConsumerStreamBackoffRestart
                   (EnvOrg.config.KnowYourCustomerServiceCircuitBreaker system)
-                  (provider.GetRequiredService<SignalRBroadcast>())
-                  (AppSaga.getEntityRef system)
+                  (getBroadcaster provider)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.org)
          )
@@ -250,33 +239,33 @@ builder.Services.AddAkka(
          // from RabbitMq & interact with a third party partner
          // bank API to sync transactions occuring on the platform.
          // It will notify relevant saga actors of syncing progress.
-         .WithSingleton<ActorMetadata.PartnerBankServiceMarker>(
+         .WithSingleton<ActorMarker.PartnerBankService>(
             ActorMetadata.partnerBankService.Name,
             (fun system _ _ ->
                PartnerBankServiceActor.initProps
+                  (getActorRegistry provider)
                   (getQueueConnection provider)
                   Env.config.PartnerBankServiceQueue
                   Env.config.QueueConsumerStreamBackoffRestart
                   (Env.config.PartnerBankServiceCircuitBreaker system)
-                  (provider.GetRequiredService<SignalRBroadcast>())
-                  (AppSaga.getEntityRef system)
+                  (getBroadcaster provider)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.CardIssuerServiceMarker>(
+         .WithSingleton<ActorMarker.CardIssuerService>(
             ActorMetadata.cardIssuerService.Name,
             (fun system _ _ ->
                CardIssuerServiceActor.initProps
+                  (getActorRegistry provider)
                   (getQueueConnection provider)
                   EnvEmployee.config.CardIssuerServiceQueue
                   Env.config.QueueConsumerStreamBackoffRestart
                   (EnvEmployee.config.cardIssuerServiceCircuitBreaker system)
-                  (provider.GetRequiredService<SignalRBroadcast>())
-                  (AppSaga.getEntityRef system)
+                  (getBroadcaster provider)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.employee)
          )
-         .WithSingleton<ActorMetadata.SagaAlarmClockMarker>(
+         .WithSingleton<ActorMarker.SagaAlarmClock>(
             ActorMetadata.sagaAlarmClock.Name,
             (fun system _ _ ->
                SagaAlarmClockActor.initProps
@@ -285,55 +274,52 @@ builder.Services.AddAkka(
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
          )
-         .WithSingleton<ActorMetadata.BillingCycleMarker>(
+         .WithSingleton<ActorMarker.BillingCycle>(
             ActorMetadata.billingCycle.Name,
             (fun system _ _ ->
                let typedProps =
                   BillingCycleActor.actorProps
+                     (getActorRegistry provider)
                      Env.config.BillingCycleFanoutThrottle
-                     (fun () ->
-                        AppSaga.getGuaranteedDeliveryProducerRef system)
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.AutoTransferSchedulingMarker>(
+         .WithSingleton<ActorMarker.AutoTransferScheduling>(
             ActorMetadata.autoTransferScheduling.Name,
             (fun system _ _ ->
                let typedProps =
                   AutomaticTransferSchedulingActor.initProps
+                     (getActorRegistry provider)
                      system
-                     (AccountActor.get system)
                      EnvTransfer.config.AutoTransferComputeThrottle
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.ScheduledTransfersLowBalanceWarningMarker>(
+         .WithSingleton<ActorMarker.ScheduledTransfersLowBalanceWarning>(
             ActorMetadata.scheduledTransfersLowBalanceWarning.Name,
             (fun system _ _ ->
                let typedProps =
                   ScheduledTransfersLowBalanceWarningActor.initProps
+                     (getActorRegistry provider)
                      system
-                     (fun () -> EmailServiceActor.getProducer system)
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.AccountClosureMarker>(
+         .WithSingleton<ActorMarker.AccountClosure>(
             ActorMetadata.accountClosure.Name,
             (fun system _ _ ->
                let typedProps =
                   AccountClosureActor.initProps
-                     (AccountActor.get system)
-                     EmailServiceActor.getProducer
-                     SchedulingActor.get
+                     (getActorRegistry provider)
                      Env.config.AccountDeleteThrottle
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.OrgReadModelSyncMarker>(
+         .WithSingleton<ActorMarker.OrgReadModelSync>(
             ActorMetadata.orgReadModelSync.Name,
             (fun _ _ _ ->
                let typedProps =
@@ -347,7 +333,7 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.org)
          )
-         .WithSingleton<ActorMetadata.AccountReadModelSyncMarker>(
+         .WithSingleton<ActorMarker.AccountReadModelSync>(
             ActorMetadata.accountReadModelSync.Name,
             (fun _ _ _ ->
                let typedProps =
@@ -359,7 +345,7 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.EmployeeReadModelSyncMarker>(
+         .WithSingleton<ActorMarker.EmployeeReadModelSync>(
             ActorMetadata.employeeReadModelSync.Name,
             (fun _ _ _ ->
                let typedProps =
@@ -373,7 +359,7 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.employee)
          )
-         .WithSingleton<ActorMetadata.SagaReadModelSyncMarker>(
+         .WithSingleton<ActorMarker.SagaReadModelSync>(
             ActorMetadata.sagaReadModelSync.Name,
             (fun system _ _ ->
                let typedProps =
@@ -389,7 +375,7 @@ builder.Services.AddAkka(
             ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
          )
          // TODO: Do more than just printing dead letter messages.
-         .WithSingleton<ActorMetadata.AuditorMarker>(
+         .WithSingleton<ActorMarker.Auditor>(
             ActorMetadata.auditor.Name,
             (fun system _ _ ->
                let handler (ctx: Actor<_>) =
@@ -415,21 +401,14 @@ builder.Services.AddAkka(
                (props handler).ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.AccountSeederMarker>(
+         .WithSingleton<ActorMarker.AccountSeeder>(
             ActorMetadata.accountSeeder.Name,
-            (fun system _ _ ->
-               AccountSeederActor.actorProps
-                  (fun () -> OrgActor.getGuaranteedDeliveryProducerRef system)
-                  (fun () ->
-                     AccountActor.getGuaranteedDeliveryProducerRef system)
-                  (fun () ->
-                     EmployeeActor.getGuaranteedDeliveryProducerRef system)
-                  (AccountActor.get system)
-                  (EmployeeActor.get system)
+            (fun _ _ _ ->
+               AccountSeederActor.actorProps (getActorRegistry provider)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMetadata.CircuitBreakerMarker>(
+         .WithSingleton<ActorMarker.CircuitBreaker>(
             ActorMetadata.circuitBreaker.Name,
             (fun _ _ _ ->
                CircuitBreakerActor.initProps
@@ -437,27 +416,29 @@ builder.Services.AddAkka(
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          // Consume EmailMessages off of RabbitMq
-         .WithSingleton<ActorMetadata.EmailMarker>(
+         .WithSingleton<ActorMarker.Email>(
             ActorMetadata.email.Name,
             (fun system _ _ ->
                EmailServiceActor.initProps
                   (provider.GetRequiredService<OrgSettingsCache>())
                   (EnvNotifications.config.circuitBreaker system)
-                  (provider.GetRequiredService<SignalRBroadcast>())
+                  (getBroadcaster provider)
                   (getQueueConnection provider)
                   EnvNotifications.config.Queue
                   Env.config.QueueConsumerStreamBackoffRestart
                   EnvNotifications.config.EmailBearerToken
-                  (AppSaga.getEntityRef system)
+                  (getActorRegistry provider)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          // Forward Email messages from web node to EmailProducer actors.
-         .WithSingleton<ActorMetadata.EmailProxyMarker>(
+         .WithSingleton<ActorMarker.EmailProxy>(
             ActorMetadata.emailProxy.Name,
             (fun system _ _ ->
+               let registry: IEmailActor = getActorRegistry provider
+
                (fun (msg: Email.EmailMessage) ->
-                  EmailServiceActor.getProducer system <<! msg
+                  registry.EmailActor() <<! msg
                   ignored ())
                |> actorOf
                |> props
@@ -465,34 +446,34 @@ builder.Services.AddAkka(
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          // Consume DomesticTransferMessages off of RabbitMq
-         .WithSingleton<ActorMetadata.DomesticTransferMarker>(
+         .WithSingleton<ActorMarker.DomesticTransfer>(
             ActorMetadata.domesticTransfer.Name,
             (fun system _ _ ->
                DomesticTransferServiceActor.initProps
+                  (getActorRegistry provider)
                   (getQueueConnection provider)
                   EnvTransfer.config.Queue
                   Env.config.QueueConsumerStreamBackoffRestart
                   (EnvTransfer.config.domesticTransferCircuitBreaker system)
-                  (provider.GetRequiredService<SignalRBroadcast>())
-                  (AppSaga.getEntityRef system)
+                  (getBroadcaster provider)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          .WithActors(fun system registry ->
-            registry.Register<ActorMetadata.BillingStatementMarker>(
+            registry.Register<ActorMarker.BillingStatement>(
                BillingStatementActor.start
                   system
                   Env.config.BillingStatementPersistenceChunking
                   Env.config.BillingStatementPersistenceBackoffRestart
                   Env.config.BillingStatementRetryPersistenceAfter
-                  (fun () -> AppSaga.getGuaranteedDeliveryProducerRef system)
+                  (getActorRegistry provider)
                |> untyped
             )
 
             // OrgOnboarding saga will send a know-your-customer verification
             // message to this actor which will enqueue the message into RabbitMq
             // for the KnowYourCustomerService singleton actor to process.
-            registry.Register<ActorMetadata.KYCServiceProducerMarker>(
+            registry.Register<ActorMarker.KYCServiceProducer>(
                Lib.Queue.startProducer<KYCMessage>
                   system
                   (getQueueConnection provider)
@@ -503,7 +484,7 @@ builder.Services.AddAkka(
 
             // Enqueues messages into RabbitMq for the PartnerBankService
             // singleton actor to process.
-            registry.Register<ActorMetadata.PartnerBankServiceProducerMarker>(
+            registry.Register<ActorMarker.PartnerBankServiceProducer>(
                Lib.Queue.startProducer<PartnerBankServiceMessage>
                   system
                   (getQueueConnection provider)
@@ -514,7 +495,7 @@ builder.Services.AddAkka(
 
             // Enqueues messages into RabbitMq for the CardIssuerService
             // singleton actor to process.
-            registry.Register<ActorMetadata.CardIssuerServiceProducerMarker>(
+            registry.Register<ActorMarker.CardIssuerServiceProducer>(
                Lib.Queue.startProducer<CardIssuerMessage>
                   system
                   (getQueueConnection provider)
@@ -526,7 +507,7 @@ builder.Services.AddAkka(
             // Other actors in the system send EmailMessages to this actor
             // which will enqueue the message into RabbitMq for the
             // EmailService Singleton Actor to process.
-            registry.Register<ActorMetadata.EmailProducerMarker>(
+            registry.Register<ActorMarker.EmailProducer>(
                Lib.Queue.startProducer<Email.EmailMessage>
                   system
                   (getQueueConnection provider)
@@ -538,7 +519,7 @@ builder.Services.AddAkka(
             // Other actors in the system send DomesticTransferMessages to this actor
             // which will enqueue the message into RabbitMq for the
             // DomesticTransferService Singleton Actor to process.
-            registry.Register<ActorMetadata.DomesticTransferProducerMarker>(
+            registry.Register<ActorMarker.DomesticTransferProducer>(
                Lib.Queue.startProducer<DomesticTransferServiceMessage>
                   system
                   (getQueueConnection provider)
@@ -547,45 +528,37 @@ builder.Services.AddAkka(
                |> untyped
             )
 
-            registry.Register<
-               ActorMetadata.SagaGuaranteedDeliveryProducerMarker
-             >(
+            registry.Register<ActorMarker.SagaGuaranteedDeliveryProducer>(
                GuaranteedDelivery.producer<AppSaga.AppSagaMessage> {
                   System = system
-                  ShardRegion = registry.Get<ActorMetadata.SagaMarker>()
+                  ShardRegion = registry.Get<ActorMarker.Saga>()
                   ProducerName = "bank-to-saga-actor"
                }
                |> untyped
             )
 
-            registry.Register<
-               ActorMetadata.OrgGuaranteedDeliveryProducerMarker
-             >(
+            registry.Register<ActorMarker.OrgGuaranteedDeliveryProducer>(
                GuaranteedDelivery.producer<OrgMessage> {
                   System = system
-                  ShardRegion = registry.Get<ActorMetadata.OrgMarker>()
+                  ShardRegion = registry.Get<ActorMarker.Org>()
                   ProducerName = "bank-to-org-actor"
                }
                |> untyped
             )
 
-            registry.Register<
-               ActorMetadata.AccountGuaranteedDeliveryProducerMarker
-             >(
+            registry.Register<ActorMarker.AccountGuaranteedDeliveryProducer>(
                GuaranteedDelivery.producer<AccountMessage> {
                   System = system
-                  ShardRegion = registry.Get<ActorMetadata.AccountMarker>()
+                  ShardRegion = registry.Get<ActorMarker.Account>()
                   ProducerName = "bank-to-account-actor"
                }
                |> untyped
             )
 
-            registry.Register<
-               ActorMetadata.EmployeeGuaranteedDeliveryProducerMarker
-             >(
+            registry.Register<ActorMarker.EmployeeGuaranteedDeliveryProducer>(
                GuaranteedDelivery.producer<EmployeeMessage> {
                   System = system
-                  ShardRegion = registry.Get<ActorMetadata.EmployeeMarker>()
+                  ShardRegion = registry.Get<ActorMarker.Employee>()
                   ProducerName = "bank-to-employee-actor"
                }
                |> untyped
