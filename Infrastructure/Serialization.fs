@@ -168,7 +168,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? AppSaga.SagaAlarmClockMessage -> "SagaAlarmClockMessage"
       | :? AppSaga.AppSagaMessage -> "AppSagaMessage"
       | :? AppSaga.AppSagaPersistableEvent -> "AppSagaEvent"
-      | :? AppSaga.Saga -> "AppSagaSnapshot"
+      | :? AppSaga.Saga -> "AppSaga"
+      | :? Option<AppSaga.Saga> -> "AppSagaSnapshot"
       | :? ScheduledTransfersLowBalanceMessage ->
          "ScheduledTransfersLowBalanceMessage"
       | :? AccountLoadTestTypes.AccountLoadTestMessage ->
@@ -289,8 +290,9 @@ type BankSerializer(system: ExtendedActorSystem) =
          JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       // Saga event persistence
       | :? AppSaga.AppSagaPersistableEvent
-      // AppSagaActor persistence snapshot.
       | :? AppSaga.Saga
+      // AppSagaActor persistence snapshot.
+      | :? Option<AppSaga.Saga>
       // Messages from SchedulingActor to Saga.App/SagaAlarmClockActor
       | :? AppSaga.SagaAlarmClockMessage
       // Messages from SchedulingActor to ScheduledTransfersLowBalanceWarningActor
@@ -372,7 +374,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AppSagaMessage" -> typeof<AppSaga.AppSagaMessage>
          | "AppSagaEvent" -> typeof<AppSaga.AppSagaPersistableEvent>
          | "AppSagaShardEnvelope" -> typeof<AppSagaShardEnvelope>
-         | "AppSagaSnapshot" -> typeof<AppSaga.Saga>
+         | "AppSaga" -> typeof<AppSaga.Saga>
+         | "AppSagaSnapshot" -> typeof<AppSaga.Saga option>
          | "SagaAlarmClockMessage" -> typeof<AppSaga.SagaAlarmClockMessage>
          | "ScheduledTransfersLowBalanceMessage" ->
             typeof<ScheduledTransfersLowBalanceMessage>
