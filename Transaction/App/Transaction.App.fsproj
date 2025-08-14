@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="HistoryApi.fs" />
+    <Compile Include="TransactionApi.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Cluster.Hosting" />
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Persistence.Extras" />
+    <PackageReference Include="Akkling" />
+    <PackageReference Include="Akkling.Cluster.Sharding" />
+    <PackageReference Include="Akkling.Persistence" />
+    <PackageReference Include="FSharp.Control.TaskSeq" />
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="Validus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Database/Database.fsproj" />
+    <ProjectReference Include="../../Lib/Server/Lib.Server.fsproj" />
+    <ProjectReference Include="../../Scheduler/Domain/Scheduler.Domain.fsproj" />
+    <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../../Billing/Domain/Billing.Domain.fsproj" />
+    <ProjectReference Include="../../Employee/Domain/Employee.Domain.fsproj" />
+    <ProjectReference Include="../../Account/Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Domain/Transaction.Domain.fsproj" />
+  </ItemGroup>
+</Project>

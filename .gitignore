@@ -2,8 +2,8 @@
 **/*obj
 UI/dist
 UI/node_modules
-Test.SharedClientServer/dist
-Test.SharedClientServer/node_modules
+Test/SharedClientServer/dist
+Test/SharedClientServer/node_modules
 
 # Ensure an empty wwwroot directory exists in git but not the contents.
 Web/wwwroot/*
@@ -11,11 +11,11 @@ Web/wwwroot/*
 
 Web/logs.json
 Web/snapshots/*
-Account.Service/ddata-*
-Account.Service/snapshots/*
-Account.Service/logs.json
-Account.Service/phoenix-banking-persisted-crdts/*
-Scheduler.Service/snapshots/*
+Account/Service/ddata-*
+Account/Service/snapshots/*
+Account/Service/logs.json
+Account/Service/phoenix-banking-persisted-crdts/*
+Scheduler/Service/snapshots/*
 Deploy/K8s/node_modules/*
 Deploy/Azure/node_modules/*
 Deploy/K8s/Pulumi.k8s-local.yaml

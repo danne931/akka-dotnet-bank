@@ -19,7 +19,7 @@ export const ports = {
   akkaHealthCheckLiveness:
     config.getNumber('akkaHealthCheckLivenessPort') ?? 9999,
   petabridgeCmd: config.getNumber('petabridgeCmdPort') ?? 9110,
-  mockDomesticTransferProcessor: config.getNumber('mockDomesticTransferProcessorTcpBindPort') ?? 5007,
+  mockPartnerBank: config.getNumber('mockPartnerBankTcpBindPort') ?? 5007,
   postgres: config.getNumber('postgresPort') ?? 5432,
   webHttp: config.getNumber('webHttp') ?? 80
 }

@@ -3,7 +3,6 @@
     <Compile Include="Routes.fs" />
     <Compile Include="Logging.fs" />
     <Compile Include="Serialization.fs" />
-    <Compile Include="SignalR.fs" />
     <Compile Include="Akka.fs" />
   </ItemGroup>
 
@@ -23,13 +22,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Saga.Domain/Saga.Domain.fsproj" />
-    <ProjectReference Include="../Billing.Domain/Billing.Domain.fsproj" />
-    <ProjectReference Include="../Org.Domain/Org.Domain.fsproj" /> 
-    <ProjectReference Include="../Account.Domain/Account.Domain.fsproj" />
-    <ProjectReference Include="../Employee.Domain/Employee.Domain.fsproj" />
-    <ProjectReference Include="../Notifications.Domain/Notifications.Domain.fsproj" />
-    <ProjectReference Include="../Scheduler.Domain/Scheduler.Domain.fsproj" />
-    <ProjectReference Include="../SignalR.App/SignalR.App.fsproj" />
+    <ProjectReference Include="../Saga/Domain/Saga.Domain.fsproj" />
+    <ProjectReference Include="../Billing/Domain/Billing.Domain.fsproj" />
+    <ProjectReference Include="../Org/Domain/Org.Domain.fsproj" /> 
+    <ProjectReference Include="../Account/Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../Employee/Domain/Employee.Domain.fsproj" />
+    <ProjectReference Include="../Notifications/Domain/Notifications.Domain.fsproj" />
+    <ProjectReference Include="../Scheduler/Domain/Scheduler.Domain.fsproj" />
+    <ProjectReference Include="../SignalR/App/SignalR.App.fsproj" />
   </ItemGroup>
 </Project>

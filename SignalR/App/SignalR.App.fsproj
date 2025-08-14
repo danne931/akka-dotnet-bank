@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Infra.fs" />
+    <Compile Include="Hub.fs" />
+    <Compile Include="Actor.fs" />
+    <Compile Include="Broadcaster.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
+    <ProjectReference Include="../../Lib/Server/Lib.Server.fsproj" />
+    <ProjectReference Include="../Domain/SignalR.Domain.fsproj" />
+  </ItemGroup>
+</Project>

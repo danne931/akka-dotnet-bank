@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Api.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Database/Database.fsproj" />
+    <ProjectReference Include="../Domain/Payment.Domain.fsproj" />
+  </ItemGroup>
+</Project>

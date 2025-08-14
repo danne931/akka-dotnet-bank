@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Environment.fs" />
+    <Compile Include="EmailServiceActor.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Streams.Amqp.RabbitMq" />
+    <PackageReference Include="Akkling" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Database/Database.fsproj" />
+    <ProjectReference Include="../../Lib/Server/Lib.Server.fsproj" />
+    <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
+    <ProjectReference Include="../../SignalR/Domain/SignalR.Domain.fsproj" />
+  </ItemGroup>
+</Project>

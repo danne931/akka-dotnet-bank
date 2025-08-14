@@ -75,8 +75,7 @@ let dockerImageNameFromProject (fsproj: string) =
    | "Web" -> Some "web"
    | "Account.Service" -> Some "account"
    | "Scheduler.Service" -> Some "scheduler"
-   | "MockDomesticTransferProcessor.Web" ->
-      Some "mock-domestic-transfer-processor"
+   | "MockPartnerBank.Service" -> Some "mock-partner-bank"
    | _ -> None
 
 let buildImage (builder: ImageBuilder) fsprojPath =

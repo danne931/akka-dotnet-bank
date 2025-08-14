@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="CoreTypes.fs" />
+    <Compile Include="MaintenanceFee.fs" />
+    <Compile Include="Events.fs" />
+    <Compile Include="Commands.fs" />
+    <Compile Include="AggregateTypes.fs" />
+    <Compile Include="PartnerBankService.fs" /> 
+    <Compile Include="Account.fs" />
+    <Compile Include="ParentAccount.fs" /> 
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Validus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Lib/SharedClientServer/Lib.SharedClientServer.fsproj" /> 
+    <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../../Payment/Domain/Payment.Domain.fsproj" />
+  </ItemGroup>
+</Project>

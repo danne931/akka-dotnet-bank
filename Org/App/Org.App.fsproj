@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="Environment.fs" />
+    <Compile Include="OrgSettingsCache.fs" />
+    <Compile Include="CircuitBreakerActor.fs" />
+    <Compile Include="OrgReadModelSyncActor.fs" />
+    <Compile Include="KnowYourCustomerServiceActor.fs" />
+    <Compile Include="OrgActor.fs" />
+    <Compile Include="AnalyticsApi.fs" />
+    <Compile Include="CommandApprovalApi.fs" />
+    <Compile Include="OrgApi.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Cluster.Hosting" />
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Persistence.Extras" />
+    <PackageReference Include="Akkling" />
+    <PackageReference Include="Akkling.Cluster.Sharding" />
+    <PackageReference Include="Akkling.Persistence" />
+    <PackageReference Include="FSharp.Control.TaskSeq" />
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="Validus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Database/Database.fsproj" />
+    <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
+    <ProjectReference Include="../../SignalR/Domain/SignalR.Domain.fsproj" />
+  </ItemGroup>
+</Project>

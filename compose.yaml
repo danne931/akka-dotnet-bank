@@ -43,7 +43,7 @@ services:
       - ClusterDiscoveryStartup__Port=8558
       - PetabridgeCmdRemoting__Port=9111
       - ASPNETCORE_ENVIRONMENT=Development
-      - MockDomesticTransferProcessor__Port=5007
+      - MockPartnerBank__Port=5007
       - ConnectionStrings__Postgres=postgres://postgres:password@postgres/akkabank
       - ConnectionStrings__PostgresAdoFormat=Server=postgres;Database=akkabank;Uid=postgres;Pwd=password
       - EmailServiceUri=https://api.useplunk.com/v1/
@@ -69,7 +69,7 @@ services:
       - ClusterDiscoveryStartup__Port=8558
       - PetabridgeCmdRemoting__Port=9112
       - ASPNETCORE_ENVIRONMENT=Development
-      - MockDomesticTransferProcessor__Port=5007
+      - MockPartnerBank__Port=5007
       - ConnectionStrings__Postgres=postgres://postgres:password@postgres/akkabank
       - ConnectionStrings__PostgresAdoFormat=Server=postgres;Database=akkabank;Uid=postgres;Pwd=password
       - EmailServiceUri=https://api.useplunk.com/v1/
@@ -105,8 +105,8 @@ services:
       - QueueConnection__Username=test
       - QueueConnection__Password=test
       - QueueConnection__VirtualHost=/
-  mock-domestic-transfer-processor:
-    image: mock-domestic-transfer-processor:latest
+  mock-partner-bank:
+    image: mock-partner-bank:latest
     expose:
       - 5007
     environment:

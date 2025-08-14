@@ -6,7 +6,7 @@ import initRabbitMq from './rabbitmq'
 import { initBankEnvConfigMap, isDev } from './environment'
 import { initAccountCluster, initAccountService } from './account'
 import { initServiceAccount, initAkkaRBAC } from './admin'
-import { initMockDomesticTransferProcessorService, initMockDomesticTransferProcessorDeployment } from './mock-domestic-transfer-processor'
+import { initMockPartnerBankService, initMockPartnerBankDeployment } from './mock-partner-bank'
 import { initSchedulerCluster, initSchedulerService } from './scheduler'
 import { initWebCluster, initWebService, initLocalWebLoadBalancer, initIngress } from './web'
 
@@ -58,8 +58,8 @@ initRabbitMq(k8sProvider, namespace)
 const bankEnvConfigMap = initBankEnvConfigMap(k8sProvider)
 initServiceAccount(k8sProvider)
 initAkkaRBAC(k8sProvider)
-initMockDomesticTransferProcessorService(k8sProvider)
-initMockDomesticTransferProcessorDeployment(k8sProvider)
+initMockPartnerBankService(k8sProvider)
+initMockPartnerBankDeployment(k8sProvider)
 initAccountCluster(k8sProvider, bankEnvConfigMap)
 initAccountService(k8sProvider)
 initSchedulerCluster(k8sProvider, bankEnvConfigMap)

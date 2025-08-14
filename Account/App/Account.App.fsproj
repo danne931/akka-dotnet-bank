@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="AccountReadModelSyncActor.fs" />
+    <Compile Include="AccountClosureActor.fs" />
+    <Compile Include="PartnerBankServiceActor.fs" /> 
+    <Compile Include="AccountActor.fs" />
+    <Compile Include="AccountApi.fs" />
+    <Compile Include="AccountSeederActor.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.Cluster.Hosting" />
+    <PackageReference Include="Akka.Hosting" />
+    <PackageReference Include="Akka.Persistence.Extras" />
+    <PackageReference Include="Akkling" />
+    <PackageReference Include="Akkling.Cluster.Sharding" />
+    <PackageReference Include="Akkling.Persistence" />
+    <PackageReference Include="FSharp.Control.TaskSeq" />
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="Validus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Database/Database.fsproj" />
+    <ProjectReference Include="../../Scheduler/Domain/Scheduler.Domain.fsproj" />
+    <ProjectReference Include="../../Notifications/Domain/Notifications.Domain.fsproj" />
+    <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../../Billing/Domain/Billing.Domain.fsproj" />
+    <ProjectReference Include="../../Employee/Domain/Employee.Domain.fsproj" />
+    <ProjectReference Include="../Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../../Saga/Domain/Saga.Domain.fsproj" />
+    <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
+    <ProjectReference Include="../../SignalR/Domain/SignalR.Domain.fsproj" />
+  </ItemGroup>
+</Project>
