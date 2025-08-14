@@ -543,7 +543,12 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
       match orgCtx with
       | Deferred.Resolved(Ok(Some org)) ->
          React.suspense (
-            [ React.lazy' ((fun () -> importDynamic "./OrgSummary"), org) ],
+            [
+               React.lazy' (
+                  (fun () -> importDynamic "../Orgs/MetricsComponent"),
+                  org
+               )
+            ],
             Html.progress []
          )
       | _ -> ()

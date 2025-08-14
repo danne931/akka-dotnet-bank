@@ -305,7 +305,7 @@ let RegisterTransferRecipientFormComponent
                Html.div [
                   Html.ins [
                      attr.text msg
-                     attr.style [ style.color "var(--primary)" ]
+                     attr.style [ style.color Style.color.primary ]
                   ]
                ]
 

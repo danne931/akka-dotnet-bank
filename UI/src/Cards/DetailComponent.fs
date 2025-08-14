@@ -323,9 +323,9 @@ let CardDetailComponent
             let color =
                match card.Card.Status with
                | CardStatus.Frozen _
-               | CardStatus.Closed -> "var(--del-color)"
-               | CardStatus.Pending -> "var(--secondary)"
-               | CardStatus.Active -> "var(--primary)"
+               | CardStatus.Closed -> Style.color.alert
+               | CardStatus.Pending -> Style.color.secondary
+               | CardStatus.Active -> Style.color.primary
 
             attr.style [ style.color color ]
          ]

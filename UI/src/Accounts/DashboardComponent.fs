@@ -202,7 +202,8 @@ let AccountDashboardComponent (url: Routes.AccountUrl) (session: UserSession) =
                   [
                      React.lazy' (
                         fun () ->
-                           importDynamic "./AutomaticBalanceManagementDashboard"
+                           importDynamic
+                              "../AutoBalanceManagement/DashboardComponent"
                         , {|
                            Session = session
                            Accounts = org.Accounts

@@ -1,4 +1,4 @@
-module OrgSummary
+module OrgMetrics
 
 open Feliz
 open Fable.Core.JS
@@ -31,7 +31,7 @@ let private renderMoneyOut amount =
    Html.p [ attr.classes [ "debit" ]; attr.text (Money.formatShort amount) ]
 
 [<ReactComponent>]
-let OrgSummaryComponent (org: OrgWithAccountProfiles) =
+let OrgMetricsComponent (org: OrgWithAccountProfiles) =
    let isFading, setFading = React.useState false
    let flow, setFlow = React.useState MoneyFlow.Out
 
@@ -198,14 +198,14 @@ let OrgSummaryComponent (org: OrgWithAccountProfiles) =
 
          match monthlyMoneyFlow with
          | Deferred.Resolved(Ok(Some analytics)) ->
-            AnalyticsDashboard.render3MonthTimeSeriesChart
-               flow
-               analytics.TimeSeries
-               {| Height = 60; Width = 120 |}
+            TopMoneyFlow.render3MonthChart flow analytics.TimeSeries {|
+               Height = 60
+               Width = 120
+            |}
          | _ -> ()
       ]
    ]
 
 // Necessary for dynamic import resolution. (Component lazily loaded so
 // charting library fetched only when necessary.)
-Fable.Core.JsInterop.exportDefault OrgSummaryComponent
+Fable.Core.JsInterop.exportDefault OrgMetricsComponent

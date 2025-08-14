@@ -673,7 +673,7 @@ let TransactionDashboardComponent
          fun conf ->
             match conf with
             | EventPersistedConfirmation.Account conf ->
-               // Update context so OrgSummary component & account selection
+               // Update context so OrgMetrics component & account selection
                // form inputs are up to date with the latest balance & other
                // metrics info. Ensure we are using current account info when
                // attempting to initiate transactions against an account.
@@ -774,7 +774,12 @@ let TransactionDashboardComponent
       match orgCtx with
       | Deferred.Resolved(Ok(Some org)) ->
          React.suspense (
-            [ React.lazy' ((fun () -> importDynamic "./OrgSummary"), org) ],
+            [
+               React.lazy' (
+                  (fun () -> importDynamic "../Orgs/MetricsComponent"),
+                  org
+               )
+            ],
             Html.progress []
          )
       | _ -> ()

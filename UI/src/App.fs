@@ -65,7 +65,7 @@ let App () =
          React.suspense (
             [
                React.lazy' (
-                  fun () -> importDynamic "./Components/AnalyticsDashboard"
+                  fun () -> importDynamic "./Analytics/DashboardComponent"
                   , {| Session = session; Url = url |}
                )
             ],

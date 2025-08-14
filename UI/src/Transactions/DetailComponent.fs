@@ -370,7 +370,7 @@ let renderTransactionInfo
 
          Html.small [
             attr.text txn.Date
-            attr.style [ style.color "var(--primary)" ]
+            attr.style [ style.color Style.color.primary ]
          ]
       ]
 
