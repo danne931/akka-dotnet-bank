@@ -48,7 +48,7 @@ export default function initPostgres (
         primary: {
           initdb: {
             // postgres-schemas configmap containing SQL files
-            // from Database/Migrations directory.
+            // from Database/Init directory.
             scriptsConfigMap: schemaConfigMap.metadata.name
           }
         }
@@ -59,12 +59,12 @@ export default function initPostgres (
 }
 
 function initSchemaConfigMap (provider: k8s.Provider): k8s.core.v1.ConfigMap {
-  const migrationsDir = '../../Database/Migrations'
+  const sqlDir = '../../Database/Init'
   const sqlFileData: { [key: string]: string } = {}
 
-  fs.readdirSync(migrationsDir).forEach((file) => {
+  fs.readdirSync(sqlDir).forEach((file) => {
     if (path.extname(file) === '.sql') {
-      const filePath = path.join(migrationsDir, file)
+      const filePath = path.join(sqlDir, file)
       const fileContent = fs.readFileSync(filePath, 'utf8')
       sqlFileData[file] = fileContent
     }
