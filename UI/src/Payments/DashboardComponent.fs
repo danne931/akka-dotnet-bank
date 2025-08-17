@@ -62,7 +62,7 @@ let update orgId msg state =
    match msg with
    | LoadPayments Started ->
       let loadPayments = async {
-         let! res = AccountService.getPayments orgId
+         let! res = PaymentService.getPayments orgId
          return LoadPayments(Finished res)
       }
 

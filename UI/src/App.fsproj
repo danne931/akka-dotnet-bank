@@ -16,6 +16,7 @@
     <Compile Include="Cards/Domain.fs" />
     <Compile Include="History/Domain.fs" />
     <Compile Include="Orgs/Service.fs" />
+    <Compile Include="Payments/Service.fs" />
     <Compile Include="Accounts/Service.fs" />
     <Compile Include="Employees/Service.fs" />
     <Compile Include="Users/Service.fs" />

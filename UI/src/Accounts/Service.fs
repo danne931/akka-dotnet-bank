@@ -7,7 +7,6 @@ open FsToolkit.ErrorHandling
 open UIDomain.Account
 open Bank.Account.Domain
 open Bank.Transfer.Domain
-open Bank.Payment.Domain
 open Lib.SharedTypes
 open RoutePaths
 
@@ -149,46 +148,4 @@ let submitParentAccountCommand
             PendingEvent = evt
             PendingCommand = command
          }
-   }
-
-let getPayments
-   (orgId: OrgId)
-   : Async<Result<PaymentRequestSummary option, Err>>
-   =
-   async {
-      let path = PaymentPath.payments orgId
-
-      let! (code, responseText) = Http.get path
-
-      if code = 404 then
-         return Ok None
-      elif code <> 200 then
-         return Error <| Err.InvalidStatusCodeError(serviceName, code)
-      else
-         return
-            responseText
-            |> Serialization.deserialize<PaymentRequestSummary>
-            |> Result.map Some
-   }
-
-let getDomesticTransfersRetryableUponRecipientEdit
-   (recipientId: AccountId)
-   : Async<Result<DomesticTransfer list option, Err>>
-   =
-   async {
-      let path =
-         TransferPath.retryableDomesticTransfersUponRecipientCorrection
-            recipientId
-
-      let! (code, responseText) = Http.get path
-
-      if code = 404 then
-         return Ok None
-      elif code <> 200 then
-         return Error <| Err.InvalidStatusCodeError(serviceName, code)
-      else
-         return
-            responseText
-            |> Serialization.deserialize<DomesticTransfer list>
-            |> Result.map Some
    }
