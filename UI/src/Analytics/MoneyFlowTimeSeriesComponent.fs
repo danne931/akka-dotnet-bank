@@ -4,7 +4,7 @@ module TimeSeries
 open Feliz
 open Feliz.Recharts
 
-open Bank.Org.Domain
+open Bank.Analytics.Domain
 open Bank.Account.Domain
 open Lib.SharedTypes
 open Lib.Time

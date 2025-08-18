@@ -1,27 +1,13 @@
-module Bank.Analytics.Api
+module Bank.Analytics.MoneyFlowTimeSeriesApi
 
 open System
-open System.Threading.Tasks
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
 open Lib.Postgres
 open Lib.Time
-open Bank.Org.Domain
-open Bank.Account.Domain
 open AccountEventSqlMapper
-
-type private MoneyFlowAnalyticsDBResult =
-   | TimeSeriesDaily of MoneyFlowDailyTimeSeriesAnalytics option
-   | TimeSeriesMonthly of MoneyFlowMonthlyTimeSeriesAnalytics option
-   | TopN of MoneyFlowTopNAnalytics option
-   | TopNPurchasers of EmployeePurchaserTopN list option
-
-type TopNQuery = {
-   OrgId: OrgId
-   Limit: int
-   Date: DateTime
-}
+open Bank.Analytics.Domain
 
 type MoneyFlowDailyTimeSeriesQuery = {
    OrgId: OrgId
@@ -39,96 +25,14 @@ type MoneyFlowMonthlyTimeSeriesQuery = {
    LookbackMonths: int
 }
 
-type MoneyFlowAnalyticsQuery = {
-   OrgId: OrgId
-   TopNMoneyFlow: TopNQuery
-   TopNPurchasers: TopNQuery
-   MoneyFlowDailyTimeSeries: MoneyFlowDailyTimeSeriesQuery
-   MoneyFlowMonthlyTimeSeries: MoneyFlowMonthlyTimeSeriesQuery
-}
-
-let moneyFlowTopNAnalytics
-   (txnQuery: TopNQuery)
-   : Task<Result<MoneyFlowTopNAnalytics option, Err>>
-   =
-   taskResultOption {
-      let query =
-         $"""
-         SELECT * FROM {Functions.moneyFlowTopNMonthly}(
-            @orgId,
-            @flowIn::{TypeCast.moneyFlow},
-            @topN,
-            @date
-         )
-
-         UNION ALL
-
-         SELECT * FROM {Functions.moneyFlowTopNMonthly}(
-            @orgId,
-            @flowOut::{TypeCast.moneyFlow},
-            @topN,
-            @date
-         )
-         """
-
-      let qParams = [
-         "orgId", Sql.uuid txnQuery.OrgId.Value
-         "flowIn", MoneyFlow.In |> string |> Sql.string
-         "flowOut", MoneyFlow.Out |> string |> Sql.string
-         "topN", Sql.int txnQuery.Limit
-         "date", Sql.timestamptz txnQuery.Date
-      ]
-
-      let! topN =
-         pgQuery<MoneyFlowTopN> query (Some qParams) (fun read -> {
-            MoneyFlow =
-               match SqlReader.moneyFlow read with
-               | Some flow -> flow
-               | None ->
-                  failwith "Error attempting to cast string to MoneyFlow"
-            Amount = read.decimal Fields.amount
-            Source = read.string Fields.source
-         })
-
-      return
-         topN
-         |> List.partition (fun a -> a.MoneyFlow = MoneyFlow.In)
-         |> fun (mfIn, mfOut) -> { In = mfIn; Out = mfOut }
-   }
-
-let employeePurchaseTopNAnalytics
-   (txnQuery: TopNQuery)
-   : Task<Result<EmployeePurchaserTopN list option, Err>>
-   =
-   let query =
-      $"""
-      SELECT * FROM {Functions.employeePurchaserTopNMonthly}(
-         @orgId,
-         @topN,
-         @date
-      )
-      """
-
-   let qParams = [
-      "orgId", Sql.uuid txnQuery.OrgId.Value
-      "topN", Sql.int txnQuery.Limit
-      "date", Sql.timestamptz txnQuery.Date
-   ]
-
-   pgQuery<EmployeePurchaserTopN> query (Some qParams) (fun read -> {
-      EmployeeId = read.uuid "employee_id" |> EmployeeId
-      EmployeeName = read.string "employee_name"
-      Amount = read.decimal "amount"
-   })
-
 let moneyFlowDailyTimeSeriesAnalytics
    (txnQuery: MoneyFlowDailyTimeSeriesQuery)
-   : Task<Result<MoneyFlowDailyTimeSeriesAnalytics option, Err>>
+   : TaskResultOption<MoneyFlowDailyTimeSeriesAnalytics, Err>
    =
    taskResultOption {
       let endDateAdjustedToPreviousDay =
          if DateTime.isToday txnQuery.End then
-            Some <| txnQuery.End.AddDays(-1)
+            Some <| txnQuery.End.AddDays -1
          else
             None
 
@@ -264,7 +168,7 @@ let moneyFlowDailyTimeSeriesAnalytics
 
 let moneyFlowMonthlyTimeSeriesAnalytics
    (txnQuery: MoneyFlowMonthlyTimeSeriesQuery)
-   : Task<Result<MoneyFlowMonthlyTimeSeriesAnalytics option, Err>>
+   : TaskResultOption<MoneyFlowMonthlyTimeSeriesAnalytics, Err>
    =
    taskResultOption {
       let qParams = [
@@ -309,56 +213,4 @@ let moneyFlowMonthlyTimeSeriesAnalytics
          AverageIn = series |> List.sumBy _.AmountIn |> avg
          AverageOut = series |> List.sumBy _.AmountOut |> avg
       }
-   }
-
-let moneyFlowAnalytics
-   (txnQuery: MoneyFlowAnalyticsQuery)
-   : Task<Result<MoneyFlowAnalytics, Err>>
-   =
-   taskResult {
-      let mfTopNTask =
-         moneyFlowTopNAnalytics txnQuery.TopNMoneyFlow
-         |> TaskResult.map MoneyFlowAnalyticsDBResult.TopN
-
-      let mfTopNPurchasersTask =
-         employeePurchaseTopNAnalytics txnQuery.TopNPurchasers
-         |> TaskResult.map MoneyFlowAnalyticsDBResult.TopNPurchasers
-
-      let mfDailyTimeSeriesTask =
-         moneyFlowDailyTimeSeriesAnalytics txnQuery.MoneyFlowDailyTimeSeries
-         |> TaskResult.map MoneyFlowAnalyticsDBResult.TimeSeriesDaily
-
-      let mfMonthlyTimeSeriesTask =
-         moneyFlowMonthlyTimeSeriesAnalytics txnQuery.MoneyFlowMonthlyTimeSeries
-         |> TaskResult.map MoneyFlowAnalyticsDBResult.TimeSeriesMonthly
-
-      let! res =
-         Task.WhenAll [|
-            mfTopNTask
-            mfTopNPurchasersTask
-            mfDailyTimeSeriesTask
-            mfMonthlyTimeSeriesTask
-         |]
-
-      let! res = res |> List.ofArray |> List.traverseResultM id
-
-      let res =
-         match res with
-         | [ MoneyFlowAnalyticsDBResult.TopN topNOpt
-             MoneyFlowAnalyticsDBResult.TopNPurchasers topNPurchasersOpt
-             MoneyFlowAnalyticsDBResult.TimeSeriesDaily seriesDailyOpt
-             MoneyFlowAnalyticsDBResult.TimeSeriesMonthly seriesMonthlyOpt ] -> {
-            TimeSeriesMonthly = seriesMonthlyOpt
-            TimeSeriesDaily = seriesDailyOpt
-            TopN = topNOpt
-            TopNPurchasers = topNPurchasersOpt
-           }
-         | _ -> {
-            TimeSeriesMonthly = None
-            TimeSeriesDaily = None
-            TopN = None
-            TopNPurchasers = None
-           }
-
-      return res
    }

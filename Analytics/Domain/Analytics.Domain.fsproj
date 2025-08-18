@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="TopN.fs" />
+    <Compile Include="TimeSeries.fs" />
+    <Compile Include="AggregateTypes.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Lib/SharedClientServer/Lib.SharedClientServer.fsproj" /> 
+  </ItemGroup>
+</Project>

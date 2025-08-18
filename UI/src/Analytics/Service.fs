@@ -6,7 +6,7 @@ open System
 open Fable.SimpleHttp
 open Lib.SharedTypes
 open RoutePaths
-open Bank.Org.Domain
+open Bank.Analytics.Domain
 open UIDomain
 
 let private serviceName = "Analytics Service"
@@ -21,18 +21,15 @@ let loadInitialAnalytics
    async {
       let path =
          AnalyticsPath.get orgId
-         + Router.encodeQueryString (
-            [
-               "topNDate", DateTime.toISOString DateTime.Now
-               "moneyFlowTopNLimit", topNLimit
-               "moneyFlowTimeSeriesDateRange",
-               DateFilter.toQueryString dateFilter
+         + Router.encodeQueryString [
+            "topNDate", DateTime.toISOString DateTime.Now
+            "moneyFlowTopNLimit", topNLimit
+            "moneyFlowTimeSeriesDateRange", DateFilter.toQueryString dateFilter
 
-               "purchasersTopNLimit", topNPurchasersLimit
-            ]
-         )
+            "purchasersTopNLimit", topNPurchasersLimit
+         ]
 
-      let! (code, responseText) = Http.get path
+      let! code, responseText = Http.get path
 
       if code <> 200 then
          return Error(Err.InvalidStatusCodeError(serviceName, code))
@@ -48,14 +45,11 @@ let loadTimeSeriesAnalytics
    async {
       let path =
          AnalyticsPath.get orgId
-         + Router.encodeQueryString (
-            [
-               "moneyFlowTimeSeriesDateRange",
-               DateFilter.toQueryString dateFilter
-            ]
-         )
+         + Router.encodeQueryString [
+            "moneyFlowTimeSeriesDateRange", DateFilter.toQueryString dateFilter
+         ]
 
-      let! (code, responseText) = Http.get path
+      let! code, responseText = Http.get path
 
       if code = 404 then
          return Ok None
@@ -76,14 +70,12 @@ let loadTopNAnalytics
    async {
       let path =
          AnalyticsPath.get orgId
-         + Router.encodeQueryString (
-            [
-               "topNDate", DateTime.toISOString date
-               "moneyFlowTopNLimit", topNLimit
-            ]
-         )
+         + Router.encodeQueryString [
+            "topNDate", DateTime.toISOString date
+            "moneyFlowTopNLimit", topNLimit
+         ]
 
-      let! (code, responseText) = Http.get path
+      let! code, responseText = Http.get path
 
       if code = 404 then
          return Ok None
@@ -103,14 +95,12 @@ let loadTopNPurchasersAnalytics
    async {
       let path =
          AnalyticsPath.get orgId
-         + Router.encodeQueryString (
-            [
-               "topNDate", DateTime.toISOString date
-               "purchasersTopNLimit", topNPurchasersLimit
-            ]
-         )
+         + Router.encodeQueryString [
+            "topNDate", DateTime.toISOString date
+            "purchasersTopNLimit", topNPurchasersLimit
+         ]
 
-      let! (code, responseText) = Http.get path
+      let! code, responseText = Http.get path
 
       if code = 404 then
          return Ok None
@@ -129,7 +119,7 @@ let loadMoneyFlowMonthlyTimeSeriesForOrg
    async {
       let path = AnalyticsPath.moneyFlowMonthlyTimeSeriesForOrg orgId
 
-      let! (code, responseText) = Http.get path
+      let! code, responseText = Http.get path
 
       if code = 404 then
          return Ok None

@@ -6,7 +6,7 @@ open Elmish
 open Feliz.Recharts
 open System
 
-open Bank.Org.Domain
+open Bank.Analytics.Domain
 open Bank.Employee.Domain
 open Lib.SharedTypes
 open UIDomain

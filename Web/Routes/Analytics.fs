@@ -6,6 +6,8 @@ open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
 
 open Bank.Analytics.Api
+open Bank.Analytics.TopNApi
+open Bank.Analytics.MoneyFlowTimeSeriesApi
 open RoutePaths
 open Lib.NetworkQuery
 open Lib.Time

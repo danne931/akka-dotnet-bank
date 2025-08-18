@@ -1,21 +1,8 @@
-namespace Bank.Org.Domain
+namespace Bank.Analytics.Domain
 
 open System
-open Bank.Account.Domain
 
 open Lib.SharedTypes
-
-type EmployeePurchaserTopN = {
-   Amount: decimal
-   EmployeeId: EmployeeId
-   EmployeeName: string
-}
-
-type MoneyFlowTopN = {
-   MoneyFlow: MoneyFlow
-   Amount: decimal
-   Source: string
-}
 
 type BalanceHistory = {
    Balance: decimal
@@ -38,11 +25,6 @@ type MoneyFlowDailyTimeSeriesByAccount = {
    BalanceHistory: BalanceHistory
 }
 
-type MoneyFlowTopNAnalytics = {
-   In: MoneyFlowTopN list
-   Out: MoneyFlowTopN list
-}
-
 type MoneyFlowDailyTimeSeriesAnalytics = {
    ByOrg: MoneyFlowDailyTimeSeriesByOrg list
    ByAccount: MoneyFlowDailyTimeSeriesByAccount list
@@ -58,11 +40,4 @@ type MoneyFlowMonthlyTimeSeriesAnalytics = {
    TimeSeries: MoneyFlowMonthlyTimeSeries list
    AverageIn: decimal
    AverageOut: decimal
-}
-
-type MoneyFlowAnalytics = {
-   TimeSeriesMonthly: MoneyFlowMonthlyTimeSeriesAnalytics option
-   TimeSeriesDaily: MoneyFlowDailyTimeSeriesAnalytics option
-   TopN: MoneyFlowTopNAnalytics option
-   TopNPurchasers: EmployeePurchaserTopN list option
 }

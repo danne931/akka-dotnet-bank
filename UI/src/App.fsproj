@@ -61,7 +61,7 @@
     <Compile Include="Employees/DetailComponent.fs" />
     <Compile Include="Employees/DashboardComponent.fs" />
     <Compile Include="Analytics/Service.fs" />
-    <Compile Include="Analytics/TimeSeriesComponent.fs" />
+    <Compile Include="Analytics/MoneyFlowTimeSeriesComponent.fs" />
     <Compile Include="Analytics/TopPurchasersComponent.fs" />
     <Compile Include="Analytics/TopMoneyFlowComponent.fs" />
     <Compile Include="Analytics/DashboardComponent.fs" />
@@ -123,6 +123,7 @@
     <ProjectReference Include="../../Org/Domain/Org.Domain.fsproj" />
     <ProjectReference Include="../../Transaction/Domain/Transaction.Domain.fsproj" />
     <ProjectReference Include="../../SignalR/Domain/SignalR.Domain.fsproj" />
+    <ProjectReference Include="../../Analytics/Domain/Analytics.Domain.fsproj" />
   </ItemGroup>
 
 </Project>

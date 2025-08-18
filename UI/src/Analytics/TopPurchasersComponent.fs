@@ -5,7 +5,7 @@ open Feliz
 open Feliz.Router
 open Fable.FontAwesome
 
-open Bank.Org.Domain
+open Bank.Analytics.Domain
 
 let private renderAmount (amount: decimal) =
    Html.p [ attr.classes [ "debit" ]; attr.text (Money.format amount) ]

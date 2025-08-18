@@ -6,7 +6,6 @@
     <Compile Include="OrgReadModelSyncActor.fs" />
     <Compile Include="KnowYourCustomerServiceActor.fs" />
     <Compile Include="OrgActor.fs" />
-    <Compile Include="AnalyticsApi.fs" />
     <Compile Include="CommandApprovalApi.fs" />
     <Compile Include="OrgApi.fs" />
   </ItemGroup>

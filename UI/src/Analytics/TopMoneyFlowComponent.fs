@@ -7,7 +7,7 @@ open Fable.FontAwesome
 open Feliz.Recharts
 open System
 
-open Bank.Org.Domain
+open Bank.Analytics.Domain
 open Lib.Time
 open UIDomain
 open UIDomain.Account
