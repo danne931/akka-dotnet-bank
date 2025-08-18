@@ -11,6 +11,7 @@
     <Compile Include="TCP.fs" />
     <Compile Include="Postgres.fs" />
     <Compile Include="Actor.fs" />
+    <Compile Include="CircuitBreakerActor.fs" />
     <Compile Include="AtLeastOnceDeliveryActor.fs" />
     <Compile Include="Queue.fs" />
     <Compile Include="BulkWriteStreamFlow.fs" />
