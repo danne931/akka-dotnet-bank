@@ -3,6 +3,7 @@
     <Compile Include="TopN.fs" />
     <Compile Include="MoneyFlowTimeSeries.fs" />
     <Compile Include="Api.fs" />
+    <Compile Include="Routes.fs" />
   </ItemGroup>
 
   <ItemGroup>

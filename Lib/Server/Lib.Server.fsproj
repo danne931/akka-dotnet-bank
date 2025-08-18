@@ -7,6 +7,7 @@
     <Compile Include="Constants.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Environment.fs" />
+    <Compile Include="Routes.fs" />
     <Compile Include="TCP.fs" />
     <Compile Include="Postgres.fs" />
     <Compile Include="Actor.fs" />

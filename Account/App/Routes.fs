@@ -7,7 +7,6 @@ open Microsoft.AspNetCore.Builder
 
 open Bank.Account.Domain
 open Bank.Account.Api
-open Bank.BillingCycle.Api
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
@@ -56,14 +55,4 @@ let start (app: WebApplication) =
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.CloseAccount)
-   |> ignore
-
-   app
-      .MapGet(
-         AccountPath.BillingStatement,
-         Func<Guid, int, Task<IResult>>(fun accountId page ->
-            getBillingTransactions (AccountId accountId) page
-            |> RouteUtil.unwrapTaskResultOption)
-      )
-      .RBAC(Permissions.BillingStatement)
    |> ignore

@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="Api.fs" />
+    <Compile Include="Routes.fs" />
   </ItemGroup>
 
   <ItemGroup>

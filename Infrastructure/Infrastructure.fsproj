@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <Compile Include="Routes.fs" />
     <Compile Include="Logging.fs" />
     <Compile Include="Serialization.fs" />
     <Compile Include="Akka.fs" />

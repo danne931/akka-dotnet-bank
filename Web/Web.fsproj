@@ -1,17 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
     <Compile Include="AccountLoadTestActor.fs" />
-    <Compile Include="Routes/UserSessionMiddleware.fs" />
-    <Compile Include="Routes/UserSession.fs" />
-    <Compile Include="Routes/Diagnostic.fs" />
-    <Compile Include="Routes/Transaction.fs" /> 
-    <Compile Include="Routes/Account.fs" />
-    <Compile Include="Routes/PaymentRequest.fs" />
-    <Compile Include="Routes/Transfer.fs" />
-    <Compile Include="Routes/Employee.fs" />
-    <Compile Include="Routes/Card.fs" />
-    <Compile Include="Routes/Analytics.fs" />
-    <Compile Include="Routes/Org.fs" />
+    <Compile Include="UserSessionRoutes.fs" />
+    <Compile Include="DiagnosticRoutes.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

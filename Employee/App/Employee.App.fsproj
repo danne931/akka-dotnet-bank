@@ -4,7 +4,9 @@
     <Compile Include="EmployeeActor.fs" />
     <Compile Include="EmployeeReadModelSyncActor.fs" />
     <Compile Include="EmployeeApi.fs" />
-    <Compile Include="CardIssuerService.fs" /> 
+    <Compile Include="CardIssuerService.fs" />
+    <Compile Include="CardRoutes.fs" />
+    <Compile Include="EmployeeRoutes.fs" />
   </ItemGroup>
 
   <ItemGroup>

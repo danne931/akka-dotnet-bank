@@ -14,9 +14,7 @@ open RoutePaths
 open Bank.UserSession.Middleware
 open BankActorRegistry
 
-let processAccountCommand = Bank.Account.Api.processCommand
-
-let start (app: WebApplication) =
+let start (app: WebApplication) processAccountCommand =
    app
       .MapGet(
          PaymentPath.Payments,

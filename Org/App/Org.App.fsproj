@@ -8,6 +8,7 @@
     <Compile Include="OrgActor.fs" />
     <Compile Include="CommandApprovalApi.fs" />
     <Compile Include="OrgApi.fs" />
+    <Compile Include="Routes.fs" />
   </ItemGroup>
 
   <ItemGroup>

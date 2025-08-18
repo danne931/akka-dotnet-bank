@@ -49,7 +49,9 @@ module AccountPath =
    let Account = Base + "/{id}"
    let Deposit = Base + "/deposit"
    let CloseAccount = Base + "/close-account"
-   let BillingStatement = Base + "/billing-statement/{accountId}/{page}"
+
+module BillingPath =
+   let BillingStatement = API + "/billing-statement/{accountId}/{page}"
 
 module DiagnosticPath =
    let Base = $"{API}/diagnostic"

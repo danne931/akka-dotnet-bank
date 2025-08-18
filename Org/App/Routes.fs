@@ -14,14 +14,14 @@ open Lib.SharedTypes
 open Bank.UserSession.Middleware
 open BankActorRegistry
 
-let start (app: WebApplication) =
+let start (app: WebApplication) getDomesticTransferRecipients =
    app
       .MapGet(
          OrgPath.Get,
          Func<Guid, Task<IResult>>(fun orgId ->
             getOrgAndAccountProfiles
                (OrgId orgId)
-               Bank.Transfer.Api.getDomesticTransferRecipients
+               getDomesticTransferRecipients
             |> RouteUtil.unwrapTaskResultOption)
       )
       .RBAC(Permissions.GetOrgAndAccountProfiles)

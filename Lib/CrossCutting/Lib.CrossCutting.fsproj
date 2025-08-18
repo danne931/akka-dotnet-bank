@@ -5,6 +5,7 @@
 
   <ItemGroup>
     <Compile Include="ActorRegistry.fs" />
+    <Compile Include="UserSessionMiddleware.fs" />
   </ItemGroup>
 
   <ItemGroup>

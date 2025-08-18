@@ -192,10 +192,10 @@ app.MapAkkaHealthCheckRoutes(
 )
 |> ignore
 
-Bank.Routes.Org.start app
+Bank.Routes.Org.start app Bank.Transfer.Api.getDomesticTransferRecipients
 Bank.Routes.UserSession.start app
-Bank.Routes.Transfer.start app
-Bank.Routes.PaymentRequest.start app
+Bank.Routes.Transfer.start app Bank.Account.Api.processCommand
+Bank.Routes.PaymentRequest.start app Bank.Account.Api.processCommand
 Bank.Routes.Account.start app
 Bank.Routes.Diagnostic.start app
 Bank.Routes.Transaction.start app

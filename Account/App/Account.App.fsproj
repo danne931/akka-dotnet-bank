@@ -6,6 +6,7 @@
     <Compile Include="AccountActor.fs" />
     <Compile Include="AccountApi.fs" />
     <Compile Include="AccountSeederActor.fs" />
+    <Compile Include="Routes.fs" />
   </ItemGroup>
 
   <ItemGroup>

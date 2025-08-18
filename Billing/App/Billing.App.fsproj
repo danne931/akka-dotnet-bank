@@ -3,6 +3,7 @@
     <Compile Include="Api.fs" />
     <Compile Include="BillingStatementActor.fs" />
     <Compile Include="BillingCycleActor.fs" />
+    <Compile Include="Routes.fs" />
   </ItemGroup>
 
   <ItemGroup>

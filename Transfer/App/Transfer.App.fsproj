@@ -5,6 +5,7 @@
     <Compile Include="AutomaticTransferSchedulingActor.fs" />
     <Compile Include="ScheduledTransfersLowBalanceWarningActor.fs" />
     <Compile Include="Api.fs" />
+    <Compile Include="Routes.fs" />
   </ItemGroup>
 
   <ItemGroup>
