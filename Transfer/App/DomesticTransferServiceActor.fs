@@ -76,7 +76,7 @@ let onSuccessfulServiceResponse
    (res: DomesticTransferServiceResponse)
    =
    let orgId = txn.Sender.OrgId
-   let corrId = txn.TransferId |> TransferId.get |> CorrelationId
+   let corrId = txn.TransferId.AsCorrelationId
 
    let latestProgressUpdate =
       if res.Ok then

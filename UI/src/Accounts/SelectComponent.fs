@@ -15,7 +15,7 @@ let renderAccountListItem
          attr.text $"{account.Name} ({Money.format account.AvailableBalance})"
 
          attr.href ""
-         attr.value (AccountId.get account.AccountId)
+         attr.value account.AccountId.Value
          attr.onClick (fun e ->
             e.preventDefault ()
             onSelect account)

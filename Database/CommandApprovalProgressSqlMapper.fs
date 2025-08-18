@@ -66,7 +66,7 @@ module Writer =
    let ruleId = CommandApprovalRuleSqlMapper.Writer.ruleId
    let orgId = OrganizationSqlMapper.OrgSqlWriter.orgId
 
-   let requestedBy = InitiatedById.get >> Sql.uuid
+   let requestedBy (InitiatedById employeeId) = Sql.uuid employeeId.Value
 
    let status (cmd: CommandApprovalProgress.Status) =
       cmd |> string |> Sql.string
@@ -75,10 +75,10 @@ module Writer =
       cmd |> Serialization.serialize |> Sql.jsonb
 
    let approvedBy (ids: EmployeeId list) =
-      ids |> List.map EmployeeId.get |> Array.ofList |> Sql.uuidArray
+      ids |> List.map _.Value |> Array.ofList |> Sql.uuidArray
 
    let declinedBy (ids: EmployeeId option) =
-      ids |> Option.map EmployeeId.get |> Sql.uuidOrNone
+      ids |> Option.map _.Value |> Sql.uuidOrNone
 
    let approvableCommandType =
       CommandApprovalRuleSqlMapper.Writer.approvableCommandType

@@ -266,7 +266,7 @@ let private depositTransfer
    =
    let cmd =
       DepositInternalTransferBetweenOrgsCommand.create
-         (TransferId.toCorrelationId transfer.TransferId)
+         transfer.TransferId.AsCorrelationId
          transfer.InitiatedBy
          { BaseInfo = transfer }
 
@@ -296,7 +296,7 @@ let onEventPersisted
    (evt: TransferEvent)
    =
    let transfer = currentState.TransferInfo
-   let correlationId = TransferId.toCorrelationId transfer.TransferId
+   let correlationId = transfer.TransferId.AsCorrelationId
 
    let reserveSenderFunds () =
       let cmd = {

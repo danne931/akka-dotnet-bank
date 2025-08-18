@@ -82,12 +82,15 @@ type PercentDistributionDestinationAccount = {
 /// Allocate 100% of account balance split amongst accounts within the org.
 module PercentDistributionRule =
    type T =
-      private | T of
+      private
+      | T of
          {|
             Sender: InternalTransferSender
             Frequency: Frequency
             DestinationAccounts: PercentDistributionDestinationAccount list
          |}
+
+      member x.Value = let (T rule) = x in rule
 
    [<RequireQualifiedAccess>]
    type ValidationError =
@@ -107,8 +110,6 @@ module PercentDistributionRule =
             "Destinations should only contain positive percent allocations."
          | ValidationError.SenderIsDestination ->
             "A sender can not be included as a destination."
-
-   let get (T value) = value
 
    let create
       (frequency: Frequency)
@@ -168,7 +169,7 @@ module PercentDistributionRule =
       (fromBalance: PositiveAmount)
       : AutoTransfer list
       =
-      let rule = get rule
+      let rule = rule.Value
 
       rule.DestinationAccounts
       |> List.map (fun o -> {
@@ -222,13 +223,10 @@ module TargetBalanceRule =
          match rule.TargetBalanceRange with
          | None -> true
          | Some range ->
-            currBalance < PositiveAmount.get range.LowerBound
-            || currBalance > PositiveAmount.get range.UpperBound
+            currBalance < range.LowerBound.Value
+            || currBalance > range.UpperBound.Value
 
-      if
-         rangeSatisfied
-         && currBalance < (PositiveAmount.get rule.TargetAccountBalance)
-      then
+      if rangeSatisfied && currBalance < rule.TargetAccountBalance.Value then
          PositiveAmount.tryMap
             (fun target -> target - currBalance)
             rule.TargetAccountBalance
@@ -248,10 +246,7 @@ module TargetBalanceRule =
             }
          })
          |> Result.toOption
-      elif
-         rangeSatisfied
-         && currBalance > (PositiveAmount.get rule.TargetAccountBalance)
-      then
+      elif rangeSatisfied && currBalance > rule.TargetAccountBalance.Value then
          PositiveAmount.tryMap
             (fun target -> currBalance - target)
             rule.TargetAccountBalance
@@ -287,7 +282,7 @@ type AutomaticTransferRule =
       | TargetBalance o ->
          $"(target balance) with target {o.TargetAccount.Name} & managing partner {o.ManagingPartnerAccount.Name}"
       | PercentDistribution o ->
-         let o = PercentDistributionRule.get o
+         let o = o.Value
          $"(percent distribution) from {o.Sender.Name} between {o.DestinationAccounts.Length} accounts"
 
 type AutoTransferDerivedFromRule = {
@@ -332,7 +327,7 @@ let requiresBalanceManagement
       | AutomaticTransferRule.TargetBalance _, Frequency.Schedule s ->
          s = CronSchedule.Daily
       | AutomaticTransferRule.PercentDistribution r, frequency ->
-         frequency = (PercentDistributionRule.get r).Frequency
+         frequency = r.Value.Frequency
       | _ -> false
 
    if requiresManagement then
@@ -358,9 +353,8 @@ let frequencyFromAutoTransferRule =
    function
    | AutomaticTransferRule.ZeroBalance _ -> Frequency.PerTransaction
    | AutomaticTransferRule.TargetBalance _ ->
-      Frequency.Schedule(CronSchedule.Daily)
-   | AutomaticTransferRule.PercentDistribution r ->
-      (PercentDistributionRule.get r).Frequency
+      Frequency.Schedule CronSchedule.Daily
+   | AutomaticTransferRule.PercentDistribution r -> r.Value.Frequency
 
 module CycleDetection =
    type private Edge = {
@@ -379,7 +373,7 @@ module CycleDetection =
       (target: AccountId)
       (currRecipientId: AccountId)
       =
-      if visited.Contains(currRecipientId) then
+      if visited.Contains currRecipientId then
          false
       elif currRecipientId = target then
          true
@@ -405,7 +399,7 @@ module CycleDetection =
                }
               ]
             | AutomaticTransferRule.PercentDistribution r ->
-               let r = PercentDistributionRule.get r
+               let r = r.Value
 
                [
                   {
@@ -439,7 +433,7 @@ module CycleDetection =
       | AutomaticTransferRule.ZeroBalance r ->
          dfs r.Sender.AccountId r.Recipient.AccountId
       | AutomaticTransferRule.PercentDistribution r ->
-         let r = PercentDistributionRule.get r
+         let r = r.Value
 
          r.DestinationAccounts
          |> List.exists (fun d -> dfs r.Sender.AccountId d.Recipient.AccountId)

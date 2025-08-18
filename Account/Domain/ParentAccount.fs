@@ -475,14 +475,11 @@ let computeAutoTransferStateTransitions
                transferCmd.InitiatedBy
                {
                   BaseInfo = {
-                     TransferId =
-                        transferCmd.CorrelationId
-                        |> CorrelationId.get
-                        |> TransferId
+                     TransferId = TransferId transferCmd.CorrelationId.Value
                      InitiatedBy = transferCmd.InitiatedBy
                      Sender = info.Sender
                      Recipient = info.Recipient
-                     Amount = PositiveAmount.get info.Amount
+                     Amount = info.Amount.Value
                      ScheduledDate = transferCmd.Timestamp
                      Memo = None
                   }

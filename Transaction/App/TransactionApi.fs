@@ -102,9 +102,7 @@ let transactionQuery (query: TransactionQuery) =
                [
                   "timestamp", Writer.timestamp cursor.Timestamp
                   "txnId",
-                  cursor.TransactionId
-                  |> TransactionId.toCorrelationId
-                  |> Writer.correlationId
+                  Writer.correlationId cursor.TransactionId.AsCorrelationId
                ]
                @ queryParams
 

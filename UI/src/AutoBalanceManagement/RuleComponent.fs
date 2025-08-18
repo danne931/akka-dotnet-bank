@@ -95,15 +95,13 @@ let ruleDescription =
    | AutomaticTransferRule.ZeroBalance r ->
       $"Move all from {r.Sender.Name} to {r.Recipient.Name}"
    | AutomaticTransferRule.TargetBalance r ->
-      let targetBalance =
-         r.TargetAccountBalance |> PositiveAmount.get |> Money.format
-
+      let targetBalance = Money.format r.TargetAccountBalance.Value
       $"Restore {r.TargetAccount.Name} to {targetBalance}"
    | AutomaticTransferRule.PercentDistribution r ->
-      let r = PercentDistributionRule.get r
-      let destinations = r.DestinationAccounts
+      let rule = r.Value
+      let destinations = rule.DestinationAccounts
 
-      $"Distribute the balance of {r.Sender.Name}
+      $"Distribute the balance of {rule.Sender.Name}
         to {destinations.Length} accounts"
 
 let frequencyDescription =
@@ -112,8 +110,8 @@ let frequencyDescription =
    | AutomaticTransferRule.TargetBalance _ ->
       (Frequency.Schedule CronSchedule.Daily).Display
    | AutomaticTransferRule.PercentDistribution r ->
-      let r = PercentDistributionRule.get r
-      r.Frequency.Display
+      let rule = r.Value
+      rule.Frequency.Display
 
 [<ReactComponent>]
 let AutoTransferRuleComponent

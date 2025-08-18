@@ -24,7 +24,6 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Payment.Domain
 open Bank.Employee.Domain
-open ActorUtil
 open AutomaticTransfer
 open RecurringPaymentSchedule
 open BankActorRegistry
@@ -326,7 +325,7 @@ let createOrgs (registry: #IOrgGuaranteedDeliveryActor) =
          }
          |> OrgCommand.SubmitOnboardingApplication
          |> OrgMessage.StateChange
-         |> GuaranteedDelivery.message (OrgId.get org.OrgId)
+         |> GuaranteedDelivery.message org.OrgId.Value
 
       registry.OrgGuaranteedDeliveryActor() <! msg
 
@@ -343,7 +342,7 @@ let enableOrgSocialTransferDiscovery (registry: #IOrgGuaranteedDeliveryActor) =
          }
          |> OrgCommand.ConfigureFeatureFlag
          |> OrgMessage.StateChange
-         |> GuaranteedDelivery.message (OrgId.get org.OrgId)
+         |> GuaranteedDelivery.message org.OrgId.Value
 
       registry.OrgGuaranteedDeliveryActor() <! msg
 
@@ -829,14 +828,13 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
    ]
 
    for _, request in requestsFromDemoAccount do
-      let entityId =
-         ParentAccountId.get request.Data.SharedDetails.Payee.ParentAccountId
+      let id = request.Data.SharedDetails.Payee.ParentAccountId.Value
 
       let msg =
          request
          |> AccountCommand.RequestPayment
          |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message entityId
+         |> GuaranteedDelivery.message id
 
       accountRef <! msg
 
@@ -867,7 +865,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
          })
       |> AccountCommand.RequestPayment
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message (ParentAccountId.get myOrg.ParentAccountId)
+      |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
    accountRef <! request3rdPartyPaymentMsg
 
@@ -918,9 +916,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
       }
       |> AccountCommand.InternalTransferBetweenOrgs
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message (
-         ParentAccountId.get payerStub.ParentAccountId
-      )
+      |> GuaranteedDelivery.message payerStub.ParentAccountId.Value
 
    accountRef <! msg
 
@@ -958,9 +954,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
          cmd
          |> AccountCommand.RequestPayment
          |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message (
-            ParentAccountId.get payee.ParentAccountId
-         )
+         |> GuaranteedDelivery.message payee.ParentAccountId.Value
 
       accountRef <! msg
 }
@@ -1028,7 +1022,7 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message (ParentAccountId.get sender.ParentAccountId)
+      |> GuaranteedDelivery.message sender.ParentAccountId.Value
 
    accountRef <! msg
 
@@ -1066,7 +1060,7 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message (ParentAccountId.get sender.ParentAccountId)
+      |> GuaranteedDelivery.message sender.ParentAccountId.Value
 
    accountRef <! msg
 
@@ -1119,7 +1113,7 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message (ParentAccountId.get target.ParentAccountId)
+      |> GuaranteedDelivery.message target.ParentAccountId.Value
 
    accountRef <! msg
 
@@ -1161,9 +1155,7 @@ let configureAutoTransferRules
          }
          |> AccountCommand.ConfigureAutoTransferRule
          |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message (
-            ParentAccountId.get sender.ParentAccountId
-         )
+         |> GuaranteedDelivery.message sender.ParentAccountId.Value
 
       accountRef <! msg
 
@@ -1203,7 +1195,7 @@ let seedAccountOwnerActions
       |> ParentAccountCommand.RegisterDomesticTransferRecipient
       |> AccountCommand.ParentAccount
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message (ParentAccountId.get myOrg.ParentAccountId)
+      |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
    accountRef <! msg
 
@@ -1240,9 +1232,7 @@ let seedAccountOwnerActions
          transferCmd
          |> AccountCommand.DomesticTransfer
          |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message (
-            ParentAccountId.get myOrg.ParentAccountId
-         )
+         |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
       accountRef <! msg
 
@@ -1273,9 +1263,7 @@ let seedAccountOwnerActions
                }
                |> AccountCommand.DepositCash
                |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message (
-                  ParentAccountId.get myOrg.ParentAccountId
-               )
+               |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
             accountRef <! msg
 
@@ -1315,9 +1303,7 @@ let seedAccountOwnerActions
                }
                |> AccountCommand.InternalTransferBetweenOrgs
                |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message (
-                  ParentAccountId.get sender.ParentAccountId
-               )
+               |> GuaranteedDelivery.message sender.ParentAccountId.Value
 
             accountRef <! msg
 
@@ -1357,9 +1343,7 @@ let seedAccountOwnerActions
                }
                |> AccountCommand.InternalTransferBetweenOrgs
                |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message (
-                  ParentAccountId.get myOrg.ParentAccountId
-               )
+               |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
             accountRef <! msg
 
@@ -1390,9 +1374,7 @@ let seedAccountOwnerActions
                }
                |> AccountCommand.InternalTransfer
                |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message (
-                  ParentAccountId.get myOrg.ParentAccountId
-               )
+               |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
             accountRef <! msg
 
@@ -1494,7 +1476,7 @@ let seedEmployeeActions
             purchaseCmd
             |> EmployeeCommand.PurchaseIntent
             |> EmployeeMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get purchaseCmd.EntityId)
+            |> GuaranteedDelivery.message purchaseCmd.EntityId.Value
 
          registry.EmployeeGuaranteedDeliveryActor() <! msg
 
@@ -1523,7 +1505,7 @@ let createAccountOwners (registry: #IEmployeeGuaranteedDeliveryActor) =
          cmd
          |> EmployeeCommand.CreateAccountOwner
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+         |> GuaranteedDelivery.message cmd.EntityId.Value
 
       registry.EmployeeGuaranteedDeliveryActor() <! createMsg
 
@@ -1546,7 +1528,7 @@ let confirmAccountOwnerInvites
             }
          |> EmployeeCommand.ConfirmInvitation
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+         |> GuaranteedDelivery.message cmd.EntityId.Value
 
       registry.EmployeeGuaranteedDeliveryActor() <! confirmInviteCmd
 
@@ -1556,7 +1538,7 @@ let createEmployees (registry: #IEmployeeGuaranteedDeliveryActor) =
          employeeCreateCmd
          |> EmployeeCommand.CreateEmployee
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message (EntityId.get employeeCreateCmd.EntityId)
+         |> GuaranteedDelivery.message employeeCreateCmd.EntityId.Value
 
       registry.EmployeeGuaranteedDeliveryActor() <! msg
 
@@ -1565,7 +1547,7 @@ let createEmployees (registry: #IEmployeeGuaranteedDeliveryActor) =
          employeeCreateCmd
          |> EmployeeCommand.CreateEmployee
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message (EmployeeId.get employeeId)
+         |> GuaranteedDelivery.message employeeId.Value
 
       registry.EmployeeGuaranteedDeliveryActor() <! msg
 
@@ -1592,7 +1574,7 @@ let confirmEmployeeInvites (registry: #IEmployeeGuaranteedDeliveryActor) =
          confirmInviteCmd
          |> EmployeeCommand.ConfirmInvitation
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message (EmployeeId.get employeeId)
+         |> GuaranteedDelivery.message employeeId.Value
 
       registry.EmployeeGuaranteedDeliveryActor() <! msg
 
@@ -1612,7 +1594,7 @@ let createEmployeeCards (registry: #IEmployeeGuaranteedDeliveryActor) =
          cmd
          |> EmployeeCommand.CreateCard
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+         |> GuaranteedDelivery.message cmd.EntityId.Value
 
       registry.EmployeeGuaranteedDeliveryActor() <! msg
 
@@ -1662,7 +1644,7 @@ let seedAccountTransactions
             }
             |> AccountCommand.DepositCash
             |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get command.EntityId)
+            |> GuaranteedDelivery.message command.EntityId.Value
 
          registry.AccountGuaranteedDeliveryActor() <! msg
       | None -> ()
@@ -1812,9 +1794,8 @@ let actorProps (registry: #IAccountGuaranteedDeliveryActor) =
                         command
                         |> AccountCommand.CreateVirtualAccount
                         |> AccountMessage.StateChange
-                        |> GuaranteedDelivery.message (
-                           ParentAccountId.get command.Data.ParentAccountId
-                        )
+                        |> GuaranteedDelivery.message
+                              command.Data.ParentAccountId.Value
 
                      registry.AccountGuaranteedDeliveryActor() <! msg
 

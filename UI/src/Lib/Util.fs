@@ -98,7 +98,7 @@ let throttleUncontrolledInput (delay: int) (func: string -> unit) =
 let keepPositiveNumbers (e: Browser.Types.KeyboardEvent) : unit =
    if
       e.which = 8 // backspace
-      || (e.which >= 48 && e.which <= 57) // number
+      || e.which >= 48 && e.which <= 57 // number
    then
       ()
    else

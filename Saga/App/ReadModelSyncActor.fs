@@ -71,7 +71,7 @@ let initProps
    =
    actorProps<AppSaga.Saga, AppSaga.AppSagaPersistableEvent>
    <| ReadModelSyncConfig.AggregateLookupMode {
-      GetAggregateIdFromEvent = _.CorrelationId >> CorrelationId.get
+      GetAggregateIdFromEvent = _.CorrelationId.Value
       GetAggregate =
          fun correlationId -> task {
             let! (opt: AppSaga.Saga option) =

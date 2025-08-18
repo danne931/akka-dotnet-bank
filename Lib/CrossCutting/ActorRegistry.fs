@@ -179,7 +179,7 @@ type BankActorRegistry(system: ActorSystem) =
          ActorUtil.getEntityRef
             system
             ActorUtil.ClusterMetadata.orgShardRegion
-            (OrgId.get orgId)
+            orgId.Value
 
    interface IOrgGuaranteedDeliveryActor with
       member _.OrgGuaranteedDeliveryActor() =
@@ -190,7 +190,7 @@ type BankActorRegistry(system: ActorSystem) =
          ActorUtil.getEntityRef
             system
             ActorUtil.ClusterMetadata.employeeShardRegion
-            (EmployeeId.get employeeId)
+            employeeId.Value
 
    interface IEmployeeGuaranteedDeliveryActor with
       member _.EmployeeGuaranteedDeliveryActor() =
@@ -201,7 +201,7 @@ type BankActorRegistry(system: ActorSystem) =
          ActorUtil.getEntityRef
             system
             ActorUtil.ClusterMetadata.accountShardRegion
-            (ParentAccountId.get parentAccountId)
+            parentAccountId.Value
 
    interface IAccountGuaranteedDeliveryActor with
       member _.AccountGuaranteedDeliveryActor() =
@@ -220,7 +220,7 @@ type BankActorRegistry(system: ActorSystem) =
          ActorUtil.getEntityRef
             system
             ActorUtil.ClusterMetadata.sagaShardRegion
-            (CorrelationId.get corrId)
+            corrId.Value
 
    interface ISagaGuaranteedDeliveryActor with
       member _.SagaGuaranteedDeliveryActor() =

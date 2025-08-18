@@ -99,7 +99,7 @@ let update
       | _ -> s, Cmd.none
    | ExternalError errMsg ->
       match state with
-      | State.FillingForm(model) ->
+      | State.FillingForm model ->
          let model = {
             model with
                State = Form.View.State.Error errMsg

@@ -20,7 +20,7 @@ type InitializePrimaryCheckingAccountCommand =
 module InitializePrimaryCheckingAccountCommand =
    let create (data: InitializePrimaryCheckingAccountInput) =
       Command.create
-         (ParentAccountId.toEntityId data.ParentAccountId)
+         data.ParentAccountId.AsEntityId
          data.OrgId
          data.CorrelationId
          Initiator.System
@@ -69,7 +69,7 @@ type CreateVirtualAccountCommand = Command<CreateVirtualAccountInput>
 module CreateVirtualAccountCommand =
    let create (data: CreateVirtualAccountInput) =
       Command.create
-         (ParentAccountId.toEntityId data.ParentAccountId)
+         data.ParentAccountId.AsEntityId
          data.OrgId
          (CorrelationId.create ())
          data.InitiatedBy
@@ -118,7 +118,7 @@ module DepositCashCommand =
       (data: DepositCashInput)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiator
@@ -150,7 +150,7 @@ module DebitCommand =
       (data: DebitPending)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          correlationId
          initiator
@@ -170,7 +170,7 @@ module DebitCommand =
             EmployeePurchaseReference = {
                EmployeeName = info.EmployeeName
                EmployeeCardNumberLast4 = info.CardNumberLast4
-               EmployeeId = InitiatedById.toEmployeeId info.InitiatedBy.Id
+               EmployeeId = info.InitiatedBy.Id.AsEmployeeId
                CardId = info.CardId
                CardNickname = info.CardNickname
             }
@@ -195,7 +195,7 @@ module FailDebitCommand =
       (data: DebitFailed)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          correlationId
          initiator
@@ -236,7 +236,7 @@ module RefundDebitCommand =
       (data: DebitRefunded)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          correlationId
          initiator
@@ -278,16 +278,11 @@ module MaintenanceFeeCommand =
       (corrId: CorrelationId)
       (billingDate: DateTime)
       =
-      Command.create
-         (ParentAccountId.toEntityId parentAccountId)
-         orgId
-         corrId
-         Initiator.System
-         {
-            AccountId = accountId
-            Amount = MaintenanceFee.RecurringDebitAmount
-            BillingDate = billingDate
-         }
+      Command.create parentAccountId.AsEntityId orgId corrId Initiator.System {
+         AccountId = accountId
+         Amount = MaintenanceFee.RecurringDebitAmount
+         BillingDate = billingDate
+      }
 
    let toEvent
       (cmd: MaintenanceFeeCommand)
@@ -304,16 +299,11 @@ module SkipMaintenanceFeeCommand =
       (criteria: MaintenanceFee.MaintenanceFeeCriteria)
       (billingDate: DateTime)
       =
-      Command.create
-         (ParentAccountId.toEntityId parentAccountId)
-         orgId
-         corrId
-         Initiator.System
-         {
-            AccountId = accountId
-            Reason = criteria
-            BillingDate = billingDate
-         }
+      Command.create parentAccountId.AsEntityId orgId corrId Initiator.System {
+         AccountId = accountId
+         Reason = criteria
+         BillingDate = billingDate
+      }
 
    let toEvent
       (cmd: SkipMaintenanceFeeCommand)
@@ -331,7 +321,7 @@ module SettleDebitCommand =
       (data: DebitSettled)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          correlationId
          initiator
@@ -371,7 +361,7 @@ module CloseAccountCommand =
       (data: AccountClosed)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiator

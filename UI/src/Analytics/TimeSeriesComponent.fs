@@ -145,7 +145,7 @@ let renderChartByAccount
             |> Option.defaultValue (string accountId)
 
          React.keyedFragment (
-            AccountId.get accountId,
+            accountId.Value,
             [
                match yAxisFilter with
                | Amount.All

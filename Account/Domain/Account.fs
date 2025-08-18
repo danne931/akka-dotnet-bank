@@ -432,7 +432,7 @@ module private StateTransition =
       (cmd: InternalAutoTransferCommand)
       =
       let input = cmd.Data.Transfer
-      let amount = PositiveAmount.get input.Amount
+      let amount = input.Amount.Value
 
       if account.Status <> AccountStatus.Active then
          accountNotActiveError account

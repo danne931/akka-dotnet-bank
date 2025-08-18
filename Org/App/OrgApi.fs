@@ -56,7 +56,7 @@ let processCommand
 
       let msg =
          GuaranteedDelivery.message
-            (EntityId.get envelope.EntityId)
+            envelope.EntityId.Value
             (OrgMessage.StateChange command)
 
       registry.OrgGuaranteedDeliveryActor() <! msg

@@ -116,11 +116,11 @@ let private onValidationError
            sagaRef <! msg
 
            let! paymentId = cmd.Data.OriginatedFromPaymentRequest
-           let corrId = PaymentRequestId.toCorrelationId paymentId
+           let corrId = paymentId.AsCorrelationId
 
            let msg =
               PaymentRequestSagaEvent.PaymentFailed(
-                 TransferId(CorrelationId.get cmd.CorrelationId),
+                 TransferId cmd.CorrelationId.Value,
                  PaymentFailReason.AccountClosed
               )
               |> AppSaga.Message.paymentRequest orgId corrId
@@ -136,7 +136,7 @@ let private onValidationError
       sagaRef <! msg
 
       let! paymentId = cmd.Data.BaseInfo.FromPaymentRequest
-      let corrId = PaymentRequestId.toCorrelationId paymentId
+      let corrId = paymentId.AsCorrelationId
 
       let msg =
          PaymentRequestSagaEvent.PaymentFailed(
@@ -269,13 +269,13 @@ let onPersisted
       let msg =
          PlatformTransferSagaEvent.TransferSettled
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
-         |> GuaranteedDelivery.message (CorrelationId.get e.CorrelationId)
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
       registry.SagaGuaranteedDeliveryActor() <! msg
 
       match info.FromPaymentRequest with
       | Some paymentRequestId ->
-         let corrId = PaymentRequestId.toCorrelationId paymentRequestId
+         let corrId = paymentRequestId.AsCorrelationId
 
          let msg =
             PaymentRequestSagaEvent.PaymentFulfilled {
@@ -283,7 +283,7 @@ let onPersisted
                FulfilledAt = e.Timestamp
             }
             |> AppSaga.Message.paymentRequest info.Recipient.OrgId corrId
-            |> GuaranteedDelivery.message (CorrelationId.get corrId)
+            |> GuaranteedDelivery.message corrId.Value
 
          registry.SagaGuaranteedDeliveryActor() <! msg
       | None -> ()
@@ -559,7 +559,7 @@ let actorProps
                      $"Retrying {transfers.Length} transfers upon recipient edit"
 
                   for transfer: DomesticTransfer in transfers do
-                     let corrId = TransferId.toCorrelationId transfer.TransferId
+                     let corrId = transfer.TransferId.AsCorrelationId
 
                      let evt =
                         Some transfer.Recipient

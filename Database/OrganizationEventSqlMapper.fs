@@ -38,18 +38,14 @@ module OrgEventSqlReader =
       |> Serialization.deserializeUnsafe<OrgEvent>
 
 module OrgEventSqlWriter =
-   let eventId (evtId: EventId) =
-      let (EventId id) = evtId
-      Sql.uuid id
+   let eventId (EventId id) = Sql.uuid id
 
-   let correlationId (corrId: CorrelationId) =
-      let (CorrelationId id) = corrId
-      Sql.uuid id
+   let correlationId (CorrelationId id) = Sql.uuid id
 
-   let initiatedById (id: InitiatedById) = id |> InitiatedById.get |> Sql.uuid
+   let initiatedById (id: InitiatedById) = id |> _.Value |> Sql.uuid
 
    let initiatedByIds (ids: InitiatedById list) =
-      ids |> List.map InitiatedById.get |> List.toArray |> Sql.uuidArray
+      ids |> List.map _.Value |> List.toArray |> Sql.uuidArray
 
    let orgId = OrgSqlWriter.orgId
    let name = Sql.text

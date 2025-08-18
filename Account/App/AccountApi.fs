@@ -29,7 +29,7 @@ let getAccountsByIds (accountIds: AccountId list) =
         WHERE {Fields.accountId} = ANY(@accountIds)"
       (Some [
          "accountIds",
-         accountIds |> List.map AccountId.get |> List.toArray |> Sql.uuidArray
+         accountIds |> List.map _.Value |> List.toArray |> Sql.uuidArray
       ])
       Reader.account
 
@@ -89,7 +89,7 @@ let processCommand
 
       let msg =
          GuaranteedDelivery.message
-            (EntityId.get envelope.EntityId)
+            envelope.EntityId.Value
             (AccountMessage.StateChange command)
 
       registry.AccountGuaranteedDeliveryActor() <! msg

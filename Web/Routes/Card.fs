@@ -115,7 +115,7 @@ let start (app: WebApplication) =
                      |> UnlockCard
                      |> ApprovableCommand.PerCommand
                      |> OrgMessage.ApprovableRequest
-                     |> GuaranteedDelivery.message (OrgId.get cmd.OrgId)
+                     |> GuaranteedDelivery.message cmd.OrgId.Value
 
                   let registry: IOrgGuaranteedDeliveryActor = registry
                   registry.OrgGuaranteedDeliveryActor() <! msg

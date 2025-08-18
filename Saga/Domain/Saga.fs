@@ -269,12 +269,10 @@ type Saga =
          | Saga.EmployeeOnboarding s -> s.CorrelationId
          | Saga.CardSetup s -> s.CorrelationId
          | Saga.Purchase s -> s.PurchaseInfo.CorrelationId
-         | Saga.DomesticTransfer s ->
-            TransferId.toCorrelationId s.TransferInfo.TransferId
-         | Saga.PlatformTransfer s ->
-            TransferId.toCorrelationId s.TransferInfo.TransferId
+         | Saga.DomesticTransfer s -> s.TransferInfo.TransferId.AsCorrelationId
+         | Saga.PlatformTransfer s -> s.TransferInfo.TransferId.AsCorrelationId
          | Saga.PaymentRequest s ->
-            PaymentRequestId.toCorrelationId s.PaymentInfo.SharedDetails.Id
+            s.PaymentInfo.SharedDetails.Id.AsCorrelationId
          | Saga.Billing s -> s.CorrelationId
 
       member x.OrgId =
@@ -380,17 +378,17 @@ module Message =
       =
       SagaEvent.create orgId corrId startEvent
       |> SagaMessage.Start
-      |> GuaranteedDelivery.message (CorrelationId.get corrId)
+      |> GuaranteedDelivery.message corrId.Value
 
    let private message orgId corrId (evt: Event) : AppSagaMessage =
       SagaEvent.create orgId corrId evt |> SagaMessage.Event
 
    let guaranteedDelivery
-      corrId
+      (corrId: CorrelationId)
       (msg: AppSagaMessage)
       : GuaranteedDelivery.Message<AppSagaMessage>
       =
-      GuaranteedDelivery.message (CorrelationId.get corrId) msg
+      GuaranteedDelivery.message corrId.Value msg
 
    let orgOnboardStart orgId corrId (evt: OrgOnboardingSagaStartEvent) =
       startMessage orgId corrId (StartEvent.OrgOnboarding evt)

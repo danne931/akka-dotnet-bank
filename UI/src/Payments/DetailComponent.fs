@@ -342,10 +342,7 @@ let PaymentDetailComponent
                Routes.TransactionsUrl.queryPath {
                   TransactionBrowserQuery.empty with
                      Transaction =
-                        f.TransferId
-                        |> TransferId.toCorrelationId
-                        |> TransactionId
-                        |> Some
+                        f.TransferId.AsCorrelationId |> TransactionId |> Some
                }
                |> Router.navigate)
          ]

@@ -99,14 +99,14 @@ module CardSqlWriter =
    let cardId (CardId id) = Sql.uuid id
 
    let thirdPartyProviderCardId (providerId: ThirdPartyProviderCardId option) =
-      providerId |> Option.map ThirdPartyProviderCardId.get |> Sql.uuidOrNone
+      providerId |> Option.map _.Value |> Sql.uuidOrNone
 
    let orgId = OrgSqlWriter.orgId
    let employeeId = EmployeeSqlWriter.employeeId
    let accountId = AccountSqlWriter.accountId
 
    let accountIds (ids: AccountId list) =
-      ids |> List.map AccountId.get |> Array.ofList |> Sql.uuidArray
+      ids |> List.map _.Value |> Array.ofList |> Sql.uuidArray
 
    let cardNumberLast4 = Sql.string
 

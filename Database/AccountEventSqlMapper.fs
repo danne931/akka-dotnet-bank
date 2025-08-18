@@ -79,13 +79,9 @@ module SqlReader =
       read.text Fields.event |> Serialization.deserializeUnsafe<AccountEvent>
 
 module SqlWriter =
-   let eventId (evtId: EventId) =
-      let (EventId id) = evtId
-      Sql.uuid id
+   let eventId (evtId: EventId) = Sql.uuid evtId.Value
 
-   let correlationId (corrId: CorrelationId) =
-      let (CorrelationId id) = corrId
-      Sql.uuid id
+   let correlationId (corrId: CorrelationId) = Sql.uuid corrId.Value
 
    let initiatedById =
       EmployeeEventSqlMapper.EmployeeEventSqlWriter.initiatedById
@@ -94,21 +90,15 @@ module SqlWriter =
       EmployeeEventSqlMapper.EmployeeEventSqlWriter.initiatedByIds
 
    let cardId (cardId: CardId option) =
-      let uuidOpt =
-         cardId
-         |> Option.map (fun cardId ->
-            let (CardId id) = cardId
-            id)
-
-      Sql.uuidOrNone uuidOpt
+      cardId |> Option.map _.Value |> Sql.uuidOrNone
 
    let cardIds (ids: CardId list) =
-      ids |> List.map CardId.get |> Array.ofList |> Sql.uuidArray
+      ids |> List.map _.Value |> Array.ofList |> Sql.uuidArray
 
    let accountId = AccountSqlWriter.accountId
 
    let accountIds (ids: AccountId list) =
-      ids |> List.map AccountId.get |> Array.ofList |> Sql.uuidArray
+      ids |> List.map _.Value |> Array.ofList |> Sql.uuidArray
 
    let parentAccountId = AccountSqlWriter.parentAccountId
 

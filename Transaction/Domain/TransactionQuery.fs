@@ -77,7 +77,7 @@ type TransactionQuery = {
    AccountIds: (AccountId list) option
    PageLimit: int
    Cursor: TransactionCursor option
-   MoneyFlow: Bank.Account.Domain.MoneyFlow option
+   MoneyFlow: MoneyFlow option
    Category: CategoryFilter option
    Amount: AmountFilter option
    DateRange: (DateTime * DateTime) option

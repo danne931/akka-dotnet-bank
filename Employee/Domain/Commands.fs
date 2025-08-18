@@ -20,7 +20,7 @@ type CreateAccountOwnerCommand = Command<CreateAccountOwnerInput>
 module CreateAccountOwnerCommand =
    let create (data: CreateAccountOwnerInput) =
       Command.create
-         (EmployeeId.toEntityId data.EmployeeId)
+         data.EmployeeId.AsEntityId
          data.OrgId
          (CorrelationId.create ())
          {
@@ -66,7 +66,7 @@ module CreateEmployeeCommand =
       let employeeId = Guid.NewGuid() |> EmployeeId
 
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         employeeId.AsEntityId
          data.OrgId
          (CorrelationId.create ())
          initiator
@@ -112,12 +112,7 @@ module RefreshInvitationTokenCommand =
       (correlationId: CorrelationId)
       (data: RefreshInvitationTokenInput)
       =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         correlationId
-         initiatedBy
-         data
+      Command.create employeeId.AsEntityId orgId correlationId initiatedBy data
 
    let toEvent
       (cmd: RefreshInvitationTokenCommand)
@@ -150,7 +145,7 @@ type CreateCardCommand = Command<CreateCardInput>
 module CreateCardCommand =
    let create (data: CreateCardInput) =
       Command.create
-         (EmployeeId.toEntityId data.EmployeeId)
+         data.EmployeeId.AsEntityId
          data.OrgId
          (CorrelationId.create ())
          data.InitiatedBy
@@ -217,7 +212,7 @@ type LinkThirdPartyProviderCardCommand =
 module LinkThirdPartyProviderCardCommand =
    let create (data: LinkThirdPartyProviderCardInput) =
       Command.create
-         (EmployeeId.toEntityId data.EmployeeId)
+         data.EmployeeId.AsEntityId
          data.OrgId
          data.CorrelationId
          data.InitiatedBy
@@ -244,7 +239,7 @@ type PurchaseIntentCommand = Command<PurchaseInfo>
 module PurchaseIntentCommand =
    let create (data: PurchaseInfo) =
       Command.create
-         (data.InitiatedBy.Id |> InitiatedById.get |> EntityId)
+         (EntityId data.InitiatedBy.Id.Value)
          data.OrgId
          data.CorrelationId
          data.InitiatedBy
@@ -271,7 +266,7 @@ type SettlePurchaseWithCardCommand = Command<CardPurchaseSettled>
 module SettlePurchaseWithCardCommand =
    let create (data: CardPurchaseSettled) =
       Command.create
-         (data.Info.InitiatedBy.Id |> InitiatedById.get |> EntityId)
+         (EntityId data.Info.InitiatedBy.Id.Value)
          data.Info.OrgId
          data.Info.CorrelationId
          data.Info.InitiatedBy
@@ -288,7 +283,7 @@ type FailPurchaseCommand = Command<CardPurchaseFailed>
 module FailPurchaseCommand =
    let create (data: CardPurchaseFailed) =
       Command.create
-         (data.Info.InitiatedBy.Id |> InitiatedById.get |> EntityId)
+         (EntityId data.Info.InitiatedBy.Id.Value)
          data.Info.OrgId
          data.Info.CorrelationId
          data.Info.InitiatedBy
@@ -305,7 +300,7 @@ type RefundPurchaseCommand = Command<CardPurchaseRefunded>
 module RefundPurchaseCommand =
    let create (data: CardPurchaseRefunded) =
       Command.create
-         (data.Info.InitiatedBy.Id |> InitiatedById.get |> EntityId)
+         (EntityId data.Info.InitiatedBy.Id.Value)
          data.Info.OrgId
          data.Info.CorrelationId
          data.Info.InitiatedBy
@@ -327,7 +322,7 @@ module ConfigureRollingPurchaseLimitCommand =
       (data: ConfiguredRollingPurchaseLimit)
       =
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         employeeId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -360,7 +355,7 @@ module LockCardCommand =
       (data: LockedCard)
       =
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         employeeId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -381,7 +376,7 @@ module UnlockCardCommand =
       (data: UnlockedCard)
       =
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         employeeId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -402,7 +397,7 @@ module UpdateRoleCommand =
       (data: RoleUpdated)
       =
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         employeeId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -431,7 +426,7 @@ module EditCardNicknameCommand =
       (data: CardNicknamed)
       =
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         employeeId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -453,12 +448,7 @@ module CancelInvitationCommand =
       (corrId: CorrelationId)
       (data: InvitationCancelled)
       =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         corrId
-         initiatedBy
-         data
+      Command.create employeeId.AsEntityId orgId corrId initiatedBy data
 
    let toEvent
       (cmd: CancelInvitationCommand)
@@ -476,7 +466,7 @@ module ConfirmInvitationCommand =
       (data: InvitationConfirmed)
       =
       Command.create
-         (initiatedBy.Id |> InitiatedById.toEmployeeId |> EmployeeId.toEntityId)
+         (EntityId initiatedBy.Id.Value)
          orgId
          correlationId
          initiatedBy
@@ -497,7 +487,7 @@ module RestoreAccessCommand =
       (data: AccessRestored)
       =
       Command.create
-         (EmployeeId.toEntityId employeeId)
+         employeeId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -523,12 +513,7 @@ module ApproveAccessCommand =
       (correlationId: CorrelationId)
       (data: ApproveAccessInput)
       =
-      Command.create
-         (EmployeeId.toEntityId employeeId)
-         orgId
-         correlationId
-         initiatedBy
-         data
+      Command.create employeeId.AsEntityId orgId correlationId initiatedBy data
 
    let toEvent
       (cmd: ApproveAccessCommand)

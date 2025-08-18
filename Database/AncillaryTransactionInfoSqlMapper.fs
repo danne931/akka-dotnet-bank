@@ -22,7 +22,7 @@ module AncillaryTransactionSqlReader =
       read.textOrNone AncillaryTransactionFields.note
 
 module AncillaryTransactionSqlWriter =
-   let transactionId (id: TransactionId) = TransactionId.get id |> Sql.uuid
+   let transactionId (TransactionId corrId) = Sql.uuid corrId.Value
 
    let categoryId = Sql.intOrNone
 

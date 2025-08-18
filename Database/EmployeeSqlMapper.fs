@@ -71,10 +71,10 @@ module EmployeeSqlReader =
    }
 
 module EmployeeSqlWriter =
-   let employeeId = EmployeeId.get >> Sql.uuid
+   let employeeId (EmployeeId id) = Sql.uuid id
 
    let employeeIds (ids: EmployeeId list) =
-      ids |> List.map EmployeeId.get |> Array.ofList |> Sql.uuidArray
+      ids |> List.map _.Value |> Array.ofList |> Sql.uuidArray
 
    let orgId = OrgSqlWriter.orgId
    let role (role: Role) = Sql.string <| string role

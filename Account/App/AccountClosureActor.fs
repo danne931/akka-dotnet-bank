@@ -1,12 +1,10 @@
 [<RequireQualifiedAccess>]
 module AccountClosureActor
 
-open Akka.Hosting
 open Akka.Actor
 open Akka.Persistence
 open Akkling
 open Akkling.Persistence
-open Akkling.Cluster.Sharding
 open Akka.Streams
 open Akkling.Streams
 open FsToolkit.ErrorHandling
@@ -151,10 +149,7 @@ let deleteHistoricalRecords (accountIds: AccountId list) =
            RETURNING {AccountFields.accountNumber}"
          (Some [
             "@accountIds",
-            accountIds
-            |> List.map AccountId.get
-            |> List.toArray
-            |> Sql.uuidArray
+            accountIds |> List.map _.Value |> List.toArray |> Sql.uuidArray
          ])
          AccountSqlReader.accountNumber
 

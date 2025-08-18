@@ -44,11 +44,11 @@ module Arrow =
          }
         ]
       | AutomaticTransferRule.PercentDistribution r ->
-         let r = PercentDistributionRule.get r
+         let rule = r.Value
 
-         r.DestinationAccounts
+         rule.DestinationAccounts
          |> List.map (fun o -> {
-            StartId = r.Sender.AccountId
+            StartId = rule.Sender.AccountId
             EndId = o.Recipient.AccountId
             RuleId = config.Id
             Direction = ArrowDirection.StartToEnd

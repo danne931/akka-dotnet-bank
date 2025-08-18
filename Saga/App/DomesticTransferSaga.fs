@@ -301,7 +301,7 @@ let onEventPersisted
    (evt: DomesticTransferSagaEvent)
    =
    let info = currentState.TransferInfo
-   let correlationId = TransferId.toCorrelationId info.TransferId
+   let correlationId = info.TransferId.AsCorrelationId
 
    let transfer = {
       Sender = info.Sender
@@ -383,7 +383,7 @@ let onEventPersisted
       let emailMsg =
          EmailMessage.create
             info.Sender.OrgId
-            (TransferId.toCorrelationId info.TransferId)
+            info.TransferId.AsCorrelationId
             (EmailInfo.DomesticTransfer {
                SenderAccountName = info.Sender.Name
                RecipientName = info.Recipient.FullName
@@ -430,7 +430,7 @@ let onEventPersisted
             let msg =
                EmailMessage.create
                   info.Sender.OrgId
-                  (TransferId.toCorrelationId info.TransferId)
+                  info.TransferId.AsCorrelationId
                   (EmailInfo.ApplicationErrorRequiresSupport(string reason))
 
             registry.EmailActor() <! msg

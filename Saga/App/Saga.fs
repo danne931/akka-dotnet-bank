@@ -29,8 +29,8 @@ let sagaHandler
    (orgSettingsCache: OrgSettingsCache)
    : SagaActor.SagaHandler<Saga, StartEvent, Event>
    =
-   let sendMessageToPaymentSaga orgId paymentId evt =
-      let corrId = PaymentRequestId.toCorrelationId paymentId
+   let sendMessageToPaymentSaga orgId (paymentId: PaymentRequestId) evt =
+      let corrId = paymentId.AsCorrelationId
       let msg = Message.paymentRequest orgId corrId evt
       registry.SagaActor corrId <! msg
 
@@ -334,7 +334,7 @@ let sagaHandler
                         let msg =
                            Message.domesticTransfer
                               transfer.Sender.OrgId
-                              (TransferId.toCorrelationId transfer.TransferId)
+                              transfer.TransferId.AsCorrelationId
                               evt
 
                         mailbox.Parent() <! msg
@@ -356,7 +356,7 @@ let sagaHandler
                         let msg =
                            Message.platformTransfer
                               transfer.Sender.OrgId
-                              (TransferId.toCorrelationId transfer.TransferId)
+                              transfer.TransferId.AsCorrelationId
                               evt
 
                         mailbox.Parent() <! msg
@@ -400,7 +400,7 @@ let getEntityRef
    ActorUtil.getEntityRef
       sys
       ActorUtil.ClusterMetadata.sagaShardRegion
-      (CorrelationId.get correlationId)
+      correlationId.Value
 
 let initProps
    registry

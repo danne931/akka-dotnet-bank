@@ -83,7 +83,7 @@ module AccountSqlReader =
    }
 
 module AccountSqlWriter =
-   let accountId = AccountId.get >> Sql.uuid
+   let accountId (AccountId id) = Sql.uuid id
    let orgId = OrgSqlWriter.orgId
    let parentAccountId (ParentAccountId id) = Sql.uuid id
 

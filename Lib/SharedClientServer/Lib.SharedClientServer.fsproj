@@ -3,6 +3,7 @@
     <Compile Include="NanoId.fs" />
     <Compile Include="Time.fs" />
     <Compile Include="Validators.fs" />
+    <Compile Include="Money.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Constants.fs" />
     <Compile Include="Permissions.fs" /> 

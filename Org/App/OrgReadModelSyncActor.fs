@@ -230,8 +230,7 @@ let sqlParamReducer
          CommandApprovalProgressId e.CorrelationId
          |> CommandApprovalProgressSqlMapper.Writer.commandId
 
-         "approvedBy",
-         e.Data.ApprovedBy.EmployeeId |> EmployeeId.get |> Sql.uuid
+         "approvedBy", Sql.uuid e.Data.ApprovedBy.EmployeeId.Value
 
          "expectedCurrentStatus",
          CommandApprovalProgressSqlMapper.Writer.status status
@@ -254,8 +253,7 @@ let sqlParamReducer
          CommandApprovalProgressId e.CorrelationId
          |> CommandApprovalProgressSqlMapper.Writer.commandId
 
-         "approvedBy",
-         e.Data.ApprovedBy.EmployeeId |> EmployeeId.get |> Sql.uuid
+         "approvedBy", Sql.uuid e.Data.ApprovedBy.EmployeeId.Value
 
          "expectedCurrentStatus",
          CommandApprovalProgress.Status.Pending

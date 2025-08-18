@@ -244,7 +244,7 @@ let form
 let renderCalculationDisplay (target: Account) (rule: TargetBalanceRule) =
    let targetName = rule.TargetAccount.Name
    let partnerName = rule.ManagingPartnerAccount.Name
-   let targetBalance = PositiveAmount.get rule.TargetAccountBalance
+   let targetBalance = rule.TargetAccountBalance.Value
    let currentBalance = target.AvailableBalance
 
    React.fragment [
@@ -258,12 +258,8 @@ let renderCalculationDisplay (target: Account) (rule: TargetBalanceRule) =
             match rule.TargetBalanceRange with
             | None -> note + "."
             | Some range ->
-               let lower =
-                  range.LowerBound |> PositiveAmount.get |> Money.format
-
-               let upper =
-                  range.UpperBound |> PositiveAmount.get |> Money.format
-
+               let lower = Money.format range.LowerBound.Value
+               let upper = Money.format range.UpperBound.Value
                $"{note} if it's outside the target range of {lower} - {upper}."
 
          if targetBalance > currentBalance then
@@ -278,7 +274,7 @@ let renderCalculationDisplay (target: Account) (rule: TargetBalanceRule) =
       match TargetBalanceRule.computeTransfer rule currentBalance with
       | None -> Html.p "No initial transfer needed."
       | Some t ->
-         let amount = t.Amount |> PositiveAmount.get |> Money.format
+         let amount = Money.format t.Amount.Value
 
          let isTargetMoneyFlowOut =
             t.Sender.AccountId = rule.TargetAccount.AccountId
@@ -321,7 +317,7 @@ let ConfigureAutoTransferTargetBalanceRuleFormComponent
    let initValues = {
       TargetBalance =
          existingRule
-         |> Option.map (_.TargetAccountBalance >> PositiveAmount.get >> string)
+         |> Option.map (_.TargetAccountBalance.Value >> string)
          |> Option.defaultValue ""
       TargetAccountId =
          Form.Util.defaultTargetAccountId existingTargetAccountId accounts
@@ -332,11 +328,11 @@ let ConfigureAutoTransferTargetBalanceRuleFormComponent
       HasRange = targetBalanceRange.IsSome
       RangeLowerBound =
          targetBalanceRange
-         |> Option.map (_.LowerBound >> PositiveAmount.get >> string)
+         |> Option.map (_.LowerBound.Value >> string)
          |> Option.defaultValue ""
       RangeUpperBound =
          targetBalanceRange
-         |> Option.map (_.UpperBound >> PositiveAmount.get >> string)
+         |> Option.map (_.UpperBound.Value >> string)
          |> Option.defaultValue ""
    }
 

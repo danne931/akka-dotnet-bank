@@ -125,8 +125,7 @@ let renderCalculationDisplay (target: Account) (rule: ZeroBalanceRule) =
       | Ok balance ->
          let amount =
             ZeroBalanceRule.computeTransfer rule balance
-            |> _.Amount
-            |> PositiveAmount.get
+            |> _.Amount.Value
             |> Money.format
 
          classyNode Html.div [ "grid" ] [

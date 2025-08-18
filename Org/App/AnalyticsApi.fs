@@ -72,7 +72,7 @@ let moneyFlowTopNAnalytics
          """
 
       let qParams = [
-         "orgId", txnQuery.OrgId |> OrgId.get |> Sql.uuid
+         "orgId", Sql.uuid txnQuery.OrgId.Value
          "flowIn", MoneyFlow.In |> string |> Sql.string
          "flowOut", MoneyFlow.Out |> string |> Sql.string
          "topN", Sql.int txnQuery.Limit
@@ -110,7 +110,7 @@ let employeePurchaseTopNAnalytics
       """
 
    let qParams = [
-      "orgId", txnQuery.OrgId |> OrgId.get |> Sql.uuid
+      "orgId", Sql.uuid txnQuery.OrgId.Value
       "topN", Sql.int txnQuery.Limit
       "date", Sql.timestamptz txnQuery.Date
    ]
@@ -133,7 +133,7 @@ let moneyFlowDailyTimeSeriesAnalytics
             None
 
       let qParams = [
-         "orgId", txnQuery.OrgId |> OrgId.get |> Sql.uuid
+         "orgId", Sql.uuid txnQuery.OrgId.Value
          "startDate", Sql.timestamptz txnQuery.Start
          "endDate",
          endDateAdjustedToPreviousDay
@@ -276,9 +276,8 @@ let moneyFlowMonthlyTimeSeriesAnalytics
          "filterId",
          match txnQuery.FilterBy with
          | MoneyFlowMonthlyTimeSeriesFilterBy.Account accountId ->
-            accountId |> AccountId.get |> Sql.uuid
-         | MoneyFlowMonthlyTimeSeriesFilterBy.Org orgId ->
-            orgId |> OrgId.get |> Sql.uuid
+            Sql.uuid accountId.Value
+         | MoneyFlowMonthlyTimeSeriesFilterBy.Org orgId -> Sql.uuid orgId.Value
 
          "lookbackMonths", Sql.int txnQuery.LookbackMonths
       ]

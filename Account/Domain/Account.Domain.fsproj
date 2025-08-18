@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="Purchase.fs" />
     <Compile Include="CoreTypes.fs" />
     <Compile Include="MaintenanceFee.fs" />
     <Compile Include="Events.fs" />

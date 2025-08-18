@@ -219,8 +219,8 @@ module TransferSqlReader =
       }
 
 module TransferSqlWriter =
-   let transferId = TransferId.get >> Sql.uuid
-   let initiatedById = InitiatedById.get >> Sql.uuid
+   let transferId (TransferId id) = Sql.uuid id
+   let initiatedById (InitiatedById employeeId) = Sql.uuid employeeId.Value
    let amount = Sql.decimal
    let transferCategory (cat: TransferCategory) = Sql.string (string cat)
    let scheduledAt (date: DateTime) = Sql.timestamptz date

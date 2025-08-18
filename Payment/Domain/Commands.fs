@@ -12,9 +12,9 @@ module RequestPaymentCommand =
       let payee = data.SharedDetails.Payee
 
       Command.create
-         (ParentAccountId.toEntityId payee.ParentAccountId)
+         payee.ParentAccountId.AsEntityId
          payee.OrgId
-         (data.SharedDetails.Id |> PaymentRequestId.get |> CorrelationId)
+         (CorrelationId data.SharedDetails.Id.Value)
          initiatedBy
          data
 
@@ -89,17 +89,14 @@ module RequestPaymentCommand =
 
          match cmd.Data with
          | Platform info ->
-            let payerOrgId = OrgId.get info.Payer.OrgId
-            let payeeOrgId = OrgId.get shared.Payee.OrgId
-
             let! _ =
                Lib.Validators.amountValidator "Payment amount" shared.Amount
 
             let! _ =
                Check.Guid.notEquals
-                  payerOrgId
+                  info.Payer.OrgId.Value
                   "Payer org = Payee org"
-                  payeeOrgId
+                  shared.Payee.OrgId.Value
 
             let info = {
                info with
@@ -131,9 +128,9 @@ module CancelPaymentRequestCommand =
       let payee = data.SharedDetails.Payee
 
       Command.create
-         (ParentAccountId.toEntityId payee.ParentAccountId)
+         payee.ParentAccountId.AsEntityId
          payee.OrgId
-         (data.SharedDetails.Id |> PaymentRequestId.get |> CorrelationId)
+         (CorrelationId data.SharedDetails.Id.Value)
          initiatedBy
          data
 
@@ -150,9 +147,9 @@ module DeclinePaymentRequestCommand =
       let payee = data.SharedDetails.Payee
 
       Command.create
-         (ParentAccountId.toEntityId payee.ParentAccountId)
+         payee.ParentAccountId.AsEntityId
          payee.OrgId
-         (data.SharedDetails.Id |> PaymentRequestId.get |> CorrelationId)
+         (CorrelationId data.SharedDetails.Id.Value)
          initiatedBy
          data
 

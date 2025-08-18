@@ -221,7 +221,7 @@ let form
    |> Form.append fieldFrequency
 
 let renderCalculationDisplay (target: Account) (r: PercentDistributionRule.T) =
-   let rule = PercentDistributionRule.get r
+   let rule = r.Value
    let targetName = rule.Sender.Name
 
    classyNode Html.div [ "auto-transfer-calculation-display" ] [
@@ -231,7 +231,7 @@ let renderCalculationDisplay (target: Account) (r: PercentDistributionRule.T) =
          List.fold
             (fun acc dest ->
                acc
-               + $$"""{{PositiveAmount.get dest.PercentAllocated}}% to {{dest.Recipient.Name}}, """)
+               + $$"""{{dest.PercentAllocated.Value}}% to {{dest.Recipient.Name}}, """)
             $"Distribute money from {targetName} to {rule.DestinationAccounts.Length} accounts: "
             rule.DestinationAccounts
          |> fun str -> str.Remove(str.Length - 2) + "."
@@ -248,11 +248,10 @@ let renderCalculationDisplay (target: Account) (r: PercentDistributionRule.T) =
       | Ok balance ->
          let computed = PercentDistributionRule.computeTransfer r balance
 
-         let totalAmount =
-            computed |> List.sumBy (_.Amount >> PositiveAmount.get)
+         let totalAmount = computed |> List.sumBy _.Amount.Value
 
          for t in computed do
-            let amount = PositiveAmount.get t.Amount
+            let amount = t.Amount.Value
             let percentToAllocate = (amount / totalAmount) * 100m
 
             classyNode Html.div [ "grid" ] [
@@ -279,8 +278,7 @@ let ConfigureAutoTransferPercentDistributionRuleFormComponent
    (accounts: Map<AccountId, Account>)
    (ruleToEdit: (Guid * PercentDistributionRule.T) option)
    =
-   let existingRule =
-      ruleToEdit |> Option.map (snd >> PercentDistributionRule.get)
+   let existingRule = ruleToEdit |> Option.map (snd >> _.Value)
 
    let existingTargetAccountId = existingRule |> Option.map _.Sender.AccountId
 
@@ -297,8 +295,7 @@ let ConfigureAutoTransferPercentDistributionRuleFormComponent
             _.DestinationAccounts
             >> List.map (fun d -> {
                AccountId = string d.Recipient.AccountId
-               PercentToAllocate =
-                  d.PercentAllocated |> PositiveAmount.get |> string
+               PercentToAllocate = string d.PercentAllocated.Value
             })
          )
          |> Option.defaultValue [

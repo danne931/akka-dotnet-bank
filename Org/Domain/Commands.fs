@@ -19,7 +19,7 @@ type SubmitOrgOnboardingApplicationCommand =
 module SubmitOrgOnboardingApplicationCommand =
    let create (data: SubmitOrgOnboardingApplicationInput) =
       Command.create
-         (OrgId.toEntityId data.OrgId)
+         data.OrgId.AsEntityId
          data.OrgId
          (CorrelationId.create ())
          data.InitiatedBy
@@ -54,7 +54,7 @@ type FinishOrgOnboardingCommand = Command<FinishOrgOnboardingInput>
 module FinishOrgOnboardingCommand =
    let create (data: FinishOrgOnboardingInput) =
       Command.create
-         (OrgId.toEntityId data.OrgId)
+         data.OrgId.AsEntityId
          data.OrgId
          data.CorrelationId
          data.InitiatedBy
@@ -72,9 +72,13 @@ module FinishOrgOnboardingCommand =
 type ConfigureFeatureFlagCommand = Command<FeatureFlagConfigured>
 
 module ConfigureFeatureFlagCommand =
-   let create orgId (initiator: Initiator) (data: FeatureFlagConfigured) =
+   let create
+      (orgId: OrgId)
+      (initiator: Initiator)
+      (data: FeatureFlagConfigured)
+      =
       Command.create
-         (OrgId.toEntityId orgId)
+         orgId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiator

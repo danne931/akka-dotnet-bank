@@ -322,7 +322,7 @@ module ManageApprovalRuleCommand =
          | ManageApprovalRuleInput.Delete(rule, initiator) -> rule, initiator
 
       Command.create
-         (OrgId.toEntityId rule.OrgId)
+         rule.OrgId.AsEntityId
          rule.OrgId
          (CorrelationId.create ())
          initiator
@@ -675,7 +675,7 @@ module CommandApprovalRule =
          : DeleteApprovalRuleCommand
          =
          Command.create
-            (OrgId.toEntityId data.OrgId)
+            data.OrgId.AsEntityId
             data.OrgId
             (CorrelationId.create ())
             initiatedBy
@@ -698,7 +698,7 @@ module CommandApprovalRule =
          : ConfigureApprovalRuleCommand
          =
          Command.create
-            (OrgId.toEntityId orgId)
+            orgId.AsEntityId
             orgId
             (CorrelationId.create ())
             initiatedBy
@@ -888,12 +888,7 @@ module CommandApprovalProgress =
          (correlationId: CorrelationId)
          (data: CommandApprovalRequested)
          =
-         Command.create
-            (OrgId.toEntityId orgId)
-            orgId
-            correlationId
-            initiatedBy
-            data
+         Command.create orgId.AsEntityId orgId correlationId initiatedBy data
 
       let toEvent
          (cmd: RequestCommandApproval)
@@ -908,7 +903,7 @@ module CommandApprovalProgress =
          let (CommandApprovalProgressId correlationId) = data.ProgressId
 
          Command.create
-            (OrgId.toEntityId orgId)
+            orgId.AsEntityId
             orgId
             correlationId
             {
@@ -934,7 +929,7 @@ module CommandApprovalProgress =
          let (CommandApprovalProgressId correlationId) = cmd.Data.ProgressId
 
          Command.create
-            (OrgId.toEntityId cmd.OrgId)
+            cmd.OrgId.AsEntityId
             cmd.OrgId
             correlationId
             {
@@ -961,7 +956,7 @@ module CommandApprovalProgress =
          let (CommandApprovalProgressId correlationId) = data.ProgressId
 
          Command.create
-            (OrgId.toEntityId orgId)
+            orgId.AsEntityId
             orgId
             correlationId
             {
@@ -983,7 +978,7 @@ module CommandApprovalProgress =
          let (CommandApprovalProgressId correlationId) = data.ProgressId
 
          Command.create
-            (OrgId.toEntityId orgId)
+            orgId.AsEntityId
             orgId
             correlationId
             Initiator.System

@@ -53,10 +53,10 @@ module EmployeeEventSqlWriter =
       let (CorrelationId id) = corrId
       Sql.uuid id
 
-   let initiatedById (id: InitiatedById) = id |> InitiatedById.get |> Sql.uuid
+   let initiatedById (id: InitiatedById) = id |> _.Value |> Sql.uuid
 
    let initiatedByIds (ids: InitiatedById list) =
-      ids |> List.map InitiatedById.get |> List.toArray |> Sql.uuidArray
+      ids |> List.map _.Value |> List.toArray |> Sql.uuidArray
 
    let orgId = OrgSqlWriter.orgId
    let employeeId = EmployeeSqlWriter.employeeId

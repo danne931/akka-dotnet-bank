@@ -57,7 +57,7 @@ let UserSessionSelectionComponent
                                     $"{session.Name} ({session.Role.Display})"
 
                                  attr.href ""
-                                 attr.value (EmployeeId.get session.EmployeeId)
+                                 attr.value session.EmployeeId.Value
 
                                  attr.onClick (fun e ->
                                     e.preventDefault ()

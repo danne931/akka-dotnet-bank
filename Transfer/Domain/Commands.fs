@@ -22,7 +22,7 @@ type InternalTransferWithinOrgCommand = Command<InternalTransferWithinOrgInput>
 module InternalTransferWithinOrgCommand =
    let create (initiator: Initiator) (data: InternalTransferWithinOrgInput) =
       Command.create
-         (ParentAccountId.toEntityId data.Sender.ParentAccountId)
+         data.Sender.ParentAccountId.AsEntityId
          data.Sender.OrgId
          (CorrelationId.create ())
          initiator
@@ -44,8 +44,7 @@ module InternalTransferWithinOrgCommand =
                cmd
                {
                   BaseInfo = {
-                     TransferId =
-                        cmd.CorrelationId |> CorrelationId.get |> TransferId
+                     TransferId = TransferId cmd.CorrelationId.Value
                      InitiatedBy = cmd.InitiatedBy
                      Recipient = info.Recipient
                      Amount = info.Amount
@@ -70,7 +69,7 @@ module DepositInternalTransferWithinOrgCommand =
       let recipient = data.BaseInfo.Recipient
 
       Command.create
-         (ParentAccountId.toEntityId recipient.ParentAccountId)
+         recipient.ParentAccountId.AsEntityId
          recipient.OrgId
          correlationId
          initiatedBy
@@ -83,7 +82,7 @@ module DepositInternalTransferWithinOrgCommand =
       let info = evt.Data.BaseInfo
 
       Command.create
-         (ParentAccountId.toEntityId info.Recipient.ParentAccountId)
+         info.Recipient.ParentAccountId.AsEntityId
          evt.OrgId
          evt.CorrelationId
          evt.InitiatedBy
@@ -114,7 +113,7 @@ module InternalTransferBetweenOrgsCommand =
       let sender = data.Sender
 
       Command.create
-         (ParentAccountId.toEntityId sender.ParentAccountId)
+         sender.ParentAccountId.AsEntityId
          sender.OrgId
          (CorrelationId.create ())
          initiator
@@ -138,8 +137,7 @@ module InternalTransferBetweenOrgsCommand =
                   FromSchedule = info.OriginatedFromSchedule
                   BaseInfo = {
                      FromPaymentRequest = cmd.Data.OriginatedFromPaymentRequest
-                     TransferId =
-                        cmd.CorrelationId |> CorrelationId.get |> TransferId
+                     TransferId = TransferId cmd.CorrelationId.Value
                      InitiatedBy = cmd.InitiatedBy
                      Recipient = info.Recipient
                      Amount = info.Amount
@@ -166,7 +164,7 @@ module ScheduleInternalTransferBetweenOrgsCommand =
       (data: ScheduleInternalTransferBetweenOrgsInput)
       =
       Command.create
-         (ParentAccountId.toEntityId data.TransferInput.Sender.ParentAccountId)
+         data.TransferInput.Sender.ParentAccountId.AsEntityId
          data.TransferInput.Sender.OrgId
          (CorrelationId.create ())
          initiator
@@ -191,8 +189,7 @@ module ScheduleInternalTransferBetweenOrgsCommand =
                cmd
                {
                   BaseInfo = {
-                     TransferId =
-                        cmd.CorrelationId |> CorrelationId.get |> TransferId
+                     TransferId = TransferId cmd.CorrelationId.Value
                      InitiatedBy = cmd.InitiatedBy
                      Recipient = info.Recipient
                      Amount = info.Amount
@@ -214,7 +211,7 @@ module FailInternalTransferBetweenOrgsCommand =
       (data: InternalTransferBetweenOrgsFailed)
       =
       Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.ParentAccountId.AsEntityId
          data.BaseInfo.Sender.OrgId
          correlationId
          initiator
@@ -236,7 +233,7 @@ module DepositInternalTransferBetweenOrgsCommand =
       (data: InternalTransferBetweenOrgsDeposited)
       =
       Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Recipient.ParentAccountId)
+         data.BaseInfo.Recipient.ParentAccountId.AsEntityId
          data.BaseInfo.Recipient.OrgId
          correlationId
          initiatedBy
@@ -258,7 +255,7 @@ module SettleInternalTransferBetweenOrgsCommand =
       (data: InternalTransferBetweenOrgsSettled)
       =
       Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.ParentAccountId.AsEntityId
          data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
@@ -290,7 +287,7 @@ type RegisterDomesticTransferRecipientCommand =
 module RegisterDomesticTransferRecipientCommand =
    let create (initiatedBy: Initiator) (data: DomesticTransferRecipientInput) =
       Command.create
-         (ParentAccountId.toEntityId data.Sender.ParentAccountId)
+         data.Sender.ParentAccountId.AsEntityId
          data.Sender.OrgId
          (CorrelationId.create ())
          initiatedBy
@@ -354,7 +351,7 @@ module EditDomesticTransferRecipientCommand =
       (data: EditDomesticTransferRecipientInput)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -404,7 +401,7 @@ module NicknameDomesticTransferRecipientCommand =
       (data: NicknamedDomesticTransferRecipient)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -440,7 +437,7 @@ module DomesticTransferCommand =
       : DomesticTransferCommand
       =
       Command.create
-         (ParentAccountId.toEntityId data.Sender.ParentAccountId)
+         data.Sender.ParentAccountId.AsEntityId
          data.Sender.OrgId
          correlationId
          initiatedBy
@@ -464,8 +461,7 @@ module DomesticTransferCommand =
                   FromSchedule = input.OriginatedFromSchedule
                   ExpectedSettlementDate = scheduledDate.AddDays 5
                   BaseInfo = {
-                     TransferId =
-                        cmd.CorrelationId |> CorrelationId.get |> TransferId
+                     TransferId = TransferId cmd.CorrelationId.Value
                      InitiatedBy = cmd.InitiatedBy
                      ScheduledDate = scheduledDate
                      Amount = input.Amount
@@ -485,7 +481,7 @@ module ScheduleDomesticTransferCommand =
       : ScheduleDomesticTransferCommand
       =
       Command.create
-         (ParentAccountId.toEntityId data.TransferInput.Sender.ParentAccountId)
+         data.TransferInput.Sender.ParentAccountId.AsEntityId
          data.TransferInput.Sender.OrgId
          (CorrelationId.create ())
          initiatedBy
@@ -510,8 +506,7 @@ module ScheduleDomesticTransferCommand =
                cmd
                {
                   BaseInfo = {
-                     TransferId =
-                        cmd.CorrelationId |> CorrelationId.get |> TransferId
+                     TransferId = TransferId cmd.CorrelationId.Value
                      InitiatedBy = cmd.InitiatedBy
                      ScheduledDate = scheduledDate
                      Amount = input.Amount
@@ -532,7 +527,7 @@ module SettleDomesticTransferCommand =
       (data: DomesticTransferSettled)
       =
       Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.ParentAccountId.AsEntityId
          data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
@@ -553,7 +548,7 @@ module FailDomesticTransferCommand =
       (data: DomesticTransferFailed)
       =
       Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.ParentAccountId.AsEntityId
          data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
@@ -575,7 +570,7 @@ module UpdateDomesticTransferProgressCommand =
       (data: DomesticTransferProgressUpdated)
       =
       Command.create
-         (ParentAccountId.toEntityId data.BaseInfo.Sender.ParentAccountId)
+         data.BaseInfo.Sender.ParentAccountId.AsEntityId
          data.BaseInfo.Sender.OrgId
          correlationId
          initiatedBy
@@ -602,7 +597,7 @@ module ConfigureAutoTransferRuleCommand =
       (data: ConfigureAutoTransferRuleInput)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -637,7 +632,7 @@ module DeleteAutoTransferRuleCommand =
       (data: AutomaticTransferRuleDeleted)
       =
       Command.create
-         (ParentAccountId.toEntityId parentAccountId)
+         parentAccountId.AsEntityId
          orgId
          (CorrelationId.create ())
          initiatedBy
@@ -657,7 +652,7 @@ module InternalAutoTransferCommand =
       let sender = data.Transfer.Sender
 
       Command.create
-         (ParentAccountId.toEntityId sender.ParentAccountId)
+         sender.ParentAccountId.AsEntityId
          sender.OrgId
          (CorrelationId.create ())
          Initiator.System
@@ -680,11 +675,10 @@ module InternalAutoTransferCommand =
                {
                   Rule = cmd.Data.Rule
                   BaseInfo = {
-                     TransferId =
-                        cmd.CorrelationId |> CorrelationId.get |> TransferId
+                     TransferId = TransferId cmd.CorrelationId.Value
                      InitiatedBy = cmd.InitiatedBy
                      Recipient = t.Recipient
-                     Amount = PositiveAmount.get t.Amount
+                     Amount = t.Amount.Value
                      ScheduledDate = cmd.Timestamp
                      Sender = t.Sender
                      Memo = None
@@ -704,7 +698,7 @@ module DepositInternalAutoTransferCommand =
       let recipient = data.BaseInfo.Recipient
 
       Command.create
-         (ParentAccountId.toEntityId recipient.ParentAccountId)
+         recipient.ParentAccountId.AsEntityId
          recipient.OrgId
          correlationId
          initiatedBy

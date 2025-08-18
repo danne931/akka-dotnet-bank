@@ -123,7 +123,7 @@ module PaymentSqlWriter =
 
    let accountId = AccountSqlWriter.accountId
 
-   let initiatedById = InitiatedById.get >> Sql.uuid
+   let initiatedById (InitiatedById employeeId) = Sql.uuid employeeId.Value
 
    let amount = Sql.decimal
 
@@ -152,7 +152,7 @@ module PaymentSqlWriter =
 
    let fulfilledByTransferId =
       function
-      | PaymentRequestStatus.Fulfilled p -> Some(TransferId.get p.TransferId)
+      | PaymentRequestStatus.Fulfilled p -> Some p.TransferId.Value
       | _ -> None
       >> Sql.uuidOrNone
 

@@ -282,22 +282,18 @@ let autoTransferRuleDisplay (rule: AutomaticTransfer.AutomaticTransferRule) =
    | AutomaticTransfer.AutomaticTransferRule.ZeroBalance _ ->
       "Maintain a zero balance."
    | AutomaticTransfer.AutomaticTransferRule.TargetBalance rule ->
-      let targetBalance =
-         rule.TargetAccountBalance |> PositiveAmount.get |> Money.formatShort
+      let targetBalance = Money.formatShort rule.TargetAccountBalance.Value
 
       let msg = $"Restore balance to {targetBalance}."
 
       match rule.TargetBalanceRange with
       | None -> msg
       | Some range ->
-         let low = range.LowerBound |> PositiveAmount.get |> Money.formatShort
-
-         let upper = range.UpperBound |> PositiveAmount.get |> Money.formatShort
-
+         let low = Money.formatShort range.LowerBound.Value
+         let upper = Money.formatShort range.UpperBound.Value
          $"{msg} Balance out of range ({low}, {upper})"
    | AutomaticTransfer.AutomaticTransferRule.PercentDistribution rule ->
-      let rule = AutomaticTransfer.PercentDistributionRule.get rule
-      $"Maintain a zero balance by distributing it between {rule.DestinationAccounts.Length} accounts."
+      $"Maintain a zero balance by distributing it between {rule.Value.DestinationAccounts.Length} accounts."
 
 let transactionUIFriendly
    (merchants: Map<string, Merchant>)

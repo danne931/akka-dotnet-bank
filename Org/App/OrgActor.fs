@@ -43,7 +43,7 @@ let private sendApprovedCommand
             { cmd with Timestamp = DateTime.UtcNow }
             |> EmployeeCommand.ApproveAccess
             |> EmployeeMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+            |> GuaranteedDelivery.message cmd.EntityId.Value
 
          getEmployeeRef () <! msg
       | UpdateEmployeeRole cmd ->
@@ -51,7 +51,7 @@ let private sendApprovedCommand
             { cmd with Timestamp = DateTime.UtcNow }
             |> EmployeeCommand.UpdateRole
             |> EmployeeMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+            |> GuaranteedDelivery.message cmd.EntityId.Value
 
          getEmployeeRef () <! msg
       | UnlockCard cmd ->
@@ -59,7 +59,7 @@ let private sendApprovedCommand
             { cmd with Timestamp = DateTime.UtcNow }
             |> EmployeeCommand.UnlockCard
             |> EmployeeMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+            |> GuaranteedDelivery.message cmd.EntityId.Value
 
          getEmployeeRef () <! msg
       | ManageApprovalRule cmd ->
@@ -89,7 +89,7 @@ let private sendApprovedCommand
             { cmd with Timestamp = DateTime.UtcNow }
             |> AccountCommand.DomesticTransfer
             |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+            |> GuaranteedDelivery.message cmd.EntityId.Value
 
          getAccountRef () <! msg
       | InternalTransferBetweenOrgs cmd ->
@@ -97,7 +97,7 @@ let private sendApprovedCommand
             { cmd with Timestamp = DateTime.UtcNow }
             |> AccountCommand.InternalTransferBetweenOrgs
             |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+            |> GuaranteedDelivery.message cmd.EntityId.Value
 
          getAccountRef () <! msg
 
@@ -249,7 +249,7 @@ let onPersisted
                }
             |> EmployeeCommand.CancelInvitation
             |> EmployeeMessage.StateChange
-            |> GuaranteedDelivery.message (EntityId.get cmd.EntityId)
+            |> GuaranteedDelivery.message cmd.EntityId.Value
 
          registry.EmployeeGuaranteedDeliveryActor() <! msg
       | ApprovableCommand.AmountBased(InternalTransferBetweenOrgs cmd) ->
@@ -280,9 +280,8 @@ let onPersisted
                }
                |> AccountCommand.DeclinePaymentRequest
                |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message (
-                  ParentAccountId.get info.Recipient.ParentAccountId
-               )
+               |> GuaranteedDelivery.message
+                     info.Recipient.ParentAccountId.Value
 
             registry.AccountGuaranteedDeliveryActor() <! msg
          | None -> ()
@@ -402,8 +401,7 @@ let actorProps
                            Command = cmd
                            Requester = {
                               EmployeeName = cmd.InitiatedBy.Name
-                              EmployeeId =
-                                 InitiatedById.toEmployeeId cmd.InitiatedBy.Id
+                              EmployeeId = cmd.InitiatedBy.Id.AsEmployeeId
                            }
                            RequesterIsConfiguredAsAnApprover =
                               CommandApprovalRule.isRequesterOneOfManyApprovers

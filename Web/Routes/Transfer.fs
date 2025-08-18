@@ -104,7 +104,7 @@ let start (app: WebApplication) =
                      |> InternalTransferBetweenOrgs
                      |> ApprovableCommand.AmountBased
                      |> OrgMessage.ApprovableRequest
-                     |> GuaranteedDelivery.message (OrgId.get cmd.OrgId)
+                     |> GuaranteedDelivery.message cmd.OrgId.Value
 
                   let registry: IOrgGuaranteedDeliveryActor = registry
                   registry.OrgGuaranteedDeliveryActor() <! msg
@@ -151,7 +151,7 @@ let start (app: WebApplication) =
                      |> DomesticTransfer
                      |> ApprovableCommand.AmountBased
                      |> OrgMessage.ApprovableRequest
-                     |> GuaranteedDelivery.message (OrgId.get cmd.OrgId)
+                     |> GuaranteedDelivery.message cmd.OrgId.Value
 
                   let registry: IOrgGuaranteedDeliveryActor = registry
                   registry.OrgGuaranteedDeliveryActor() <! msg

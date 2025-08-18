@@ -58,8 +58,6 @@ module AmountFilter =
          "amountMax", string max
         ]
 
-type MoneyFlow = Bank.Account.Domain.MoneyFlow
-
 module MoneyFlow =
    let display =
       function

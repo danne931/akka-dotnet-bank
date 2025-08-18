@@ -14,103 +14,62 @@ module Guid =
 type EntityId =
    | EntityId of Guid
 
-   override x.ToString() =
-      let (EntityId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module EntityId =
-   let get (entityId: EntityId) : Guid =
-      let (EntityId id) = entityId
-      id
+   member x.Value = let (EntityId id) = x in id
 
 type CorrelationId =
    | CorrelationId of Guid
 
-   override x.ToString() =
-      let (CorrelationId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module CorrelationId =
-   let create () = CorrelationId <| Guid.NewGuid()
+   member x.Value = let (CorrelationId id) = x in id
 
-   let get (corrId: CorrelationId) : Guid =
-      let (CorrelationId id) = corrId
-      id
+   static member create() = CorrelationId <| Guid.NewGuid()
 
 type EventId =
    | EventId of Guid
 
-   override x.ToString() =
-      let (EventId id) = x
-      string id
+   override x.ToString() = string x.Value
+
+   member x.Value = let (EventId id) = x in id
 
 type TransactionId =
    | TransactionId of CorrelationId
 
-   override x.ToString() =
-      let (TransactionId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module TransactionId =
-   let get (txnId: TransactionId) : Guid =
-      let (TransactionId id) = txnId
-      CorrelationId.get id
+   member x.Value = let (TransactionId corrId) = x in corrId.Value
 
-   let toCorrelationId (id: TransactionId) : CorrelationId =
-      let (TransactionId txnId) = id
-      txnId
+   member x.AsCorrelationId = CorrelationId x.Value
 
 type OrgId =
    | OrgId of Guid
 
-   override x.ToString() =
-      let (OrgId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module OrgId =
-   let get (orgId: OrgId) : Guid =
-      let (OrgId id) = orgId
-      id
+   member x.Value = let (OrgId id) = x in id
 
-   let toEntityId (orgId: OrgId) : EntityId =
-      let (OrgId id) = orgId
-      EntityId id
+   member x.AsEntityId = EntityId x.Value
 
-   let fromEntityId (entityId: EntityId) : OrgId =
-      let (EntityId id) = entityId
-      OrgId id
+   static member fromEntityId(EntityId entityId) = OrgId entityId
 
 type AccountId =
    | AccountId of Guid
 
-   override x.ToString() =
-      let (AccountId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module AccountId =
-   let get (accountId: AccountId) : Guid =
-      let (AccountId id) = accountId
-      id
+   member x.Value = let (AccountId id) = x in id
 
 type ParentAccountId =
    | ParentAccountId of Guid
 
-   override x.ToString() =
-      let (ParentAccountId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module ParentAccountId =
-   let get (accountId: ParentAccountId) : Guid =
-      let (ParentAccountId id) = accountId
-      id
+   member x.Value = let (ParentAccountId id) = x in id
 
-   let toEntityId (accountId: ParentAccountId) : EntityId =
-      let (ParentAccountId id) = accountId
-      EntityId id
-
-   let fromEntityId (entityId: EntityId) : ParentAccountId =
-      let (EntityId id) = entityId
-      ParentAccountId id
+   member x.AsEntityId = EntityId x.Value
+   static member fromEntityId(EntityId id) = ParentAccountId id
 
 type EmployeeId =
    | EmployeeId of Guid
@@ -119,57 +78,35 @@ type EmployeeId =
       let (EmployeeId id) = x
       string id
 
-module EmployeeId =
-   let get (employeeId: EmployeeId) : Guid =
-      let (EmployeeId id) = employeeId
-      id
+   member x.Value = let (EmployeeId id) = x in id
 
-   let toEntityId (employeeId: EmployeeId) : EntityId =
-      let (EmployeeId id) = employeeId
-      EntityId id
+   member x.AsEntityId = EntityId x.Value
 
-   let fromEntityId (entityId: EntityId) : EmployeeId =
-      let (EntityId id) = entityId
-      EmployeeId id
+   static member fromEntityId(EntityId id) = EmployeeId id
 
 // Employee who initiated the command.
 type InitiatedById =
    | InitiatedById of EmployeeId
 
-   override x.ToString() =
-      let (InitiatedById initiatedById) = x
-      let (EmployeeId id) = initiatedById
-      string id
+   override x.ToString() = string x.Value
 
-module InitiatedById =
-   let toEmployeeId (id: InitiatedById) : EmployeeId =
-      let (InitiatedById employeeId) = id
-      employeeId
+   member x.Value = let (EmployeeId id) = x.AsEmployeeId in id
 
-   let get (initiatedById: InitiatedById) : Guid =
-      let (EmployeeId id) = toEmployeeId initiatedById
-      id
+   member x.AsEmployeeId = let (InitiatedById emId) = x in emId
 
 type CardId =
    | CardId of Guid
 
-   override x.ToString() =
-      let (CardId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module CardId =
-   let get (cardId: CardId) : Guid =
-      let (CardId id) = cardId
-      id
+   member x.Value = let (CardId id) = x in id
 
 type CommandApprovalRuleId =
    | CommandApprovalRuleId of Guid
 
    override x.ToString() = string x.Value
 
-   member x.Value: Guid =
-      let (CommandApprovalRuleId ruleId) = x
-      ruleId
+   member x.Value = let (CommandApprovalRuleId ruleId) = x in ruleId
 
 type CommandApprovalProgressId =
    | CommandApprovalProgressId of CorrelationId
@@ -186,37 +123,27 @@ type CommandApprovalProgressId =
 type SettlementId =
    | SettlementId of Guid
 
-   override x.ToString() =
-      let (SettlementId id) = x
-      string id
+   override x.ToString() = string x.Value
+
+   member x.Value = let (SettlementId id) = x in id
 
 type PaymentRequestId =
    | PaymentRequestId of Guid
 
-   override x.ToString() =
-      let (PaymentRequestId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module PaymentRequestId =
-   let get (payId: PaymentRequestId) =
-      let (PaymentRequestId id) = payId
-      id
+   member x.Value = let (PaymentRequestId id) = x in id
 
-   let toCorrelationId (PaymentRequestId payId) = CorrelationId payId
+   member x.AsCorrelationId = CorrelationId x.Value
 
 type TransferId =
    | TransferId of Guid
 
-   override x.ToString() =
-      let (TransferId id) = x
-      string id
+   override x.ToString() = string x.Value
 
-module TransferId =
-   let get (transferId: TransferId) =
-      let (TransferId id) = transferId
-      id
+   member x.Value = let (TransferId id) = x in id
 
-   let toCorrelationId (TransferId transferId) = CorrelationId transferId
+   member x.AsCorrelationId = CorrelationId x.Value
 
 type Initiator = { Id: InitiatedById; Name: string }
 
@@ -608,54 +535,3 @@ type Email = private {
    static member deserialize(email: string) : Email = { Email = email }
 
    static member empty = { Email = "" }
-
-type PositiveAmount =
-   private
-   | PositiveAmount of decimal
-
-   static member create(value: decimal) =
-      if value > 0m then
-         Ok(PositiveAmount value)
-      else
-         Error "Non-Positive Amount"
-
-   static member get(PositiveAmount v) = v
-
-   /// Have yet to refactor the codebase to use PositiveAmount more often.
-   /// When a PositiveAmount interacts with a decimal we should
-   /// use this tryMap to ensure the result of the transform is still a valid
-   /// PositiveAmount.
-   static member tryMap
-      (transform: decimal -> decimal)
-      (PositiveAmount amount)
-      =
-      PositiveAmount.create (transform amount)
-
-   static member (-)(PositiveAmount amt1, PositiveAmount amt2) =
-      PositiveAmount.create (amt1 - amt2)
-
-   static member (+)(PositiveAmount amt1, PositiveAmount amt2) =
-      PositiveAmount(amt1 + amt2)
-
-   static member (/)(PositiveAmount amt1, PositiveAmount amt2) =
-      PositiveAmount(amt1 / amt2)
-
-   static member (*)(PositiveAmount amt1, PositiveAmount amt2) =
-      PositiveAmount(amt1 * amt2)
-
-type PendingDeductions = {
-   Count: int
-   Money: decimal
-} with
-
-   static member Zero = { Count = 0; Money = 0m }
-
-   member x.Add(amount: decimal) = {
-      Count = x.Count + 1
-      Money = x.Money + amount
-   }
-
-   member x.Remove(amount: decimal) = {
-      Count = max (x.Count - 1) 0
-      Money = max (x.Money - amount) 0m
-   }

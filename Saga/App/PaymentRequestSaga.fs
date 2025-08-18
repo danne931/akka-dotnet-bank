@@ -263,7 +263,7 @@ let stateTransition
       Ok(applyEvent saga evt timestamp)
 
 let private notifyPayerOfPaymentRequest emailRef (payment: PaymentRequested) =
-   let corrId = PaymentRequestId.toCorrelationId payment.SharedDetails.Id
+   let corrId = payment.SharedDetails.Id.AsCorrelationId
    let payeeOrgName = payment.SharedDetails.Payee.OrgName
    let amount = payment.SharedDetails.Amount
 
@@ -297,7 +297,7 @@ let private notifyPayeeOfPaymentDecline (payment: PaymentRequested) emailRef =
    let msg =
       EmailMessage.create
          shared.Payee.OrgId
-         (PaymentRequestId.toCorrelationId shared.Id)
+         shared.Id.AsCorrelationId
          (EmailInfo.PlatformPaymentDeclined {
             Amount = shared.Amount
             PayeeBusinessName = shared.Payee.OrgName
@@ -308,7 +308,7 @@ let private notifyPayeeOfPaymentDecline (payment: PaymentRequested) emailRef =
 
 let private remindPayerOfPaymentRequest (payment: PaymentRequested) emailRef =
    let shared = payment.SharedDetails
-   let corrId = PaymentRequestId.toCorrelationId shared.Id
+   let corrId = shared.Id.AsCorrelationId
 
    let msg =
       match payment with

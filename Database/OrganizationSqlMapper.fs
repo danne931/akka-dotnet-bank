@@ -69,7 +69,7 @@ module OrgSqlWriter =
       status |> Serialization.serialize |> Sql.jsonb
 
    let socialTransferDiscoveryAccountId (accountId: AccountId option) =
-      accountId |> Option.map AccountId.get |> Sql.uuidOrNone
+      accountId |> Option.map _.Value |> Sql.uuidOrNone
 
    let adminTeamEmail (email: Email) = email |> string |> Sql.string
 
