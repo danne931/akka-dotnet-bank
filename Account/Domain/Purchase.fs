@@ -13,7 +13,7 @@ type PurchaseInfo = {
    InitiatedBy: Initiator
    CorrelationId: CorrelationId
    EmployeeName: string
-   EmployeeEmail: Email
+   EmployeeEmail: Email.Email
    CardNumberLast4: string
    Date: DateTime
    Amount: decimal

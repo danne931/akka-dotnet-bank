@@ -6,7 +6,7 @@ open Akkling
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
-open Email
+open EmailMessage
 open Lib.Saga
 open TransferMessages
 open DomesticTransferSaga

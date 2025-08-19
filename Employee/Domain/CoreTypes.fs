@@ -40,7 +40,7 @@ type PendingInviteConfirmation = {
 }
 
 type EmployeePendingInviteConfirmation = {
-   Email: Email
+   Email: Email.Email
    Name: string
    InviteConfirmation: PendingInviteConfirmation
    EmployeeId: EmployeeId
@@ -85,7 +85,7 @@ type UserSession = {
    OrgId: OrgId
    EmployeeId: EmployeeId
    Name: string
-   Email: Email
+   Email: Email.Email
    Role: Role
 } with
 

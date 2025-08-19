@@ -4,6 +4,7 @@ open System
 
 open Lib.SharedTypes
 open Bank.Account.Domain
+open Email
 
 type CreatedAccountOwner = {
    Email: Email

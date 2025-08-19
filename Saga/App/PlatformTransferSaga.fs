@@ -7,7 +7,7 @@ open Lib.SharedTypes
 open Lib.Saga
 open Bank.Account.Domain
 open Bank.Transfer.Domain
-open Email
+open EmailMessage
 open PartnerBank.Service.Domain
 open PlatformTransferSaga
 open BankActorRegistry

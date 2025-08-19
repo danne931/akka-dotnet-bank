@@ -5,6 +5,7 @@ open System
 open Lib.SharedTypes
 open Bank.Employee.Domain
 open OrganizationSqlMapper
+open Email
 
 let table = "employee"
 

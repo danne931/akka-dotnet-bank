@@ -2,8 +2,6 @@
 module OrgReadModelSyncActor
 
 open System
-open Akkling
-open Akkling.Cluster.Sharding
 
 open Lib.SharedTypes
 open Lib.Types

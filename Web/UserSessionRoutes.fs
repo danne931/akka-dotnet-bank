@@ -13,6 +13,7 @@ open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
 open BankActorRegistry
+open Email
 
 let private getValidInviteFromQuery (token: string) = taskResultOption {
    let lift = Ok >> Task.FromResult

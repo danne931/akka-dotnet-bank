@@ -14,6 +14,7 @@ open CardIssuer.Service.Domain
 open PartnerBank.Service.Domain
 open BillingStatement
 open Bank.Scheduler
+open EmailMessage
 
 [<RequireQualifiedAccess>]
 module ActorMarker =
@@ -97,10 +98,10 @@ module ActorMarker =
    type EmployeeReadModelSync() = class end
 
 type IEmailActor =
-   abstract EmailActor: unit -> IActorRef<Email.EmailMessage>
+   abstract EmailActor: unit -> IActorRef<EmailMessage>
 
 type IEmailProxyActor =
-   abstract EmailProxyActor: unit -> IActorRef<Email.EmailMessage>
+   abstract EmailProxyActor: unit -> IActorRef<EmailMessage>
 
 type IOrgActor =
    abstract OrgActor: OrgId -> IEntityRef<OrgMessage>

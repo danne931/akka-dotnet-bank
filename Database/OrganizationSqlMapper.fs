@@ -2,6 +2,7 @@ module OrganizationSqlMapper
 
 open Lib.SharedTypes
 open Bank.Org.Domain
+open Email
 
 let table = "organization"
 let featureFlagsTable = "org_feature_flag"

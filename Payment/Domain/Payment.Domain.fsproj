@@ -14,5 +14,6 @@
   <ItemGroup>
     <ProjectReference Include="../../Lib/SharedClientServer/Lib.SharedClientServer.fsproj" />
     <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../../Notifications/Domain/Notifications.Domain.fsproj" />
   </ItemGroup>
 </Project>

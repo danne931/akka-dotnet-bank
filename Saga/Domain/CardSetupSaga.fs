@@ -5,6 +5,7 @@ open System
 open Lib.SharedTypes
 open Bank.Employee.Domain
 open Lib.Saga
+open Email
 
 [<RequireQualifiedAccess>]
 type CardSetupFailureReason = | CardProviderCardCreateFail

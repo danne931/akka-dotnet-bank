@@ -3,6 +3,7 @@ namespace Bank.Org.Domain
 open Validus
 
 open Lib.SharedTypes
+open Email
 
 type SubmitOrgOnboardingApplicationInput = {
    LegalBusinessName: string

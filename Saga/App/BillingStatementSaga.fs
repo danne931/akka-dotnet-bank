@@ -4,7 +4,7 @@ open System
 open Akkling
 
 open Bank.Account.Domain
-open Email
+open EmailMessage
 open Lib.Saga
 open BillingSaga
 open BankActorRegistry

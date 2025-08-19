@@ -17,6 +17,7 @@ open Lib.Time
 open RecurringPaymentSchedule
 open RecurringPaymentForm
 open InvoiceForm
+open Email
 
 type Values = {
    Amount: string

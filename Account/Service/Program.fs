@@ -19,6 +19,7 @@ open ActorUtil
 open SignalRBroadcast
 open TransferMessages
 open BankActorRegistry
+open EmailMessage
 
 let builder = Env.builder
 
@@ -434,10 +435,10 @@ builder.Services.AddAkka(
          // Forward Email messages from web node to EmailProducer actors.
          .WithSingleton<ActorMarker.EmailProxy>(
             ActorMetadata.emailProxy.Name,
-            (fun system _ _ ->
+            (fun _ _ _ ->
                let registry: IEmailActor = getActorRegistry provider
 
-               (fun (msg: Email.EmailMessage) ->
+               (fun (msg: EmailMessage) ->
                   registry.EmailActor() <<! msg
                   ignored ())
                |> actorOf
@@ -508,7 +509,7 @@ builder.Services.AddAkka(
             // which will enqueue the message into RabbitMq for the
             // EmailService Singleton Actor to process.
             registry.Register<ActorMarker.EmailProducer>(
-               Lib.Queue.startProducer<Email.EmailMessage>
+               Lib.Queue.startProducer<EmailMessage>
                   system
                   (getQueueConnection provider)
                   EnvNotifications.config.Queue

@@ -19,7 +19,7 @@ open Bank.Payment.Domain
 open BillingStatement
 open AutomaticTransfer
 open SignalRBroadcast
-open Email
+open EmailMessage
 open OrgOnboardingSaga
 open PurchaseSaga
 open DomesticTransferSaga

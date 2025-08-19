@@ -55,7 +55,7 @@ type PlatformPayer = {
    OrgName: string
 }
 
-type ThirdPartyPayer = { Name: string; Email: Email }
+type ThirdPartyPayer = { Name: string; Email: Email.Email }
 
 [<RequireQualifiedAccess>]
 type Payer =

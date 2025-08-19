@@ -4,7 +4,7 @@ open Lib.SharedTypes
 
 type OrgOnboardingApplicationSubmitted = {
    LegalBusinessName: string
-   AdminTeamEmail: Email
+   AdminTeamEmail: Email.Email
    ParentAccountId: ParentAccountId
    EmployerIdentificationNumber: string
 }

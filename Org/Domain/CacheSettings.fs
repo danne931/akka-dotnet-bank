@@ -3,7 +3,7 @@ module CachedOrgSettings
 open Lib.SharedTypes
 
 type CachedOrgSettings = {
-   AdminTeamEmail: Email
+   AdminTeamEmail: Email.Email
    ParentAccountId: ParentAccountId
    PartnerBankAccountLink: PartnerBank.Service.Domain.PartnerBankAccountLink
 }

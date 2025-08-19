@@ -5,6 +5,7 @@ open Microsoft.AspNetCore.Builder
 
 open Bank.Employee.Domain
 open Lib.SharedTypes
+open Email
 
 let getSession (context: HttpContext) =
    let employeeId =

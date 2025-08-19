@@ -3,6 +3,7 @@ namespace Bank.Employee.Domain
 open System
 
 open Lib.SharedTypes
+open Email
 
 [<RequireQualifiedAccess>]
 type EmployeeCommand =

@@ -6,7 +6,7 @@ open Akkling
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Org.Domain
-open Email
+open EmailMessage
 open Lib.Saga
 open PartnerBank.Service.Domain
 open CachedOrgSettings

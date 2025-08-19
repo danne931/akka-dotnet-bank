@@ -70,7 +70,7 @@ builder.Services.AddAkka(
                typedefof<EmployeeMessage>
                typedefof<CircuitBreakerMessage>
                typedefof<CircuitBreakerState>
-               typedefof<Email.EmailMessage>
+               typedefof<EmailMessage.EmailMessage>
                // NOTE: Akka ShardRegionProxy defined in Akka.Hosting below
                //       does not recognize Akkling ShardEnvelope as Akka
                //       ShardingEnvelope so need to explicitly add it for

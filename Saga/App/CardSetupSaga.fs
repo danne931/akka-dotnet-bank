@@ -5,7 +5,7 @@ open Akkling
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
-open Email
+open EmailMessage
 open Lib.Saga
 open CardIssuer.Service.Domain
 open CardSetupSaga

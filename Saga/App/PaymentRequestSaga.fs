@@ -7,7 +7,7 @@ open Lib.SharedTypes
 open Lib.Saga
 open Bank.Account.Domain
 open Bank.Payment.Domain
-open Email
+open EmailMessage
 open RecurringPaymentSchedule
 open PaymentRequestSaga
 open BankActorRegistry

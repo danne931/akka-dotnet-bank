@@ -124,6 +124,7 @@
     <ProjectReference Include="../../Transaction/Domain/Transaction.Domain.fsproj" />
     <ProjectReference Include="../../SignalR/Domain/SignalR.Domain.fsproj" />
     <ProjectReference Include="../../Analytics/Domain/Analytics.Domain.fsproj" />
+    <ProjectReference Include="../../Notifications/Domain/Notifications.Domain.fsproj" />
   </ItemGroup>
 
 </Project>

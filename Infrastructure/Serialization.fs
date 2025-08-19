@@ -199,7 +199,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | :? EmployeeMessage -> "EmployeeShardEnvelope"
          | :? AppSaga.AppSagaMessage -> "AppSagaShardEnvelope"
          | _ -> raise <| NotImplementedException()
-      | :? Email.EmailMessage -> "EmailMessage"
+      | :? EmailMessage.EmailMessage -> "EmailMessage"
       | _ -> raise <| NotImplementedException()
 
    override _.ToBinary(o: obj) =
@@ -266,7 +266,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? SignalRActor.Msg
       // Most email sending is done from actors within account nodes.
       // Allow emails to also be sent from web nodes.
-      | :? Email.EmailMessage
+      | :? EmailMessage.EmailMessage
       // AccountActor persistence snapshot.
       | :? ParentAccountSnapshot as o ->
          JsonSerializer.SerializeToUtf8Bytes(o, Serialization.jsonOptions)
@@ -391,8 +391,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AccountClosureActorMessage" -> typeof<AccountClosureMessage>
          | "SchedulerMessage" -> typeof<SchedulerMessage>
          | "AccountSeederMessage" -> typeof<AccountSeederMessage>
-         | "Email+EmailMessage, Notifications.Domain"
-         | "EmailMessage" -> typeof<Email.EmailMessage>
+         | "EmailMessage+EmailMessage, Notifications.Domain"
+         | "EmailMessage" -> typeof<EmailMessage.EmailMessage>
          | _ -> raise <| SerializationException()
 
       let deserialized =

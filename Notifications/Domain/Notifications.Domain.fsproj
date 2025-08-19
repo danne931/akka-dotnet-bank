@@ -1,11 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="Email.fs" />
+    <Compile Include="EmailMessage.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
-    <ProjectReference Include="../../Account/Domain/Account.Domain.fsproj" />
-    <ProjectReference Include="../../Employee/Domain/Employee.Domain.fsproj" /> 
+    <PackageReference Include="Validus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Lib/SharedClientServer/Lib.SharedClientServer.fsproj" />
   </ItemGroup>
 </Project>

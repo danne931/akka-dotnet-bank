@@ -13,7 +13,7 @@ open Lib.SharedTypes
 open Lib.Types
 open ActorUtil
 open Bank.Account.Domain
-open Email
+open EmailMessage
 open Bank.Scheduler
 open BankActorRegistry
 

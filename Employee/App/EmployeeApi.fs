@@ -10,6 +10,7 @@ open Lib.SharedTypes
 open Bank.Employee.Domain
 open Lib.NetworkQuery
 open BankActorRegistry
+open Email
 
 module AccountFields = AccountSqlMapper.AccountFields
 module Fields = EmployeeSqlMapper.EmployeeFields

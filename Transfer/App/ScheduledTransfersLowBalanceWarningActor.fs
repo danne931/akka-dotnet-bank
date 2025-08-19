@@ -7,7 +7,7 @@ open Akkling
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
-open Email
+open EmailMessage
 open Lib.Postgres
 open AccountSqlMapper
 open TransferSqlMapper

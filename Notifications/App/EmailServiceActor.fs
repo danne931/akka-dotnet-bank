@@ -15,6 +15,7 @@ open Lib.Postgres
 open Lib.SharedTypes
 open Lib.CircuitBreaker
 open SignalRBroadcast
+open EmailMessage
 open Email
 open OrgOnboardingSaga
 open EmployeeOnboardingSaga
@@ -118,7 +119,7 @@ let private emailPropsFromMessage
       OrgId = msg.OrgId
       Event = "debit-declined"
       Email = Some(string info.Email)
-      Data = {| reason = info.Reason.Display |}
+      Data = {| reason = info.Reason |}
      }
    | EmailInfo.InternalTransferBetweenOrgs info -> {
       OrgId = msg.OrgId
@@ -216,7 +217,7 @@ let private emailPropsFromMessage
          name = info.Name
          // TODO: Domain not configured.
          inviteLink =
-            $"localhost:8080{RoutePaths.UserSessionPath.AuthorizeInvite}?token={info.Token.Token}"
+            $"localhost:8080{RoutePaths.UserSessionPath.AuthorizeInvite}?token={info.Token}"
       |}
      }
    | EmailInfo.EmployeeOnboardingFail info -> {

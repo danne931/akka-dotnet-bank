@@ -15,7 +15,7 @@ open CommandApproval
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
-open Email
+open EmailMessage
 open BankActorRegistry
 
 let start (app: WebApplication) =
@@ -170,7 +170,7 @@ let start (app: WebApplication) =
                            (EmailInfo.EmployeeInvite {
                               Name = employee.Name
                               Email = employee.Email
-                              Token = invite.Token
+                              Token = string invite.Token.Token
                            })
 
                      (registry :> IEmailProxyActor).EmailProxyActor() <! msg

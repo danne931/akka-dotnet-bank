@@ -27,6 +27,7 @@ open Bank.Employee.Domain
 open AutomaticTransfer
 open RecurringPaymentSchedule
 open BankActorRegistry
+open Email
 
 module aeFields = AccountEventSqlMapper.Fields
 

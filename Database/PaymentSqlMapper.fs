@@ -6,6 +6,7 @@ open Lib.SharedTypes
 open OrganizationSqlMapper
 open AccountSqlMapper
 open Bank.Payment.Domain
+open Email
 
 module Table =
    let payment = "payment_request"

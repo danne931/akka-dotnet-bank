@@ -5,7 +5,7 @@ open Akkling
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open Email
+open EmailMessage
 open Lib.Saga
 open PartnerBank.Service.Domain
 open PurchaseSaga
@@ -302,7 +302,7 @@ let onStartEventPersisted
          Info =
             EmailInfo.PurchaseFailed {
                Email = purchaseInfo.EmployeeEmail
-               Reason = reason
+               Reason = reason.Display
             }
       }
 
@@ -370,14 +370,14 @@ let onEventPersisted
 
       registry.EmailActor() <! emailMsg
 
-   let sendPurchaseFailedEmail reason =
+   let sendPurchaseFailedEmail (reason: PurchaseFailReason) =
       let emailMsg = {
          OrgId = purchaseInfo.OrgId
          CorrelationId = purchaseInfo.CorrelationId
          Info =
             EmailInfo.PurchaseFailed {
                Email = purchaseInfo.EmployeeEmail
-               Reason = reason
+               Reason = reason.Display
             }
       }
 

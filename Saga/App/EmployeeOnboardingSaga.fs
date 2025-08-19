@@ -7,7 +7,7 @@ open Lib.SharedTypes
 open Bank.Employee.Domain
 open Bank.Org.Domain
 open CommandApproval
-open Email
+open EmailMessage
 open Lib.Saga
 open CardIssuer.Service.Domain
 open EmployeeOnboardingSaga
@@ -308,7 +308,7 @@ let onStartEventPersisted
          EmailInfo.EmployeeInvite {
             Name = $"{e.Data.FirstName} {e.Data.LastName}"
             Email = e.Data.Email
-            Token = e.Data.InviteToken
+            Token = string e.Data.InviteToken.Token
          }
          |> EmailMessage.create e.OrgId e.CorrelationId
 
@@ -334,7 +334,7 @@ let onStartEventPersisted
             EmailInfo.EmployeeInvite {
                Name = $"{e.Data.FirstName} {e.Data.LastName}"
                Email = e.Data.Email
-               Token = e.Data.InviteToken
+               Token = string e.Data.InviteToken.Token
             }
             |> EmailMessage.create e.OrgId e.CorrelationId
 
@@ -344,7 +344,7 @@ let onStartEventPersisted
          EmailInfo.EmployeeInvite {
             Name = o.EmployeeName
             Email = o.EmployeeEmail
-            Token = o.InviteToken
+            Token = string o.InviteToken.Token
          }
          |> EmailMessage.create o.Event.OrgId o.Event.CorrelationId
 
@@ -367,7 +367,7 @@ let onEventPersisted
          EmailInfo.EmployeeInvite {
             Name = employeeName
             Email = updatedState.EmployeeEmail
-            Token = updatedState.InviteToken
+            Token = string updatedState.InviteToken.Token
          }
          |> EmailMessage.create orgId corrId
 
