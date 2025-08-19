@@ -6,7 +6,6 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
 
-open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Org.Domain
 open Bank.Transaction.Api

@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../Database/Database.fsproj" />
+    <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
     <ProjectReference Include="../Domain/Payment.Domain.fsproj" />
   </ItemGroup>
 </Project>

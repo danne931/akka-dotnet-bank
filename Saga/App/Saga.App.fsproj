@@ -9,7 +9,6 @@
     <Compile Include="DomesticTransferSaga.fs" />
     <Compile Include="PurchaseSaga.fs" />
     <Compile Include="Saga.fs" />
-    <Compile Include="SqlMapper.fs" />
     <Compile Include="AlarmClockActor.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
   </ItemGroup>
@@ -26,5 +25,6 @@
     <ProjectReference Include="../../Scheduler/Domain/Scheduler.Domain.fsproj" />
     <ProjectReference Include="../Domain/Saga.Domain.fsproj" />
     <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
+    <ProjectReference Include="../../Database/Database.fsproj" />
   </ItemGroup>
 </Project>

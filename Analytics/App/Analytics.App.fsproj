@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../Database/Database.fsproj" />
+    <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
     <ProjectReference Include="../Domain/Analytics.Domain.fsproj" />
   </ItemGroup>
 </Project>

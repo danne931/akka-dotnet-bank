@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="../../Database/Database.fsproj" />
     <ProjectReference Include="../../Lib/Server/Lib.Server.fsproj" />
+    <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
     <ProjectReference Include="../../Scheduler/Domain/Scheduler.Domain.fsproj" />
     <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
     <ProjectReference Include="../../Billing/Domain/Billing.Domain.fsproj" />
