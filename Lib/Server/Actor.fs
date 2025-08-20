@@ -14,6 +14,7 @@ open Akka.Persistence.Query
 open Akka.Persistence.Extras
 open Akka.Persistence.Sql.Query
 open Akka.Cluster.Tools.PublishSubscribe
+
 open Lib.Types
 
 module SystemLog =
@@ -224,22 +225,6 @@ module ActorMetadata =
    let sagaAlarmClock = {
       Name = "saga-alarm-clock"
       Route = "saga-alarm-clock"
-   }
-
-   let internalTransfer = {
-      Name = "internal-transfer-recipient"
-      RouteBuilder =
-         fun accountId -> $"account/{accountId}/internal-transfer-recipient"
-   }
-
-   let domesticTransfer = {
-      Name = "domestic-transfer-consumer"
-      Route = "domestic-transfer-consumer"
-   }
-
-   let domesticTransferProducer = {
-      Name = "domestic-transfer-producer"
-      Route = "domestic-transfer-producer"
    }
 
    let autoTransferScheduling = {

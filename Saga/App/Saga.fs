@@ -25,7 +25,7 @@ open BankActorRegistry
 
 let sagaHandler
    (registry:
-      #IOrgActor & #IEmployeeActor & #IAccountActor & #IEmailActor & #IDomesticTransferActor & #ISchedulerActor & #IKYCServiceActor & #IPartnerBankServiceActor & #ICardIssuerServiceActor & #ISagaActor)
+      #IOrgActor & #IEmployeeActor & #IAccountActor & #IEmailActor & #ISchedulerActor & #IKYCServiceActor & #IPartnerBankServiceActor & #ICardIssuerServiceActor & #ISagaActor)
    (orgSettingsCache: OrgSettingsCache)
    : SagaActor.SagaHandler<Saga, StartEvent, Event>
    =

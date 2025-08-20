@@ -124,10 +124,6 @@ type IAccountGuaranteedDeliveryActor =
    abstract AccountGuaranteedDeliveryActor:
       unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>
 
-type IDomesticTransferActor =
-   abstract DomesticTransferActor:
-      unit -> IActorRef<DomesticTransferServiceMessage>
-
 type IAccountClosureActor =
    abstract AccountClosureActor: unit -> IActorRef<AccountClosureMessage>
 
@@ -211,10 +207,6 @@ type BankActorRegistry(system: ActorSystem) =
    interface IAccountClosureActor with
       member _.AccountClosureActor() =
          registry.Get<ActorMarker.AccountClosure>() |> typed
-
-   interface IDomesticTransferActor with
-      member _.DomesticTransferActor() =
-         registry.Get<ActorMarker.DomesticTransferProducer>() |> typed
 
    interface ISagaActor with
       member _.SagaActor corrId =

@@ -394,7 +394,7 @@ let onEventPersisted
          }
       }
 
-   let initializeVirtualAccount partnerBankAccount =
+   let initializeVirtualAccount (partnerBankLink: PartnerBankAccountLink) =
       let parentAccountId = application.ParentAccountId
 
       let msg =
@@ -402,15 +402,15 @@ let onEventPersisted
             OrgId = orgId
             CorrelationId = corrId
             ParentAccountId = parentAccountId
-            PartnerBankAccountNumber = partnerBankAccount.AccountNumber
-            PartnerBankRoutingNumber = partnerBankAccount.RoutingNumber
+            PartnerBankAccountNumber = partnerBankLink.AccountNumber
+            PartnerBankRoutingNumber = partnerBankLink.RoutingNumber
          }
          |> AccountCommand.InitializePrimaryCheckingAccount
          |> AccountMessage.StateChange
 
       registry.AccountActor parentAccountId <! msg
 
-   let initOrgSettingsCache partnerBankLink =
+   let initOrgSettingsCache (partnerBankLink: PartnerBankAccountLink) =
       let asyncEvt = async {
          let! res =
             operationEnv.OrgSettingsCache.Update orgId {

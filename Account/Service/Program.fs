@@ -17,7 +17,6 @@ open CardIssuer.Service.Domain
 open Bank.Infrastructure
 open ActorUtil
 open SignalRBroadcast
-open TransferMessages
 open BankActorRegistry
 open EmailMessage
 
@@ -446,20 +445,6 @@ builder.Services.AddAkka(
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         // Consume DomesticTransferMessages off of RabbitMq
-         .WithSingleton<ActorMarker.DomesticTransfer>(
-            ActorMetadata.domesticTransfer.Name,
-            (fun system _ _ ->
-               DomesticTransferServiceActor.initProps
-                  (getActorRegistry provider)
-                  (getQueueConnection provider)
-                  EnvTransfer.config.Queue
-                  Env.config.QueueConsumerStreamBackoffRestart
-                  (EnvTransfer.config.domesticTransferCircuitBreaker system)
-                  (getBroadcaster provider)
-               |> _.ToProps()),
-            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
-         )
          .WithActors(fun system registry ->
             registry.Register<ActorMarker.BillingStatement>(
                BillingStatementActor.start
@@ -513,18 +498,6 @@ builder.Services.AddAkka(
                   system
                   (getQueueConnection provider)
                   EnvNotifications.config.Queue
-                  Env.config.QueueConsumerStreamBackoffRestart
-               |> untyped
-            )
-
-            // Other actors in the system send DomesticTransferMessages to this actor
-            // which will enqueue the message into RabbitMq for the
-            // DomesticTransferService Singleton Actor to process.
-            registry.Register<ActorMarker.DomesticTransferProducer>(
-               Lib.Queue.startProducer<DomesticTransferServiceMessage>
-                  system
-                  (getQueueConnection provider)
-                  EnvTransfer.config.Queue
                   Env.config.QueueConsumerStreamBackoffRestart
                |> untyped
             )

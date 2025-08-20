@@ -190,7 +190,6 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? CircuitBreakerEvent -> "CircuitBreakerEvent"
       | :? CircuitBreakerMessage -> "CircuitBreakerActorMessage"
       | :? BillingCycleMessage -> "BillingCycleActorMessage"
-      | :? DomesticTransferServiceMessage -> "DomesticTransferActorMessage"
       | :? AutoTransferMessage -> "AutomaticTransferActorMessage"
       | :? ShardEnvelope as e ->
          match e.Message with
@@ -242,8 +241,6 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? BillingCycleMessage
       // Messages from SchedulingActor to AutomaticTransferSchedulingActor
       | :? AutoTransferMessage
-      // Ack/ProgressCheck messages from saga to to DomesticTransferActor
-      | :? DomesticTransferServiceMessage
       // Messages from sharded account nodes to AccountClosureActor cluster
       // singleton. Also for messages from SchedulingActor to Account Closure Proxy
       | :? AccountClosureMessage
@@ -351,7 +348,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "KYCMessage"
          | "Bank.Org.Domain.KYCMessage, Org.Domain" -> typeof<KYCMessage>
          | "PartnerBankServiceMessage"
-         | "PartnerBank.Service.Domain+PartnerBankServiceMessage, Account.Domain" ->
+         | "PartnerBank.Service.Domain+PartnerBankServiceMessage, Transfer.Domain" ->
             typeof<PartnerBankServiceMessage>
          | "CardIssuerServiceMessage"
          | "CardIssuer.Service.Domain+CardIssuerMessage, Employee.Domain" ->
@@ -385,9 +382,6 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "CircuitBreakerActorState" -> typeof<CircuitBreakerState>
          | "BillingCycleActorMessage" -> typeof<BillingCycleMessage>
          | "AutomaticTransferActorMessage" -> typeof<AutoTransferMessage>
-         | "TransferMessages+DomesticTransferServiceMessage, Transfer.Domain"
-         | "DomesticTransferActorMessage" ->
-            typeof<DomesticTransferServiceMessage>
          | "AccountClosureActorMessage" -> typeof<AccountClosureMessage>
          | "SchedulerMessage" -> typeof<SchedulerMessage>
          | "AccountSeederMessage" -> typeof<AccountSeederMessage>

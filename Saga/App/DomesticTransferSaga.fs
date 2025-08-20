@@ -8,14 +8,9 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open EmailMessage
 open Lib.Saga
-open TransferMessages
 open DomesticTransferSaga
 open BankActorRegistry
-
-type private ServiceMessage = DomesticTransferServiceMessage
-
-type private ServiceAction =
-   DomesticTransfer.Service.Domain.DomesticTransferServiceAction
+open PartnerBank.Service.Domain
 
 let applyStartEvent
    (start: DomesticTransferSagaStartEvent)
@@ -273,7 +268,7 @@ let stateTransition
       Ok(applyEvent saga evt timestamp)
 
 let onStartEventPersisted
-   (registry: #IDomesticTransferActor)
+   (registry: #IPartnerBankServiceActor)
    (evt: DomesticTransferSagaStartEvent)
    =
    match evt with
@@ -281,9 +276,18 @@ let onStartEventPersisted
       let transfer = TransferEventToDomesticTransfer.fromPending e
 
       let msg =
-         ServiceMessage.TransferRequest(ServiceAction.TransferAck, transfer)
+         PartnerBankServiceMessage.TransferDomestic(
+            {
+               Action = DomesticTransferServiceAction.TransferAck
+               Transfer = transfer
+               Metadata = {
+                  OrgId = e.Data.BaseInfo.Sender.OrgId
+                  CorrelationId = e.CorrelationId
+               }
+            }
+         )
 
-      registry.DomesticTransferActor() <! msg
+      registry.PartnerBankServiceActor() <! msg
    | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ -> ()
 
 type OperationEnv = {
@@ -294,7 +298,7 @@ type OperationEnv = {
 
 let onEventPersisted
    (registry:
-      #IDomesticTransferActor & #IAccountActor & #IEmailActor & #ISchedulerActor)
+      #IPartnerBankServiceActor & #IAccountActor & #IEmailActor & #ISchedulerActor)
    (operationEnv: OperationEnv)
    (previousState: DomesticTransferSaga)
    (currentState: DomesticTransferSaga)
@@ -333,15 +337,33 @@ let onEventPersisted
 
    let sendTransferToProcessorService () =
       let msg =
-         ServiceMessage.TransferRequest(ServiceAction.TransferAck, transfer)
+         PartnerBankServiceMessage.TransferDomestic(
+            {
+               Action = DomesticTransferServiceAction.TransferAck
+               Transfer = transfer
+               Metadata = {
+                  OrgId = info.Sender.OrgId
+                  CorrelationId = correlationId
+               }
+            }
+         )
 
-      registry.DomesticTransferActor() <! msg
+      registry.PartnerBankServiceActor() <! msg
 
    let checkOnTransferProgress () =
       let msg =
-         ServiceMessage.TransferRequest(ServiceAction.ProgressCheck, transfer)
+         PartnerBankServiceMessage.TransferDomestic(
+            {
+               Action = DomesticTransferServiceAction.ProgressCheck
+               Transfer = transfer
+               Metadata = {
+                  OrgId = info.Sender.OrgId
+                  CorrelationId = correlationId
+               }
+            }
+         )
 
-      registry.DomesticTransferActor() <! msg
+      registry.PartnerBankServiceActor() <! msg
 
    let updateTransferProgress (progress: DomesticTransferThirdPartyUpdate) =
       let cmd =
