@@ -97,3 +97,27 @@ type PartnerBankResponse =
    | TransferBetweenOrganizations of PartnerBankSyncTransferBetweenOrgsResponse
    | TransferDomestic of PartnerBankDomesticTransferResponse
    | Purchase of PartnerBankSyncPurchaseResponse
+
+let networkSender
+   (sender: DomesticTransferSender)
+   : DomesticTransferServiceSender
+   =
+   {
+      Name = sender.Name
+      AccountNumber = string sender.AccountNumber
+      RoutingNumber = string sender.RoutingNumber
+   }
+
+let networkRecipient
+   (recipient: DomesticTransferRecipient)
+   : DomesticTransferServiceRecipient
+   =
+   {
+      Name = recipient.Name
+      AccountNumber = string recipient.AccountNumber
+      RoutingNumber = string recipient.RoutingNumber
+      Depository =
+         match recipient.Depository with
+         | DomesticRecipientAccountDepository.Checking -> "checking"
+         | DomesticRecipientAccountDepository.Savings -> "savings"
+   }

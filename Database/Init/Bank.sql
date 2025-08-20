@@ -783,11 +783,10 @@ WHERE recipient_account_id IS NOT NULL;
 COMMENT ON TABLE transfer_domestic IS
 'Child table of transfers represents transfers which occur outside the platform, domestically within the U.S.
 
-There is currently a server, defined in MockDomesticTransferProcessor.Web folder, which supports mocking
+There is currently a server, defined in MockPartnerBank.Service folder, which supports mocking
 the interaction of sending transfers domestically from accounts on the platform to accounts outside the platform.
 Transfer request and progress check messages are sent over TCP from the platform (Transfer.App/DomesticTransferRecipientActor.fs)
-to a mock 3rd party transfer processor (MockDomesticTransferProcess.Web/Program.fs).
-TODO: Look into integrating Plaid.';
+to a mock 3rd party transfer processor (MockPartnerBank.Service/Program.fs).';
 
 
 --- PAYMENT REQUESTS ---

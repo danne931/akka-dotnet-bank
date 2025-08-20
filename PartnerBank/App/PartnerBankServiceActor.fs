@@ -43,30 +43,6 @@ let private failReasonFromError (err: string) : FailReason =
    | Contains "NoTransferProcessing" -> FailReason.NoTransferFound
    | e -> FailReason.Infra(InfraFailReason.Unknown e)
 
-let private networkSender
-   (sender: DomesticTransferSender)
-   : DomesticTransferServiceSender
-   =
-   {
-      Name = sender.Name
-      AccountNumber = string sender.AccountNumber
-      RoutingNumber = string sender.RoutingNumber
-   }
-
-let private networkRecipient
-   (recipient: DomesticTransferRecipient)
-   : DomesticTransferServiceRecipient
-   =
-   {
-      Name = recipient.Name
-      AccountNumber = string recipient.AccountNumber
-      RoutingNumber = string recipient.RoutingNumber
-      Depository =
-         match recipient.Depository with
-         | DomesticRecipientAccountDepository.Checking -> "checking"
-         | DomesticRecipientAccountDepository.Savings -> "savings"
-   }
-
 let protectedAction
    (networkRequest: NetworkRequest)
    (mailbox: Actor<_>)
@@ -266,8 +242,8 @@ let private networkRequest
 
          let! response =
             TCP.request
-               EnvTransfer.config.MockPartnerBank.Host
-               EnvTransfer.config.MockPartnerBank.Port
+               EnvPartnerBank.config.MockPartnerBank.Host
+               EnvPartnerBank.config.MockPartnerBank.Port
                Encoding.UTF8
                (JsonSerializer.SerializeToUtf8Bytes request)
 

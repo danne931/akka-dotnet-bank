@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="PartnerBankService.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Validus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
+  </ItemGroup>
+</Project>

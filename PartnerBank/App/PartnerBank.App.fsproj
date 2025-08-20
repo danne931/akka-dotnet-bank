@@ -1,10 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="Environment.fs" />
-    <Compile Include="AutomaticTransferSchedulingActor.fs" />
-    <Compile Include="ScheduledTransfersLowBalanceWarningActor.fs" />
-    <Compile Include="Api.fs" />
-    <Compile Include="Routes.fs" />
+    <Compile Include="PartnerBankServiceActor.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,5 +15,6 @@
     <ProjectReference Include="../../Database/Database.fsproj" />
     <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" /> 
     <ProjectReference Include="../../SignalR/Domain/SignalR.Domain.fsproj" />
+    <ProjectReference Include="../Domain/PartnerBank.Domain.fsproj" />
   </ItemGroup>
 </Project>

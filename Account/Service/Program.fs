@@ -245,9 +245,9 @@ builder.Services.AddAkka(
                PartnerBankServiceActor.initProps
                   (getActorRegistry provider)
                   (getQueueConnection provider)
-                  Env.config.PartnerBankServiceQueue
+                  EnvPartnerBank.config.Queue
                   Env.config.QueueConsumerStreamBackoffRestart
-                  (Env.config.PartnerBankServiceCircuitBreaker system)
+                  (EnvPartnerBank.config.CircuitBreaker system)
                   (getBroadcaster provider)
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -474,7 +474,7 @@ builder.Services.AddAkka(
                Lib.Queue.startProducer<PartnerBankServiceMessage>
                   system
                   (getQueueConnection provider)
-                  Env.config.PartnerBankServiceQueue
+                  EnvPartnerBank.config.Queue
                   Env.config.QueueConsumerStreamBackoffRestart
                |> untyped
             )

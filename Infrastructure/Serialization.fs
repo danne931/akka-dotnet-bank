@@ -348,7 +348,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "KYCMessage"
          | "Bank.Org.Domain.KYCMessage, Org.Domain" -> typeof<KYCMessage>
          | "PartnerBankServiceMessage"
-         | "PartnerBank.Service.Domain+PartnerBankServiceMessage, Transfer.Domain" ->
+         | "PartnerBank.Service.Domain+PartnerBankServiceMessage, PartnerBank.Domain" ->
             typeof<PartnerBankServiceMessage>
          | "CardIssuerServiceMessage"
          | "CardIssuer.Service.Domain+CardIssuerMessage, Employee.Domain" ->

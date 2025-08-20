@@ -2,17 +2,13 @@
 module EnvTransfer
 
 open System
-open System.Net
 open FsConfig
 
 open Lib.Types
 
 let builder = Env.builder
 
-type MockPartnerBank = { Host: IPAddress; Port: int }
-
 type private TransferConfigInput = {
-   MockPartnerBank: {| Host: string option; Port: int |}
    DomesticTransferCircuitBreaker: {|
       MaxFailures: int option
       CallTimeoutSeconds: float option
@@ -26,39 +22,15 @@ type private TransferConfigInput = {
 }
 
 type TransferConfig = {
-   MockPartnerBank: MockPartnerBank
    domesticTransferCircuitBreaker:
       Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
    AutoTransferComputeThrottle: StreamThrottleEnvConfig
    Queue: QueueEnvConfig
 }
 
-let private getMockPartnerBankHost (host: string option) =
-   match host with
-   | Some ip -> IPAddress.Parse ip
-   | None ->
-      try
-         // Referencing container by name to resolve IP for
-         // mock partner bank server.
-         Dns.GetHostAddresses("mock-partner-bank")[0]
-      with _ ->
-         if not Env.isDev then
-            failwith
-               """
-               IP for mock partner bank doesn't exist.
-               Misconfigured container name.
-               """
-         else
-            printfn "Configuring localhost for domestic transfer."
-            IPAddress.Loopback
-
 let config =
    match AppConfig(builder.Configuration).Get<TransferConfigInput>() with
    | Ok input -> {
-      MockPartnerBank = {
-         Host = getMockPartnerBankHost input.MockPartnerBank.Host
-         Port = input.MockPartnerBank.Port
-      }
       domesticTransferCircuitBreaker =
          fun system ->
             Akka.Pattern.CircuitBreaker(
