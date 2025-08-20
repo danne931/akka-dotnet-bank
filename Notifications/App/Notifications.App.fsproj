@@ -8,6 +8,7 @@
     <PackageReference Include="Akka.Hosting" />
     <PackageReference Include="Akka.Streams.Amqp.RabbitMq" />
     <PackageReference Include="Akkling" />
+    <PackageReference Include="Flurl.Http" />
   </ItemGroup>
 
   <ItemGroup>

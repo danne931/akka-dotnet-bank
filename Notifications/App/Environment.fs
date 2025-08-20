@@ -5,6 +5,7 @@ open System
 open FsConfig
 
 open Lib.Types
+open Email
 
 let builder = Env.builder
 
@@ -34,14 +35,14 @@ type NotificationsInput = {
 type NotificationsConfig = {
    EmailServiceUri: string
    EmailBearerToken: string option
-   SupportEmail: string option
+   SupportEmail: Email option
    circuitBreaker: Akka.Actor.ActorSystem -> Akka.Pattern.CircuitBreaker
    Queue: QueueEnvConfig
    // If true, will pretend to send emails rather than hitting the email
    // third party API.
    MockSendingEmail: bool
    // Will redirect all emails to this.  Useful in development.
-   OverrideEmailRecipient: string option
+   OverrideEmailRecipient: Email option
 }
 
 let private errorMessage missing =
@@ -74,14 +75,17 @@ let config =
       let mockEmail = input.MockSendingEmail |> Option.defaultValue false
 
       {
-         MockSendingEmail = (not Env.isProd) && mockEmail
+         MockSendingEmail = not Env.isProd && mockEmail
          OverrideEmailRecipient =
             input.OverrideEmailRecipient
             |> Option.bind (fun email ->
-               if not Env.isProd then Some email else None)
+               if not Env.isProd then
+                  Some(Email.deserialize email)
+               else
+                  None)
          EmailServiceUri = input.EmailServiceUri
          EmailBearerToken = input.EmailBearerToken
-         SupportEmail = input.SupportEmail
+         SupportEmail = input.SupportEmail |> Option.map Email.deserialize
          Queue = {
             Name = input.EmailQueue.Name |> Option.defaultValue "email"
             MaxParallelism =

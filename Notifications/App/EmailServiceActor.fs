@@ -4,9 +4,7 @@ module EmailServiceActor
 open Akka.Streams.Amqp.RabbitMq
 open Akkling
 open Akkling.Streams
-open System
 open System.Net.Http
-open System.Net.Http.Json
 open System.Threading.Tasks
 open FsToolkit.ErrorHandling
 
@@ -26,52 +24,33 @@ open PurchaseSaga
 open DomesticTransferSaga
 open CachedOrgSettings
 open BankActorRegistry
+open Flurl.Http
 
-module EmailRequest =
-   type PreliminaryT = {
-      OrgId: OrgId
-      Event: string
-      Email: string option
-      Data: obj
-   }
+type EmailRequest = {
+   OrgId: OrgId
+   Event: string
+   Email: Email | null
+   Data: obj
+}
 
-   type T = {
-      OrgId: string
-      Event: string
-      Email: string
-      Data: obj
-   }
-
-   let create (o: PreliminaryT) : T option =
-      o.Email
-      |> Option.map (fun email -> {
-         OrgId = string o.OrgId
-         Event = o.Event
-         Email = email
-         Data = o.Data
-      })
-
-let private emailPropsFromMessage
-   (msg: EmailMessage)
-   : EmailRequest.PreliminaryT
-   =
+let private emailPropsFromMessage (msg: EmailMessage) : EmailRequest =
    match msg.Info with
    | EmailInfo.OrgOnboardingApplicationSubmitted info -> {
       OrgId = msg.OrgId
       Event = "org-onboarding-application-submitted"
-      Email = Some(string info.Email)
+      Email = info.Email
       Data = {| name = info.BusinessName |}
      }
    | EmailInfo.OrgOnboardingApplicationAccepted info -> {
       OrgId = msg.OrgId
       Event = "org-onboarding-application-accepted"
-      Email = Some(string info.Email)
+      Email = info.Email
       Data = {| name = info.BusinessName |}
      }
    | EmailInfo.OrgOnboardingApplicationRejected info -> {
       OrgId = msg.OrgId
       Event = "org-onboarding-application-rejected"
-      Email = Some(string info.Info.Email)
+      Email = info.Info.Email
       Data = {|
          name = info.Info.BusinessName
          reason = info.Reason
@@ -80,7 +59,7 @@ let private emailPropsFromMessage
    | EmailInfo.OrgOnboardingApplicationRequiresRevision info -> {
       OrgId = msg.OrgId
       Event = "org-onboarding-application-requires-revision"
-      Email = Some(string info.Info.Email)
+      Email = info.Info.Email
       Data = {|
          name = info.Info.BusinessName
          reason = info.Reason
@@ -89,26 +68,26 @@ let private emailPropsFromMessage
    | EmailInfo.AccountOpen(accountName) -> {
       OrgId = msg.OrgId
       Event = "account-opened"
-      Email = None
+      Email = null
       Data = {| name = accountName |}
      }
    | EmailInfo.AccountClose(accountName) -> {
       OrgId = msg.OrgId
       Event = "account-closed"
-      Email = None
+      Email = null
       Data = {| name = accountName |}
      }
    // TODO: Include link to view statement
    | EmailInfo.BillingStatement -> {
       OrgId = msg.OrgId
       Event = "billing-statement"
-      Email = None
+      Email = null
       Data = {| |}
      }
    | EmailInfo.Purchase info -> {
       OrgId = msg.OrgId
       Event = "purchase"
-      Email = Some(string info.Email)
+      Email = info.Email
       Data = {|
          amount = $"${info.Amount}"
          merchant = info.Merchant
@@ -118,35 +97,33 @@ let private emailPropsFromMessage
    | EmailInfo.PurchaseFailed info -> {
       OrgId = msg.OrgId
       Event = "debit-declined"
-      Email = Some(string info.Email)
+      Email = info.Email
       Data = {| reason = info.Reason |}
      }
    | EmailInfo.InternalTransferBetweenOrgs info -> {
       OrgId = msg.OrgId
       Event = "internal-transfer-between-orgs"
-      Email = None
+      Email = null
       Data = {|
          sender = info.SenderAccountName
          recipient = info.RecipientBusinessName
          amount = $"${info.Amount}"
-         originatedFromPaymentRequest = info.OriginatedFromPaymentRequest.IsSome
       |}
      }
    | EmailInfo.InternalTransferBetweenOrgsDeposited info -> {
       OrgId = msg.OrgId
       Event = "internal-transfer-between-orgs-deposited"
-      Email = None
+      Email = null
       Data = {|
          sender = info.SenderBusinessName
          recipient = info.RecipientAccountName
          amount = $"${info.Amount}"
-         originatedFromPaymentRequest = info.OriginatedFromPaymentRequest.IsSome
       |}
      }
    | EmailInfo.PlatformPaymentRequested info -> {
       OrgId = msg.OrgId
       Event = "platform-payment-requested"
-      Email = None
+      Email = null
       Data = {|
          payee = info.PayeeBusinessName
          payer = info.PayerBusinessName
@@ -156,7 +133,7 @@ let private emailPropsFromMessage
    | EmailInfo.PlatformPaymentReminder info -> {
       OrgId = msg.OrgId
       Event = "platform-payment-reminder"
-      Email = None
+      Email = null
       Data = {|
          payee = info.PayeeBusinessName
          payer = info.PayerBusinessName
@@ -166,7 +143,7 @@ let private emailPropsFromMessage
    | EmailInfo.PlatformPaymentDeclined info -> {
       OrgId = msg.OrgId
       Event = "platform-payment-declined"
-      Email = None
+      Email = null
       Data = {|
          payee = info.PayeeBusinessName
          payer = info.PayerBusinessName
@@ -176,7 +153,7 @@ let private emailPropsFromMessage
    | EmailInfo.ThirdPartyPaymentRequested info -> {
       OrgId = msg.OrgId
       Event = "third-party-payment-requested"
-      Email = Some(string info.PayerEmail)
+      Email = info.PayerEmail
       Data = {|
          payee = info.PayeeBusinessName
          amount = $"${info.Amount}"
@@ -186,7 +163,7 @@ let private emailPropsFromMessage
    | EmailInfo.ThirdPartyPaymentReminder info -> {
       OrgId = msg.OrgId
       Event = "third-party-payment-reminder"
-      Email = Some(string info.PayerEmail)
+      Email = info.PayerEmail
       Data = {|
          payee = info.PayeeBusinessName
          amount = $"${info.Amount}"
@@ -196,7 +173,7 @@ let private emailPropsFromMessage
    | EmailInfo.DomesticTransfer info -> {
       OrgId = msg.OrgId
       Event = "domestic-transfer"
-      Email = None
+      Email = null
       Data = {|
          senderAccountName = info.SenderAccountName
          recipientName = info.RecipientName
@@ -206,13 +183,16 @@ let private emailPropsFromMessage
    | EmailInfo.ApplicationErrorRequiresSupport(errMsg) -> {
       OrgId = msg.OrgId
       Event = "application-error-requires-support"
-      Email = EnvNotifications.config.SupportEmail
+      Email =
+         match EnvNotifications.config.SupportEmail with
+         | None -> null
+         | Some email -> email
       Data = {| error = errMsg |}
      }
    | EmailInfo.EmployeeInvite info -> {
       OrgId = msg.OrgId
       Event = "employee-invite"
-      Email = Some(string info.Email)
+      Email = info.Email
       Data = {|
          name = info.Name
          // TODO: Domain not configured.
@@ -223,7 +203,7 @@ let private emailPropsFromMessage
    | EmailInfo.EmployeeOnboardingFail info -> {
       OrgId = msg.OrgId
       Event = "employee-onboarding-fail"
-      Email = None
+      Email = null
       Data = {|
          name = info.Name
          reason = info.Reason
@@ -232,19 +212,19 @@ let private emailPropsFromMessage
    | EmailInfo.CardSetupSuccess info -> {
       OrgId = msg.OrgId
       Event = "card-setup-success"
-      Email = Some(string info.EmployeeEmail)
+      Email = info.EmployeeEmail
       Data = {| name = info.EmployeeName |}
      }
    | EmailInfo.CardSetupFail info -> {
       OrgId = msg.OrgId
       Event = "card-setup-fail"
-      Email = None
+      Email = null
       Data = {| name = info.EmployeeName |}
      }
    | EmailInfo.ScheduledTransferInsufficientBalanceWarning info -> {
       OrgId = msg.OrgId
       Event = "scheduled-transfer-low-balance-warning"
-      Email = None
+      Email = null
       Data = {|
          senderAccountName = info.SenderAccountName
          availableBalance = $"${info.AvailableBalance}"
@@ -255,49 +235,43 @@ let private emailPropsFromMessage
      }
 
 let private sendEmail
-   (client: HttpClient)
-   (data: EmailRequest.T)
+   (bearerToken: string)
+   (data: EmailRequest)
    : TaskResult<HttpResponseMessage, Err>
    =
    task {
       try
-         use! response =
-            client.PostAsJsonAsync(
-               "track",
-               {|
-                  orgId = data.OrgId
-                  event = data.Event
-                  email =
-                     EnvNotifications.config.OverrideEmailRecipient
-                     |> Option.defaultValue data.Email
-                  data = data.Data
-               |}
-            )
+         let email =
+            EnvNotifications.config.OverrideEmailRecipient
+            |> Option.defaultValue data.Email
 
-         if not response.IsSuccessStatusCode then
-            let! content = response.Content.ReadFromJsonAsync()
+         let url = EnvNotifications.config.EmailServiceUri + "/track"
+
+         let data = {|
+            orgId = string data.OrgId
+            event = data.Event
+            email = string email
+            data = data.Data
+         |}
+
+         let! response =
+            url.WithOAuthBearerToken(bearerToken).PostJsonAsync data
+
+         if not response.ResponseMessage.IsSuccessStatusCode then
+            let! content = response.GetStringAsync()
 
             let errMsg =
-               $"Error sending email: {response.ReasonPhrase} - {content}"
+               $"Error sending email: {response.StatusCode} - {content}"
 
             return Error(Err.UnexpectedError errMsg)
          else
-            return Ok response
+            return Ok response.ResponseMessage
       with e ->
          return Error(Err.UnexpectedError e.Message)
    }
 
 let private mockSendEmail _ =
    new HttpResponseMessage() |> Ok |> Task.FromResult
-
-let private createClient (bearerToken: string) =
-   let client =
-      new HttpClient(BaseAddress = Uri EnvNotifications.config.EmailServiceUri)
-
-   client.DefaultRequestHeaders.Authorization <-
-      Headers.AuthenticationHeaderValue("Bearer", bearerToken)
-
-   client
 
 // Formulate an EmailRequest configured with the specified Email
 // from the EmailMessage.
@@ -307,24 +281,18 @@ let private queueMessageToActionRequest
    (getTeamEmail: Actor<_> -> OrgId -> Task<Result<Email option, Err>>)
    (mailbox: Actor<_>)
    (msg: EmailMessage)
-   : EmailRequest.T option Task
+   : EmailRequest option Task
    =
    task {
-      let preliminaryInfo = emailPropsFromMessage msg
-      let orgId = preliminaryInfo.OrgId
+      let info = emailPropsFromMessage msg
+      let orgId = info.OrgId
 
-      match EmailRequest.create preliminaryInfo with
-      | Some email -> return Some email
-      | None ->
+      if not (isNull info.Email) then
+         return Some info
+      else
          let! email =
             getTeamEmail mailbox orgId
-            |> TaskResult.map (
-               Option.bind (fun email ->
-                  EmailRequest.create {
-                     preliminaryInfo with
-                        Email = Some(string email)
-                  })
-            )
+            |> TaskResultOption.map (fun email -> { info with Email = email })
 
          return
             match email with
@@ -425,13 +393,13 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (getTeamEmail: Actor<_> -> OrgId -> Task<Result<Email option, Err>>)
    registry
-   (sendEmail: EmailRequest.T -> TaskResult<HttpResponseMessage, Err>)
+   (sendEmail: EmailRequest -> TaskResult<HttpResponseMessage, Err>)
    : Props<obj>
    =
    let consumerQueueOpts
       : Lib.Queue.QueueConsumerOptions<
            EmailMessage,
-           EmailRequest.T,
+           EmailRequest,
            HttpResponseMessage
          > = {
       Service = CircuitBreakerService.Email
@@ -455,18 +423,50 @@ let actorProps
       breaker
       consumerQueueOpts
 
-module Fields = OrganizationSqlMapper.OrgFields
-module Reader = OrganizationSqlMapper.OrgSqlReader
-module Writer = OrganizationSqlMapper.OrgSqlWriter
+open OrganizationSqlMapper
 
-let getOrgTeamEmailFromDB (orgId: OrgId) =
+let private getOrgTeamEmailFromDB (orgId: OrgId) =
    pgQuerySingle<Email>
       $"""
-      SELECT {Fields.adminTeamEmail} FROM {OrganizationSqlMapper.table}
-      WHERE {Fields.orgId} = @orgId
+      SELECT {OrgFields.adminTeamEmail} FROM {table}
+      WHERE {OrgFields.orgId} = @orgId
       """
-      (Some [ "orgId", Writer.orgId orgId ])
-      Reader.adminTeamEmail
+      (Some [ "orgId", OrgSqlWriter.orgId orgId ])
+      OrgSqlReader.adminTeamEmail
+
+let private getTeamEmailFromCacheOrDB
+   (orgSettingsCache: OrgSettingsCache)
+   (mailbox: Actor<_>)
+   (orgId: OrgId)
+   =
+   taskResult {
+      let! foundInCache =
+         orgSettingsCache.Get orgId |> AsyncResultOption.map _.AdminTeamEmail
+
+      if foundInCache.IsSome then
+         return foundInCache
+      else
+         logDebug mailbox $"Team email not found in cache. {orgId}"
+         return! getOrgTeamEmailFromDB orgId
+   }
+
+// Will not consume email messages off of RabbitMq if no EmailBearerToken
+// configured for interaction with third party email provider.
+let private idleActor () =
+   let handler ctx msg =
+      match msg with
+      | LifecycleEvent e ->
+         match e with
+         | PreStart ->
+            logWarning ctx $"EmailBearerToken not set. Will not send email"
+
+            ignored ()
+         | _ -> ignored ()
+      | msg ->
+         logError ctx $"Unknown Message: {msg}"
+         unhandled ()
+
+   props (actorOf2 handler)
 
 let initProps
    (orgSettingsCache: OrgSettingsCache)
@@ -478,19 +478,6 @@ let initProps
    (bearerToken: string option)
    registry
    =
-   let client = bearerToken |> Option.map createClient
-
-   let getTeamEmailFromCacheOrDB (mailbox: Actor<_>) (orgId: OrgId) = taskResult {
-      let! foundInCache =
-         orgSettingsCache.Get orgId |> AsyncResultOption.map _.AdminTeamEmail
-
-      if foundInCache.IsSome then
-         return foundInCache
-      else
-         logDebug mailbox $"Team email not found in cache. {orgId}"
-         return! getOrgTeamEmailFromDB orgId
-   }
-
    let actorProps =
       actorProps
          queueConnection
@@ -498,29 +485,10 @@ let initProps
          streamRestartSettings
          breaker
          broadcaster
-         getTeamEmailFromCacheOrDB
+         (getTeamEmailFromCacheOrDB orgSettingsCache)
          registry
 
-   match client with
-   | Some client -> actorProps (sendEmail client)
-   | None when EnvNotifications.config.MockSendingEmail ->
-      actorProps mockSendEmail
-   | None ->
-      let name = $"{queueSettings.Name}-consumer"
-
-      let handler ctx msg =
-         match msg with
-         | LifecycleEvent e ->
-            match e with
-            | PreStart ->
-               logWarning
-                  ctx
-                  $"({name}): EmailBearerToken not set. Will not send email"
-
-               ignored ()
-            | _ -> ignored ()
-         | msg ->
-            logError ctx $"({name}) Unknown Message: {msg}"
-            unhandled ()
-
-      props (actorOf2 handler)
+   match EnvNotifications.config.MockSendingEmail, bearerToken with
+   | true, _ -> actorProps mockSendEmail
+   | false, None -> idleActor ()
+   | false, Some token -> actorProps (sendEmail token)
