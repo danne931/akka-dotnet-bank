@@ -276,16 +276,14 @@ let onStartEventPersisted
       let transfer = TransferEventToDomesticTransfer.fromPending e
 
       let msg =
-         PartnerBankServiceMessage.TransferDomestic(
-            {
-               Action = DomesticTransferServiceAction.TransferAck
-               Transfer = transfer
-               Metadata = {
-                  OrgId = e.Data.BaseInfo.Sender.OrgId
-                  CorrelationId = e.CorrelationId
-               }
+         PartnerBankServiceMessage.TransferDomestic {
+            Action = DomesticTransferServiceAction.TransferAck
+            Transfer = transfer
+            SagaMetadata = {
+               OrgId = e.Data.BaseInfo.Sender.OrgId
+               CorrelationId = e.CorrelationId
             }
-         )
+         }
 
       registry.PartnerBankServiceActor() <! msg
    | DomesticTransferSagaStartEvent.ScheduleTransferRequest _ -> ()
@@ -337,31 +335,27 @@ let onEventPersisted
 
    let sendTransferToProcessorService () =
       let msg =
-         PartnerBankServiceMessage.TransferDomestic(
-            {
-               Action = DomesticTransferServiceAction.TransferAck
-               Transfer = transfer
-               Metadata = {
-                  OrgId = info.Sender.OrgId
-                  CorrelationId = correlationId
-               }
+         PartnerBankServiceMessage.TransferDomestic {
+            Action = DomesticTransferServiceAction.TransferAck
+            Transfer = transfer
+            SagaMetadata = {
+               OrgId = info.Sender.OrgId
+               CorrelationId = correlationId
             }
-         )
+         }
 
       registry.PartnerBankServiceActor() <! msg
 
    let checkOnTransferProgress () =
       let msg =
-         PartnerBankServiceMessage.TransferDomestic(
-            {
-               Action = DomesticTransferServiceAction.ProgressCheck
-               Transfer = transfer
-               Metadata = {
-                  OrgId = info.Sender.OrgId
-                  CorrelationId = correlationId
-               }
+         PartnerBankServiceMessage.TransferDomestic {
+            Action = DomesticTransferServiceAction.ProgressCheck
+            Transfer = transfer
+            SagaMetadata = {
+               OrgId = info.Sender.OrgId
+               CorrelationId = correlationId
             }
-         )
+         }
 
       registry.PartnerBankServiceActor() <! msg
 

@@ -1,6 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <Compile Include="PartnerBankService.fs" />
+    <Compile Include="CoreTypes.fs" />
+    <Compile Include="Account.fs" />
+    <Compile Include="Transfer.fs" />
+    <Compile Include="AggregateTypes.fs" />
   </ItemGroup>
 
   <ItemGroup>

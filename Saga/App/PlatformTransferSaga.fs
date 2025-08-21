@@ -360,7 +360,7 @@ let onEventPersisted
             Amount = transfer.Amount
             From = sender
             To = recipient
-            Metadata = {
+            SagaMetadata = {
                OrgId = transfer.Sender.OrgId
                CorrelationId = correlationId
             }

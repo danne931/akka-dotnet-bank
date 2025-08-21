@@ -10,10 +10,8 @@ open Akkling.Streams
 open Akka.Streams.Amqp.RabbitMq
 open FsToolkit.ErrorHandling
 
-open Lib.ActivePatterns
 open Lib.SharedTypes
 open Lib.CircuitBreaker
-open Bank.Transfer.Domain
 open SignalRBroadcast
 open Lib.Types
 open OrgOnboardingSaga
@@ -25,23 +23,6 @@ open BankActorRegistry
 
 type private NetworkRequest =
    PartnerBankServiceMessage -> Task<Result<PartnerBankResponse, Err>>
-
-type private InfraFailReason = DomesticTransferInfraFailReason
-type private FailReason = DomesticTransferThirdPartyFailReason
-
-let private failReasonFromError (err: string) : FailReason =
-   match err with
-   | Contains "CorruptData" -> FailReason.Infra InfraFailReason.CorruptData
-   | Contains "InvalidAction" -> FailReason.Infra InfraFailReason.InvalidAction
-   | Contains "InvalidAmount" -> FailReason.InvalidAmount
-   | Contains "InvalidAccountInfo" -> FailReason.RecipientAccountInvalidInfo
-   | Contains "InvalidPaymentNetwork" ->
-      FailReason.Infra InfraFailReason.InvalidPaymentNetwork
-   | Contains "InvalidDepository" ->
-      FailReason.Infra InfraFailReason.RecipientAccountInvalidDepository
-   | Contains "InactiveAccount" -> FailReason.RecipientAccountInvalidInfo
-   | Contains "NoTransferProcessing" -> FailReason.NoTransferFound
-   | e -> FailReason.Infra(InfraFailReason.Unknown e)
 
 let protectedAction
    (networkRequest: NetworkRequest)
@@ -60,8 +41,12 @@ let protectedAction
             logError mailbox errMsg
 
             {
-               Sender = networkSender info.Transfer.Sender
-               Recipient = networkRecipient info.Transfer.Recipient
+               Sender =
+                  PartnerBankDomesticTransferRequest.networkSender
+                     info.Transfer.Sender
+               Recipient =
+                  PartnerBankDomesticTransferRequest.networkRecipient
+                     info.Transfer.Recipient
                Ok = false
                Status = ""
                Reason = "CorruptData"
@@ -72,63 +57,6 @@ let protectedAction
             |> Ok
          | _ -> result
    }
-
-// Notify account actor of DomesticTransfer Progress, Completed, or Failed.
-let onOkDomesticTransferResponse
-   (logDebug: string -> unit)
-   (registry: #ISagaActor)
-   (txn: DomesticTransfer)
-   (res: PartnerBankDomesticTransferResponse)
-   =
-   let orgId = txn.Sender.OrgId
-   let corrId = txn.TransferId.AsCorrelationId
-
-   let latestProgressUpdate =
-      if res.Ok then
-         match res.Status with
-         | "Complete" -> DomesticTransferThirdPartyUpdate.Settled
-         | "ReceivedRequest" ->
-            DomesticTransferThirdPartyUpdate.ServiceAckReceived
-         | status ->
-            let expectedSettlementDate =
-               res.ExpectedSettlementDate
-               |> Option.defaultValue txn.ExpectedSettlementDate
-
-            DomesticTransferThirdPartyUpdate.ProgressDetail {
-               Detail = status
-               ExpectedSettlementDate = expectedSettlementDate
-            }
-      else
-         res.Reason
-         |> failReasonFromError
-         |> DomesticTransferThirdPartyUpdate.Failed
-
-   let newProgressToSave =
-      match txn.Status with
-      | DomesticTransferProgress.WaitingForTransferServiceAck ->
-         Some latestProgressUpdate
-      // Don't save a new progress update if there has been no change.
-      | DomesticTransferProgress.ThirdParty existingProgressUpdate when
-         existingProgressUpdate <> latestProgressUpdate
-         ->
-         Some latestProgressUpdate
-      | _ -> None
-
-   match newProgressToSave with
-   | Some progressUpdate ->
-      let msg =
-         progressUpdate
-         |> DomesticTransferSagaEvent.TransferProcessorProgressUpdate
-         |> AppSaga.Message.domesticTransfer orgId corrId
-
-      registry.SagaActor corrId <! msg
-   | _ ->
-      logDebug (
-         "No domestic transfer progress update will be saved."
-         + $" - Transfer ID ({txn.TransferId})"
-         + $" - Existing status ({txn.Status})"
-         + $" - Service status ({latestProgressUpdate})"
-      )
 
 let actorProps
    (registry: #ISagaActor)
@@ -154,7 +82,7 @@ let actorProps
       onSuccessFlow =
          Flow.map
             (fun (mailbox, queueMessage: PartnerBankServiceMessage, response) ->
-               let metadata = queueMessage.Metadata
+               let metadata = queueMessage.SagaMetadata
                let corrId = metadata.CorrelationId
                let orgId = metadata.OrgId
 
@@ -185,11 +113,24 @@ let actorProps
                   registry.SagaActor corrId <! msg
                | PartnerBankServiceMessage.TransferDomestic info,
                  PartnerBankResponse.TransferDomestic res ->
-                  onOkDomesticTransferResponse
-                     (logDebug mailbox)
-                     registry
-                     info.Transfer
-                     res
+                  let txn = info.Transfer
+                  let updatedProgress = res.NewProgressToSave txn
+
+                  match updatedProgress with
+                  | Some progressUpdate ->
+                     let msg =
+                        progressUpdate
+                        |> DomesticTransferSagaEvent.TransferProcessorProgressUpdate
+                        |> AppSaga.Message.domesticTransfer orgId corrId
+
+                     registry.SagaActor corrId <! msg
+                  | _ ->
+                     logDebug
+                        mailbox
+                        ("No domestic transfer progress update will be saved."
+                         + $" - Transfer ID ({txn.TransferId})"
+                         + $" - Existing status ({txn.Status})"
+                         + $" - Service status ({res.Progress txn.ExpectedSettlementDate})")
                | _ -> logError mailbox "Partner Bank Sync: Mixed req/res."
 
                response)
@@ -225,27 +166,24 @@ let private networkRequest
       | PartnerBankServiceMessage.TransferDomestic info ->
          let txn = info.Transfer
 
-         let request = {|
-            Action =
-               match info.Action with
-               | DomesticTransferServiceAction.TransferAck -> "TransferRequest"
-               | DomesticTransferServiceAction.ProgressCheck -> "ProgressCheck"
-            Sender = networkSender txn.Sender
-            Recipient = networkRecipient txn.Recipient
+         let request: PartnerBankDomesticTransferRequest = {
+            Action = info.Action
+            Sender = txn.Sender
+            Recipient = txn.Recipient
             Amount = txn.Amount
             Date = txn.ScheduledDate
-            TransactionId = string txn.TransferId
-            PaymentNetwork =
-               match txn.Recipient.PaymentNetwork with
-               | PaymentNetwork.ACH -> "ach"
-         |}
+            TransactionId = txn.TransferId
+            PaymentNetwork = txn.Recipient.PaymentNetwork
+         }
+
+         let serialized = JsonSerializer.SerializeToUtf8Bytes request.AsDTO
 
          let! response =
             TCP.request
                EnvPartnerBank.config.MockPartnerBank.Host
                EnvPartnerBank.config.MockPartnerBank.Port
                Encoding.UTF8
-               (JsonSerializer.SerializeToUtf8Bytes request)
+               serialized
 
          let! res =
             Serialization.deserialize<PartnerBankDomesticTransferResponse>

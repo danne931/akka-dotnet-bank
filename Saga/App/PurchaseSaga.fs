@@ -400,7 +400,7 @@ let onEventPersisted
             PartnerBankServiceMessage.Purchase {
                Amount = purchaseInfo.Amount
                Account = link
-               Metadata = {
+               SagaMetadata = {
                   OrgId = purchaseInfo.OrgId
                   CorrelationId = purchaseInfo.CorrelationId
                }

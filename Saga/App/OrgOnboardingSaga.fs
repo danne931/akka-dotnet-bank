@@ -388,7 +388,7 @@ let onEventPersisted
       <! PartnerBankServiceMessage.LinkAccount {
          LegalBusinessName = application.LegalBusinessName
          EmployerIdentificationNumber = application.EmployerIdentificationNumber
-         Metadata = {
+         SagaMetadata = {
             OrgId = orgId
             CorrelationId = corrId
          }
