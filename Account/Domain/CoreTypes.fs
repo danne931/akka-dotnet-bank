@@ -1,6 +1,10 @@
 namespace Bank.Account.Domain
 
 open System
+open Validus
+open Validus.Operators
+
+open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
 type ParentAccountStatus =
@@ -85,3 +89,13 @@ type AccountDepository =
       | Some dep -> dep
 
 type BillingPeriod = { Month: int; Year: int }
+
+type PartnerBankRoutingNumber = PartnerBankRoutingNumber of RoutingNumber
+type PartnerBankAccountNumber = PartnerBankAccountNumber of AccountNumber
+type PartnerBankAccountId = PartnerBankAccountId of string
+
+type PartnerBankInternalAccountLink = {
+   AccountNumber: PartnerBankAccountNumber
+   RoutingNumber: PartnerBankRoutingNumber
+   PartnerBankAccountId: PartnerBankAccountId
+}

@@ -49,6 +49,7 @@ DROP TYPE IF EXISTS monthly_time_series_filter_by CASCADE;
 DROP TYPE IF EXISTS time_frame CASCADE;
 DROP TYPE IF EXISTS employee_status;
 DROP TYPE IF EXISTS organization_status;
+DROP TYPE IF EXISTS business_type;
 DROP TYPE IF EXISTS employee_role;
 DROP TYPE IF EXISTS account_depository;
 DROP TYPE IF EXISTS account_status;
@@ -156,6 +157,19 @@ CREATE TYPE organization_status AS ENUM (
   'Active'
 );
 
+CREATE TYPE business_type AS ENUM (
+  'LimitedPartnership',
+  'Trust',
+  'SoleProprietorship',
+  'Corporation',
+  'LLC',
+  'GeneralPartnership',
+  'ProfessionalAssociation',
+  'Government',
+  'NonProfit',
+  'Other'
+);
+
 --- ORGANIZATION ---
 CREATE TABLE organization (
    org_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -164,6 +178,10 @@ CREATE TABLE organization (
    status_detail JSONB NOT NULL,
    admin_team_email VARCHAR(255) UNIQUE NOT NULL,
    ein CHAR(9) UNIQUE NOT NULL CHECK (ein ~ '^\d{9}$'),
+   business_type business_type NOT NULL,
+   description VARCHAR(255) NOT NULL,
+   website VARCHAR(255),
+   address JSONB NOT NULL,
    parent_account_id UUID UNIQUE NOT NULL
 );
 
@@ -187,6 +205,7 @@ CREATE TABLE partner_bank_parent_account (
    parent_account_id UUID PRIMARY KEY,
    partner_bank_routing_number INT NOT NULL,
    partner_bank_account_number BIGINT NOT NULL,
+   partner_bank_account_id VARCHAR(255) NOT NULL,
    status parent_account_status NOT NULL,
    last_billing_cycle_at TIMESTAMPTZ,
    org_id UUID NOT NULL REFERENCES organization
@@ -208,9 +227,10 @@ accounts tied to a single partner bank account number representing the
 actual business checking account provided by the partner bank.
 
 This account number is not shared with customers.
-A separate account number is generated for each virtual account for that purpose.
-It is only used for syncing transactions with the partner bank.
-';
+A separate account number is generated for each virtual account for that purpose.';
+
+COMMENT ON COLUMN partner_bank_parent_account.partner_bank_account_id IS
+'Used for syncing transactions with the partner bank.';
 
 --- ACCOUNT ---
 CREATE TYPE account_depository AS ENUM ('Checking', 'Savings');
@@ -1429,6 +1449,10 @@ INSERT INTO organization (
   status_detail,
   admin_team_email,
   ein,
+  business_type,
+  description,
+  website,
+  address,
   parent_account_id
 )
 VALUES (
@@ -1437,6 +1461,10 @@ VALUES (
    '"Active"'::jsonb,
    'team@system.com',
    '123456789',
+   'Other',
+   'This is the system organization',
+   null,
+   '{"street": "123 Main St", "city": "Anytown", "state": "CA", "zip": "12345"}',
    -- This parent_account_id is defined in Lib.SharedClientServer/Constants.fs
    'd1240fcd-6080-45e6-a28d-7c840ece437b'
 );

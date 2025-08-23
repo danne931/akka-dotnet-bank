@@ -30,5 +30,6 @@
     <ProjectReference Include="../Org/Domain/Org.Domain.fsproj" />
     <ProjectReference Include="../Transaction/Domain/Transaction.Domain.fsproj" />
     <ProjectReference Include="../Saga/Domain/Saga.Domain.fsproj" />
+    <ProjectReference Include="../PartnerBank/Domain/PartnerBank.Domain.fsproj" />
   </ItemGroup>
 </Project>

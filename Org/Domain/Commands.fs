@@ -6,11 +6,10 @@ open Lib.SharedTypes
 open Email
 
 type SubmitOrgOnboardingApplicationInput = {
-   LegalBusinessName: string
    AdminTeamEmail: Email
-   EmployerIdentificationNumber: string
    OrgId: OrgId
    ParentAccountId: ParentAccountId
+   BusinessDetails: BusinessDetails
    InitiatedBy: Initiator
 }
 
@@ -36,10 +35,9 @@ module SubmitOrgOnboardingApplicationCommand =
        >
          cmd
          {
-            LegalBusinessName = cmd.Data.LegalBusinessName
             AdminTeamEmail = cmd.Data.AdminTeamEmail
-            EmployerIdentificationNumber = cmd.Data.EmployerIdentificationNumber
             ParentAccountId = cmd.Data.ParentAccountId
+            BusinessDetails = cmd.Data.BusinessDetails
          }
       |> Ok
 

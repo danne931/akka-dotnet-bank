@@ -2,6 +2,47 @@ namespace Bank.Org.Domain
 
 open Lib.SharedTypes
 
+[<RequireQualifiedAccess>]
+type BusinessType =
+   | LimitedPartnership
+   | Trust
+   | SoleProprietorship
+   | Corporation
+   | LLC
+   | GeneralPartnership
+   | ProfessionalAssociation
+   | Government
+   | NonProfit
+   | Other
+
+type Address = {
+   City: string
+   CountryCode: string
+   Line1: string
+   Line2: string
+   PostalCode: string
+   State: string
+}
+
+module Address =
+   let empty = {
+      City = ""
+      CountryCode = ""
+      Line1 = ""
+      Line2 = ""
+      PostalCode = ""
+      State = ""
+   }
+
+type BusinessDetails = {
+   Address: Address
+   BusinessName: string
+   Description: string
+   EmployerIdentificationNumber: string
+   LegalType: BusinessType
+   Website: string option
+}
+
 type Merchant = {
    OrgId: OrgId
    Name: string
@@ -68,4 +109,5 @@ type OrgOnboardingVerificationError =
 [<RequireQualifiedAccess>]
 type OrgOnboardingFailureReason =
    | KYCRejectedReason of OrgOnboardingApplicationRejectedReason
-   | PartnerBankLinkError of string
+   | PartnerBankLegalEntityCreateError of string
+   | PartnerBankInternalAccountCreateError of string

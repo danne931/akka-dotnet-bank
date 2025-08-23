@@ -24,6 +24,7 @@ type KYCServiceRequest = {
    tax_id: string
    address: {|
       line1: string
+      line2: string
       city: string
       state: string
       postal_code: string
@@ -114,15 +115,17 @@ let private networkRequestToKYCService (msg: KYCMessage) = taskResult {
    match msg with
    | KYCMessage.VerifyApplication submission ->
       let application = submission.Application
+      let address = application.BusinessDetails.Address
 
       let request: KYCServiceRequest = {
-         name = application.LegalBusinessName
-         tax_id = application.EmployerIdentificationNumber
+         name = application.BusinessDetails.BusinessName
+         tax_id = application.BusinessDetails.EmployerIdentificationNumber
          address = {|
-            line1 = "TODO"
-            city = "TODO"
-            state = "TODO"
-            postal_code = "TODO"
+            line1 = address.Line1
+            line2 = address.Line2
+            city = address.City
+            state = address.State
+            postal_code = address.PostalCode
          |}
       }
 

@@ -2,15 +2,18 @@
   <ItemGroup>
     <Compile Include="CoreTypes.fs" />
     <Compile Include="Account.fs" />
+    <Compile Include="LegalEntity.fs" /> 
     <Compile Include="Transfer.fs" />
     <Compile Include="AggregateTypes.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Validus" />
+    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
+    <ProjectReference Include="../../Org/Domain/Org.Domain.fsproj" />
   </ItemGroup>
 </Project>

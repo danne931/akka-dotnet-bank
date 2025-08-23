@@ -3,10 +3,9 @@ namespace Bank.Org.Domain
 open Lib.SharedTypes
 
 type OrgOnboardingApplicationSubmitted = {
-   LegalBusinessName: string
    AdminTeamEmail: Email.Email
    ParentAccountId: ParentAccountId
-   EmployerIdentificationNumber: string
+   BusinessDetails: BusinessDetails
 }
 
 type OrgOnboardingFinished = { ParentAccountId: ParentAccountId }

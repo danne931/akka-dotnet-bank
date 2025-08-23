@@ -9,7 +9,6 @@ open Lib.SharedTypes
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
-open TransferMessages
 open CardIssuer.Service.Domain
 open PartnerBank.Service.Domain
 open BillingStatement

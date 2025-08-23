@@ -491,6 +491,3 @@ type RoutingNumber =
       >=> Check.String.equalsLen 9 *|* (Int32.Parse >> RoutingNumber)
 
    static member Empty = RoutingNumber 123456789
-
-type ParentAccountNumber = ParentAccountNumber of AccountNumber
-type ParentRoutingNumber = ParentRoutingNumber of RoutingNumber

@@ -9,6 +9,7 @@ let featureFlagsTable = "org_feature_flag"
 
 module OrgTypeCast =
    let status = "organization_status"
+   let businessType = "business_type"
 
 module OrgFields =
    let orgId = "org_id"
@@ -19,6 +20,14 @@ module OrgFields =
    let adminTeamEmail = "admin_team_email"
    let parentAccountId = "parent_account_id"
    let employerIdentificationNumber = "ein"
+
+   let address = "address"
+
+   let businessType = "business_type"
+
+   let description = "description"
+
+   let website = "website"
 
 module OrgSqlReader =
    let orgId (read: RowReader) = OrgFields.orgId |> read.uuid |> OrgId
@@ -42,6 +51,17 @@ module OrgSqlReader =
    let employerIdentificationNumber (read: RowReader) =
       OrgFields.employerIdentificationNumber |> read.string
 
+   let address (read: RowReader) =
+      read.text OrgFields.address |> Serialization.deserializeUnsafe<Address>
+
+   let businessType (read: RowReader) =
+      read.text OrgFields.businessType
+      |> Serialization.deserializeUnsafe<BusinessType>
+
+   let description (read: RowReader) = read.text OrgFields.description
+
+   let website (read: RowReader) = read.textOrNone OrgFields.website
+
    let org (read: RowReader) : Org = {
       OrgId = orgId read
       ParentAccountId = parentAccountId read
@@ -49,6 +69,10 @@ module OrgSqlReader =
       Status = statusDetail read
       AdminTeamEmail = adminTeamEmail read
       EmployerIdentificationNumber = employerIdentificationNumber read
+      Address = address read
+      BusinessType = businessType read
+      Description = description read
+      Website = website read
       FeatureFlags = {
          SocialTransferDiscoveryPrimaryAccountId =
             socialTransferDiscoveryAccountId read
@@ -77,3 +101,13 @@ module OrgSqlWriter =
    let parentAccountId (ParentAccountId id) = Sql.uuid id
 
    let employerIdentificationNumber = Sql.string
+
+   let address (address: Address) =
+      address |> Serialization.serialize |> Sql.jsonb
+
+   let businessType (businessType: BusinessType) =
+      businessType |> string |> Sql.string
+
+   let description = Sql.string
+
+   let website = Sql.stringOrNone

@@ -157,15 +157,20 @@ let applyEvent (state: OrgSnapshot) (evt: OrgEvent) =
       | OnboardingApplicationSubmitted e -> {
          OrgId = e.OrgId
          ParentAccountId = e.Data.ParentAccountId
-         Name = e.Data.LegalBusinessName
+         Name = e.Data.BusinessDetails.BusinessName
          Status = OrgStatus.PendingOnboardingTasksFulfilled
          AdminTeamEmail = e.Data.AdminTeamEmail
-         EmployerIdentificationNumber = e.Data.EmployerIdentificationNumber
          FeatureFlags = {
             SocialTransferDiscoveryPrimaryAccountId = None
          }
          CommandApprovalRules = Map.empty
          CommandApprovalProgress = Map.empty
+         EmployerIdentificationNumber =
+            e.Data.BusinessDetails.EmployerIdentificationNumber
+         Address = e.Data.BusinessDetails.Address
+         BusinessType = e.Data.BusinessDetails.LegalType
+         Description = e.Data.BusinessDetails.Description
+         Website = e.Data.BusinessDetails.Website
         }
       | OnboardingFinished _ -> { org with Status = OrgStatus.Active }
       | FeatureFlagConfigured e -> {

@@ -5,7 +5,6 @@ open System
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Lib.Saga
-open PartnerBank.Service.Domain
 
 [<RequireQualifiedAccess>]
 type PurchaseSagaStatus =
@@ -21,7 +20,7 @@ type PurchaseSagaStartEvent =
 [<RequireQualifiedAccess>]
 type PurchaseSagaEvent =
    | PurchaseFailureAcknowledgedByCard
-   | AccountReservedFunds of PartnerBankAccountLink
+   | AccountReservedFunds of PartnerBankInternalAccountLink
    | PurchaseRejectedByAccount of PurchaseAccountFailReason
    | PurchaseFailureAcknowledgedByAccount
    | PurchaseRejectedCardNetworkResponse of
@@ -80,7 +79,7 @@ type PurchaseSaga = {
    Status: PurchaseSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
    FailReason: PurchaseFailReason option
-   PartnerBankAccountLink: PartnerBankAccountLink option
+   PartnerBankAccountLink: PartnerBankInternalAccountLink option
 } with
 
    member x.ReservedEmployeeCardFunds =

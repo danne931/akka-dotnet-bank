@@ -64,14 +64,20 @@ let sqlParamReducer
       let qParams = [
          "orgId", OrgSqlWriter.orgId e.OrgId
          "parentAccountId", OrgSqlWriter.parentAccountId e.Data.ParentAccountId
-         "name", OrgSqlWriter.name e.Data.LegalBusinessName
+         "name", OrgSqlWriter.name e.Data.BusinessDetails.BusinessName
          "status", OrgSqlWriter.status OrgStatus.PendingOnboardingTasksFulfilled
          "statusDetail",
          OrgSqlWriter.statusDetail OrgStatus.PendingOnboardingTasksFulfilled
          "adminTeamEmail", OrgSqlWriter.adminTeamEmail e.Data.AdminTeamEmail
          "employerIdentificationNumber",
          OrgSqlWriter.employerIdentificationNumber
-            e.Data.EmployerIdentificationNumber
+            e.Data.BusinessDetails.EmployerIdentificationNumber
+         "address", OrgSqlWriter.address e.Data.BusinessDetails.Address
+         "businessType",
+         OrgSqlWriter.businessType e.Data.BusinessDetails.LegalType
+         "description",
+         OrgSqlWriter.description e.Data.BusinessDetails.Description
+         "website", OrgSqlWriter.website e.Data.BusinessDetails.Website
       ]
 
       {
@@ -346,7 +352,11 @@ let upsertReadModels (orgEvents: OrgEvent list) =
           {OrgFields.status},
           {OrgFields.statusDetail},
           {OrgFields.adminTeamEmail},
-          {OrgFields.employerIdentificationNumber})
+          {OrgFields.employerIdentificationNumber},
+          {OrgFields.address},
+          {OrgFields.businessType},
+          {OrgFields.description},
+          {OrgFields.website})
       VALUES
          (@orgId,
           @parentAccountId,
@@ -354,7 +364,11 @@ let upsertReadModels (orgEvents: OrgEvent list) =
           @status::{OrgTypeCast.status},
           @statusDetail,
           @adminTeamEmail,
-          @employerIdentificationNumber)
+          @employerIdentificationNumber,
+          @address,
+          @businessType::{OrgTypeCast.businessType},
+          @description,
+          @website)
       ON CONFLICT ({OrgFields.orgId})
       DO NOTHING;
       """,

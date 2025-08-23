@@ -82,8 +82,10 @@ type Event =
             "OrgOnboardingKnowYourCustomerServiceResponse"
          | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService _ ->
             "OrgOnboardingReceivedInfoFixDemandedByKYCService"
-         | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse _ ->
-            "OrgOnboardingLinkAccountToPartnerBankResponse"
+         | OrgOnboardingSagaEvent.CreateLegalEntityWithPartnerBankResponse _ ->
+            "OrgOnboardingCreateLegalEntityWithPartnerBankResponse"
+         | OrgOnboardingSagaEvent.CreateInternalAccountWithPartnerBankResponse _ ->
+            "OrgOnboardingCreateInternalAccountWithPartnerBankResponse"
          | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
             "OrgOnboardingInitializedPrimaryVirtualAccount"
          | OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse _ ->

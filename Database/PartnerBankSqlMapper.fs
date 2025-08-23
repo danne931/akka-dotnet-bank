@@ -13,8 +13,9 @@ module TypeCast =
 module Fields =
    let orgId = "org_id"
    let parentAccountId = "parent_account_id"
-   let routingNumber = "partner_bank_routing_number"
-   let accountNumber = "partner_bank_account_number"
+   let partnerBankRoutingNumber = "partner_bank_routing_number"
+   let partnerBankAccountNumber = "partner_bank_account_number"
+   let partnerBankAccountId = "partner_bank_account_id"
    let lastBillingCycleDate = "last_billing_cycle_at"
    let status = "status"
 
@@ -24,11 +25,18 @@ module SqlReader =
    let parentAccountId (read: RowReader) =
       Fields.parentAccountId |> read.uuid |> ParentAccountId
 
-   let accountNumber (read: RowReader) =
-      read.int64 Fields.accountNumber |> AccountNumber |> ParentAccountNumber
+   let partnerBankAccountNumber (read: RowReader) =
+      read.int64 Fields.partnerBankAccountNumber
+      |> AccountNumber
+      |> PartnerBankAccountNumber
 
-   let routingNumber (read: RowReader) =
-      read.int Fields.routingNumber |> RoutingNumber |> ParentRoutingNumber
+   let partnerBankRoutingNumber (read: RowReader) =
+      read.int Fields.partnerBankRoutingNumber
+      |> RoutingNumber
+      |> PartnerBankRoutingNumber
+
+   let partnerBankAccountId (read: RowReader) =
+      read.string Fields.partnerBankAccountId |> PartnerBankAccountId
 
    let lastBillingCycleDate (read: RowReader) =
       read.dateTimeOrNone Fields.lastBillingCycleDate
@@ -41,9 +49,13 @@ module SqlWriter =
 
    let parentAccountId (ParentAccountId id) = Sql.uuid id
 
-   let accountNumber (ParentAccountNumber(AccountNumber num)) = Sql.int64 num
+   let partnerBankAccountNumber (PartnerBankAccountNumber(AccountNumber num)) =
+      Sql.int64 num
 
-   let routingNumber (ParentRoutingNumber(RoutingNumber num)) = Sql.int num
+   let partnerBankRoutingNumber (PartnerBankRoutingNumber(RoutingNumber num)) =
+      Sql.int num
+
+   let partnerBankAccountId (PartnerBankAccountId id) = Sql.string id
 
    let lastBillingCycleDate (date: DateTime option) = Sql.timestamptzOrNone date
 

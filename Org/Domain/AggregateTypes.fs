@@ -113,6 +113,10 @@ type Org = {
       Map<CommandApprovalProgressId, CommandApprovalProgress.T>
    AdminTeamEmail: Email
    EmployerIdentificationNumber: string
+   Address: Address
+   BusinessType: BusinessType
+   Description: string
+   Website: string option
 }
 
 module Org =
@@ -128,6 +132,10 @@ module Org =
       CommandApprovalRules = Map.empty
       CommandApprovalProgress = Map.empty
       EmployerIdentificationNumber = ""
+      Address = Address.empty
+      BusinessType = BusinessType.LimitedPartnership
+      Description = ""
+      Website = None
    }
 
 type OrgSnapshot = {

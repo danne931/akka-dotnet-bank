@@ -87,11 +87,19 @@ let actorProps
                let orgId = metadata.OrgId
 
                match queueMessage, response with
-               | PartnerBankServiceMessage.LinkAccount req,
-                 PartnerBankResponse.LinkAccount res ->
+               | PartnerBankServiceMessage.CreateLegalEntity req,
+                 PartnerBankResponse.CreateLegalEntity res ->
                   let msg =
-                     Ok res.Link
-                     |> OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse
+                     Ok res
+                     |> OrgOnboardingSagaEvent.CreateLegalEntityWithPartnerBankResponse
+                     |> AppSaga.Message.orgOnboard orgId corrId
+
+                  registry.SagaActor corrId <! msg
+               | PartnerBankServiceMessage.CreateInternalAccount req,
+                 PartnerBankResponse.CreateInternalAccount res ->
+                  let msg =
+                     Ok res
+                     |> OrgOnboardingSagaEvent.CreateInternalAccountWithPartnerBankResponse
                      |> AppSaga.Message.orgOnboard orgId corrId
 
                   registry.SagaActor corrId <! msg
@@ -151,18 +159,31 @@ let private networkRequest
    =
    taskResult {
       match msg with
-      | PartnerBankServiceMessage.LinkAccount req ->
+      | PartnerBankServiceMessage.CreateLegalEntity req ->
+         do! Task.Delay 2000
+
+         let res: LegalBusinessEntityCreateResponseDTO = {
+            id = "enti_2Q1fIwKjnf7TmZP37mAuKjWXB2o"
+            business_details = BusinessDetailsDTO.fromEntity req.Detail
+            verification_status = "VERIFIED"
+            review_reasons = []
+         }
+
+         let! entity = LegalBusinessEntityDTO.toEntity res
+
+         return PartnerBankResponse.CreateLegalEntity entity
+      | PartnerBankServiceMessage.CreateInternalAccount req ->
          do! Task.Delay 5000
 
-         return
-            PartnerBankResponse.LinkAccount {
-               Accepted = true
-               Link = {
-                  AccountNumber =
-                     ParentAccountNumber <| AccountNumber.generate ()
-                  RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
-               }
-            }
+         let res: InternalAccountCreateResponseDTO = {
+            account_number = AccountNumber.generate () |> string
+            routing_number = RoutingNumber.Empty |> string
+            account_id = "bacc_2YHAXVyuS2xcJW12Buh9zsxV7vC"
+         }
+
+         let! entity = res.AsEntity
+
+         return PartnerBankResponse.CreateInternalAccount entity
       | PartnerBankServiceMessage.TransferDomestic info ->
          let txn = info.Transfer
 

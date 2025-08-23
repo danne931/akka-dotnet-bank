@@ -22,7 +22,10 @@ type OrgOnboardingSagaEvent =
    | ApplicationProcessingNotificationSent
    | KYCResponse of Result<unit, OrgOnboardingVerificationError>
    | ReceivedInfoFixDemandedByKYCService of OrgOnboardingApplicationSubmitted
-   | LinkAccountToPartnerBankResponse of Result<PartnerBankAccountLink, string>
+   | CreateLegalEntityWithPartnerBankResponse of
+      Result<LegalBusinessEntityCreateResponse, string>
+   | CreateInternalAccountWithPartnerBankResponse of
+      Result<InternalAccountCreateResponse, string>
    | InitializedPrimaryVirtualAccount
    | InitializeOrgSettingsCacheResponse of Result<unit, Err>
    | OrgActivated
@@ -38,7 +41,8 @@ type Activity =
    | SubmitApplication
    | SendApplicationProcessingNotification
    | KYCVerification
-   | LinkAccountToPartnerBank
+   | CreateLegalEntityWithPartnerBank
+   | CreateInternalAccountWithPartnerBank
    | InitializePrimaryVirtualAccount
    | InitializeOrgSettingsCache
    | ActivateOrg
@@ -46,24 +50,26 @@ type Activity =
    | SendApplicationRejectedNotification
    | WaitForInfoFixDemandedByKYCService
    | SendApplicationRequiresRevisionForKYCServiceNotification
-   | WaitForSupportTeamToResolvePartnerBankLink
+   | WaitForSupportTeamToResolve
 
    interface IActivity with
       member x.MaxAttempts =
          match x with
          | WaitForInfoFixDemandedByKYCService
-         | WaitForSupportTeamToResolvePartnerBankLink -> 0
+         | WaitForSupportTeamToResolve -> 0
          | SubmitApplication -> 1
-         | LinkAccountToPartnerBank -> 4
+         | CreateLegalEntityWithPartnerBank
+         | CreateInternalAccountWithPartnerBank -> 4
          | _ -> 3
 
       member x.InactivityTimeout =
          match x with
          | SubmitApplication
          | WaitForInfoFixDemandedByKYCService
-         | WaitForSupportTeamToResolvePartnerBankLink -> None
+         | WaitForSupportTeamToResolve -> None
          | KYCVerification
-         | LinkAccountToPartnerBank -> Some(TimeSpan.FromMinutes 2.)
+         | CreateLegalEntityWithPartnerBank
+         | CreateInternalAccountWithPartnerBank -> Some(TimeSpan.FromMinutes 2.)
          | SendApplicationProcessingNotification
          | SendApplicationRequiresRevisionForKYCServiceNotification
          | SendApplicationAcceptedNotification
@@ -84,9 +90,16 @@ type OrgOnboardingSaga = {
       OrgOnboardingApplicationRequiresUpdateInfo option
 } with
 
-   member x.LinkedAccountToPartnerBank =
+   member x.PartnerBankLegalEntity =
       x.Events
       |> List.tryPick (function
-         | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse res ->
+         | OrgOnboardingSagaEvent.CreateLegalEntityWithPartnerBankResponse res ->
+            Result.toOption res
+         | _ -> None)
+
+   member x.PartnerBankInternalAccount =
+      x.Events
+      |> List.tryPick (function
+         | OrgOnboardingSagaEvent.CreateInternalAccountWithPartnerBankResponse res ->
             Result.toOption res
          | _ -> None)

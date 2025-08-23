@@ -388,12 +388,15 @@ let sqlParamReducer
          "orgId", PartnerBankSqlMapper.SqlWriter.orgId e.OrgId
          "parentAccountId",
          PartnerBankSqlMapper.SqlWriter.parentAccountId e.Data.ParentAccountId
-         "routingNumber",
-         PartnerBankSqlMapper.SqlWriter.routingNumber
-            e.Data.PartnerBankRoutingNumber
-         "accountNumber",
-         PartnerBankSqlMapper.SqlWriter.accountNumber
-            e.Data.PartnerBankAccountNumber
+         "partnerBankRoutingNumber",
+         PartnerBankSqlMapper.SqlWriter.partnerBankRoutingNumber
+            e.Data.PartnerBankLink.RoutingNumber
+         "partnerBankAccountNumber",
+         PartnerBankSqlMapper.SqlWriter.partnerBankAccountNumber
+            e.Data.PartnerBankLink.AccountNumber
+         "partnerBankAccountId",
+         PartnerBankSqlMapper.SqlWriter.partnerBankAccountId
+            e.Data.PartnerBankLink.PartnerBankAccountId
          "status",
          PartnerBankSqlMapper.SqlWriter.status ParentAccountStatus.Active
       ]
@@ -1030,14 +1033,16 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       $"""
       INSERT into {PartnerBankSqlMapper.table}
          ({PartnerBankSqlMapper.Fields.parentAccountId},
-          {PartnerBankSqlMapper.Fields.accountNumber},
-          {PartnerBankSqlMapper.Fields.routingNumber},
+          {PartnerBankSqlMapper.Fields.partnerBankAccountNumber},
+          {PartnerBankSqlMapper.Fields.partnerBankRoutingNumber},
+          {PartnerBankSqlMapper.Fields.partnerBankAccountId},
           {PartnerBankSqlMapper.Fields.status},
           {PartnerBankSqlMapper.Fields.orgId})
       VALUES
          (@parentAccountId,
-          @accountNumber,
-          @routingNumber,
+          @partnerBankAccountNumber,
+          @partnerBankRoutingNumber,
+          @partnerBankAccountId,
           @status::{PartnerBankSqlMapper.TypeCast.status},
           @orgId)
       ON CONFLICT ({PartnerBankSqlMapper.Fields.parentAccountId})

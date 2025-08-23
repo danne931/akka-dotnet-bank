@@ -5,7 +5,7 @@ open System
 open Lib.SharedTypes
 open Lib.Saga
 open Bank.Transfer.Domain
-open PartnerBank.Service.Domain
+open Bank.Account.Domain
 
 [<RequireQualifiedAccess>]
 type PlatformTransferSagaStatus =
@@ -18,15 +18,15 @@ type PlatformTransferSagaStatus =
 type PlatformTransferSagaStartEvent =
    | SenderReservedFunds of
       BankEvent<InternalTransferBetweenOrgsPending> *
-      PartnerBankAccountLink
+      PartnerBankInternalAccountLink
    | ScheduleTransferRequest of BankEvent<InternalTransferBetweenOrgsScheduled>
 
 [<RequireQualifiedAccess>]
 type PlatformTransferSagaEvent =
    | ScheduledTransferActivated
-   | SenderReservedFunds of PartnerBankAccountLink
+   | SenderReservedFunds of PartnerBankInternalAccountLink
    | SenderUnableToReserveFunds of InternalTransferFailReason
-   | RecipientDepositedFunds of PartnerBankAccountLink
+   | RecipientDepositedFunds of PartnerBankInternalAccountLink
    | RecipientUnableToDepositFunds of InternalTransferFailReason
    | TransferNotificationSent
    | TransferDepositNotificationSent
@@ -92,8 +92,8 @@ type PlatformTransferSaga = {
    Status: PlatformTransferSagaStatus
    TransferInfo: BaseInternalTransferBetweenOrgsInfo
    LifeCycle: SagaLifeCycle<Activity>
-   PartnerBankSenderAccountLink: PartnerBankAccountLink option
-   PartnerBankRecipientAccountLink: PartnerBankAccountLink option
+   PartnerBankSenderAccountLink: PartnerBankInternalAccountLink option
+   PartnerBankRecipientAccountLink: PartnerBankInternalAccountLink option
 } with
 
    member x.SyncedToPartnerBank =

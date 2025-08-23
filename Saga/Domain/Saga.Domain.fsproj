@@ -21,5 +21,6 @@
     <ProjectReference Include="../../Billing/Domain/Billing.Domain.fsproj" /> 
     <ProjectReference Include="../../Org/Domain/Org.Domain.fsproj" /> 
     <ProjectReference Include="../../Account/Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../../PartnerBank/Domain/PartnerBank.Domain.fsproj" />
   </ItemGroup>
 </Project>

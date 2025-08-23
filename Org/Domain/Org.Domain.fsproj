@@ -17,6 +17,5 @@
     <ProjectReference Include="../../Lib/SharedClientServer/Lib.SharedClientServer.fsproj" />
     <ProjectReference Include="../../Account/Domain/Account.Domain.fsproj" />
     <ProjectReference Include="../../Employee/Domain/Employee.Domain.fsproj" />
-    <ProjectReference Include="../../PartnerBank/Domain/PartnerBank.Domain.fsproj" />
   </ItemGroup>
 </Project>

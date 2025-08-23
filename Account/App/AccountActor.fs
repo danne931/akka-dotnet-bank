@@ -158,11 +158,6 @@ let onPersisted
    (state: ParentAccountSnapshot)
    (evt: AccountEvent)
    =
-   let partnerBankAccountLink: PartnerBank.Service.Domain.PartnerBankAccountLink = {
-      AccountNumber = state.AccountNumber
-      RoutingNumber = state.RoutingNumber
-   }
-
    match evt with
    | AccountEvent.InitializedPrimaryCheckingAccount e ->
       let msg =
@@ -186,7 +181,7 @@ let onPersisted
       ()
    | AccountEvent.DebitPending e ->
       let msg =
-         partnerBankAccountLink
+         state.PartnerBankLink
          |> PurchaseSagaEvent.AccountReservedFunds
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
 
@@ -236,7 +231,7 @@ let onPersisted
    | AccountEvent.InternalTransferBetweenOrgsPending e ->
       if e.Data.FromSchedule then
          let msg =
-            partnerBankAccountLink
+            state.PartnerBankLink
             |> PlatformTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 
@@ -245,7 +240,7 @@ let onPersisted
          let msg =
             PlatformTransferSagaStartEvent.SenderReservedFunds(
                e,
-               partnerBankAccountLink
+               state.PartnerBankLink
             )
             |> AppSaga.Message.platformTransferStart e.OrgId e.CorrelationId
 
@@ -258,7 +253,7 @@ let onPersisted
       registry.SagaGuaranteedDeliveryActor() <! msg
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       let msg =
-         partnerBankAccountLink
+         state.PartnerBankLink
          |> PlatformTransferSagaEvent.RecipientDepositedFunds
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 

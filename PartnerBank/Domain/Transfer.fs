@@ -5,6 +5,7 @@ open System
 open Lib.SharedTypes
 open Lib.ActivePatterns
 open Bank.Transfer.Domain
+open Bank.Account.Domain
 
 [<RequireQualifiedAccess>]
 type DomesticTransferServiceAction =
@@ -151,8 +152,8 @@ type PartnerBankDomesticTransferResponse = {
 
 type PartnerBankSyncTransferBetweenOrgs = {
    Amount: decimal
-   From: PartnerBankAccountLink
-   To: PartnerBankAccountLink
+   From: PartnerBankInternalAccountLink
+   To: PartnerBankInternalAccountLink
    SagaMetadata: PartnerBankSagaMetadata
 }
 

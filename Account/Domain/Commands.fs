@@ -10,8 +10,7 @@ type InitializePrimaryCheckingAccountInput = {
    OrgId: OrgId
    CorrelationId: CorrelationId
    ParentAccountId: ParentAccountId
-   PartnerBankAccountNumber: ParentAccountNumber
-   PartnerBankRoutingNumber: ParentRoutingNumber
+   PartnerBankLink: PartnerBankInternalAccountLink
 }
 
 type InitializePrimaryCheckingAccountCommand =
@@ -42,8 +41,7 @@ module InitializePrimaryCheckingAccountCommand =
                {
                   OrgId = input.OrgId
                   ParentAccountId = input.ParentAccountId
-                  PartnerBankAccountNumber = input.PartnerBankAccountNumber
-                  PartnerBankRoutingNumber = input.PartnerBankRoutingNumber
+                  PartnerBankLink = input.PartnerBankLink
                   PrimaryChecking = {
                      Name = "Checking"
                      AccountId = Guid.NewGuid() |> AccountId

@@ -5,7 +5,8 @@ open Lib.SharedTypes
 type CachedOrgSettings = {
    AdminTeamEmail: Email.Email
    ParentAccountId: ParentAccountId
-   PartnerBankAccountLink: PartnerBank.Service.Domain.PartnerBankAccountLink
+   PartnerBankInternalAccountLink:
+      Bank.Account.Domain.PartnerBankInternalAccountLink
 }
 
 /// CRDT interface for accessing org settings across the cluster.

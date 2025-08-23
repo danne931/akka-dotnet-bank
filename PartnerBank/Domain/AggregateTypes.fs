@@ -2,21 +2,24 @@ namespace PartnerBank.Service.Domain
 
 [<RequireQualifiedAccess>]
 type PartnerBankServiceMessage =
-   | LinkAccount of PartnerBankAccountLinking
+   | CreateLegalEntity of LegalBusinessEntityCreateRequest
+   | CreateInternalAccount of InternalAccountCreateRequest
    | TransferDomestic of PartnerBankDomesticTransfer
    | TransferBetweenOrganizations of PartnerBankSyncTransferBetweenOrgs
-   | Purchase of PartnerBankSyncPurchase
+   | Purchase of SyncPurchase
 
    member x.SagaMetadata =
       match x with
-      | LinkAccount req -> req.SagaMetadata
+      | CreateLegalEntity req -> req.SagaMetadata
+      | CreateInternalAccount req -> req.SagaMetadata
       | TransferBetweenOrganizations req -> req.SagaMetadata
       | TransferDomestic req -> req.SagaMetadata
       | Purchase req -> req.SagaMetadata
 
 [<RequireQualifiedAccess>]
 type PartnerBankResponse =
-   | LinkAccount of AccountLinkResponse
+   | CreateLegalEntity of LegalBusinessEntityCreateResponse
+   | CreateInternalAccount of InternalAccountCreateResponse
    | TransferBetweenOrganizations of PartnerBankSyncTransferBetweenOrgsResponse
    | TransferDomestic of PartnerBankDomesticTransferResponse
-   | Purchase of PartnerBankSyncPurchaseResponse
+   | Purchase of SyncPurchaseResponse

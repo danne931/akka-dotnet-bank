@@ -80,7 +80,7 @@ let applyEvent
             LifeCycle =
                saga.LifeCycle
                |> finishActivity activity
-               |> addActivity Activity.LinkAccountToPartnerBank
+               |> addActivity Activity.CreateLegalEntityWithPartnerBank
         }
       | Error err ->
          match err with
@@ -121,8 +121,8 @@ let applyEvent
             |> finishActivity Activity.WaitForInfoFixDemandedByKYCService
             |> addActivity Activity.KYCVerification
      }
-   | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse res ->
-      let activity = Activity.LinkAccountToPartnerBank
+   | OrgOnboardingSagaEvent.CreateLegalEntityWithPartnerBankResponse res ->
+      let activity = Activity.CreateLegalEntityWithPartnerBank
 
       match res with
       | Error err ->
@@ -135,13 +135,42 @@ let applyEvent
             {
                saga with
                   Status =
-                     OrgOnboardingFailureReason.PartnerBankLinkError err
+                     OrgOnboardingFailureReason.PartnerBankLegalEntityCreateError
+                        err
                      |> OrgOnboardingSagaStatus.Failed
                   LifeCycle =
                      saga.LifeCycle
                      |> failActivity activity
-                     |> addActivity
-                           Activity.WaitForSupportTeamToResolvePartnerBankLink
+                     |> addActivity Activity.WaitForSupportTeamToResolve
+            }
+      | Ok _ -> {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.CreateLegalEntityWithPartnerBank
+               |> addActivity Activity.CreateInternalAccountWithPartnerBank
+        }
+   | OrgOnboardingSagaEvent.CreateInternalAccountWithPartnerBankResponse res ->
+      let activity = Activity.CreateInternalAccountWithPartnerBank
+
+      match res with
+      | Error err ->
+         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
+            {
+               saga with
+                  LifeCycle = retryActivity activity saga.LifeCycle
+            }
+         else
+            {
+               saga with
+                  Status =
+                     OrgOnboardingFailureReason.PartnerBankInternalAccountCreateError
+                        err
+                     |> OrgOnboardingSagaStatus.Failed
+                  LifeCycle =
+                     saga.LifeCycle
+                     |> failActivity activity
+                     |> addActivity Activity.WaitForSupportTeamToResolve
             }
       | Ok _ -> {
          saga with
@@ -212,9 +241,8 @@ let applyEvent
          Status = OrgOnboardingSagaStatus.InProgress
          LifeCycle =
             saga.LifeCycle
-            |> finishActivity
-                  Activity.WaitForSupportTeamToResolvePartnerBankLink
-            |> addActivity Activity.LinkAccountToPartnerBank
+            |> finishActivity Activity.WaitForSupportTeamToResolve
+            |> addActivity Activity.CreateInternalAccountWithPartnerBank
      }
    | OrgOnboardingSagaEvent.EvaluateRemainingWork -> {
       saga with
@@ -248,7 +276,7 @@ let stateTransition
       | OrgOnboardingSagaEvent.EvaluateRemainingWork
       | OrgOnboardingSagaEvent.ResetInProgressActivityAttempts -> false
       | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink ->
-         activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankLink
+         activityIsDone Activity.WaitForSupportTeamToResolve
       | OrgOnboardingSagaEvent.ApplicationProcessingNotificationSent ->
          activityIsDone Activity.SendApplicationProcessingNotification
       | OrgOnboardingSagaEvent.ApplicationRejectedNotificationSent ->
@@ -262,8 +290,10 @@ let stateTransition
          activityIsDone Activity.KYCVerification
       | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService _ ->
          activityIsDone Activity.WaitForInfoFixDemandedByKYCService
-      | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse _ ->
-         activityIsDone Activity.LinkAccountToPartnerBank
+      | OrgOnboardingSagaEvent.CreateLegalEntityWithPartnerBankResponse _ ->
+         activityIsDone Activity.CreateLegalEntityWithPartnerBank
+      | OrgOnboardingSagaEvent.CreateInternalAccountWithPartnerBankResponse _ ->
+         activityIsDone Activity.CreateInternalAccountWithPartnerBank
       | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
          activityIsDone Activity.InitializePrimaryVirtualAccount
       | OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse _ ->
@@ -294,7 +324,7 @@ let onStartEventPersisted
          Info =
             EmailInfo.OrgOnboardingApplicationSubmitted {
                Email = info.AdminTeamEmail
-               BusinessName = info.LegalBusinessName
+               BusinessName = info.BusinessDetails.BusinessName
             }
       }
 
@@ -326,6 +356,20 @@ let onEventPersisted
    let orgId = updatedState.OrgId
    let corrId = updatedState.CorrelationId
 
+   let sagaMetadata = {
+      OrgId = orgId
+      CorrelationId = corrId
+   }
+
+   let sendApplicationRequiresSupportEmail (reason: string) =
+      let emailMsg = {
+         OrgId = orgId
+         CorrelationId = corrId
+         Info = EmailInfo.ApplicationErrorRequiresSupport reason
+      }
+
+      registry.EmailActor() <! emailMsg
+
    let sendApplicationAcceptedEmail () =
       let emailMsg = {
          OrgId = orgId
@@ -333,7 +377,7 @@ let onEventPersisted
          Info =
             EmailInfo.OrgOnboardingApplicationAccepted {
                Email = application.AdminTeamEmail
-               BusinessName = application.LegalBusinessName
+               BusinessName = application.BusinessDetails.BusinessName
             }
       }
 
@@ -349,7 +393,7 @@ let onEventPersisted
             EmailInfo.OrgOnboardingApplicationRejected {
                Info = {
                   Email = application.AdminTeamEmail
-                  BusinessName = application.LegalBusinessName
+                  BusinessName = application.BusinessDetails.BusinessName
                }
                Reason = reason.Display
             }
@@ -367,7 +411,7 @@ let onEventPersisted
             EmailInfo.OrgOnboardingApplicationRequiresRevision {
                Info = {
                   Email = application.AdminTeamEmail
-                  BusinessName = application.LegalBusinessName
+                  BusinessName = application.BusinessDetails.BusinessName
                }
                Reason = reason.Display
             }
@@ -383,18 +427,28 @@ let onEventPersisted
          Application = application
       }
 
-   let linkAccountToPartnerBank () =
+   let createLegalEntityWithPartnerBank () =
       registry.PartnerBankServiceActor()
-      <! PartnerBankServiceMessage.LinkAccount {
-         LegalBusinessName = application.LegalBusinessName
-         EmployerIdentificationNumber = application.EmployerIdentificationNumber
-         SagaMetadata = {
-            OrgId = orgId
-            CorrelationId = corrId
-         }
+      <! PartnerBankServiceMessage.CreateLegalEntity {
+         Detail = application.BusinessDetails
+         SagaMetadata = sagaMetadata
       }
 
-   let initializeVirtualAccount (partnerBankLink: PartnerBankAccountLink) =
+   let createInternalAccountWithPartnerBank () =
+      match updatedState.PartnerBankLegalEntity with
+      | Some entity ->
+         registry.PartnerBankServiceActor()
+         <! PartnerBankServiceMessage.CreateInternalAccount {
+            LegalEntityId = entity.Id
+            AccountName = "Operations"
+            SagaMetadata = sagaMetadata
+         }
+      | None ->
+         operationEnv.logError "Attempted to create account before legal entity"
+
+   let initializeVirtualAccount
+      (partnerBankLink: PartnerBankInternalAccountLink)
+      =
       let parentAccountId = application.ParentAccountId
 
       let msg =
@@ -402,21 +456,20 @@ let onEventPersisted
             OrgId = orgId
             CorrelationId = corrId
             ParentAccountId = parentAccountId
-            PartnerBankAccountNumber = partnerBankLink.AccountNumber
-            PartnerBankRoutingNumber = partnerBankLink.RoutingNumber
+            PartnerBankLink = partnerBankLink
          }
          |> AccountCommand.InitializePrimaryCheckingAccount
          |> AccountMessage.StateChange
 
       registry.AccountActor parentAccountId <! msg
 
-   let initOrgSettingsCache (partnerBankLink: PartnerBankAccountLink) =
+   let initOrgSettingsCache (partnerBankLink: PartnerBankInternalAccountLink) =
       let asyncEvt = async {
          let! res =
             operationEnv.OrgSettingsCache.Update orgId {
                AdminTeamEmail = application.AdminTeamEmail
                ParentAccountId = application.ParentAccountId
-               PartnerBankAccountLink = partnerBankLink
+               PartnerBankInternalAccountLink = partnerBankLink
             }
 
          return OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse res
@@ -440,7 +493,7 @@ let onEventPersisted
    match evt with
    | OrgOnboardingSagaEvent.KYCResponse res ->
       match res with
-      | Ok _ -> linkAccountToPartnerBank ()
+      | Ok _ -> createLegalEntityWithPartnerBank ()
       | Error err ->
          match err with
          | OrgOnboardingVerificationError.RequiresUpdatedInfo infoRequired ->
@@ -449,28 +502,34 @@ let onEventPersisted
             sendApplicationRejectedEmail reason
    | OrgOnboardingSagaEvent.ReceivedInfoFixDemandedByKYCService _ ->
       verifyOrg ()
-   | OrgOnboardingSagaEvent.LinkAccountToPartnerBankResponse res ->
+   | OrgOnboardingSagaEvent.CreateLegalEntityWithPartnerBankResponse res ->
+      match res with
+      | Ok _ -> createInternalAccountWithPartnerBank ()
+      | Error reason ->
+         if
+            previousState.LifeCycle.ActivityHasRemainingAttempts
+               Activity.CreateLegalEntityWithPartnerBank
+         then
+            createLegalEntityWithPartnerBank ()
+         else
+            sendApplicationRequiresSupportEmail reason
+   | OrgOnboardingSagaEvent.CreateInternalAccountWithPartnerBankResponse res ->
       match res with
       | Ok link -> initializeVirtualAccount link
       | Error reason ->
          if
             previousState.LifeCycle.ActivityHasRemainingAttempts
-               Activity.LinkAccountToPartnerBank
+               Activity.CreateInternalAccountWithPartnerBank
          then
-            linkAccountToPartnerBank ()
+            createInternalAccountWithPartnerBank ()
          else
-            registry.EmailActor()
-            <! {
-                  OrgId = orgId
-                  CorrelationId = corrId
-                  Info = EmailInfo.ApplicationErrorRequiresSupport reason
-               }
+            sendApplicationRequiresSupportEmail reason
    | OrgOnboardingSagaEvent.SupportTeamResolvedPartnerBankLink ->
       // Support team resolved dispute with partner bank so
       // reattempt linking parent account with partner bank.
-      linkAccountToPartnerBank ()
+      createInternalAccountWithPartnerBank ()
    | OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount ->
-      updatedState.LinkedAccountToPartnerBank
+      updatedState.PartnerBankInternalAccount
       |> Option.iter initOrgSettingsCache
    | OrgOnboardingSagaEvent.InitializeOrgSettingsCacheResponse res ->
       match res with
@@ -488,7 +547,7 @@ let onEventPersisted
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
          | Activity.SubmitApplication
-         | Activity.WaitForSupportTeamToResolvePartnerBankLink
+         | Activity.WaitForSupportTeamToResolve
          | Activity.WaitForInfoFixDemandedByKYCService -> ()
          | Activity.SendApplicationProcessingNotification ->
             let emailMsg = {
@@ -497,7 +556,7 @@ let onEventPersisted
                Info =
                   EmailInfo.OrgOnboardingApplicationSubmitted {
                      Email = application.AdminTeamEmail
-                     BusinessName = application.LegalBusinessName
+                     BusinessName = application.BusinessDetails.BusinessName
                   }
             }
 
@@ -513,11 +572,14 @@ let onEventPersisted
          | Activity.SendApplicationAcceptedNotification ->
             sendApplicationAcceptedEmail ()
          | Activity.KYCVerification -> verifyOrg ()
-         | Activity.LinkAccountToPartnerBank -> linkAccountToPartnerBank ()
+         | Activity.CreateLegalEntityWithPartnerBank ->
+            createLegalEntityWithPartnerBank ()
+         | Activity.CreateInternalAccountWithPartnerBank ->
+            createInternalAccountWithPartnerBank ()
          | Activity.InitializePrimaryVirtualAccount ->
-            updatedState.LinkedAccountToPartnerBank
+            updatedState.PartnerBankInternalAccount
             |> Option.iter initializeVirtualAccount
          | Activity.InitializeOrgSettingsCache ->
-            updatedState.LinkedAccountToPartnerBank
+            updatedState.PartnerBankInternalAccount
             |> Option.iter initOrgSettingsCache
          | Activity.ActivateOrg -> activateOrg ()

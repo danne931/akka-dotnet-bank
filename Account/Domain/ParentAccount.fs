@@ -134,8 +134,7 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
          updated with
             OrgId = e.OrgId
             ParentAccountId = e.Data.ParentAccountId
-            AccountNumber = e.Data.PartnerBankAccountNumber
-            RoutingNumber = e.Data.PartnerBankRoutingNumber
+            PartnerBankLink = e.Data.PartnerBankLink
             PrimaryVirtualAccountId = e.Data.PrimaryChecking.AccountId
             Status = ParentAccountStatus.Active
         }

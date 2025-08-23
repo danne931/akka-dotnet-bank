@@ -62,13 +62,37 @@ type OrgSetup = {
    AccountOwnerId: EmployeeId
    AccountOwnerName: {| First: string; Last: string |}
    AccountOwnerEmail: string
-   BusinessName: string
-   EIN: string
+   BusinessDetails: BusinessDetails
 }
+
+let businessDetails (name: string) =
+   let rnd = Random()
+
+   let ein =
+      List.init 9 (fun _ -> rnd.Next(1, 9))
+      |> List.map string
+      |> String.concat ""
+
+   let website = name.ToLower().Replace(" ", "-") + ".com"
+
+   {
+      BusinessName = name
+      Description = ""
+      EmployerIdentificationNumber = ein
+      LegalType = BusinessType.LLC
+      Website = Some website
+      Address = {
+         Line1 = "123 Main St"
+         Line2 = "40931"
+         City = "Mill Valley"
+         State = "CA"
+         CountryCode = "US"
+         PostalCode = "94941"
+      }
+   }
 
 let myOrg = {
    OrgId = Constants.ORG_ID_REMOVE_SOON
-   BusinessName = "Sapphire Health"
    ParentAccountId =
       ParentAccountId(Guid.Parse("06751328-320e-477a-9b89-2c193d8cf3a0"))
    PrimaryAccountId = AccountId(Guid.NewGuid())
@@ -82,7 +106,10 @@ let myOrg = {
       Last = "Eisenbarger"
    |}
    AccountOwnerEmail = "jellyfish@gmail.com"
-   EIN = "124536789"
+   BusinessDetails = {
+      businessDetails "Sapphire Health" with
+         LegalType = BusinessType.NonProfit
+   }
 }
 
 let arCheckingAccountId =
@@ -109,8 +136,7 @@ let socialTransferCandidates = [
          Last = "Caplette"
       |}
       AccountOwnerEmail = "elsiane@gmail.com"
-      BusinessName = "Figma"
-      EIN = "124537689"
+      BusinessDetails = businessDetails "Figma"
    }
    {
       OrgId = "55e75321-b9ad-48cc-b5ad-74af0a7e31b2" |> Guid.Parse |> OrgId
@@ -126,8 +152,7 @@ let socialTransferCandidates = [
          "54804db3-1a1c-42dd-b8bb-94cc71519558" |> Guid.Parse |> EmployeeId
       AccountOwnerName = {| First = "Paul"; Last = "Haslinger" |}
       AccountOwnerEmail = "haslinger@gmail.com"
-      BusinessName = "Lendtable"
-      EIN = "124536798"
+      BusinessDetails = businessDetails "Lendtable"
    }
    {
       OrgId = "4c6d31a0-51de-4ab8-b805-f61eadb78f81" |> Guid.Parse |> OrgId
@@ -146,8 +171,7 @@ let socialTransferCandidates = [
          Last = "Swiftshadow"
       |}
       AccountOwnerEmail = "finneganswift@gmail.com"
-      BusinessName = "Shopify"
-      EIN = "124536788"
+      BusinessDetails = businessDetails "Shopify"
    }
 ]
 
@@ -166,8 +190,7 @@ let socialTransferSenders = [
          "3c2d88fd-d3aa-4999-8e73-d8129404f00b" |> Guid.Parse |> EmployeeId
       AccountOwnerName = {| First = "Meorise"; Last = "Sarlee" |}
       AccountOwnerEmail = "msarlee@yahoo.com"
-      BusinessName = "Huntress"
-      EIN = "124566789"
+      BusinessDetails = businessDetails "Huntress"
    }
    {
       OrgId = "b854d513-c40e-4582-bf2f-688d6a73a21a" |> Guid.Parse |> OrgId
@@ -183,8 +206,7 @@ let socialTransferSenders = [
          "e8e8de39-dce0-4c70-89e4-5ab345949f99" |> Guid.Parse |> EmployeeId
       AccountOwnerName = {| First = "Pruncha"; Last = "Yukio" |}
       AccountOwnerEmail = "yukio@yahoo.com"
-      BusinessName = "Github"
-      EIN = "124436789"
+      BusinessDetails = businessDetails "Github"
    }
    {
       OrgId = "1e01868e-adcb-4c5d-8a8b-f75bc36db0f5" |> Guid.Parse |> OrgId
@@ -200,8 +222,7 @@ let socialTransferSenders = [
          "20038dd5-e7f2-478d-a57b-6165969471a4" |> Guid.Parse |> EmployeeId
       AccountOwnerName = {| First = "Aio"; Last = "Usagi" |}
       AccountOwnerEmail = "usagi@yahoo.com"
-      BusinessName = "Segment"
-      EIN = "524536789"
+      BusinessDetails = businessDetails "Segment"
    }
 ]
 
@@ -225,8 +246,7 @@ let paymentRequesters = [
          Last = "Daleth"
       |}
       AccountOwnerEmail = "nakiasha@yahoo.com"
-      BusinessName = "Dusty Robotics"
-      EIN = "534536789"
+      BusinessDetails = businessDetails "Dusty Robotics"
    }
    {
       OrgId = "7ef9d8f8-741f-4138-8aa8-37ab6e2e576d" |> Guid.Parse |> OrgId
@@ -242,8 +262,7 @@ let paymentRequesters = [
          "d7cbb60f-c7e7-4cf9-b28c-b5da6c57f493" |> Guid.Parse |> EmployeeId
       AccountOwnerName = {| First = "Bích"; Last = "Phương" |}
       AccountOwnerEmail = "bichphuong@gmail.com"
-      BusinessName = "Linear"
-      EIN = "524578789"
+      BusinessDetails = businessDetails "Linear"
    }
 ]
 
@@ -262,8 +281,7 @@ let paymentPayers = [
          "3565a715-a7e9-4ef2-b81a-628605aabaa0" |> Guid.Parse |> EmployeeId
       AccountOwnerName = {| First = "Mahatma"; Last = "Gandhi" |}
       AccountOwnerEmail = "gandhi@yahoo.com"
-      BusinessName = "Dropbox"
-      EIN = "524536711"
+      BusinessDetails = businessDetails "Dropbox"
    }
    {
       OrgId = "9f7a2ae5-9cb5-46ac-908e-4427230bf0fe" |> Guid.Parse |> OrgId
@@ -279,8 +297,7 @@ let paymentPayers = [
          "d260f814-186f-451c-8a9c-8ce2e565fbb4" |> Guid.Parse |> EmployeeId
       AccountOwnerName = {| First = "Zhi"; Last = "Ng" |}
       AccountOwnerEmail = "zhi@yahoo.com"
-      BusinessName = "Xero"
-      EIN = "524496789"
+      BusinessDetails = businessDetails "Xero"
    }
 ]
 
@@ -311,16 +328,13 @@ let createOrgs (registry: #IOrgGuaranteedDeliveryActor) =
       let msg =
          {
             SubmitOrgOnboardingApplicationCommand.create {
-               LegalBusinessName = org.BusinessName
+               BusinessDetails = org.BusinessDetails
                // TODO: Allow the org to set admin team email
                AdminTeamEmail =
-                  $"adminteam@{org.BusinessName}.com"
-                  |> _.ToLower().Replace(" ", "")
-                  |> Email.deserialize
+                  Email.deserialize $"adminteam@{org.BusinessDetails.Website}"
                OrgId = org.OrgId
                ParentAccountId = org.ParentAccountId
                InitiatedBy = Initiator.System
-               EmployerIdentificationNumber = org.EIN
             } with
                Timestamp = DateTime.UtcNow.AddMonths -4
          }
@@ -809,7 +823,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
                      Amount = randomAmount 3000 5000
                      Payee = {
                         OrgId = myOrg.OrgId
-                        OrgName = myOrg.BusinessName
+                        OrgName = myOrg.BusinessDetails.BusinessName
                         AccountId = arCheckingAccountId
                         ParentAccountId = myOrg.ParentAccountId
                      }
@@ -818,7 +832,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
                   }
                   Payer = {
                      OrgId = payer.OrgId
-                     OrgName = payer.BusinessName
+                     OrgName = payer.BusinessDetails.BusinessName
                      ParentAccountId = payer.ParentAccountId
                   }
                   RecurringPaymentReference = recurringPaymentReference
@@ -858,7 +872,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
                   "Robes, slippers, massage oils, massage tables, face cradle cushions"
                Payee = {
                   OrgId = myOrg.OrgId
-                  OrgName = myOrg.BusinessName
+                  OrgName = myOrg.BusinessDetails.BusinessName
                   AccountId = arCheckingAccountId
                   ParentAccountId = myOrg.ParentAccountId
                }
@@ -892,7 +906,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
          InternalTransferBetweenOrgsCommand.create
             {
                Id = InitiatedById payerStub.AccountOwnerId
-               Name = payerStub.BusinessName
+               Name = payerStub.BusinessDetails.BusinessName
             }
             {
                Memo = None
@@ -927,7 +941,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
          RequestPaymentCommand.create
             {
                Id = InitiatedById payee.AccountOwnerId
-               Name = payee.BusinessName
+               Name = payee.BusinessDetails.BusinessName
             }
             (PaymentRequested.Platform {
                SharedDetails = {
@@ -935,7 +949,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
                   Amount = 5000m + randomAmount 1000 3000
                   Payee = {
                      OrgId = payee.OrgId
-                     OrgName = payee.BusinessName
+                     OrgName = payee.BusinessDetails.BusinessName
                      AccountId = payee.PrimaryAccountId
                      ParentAccountId = payee.ParentAccountId
                   }
@@ -946,7 +960,7 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
                RecurringPaymentReference = None
                Payer = {
                   OrgId = myOrg.OrgId
-                  OrgName = myOrg.BusinessName
+                  OrgName = myOrg.BusinessDetails.BusinessName
                   ParentAccountId = myOrg.ParentAccountId
                }
             })
@@ -1125,7 +1139,7 @@ let configureAutoTransferRules
          OrgId = candidate.OrgId
          AccountId = candidate.PrimaryAccountId
          ParentAccountId = candidate.ParentAccountId
-         Name = candidate.BusinessName
+         Name = candidate.BusinessDetails.BusinessName
       }
 
       let recipient = mockAccounts[candidate.OpsAccountId]
@@ -1136,7 +1150,7 @@ let configureAutoTransferRules
                (sender.ParentAccountId, sender.OrgId)
                {
                   Id = InitiatedById candidate.AccountOwnerId
-                  Name = candidate.BusinessName
+                  Name = candidate.BusinessDetails.BusinessName
                }
                {
                   AccountId = sender.AccountId
@@ -1278,7 +1292,7 @@ let seedAccountOwnerActions
                {
                   InternalTransferBetweenOrgsCommand.create
                      {
-                        Name = sender.BusinessName
+                        Name = sender.BusinessDetails.BusinessName
                         Id = InitiatedById sender.AccountOwnerId
                      }
                      {
@@ -1290,11 +1304,11 @@ let seedAccountOwnerActions
                            OrgId = myOrg.OrgId
                            AccountId = apCheckingAccountId
                            ParentAccountId = myOrg.ParentAccountId
-                           Name = myOrg.BusinessName
+                           Name = myOrg.BusinessDetails.BusinessName
                         }
                         ScheduledDateSeedOverride = Some ts
                         Sender = {
-                           Name = sender.BusinessName
+                           Name = sender.BusinessDetails.BusinessName
                            AccountId = sender.PrimaryAccountId
                            ParentAccountId = sender.ParentAccountId
                            OrgId = sender.OrgId
@@ -1329,12 +1343,12 @@ let seedAccountOwnerActions
                            OrgId = recipient.OrgId
                            ParentAccountId = recipient.ParentAccountId
                            AccountId = recipient.PrimaryAccountId
-                           Name = recipient.BusinessName
+                           Name = recipient.BusinessDetails.BusinessName
                         }
                      Amount = 3000m + randomAmount 1000 8000
                      ScheduledDateSeedOverride = Some timestamp
                      Sender = {
-                        Name = myOrg.BusinessName
+                        Name = myOrg.BusinessDetails.BusinessName
                         ParentAccountId = myOrg.ParentAccountId
                         AccountId = myOrg.OpsAccountId
                         OrgId = myOrg.OrgId

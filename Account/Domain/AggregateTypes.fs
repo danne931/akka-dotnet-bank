@@ -486,8 +486,7 @@ type Account = {
 type ParentAccountSnapshot = {
    OrgId: OrgId
    ParentAccountId: ParentAccountId
-   AccountNumber: ParentAccountNumber
-   RoutingNumber: ParentRoutingNumber
+   PartnerBankLink: PartnerBankInternalAccountLink
    PrimaryVirtualAccountId: AccountId
    VirtualAccounts: Map<AccountId, Account>
    LastBillingCycleDate: DateTime option
@@ -500,8 +499,11 @@ type ParentAccountSnapshot = {
    static member empty: ParentAccountSnapshot = {
       OrgId = OrgId Guid.Empty
       ParentAccountId = ParentAccountId Guid.Empty
-      AccountNumber = ParentAccountNumber AccountNumber.Empty
-      RoutingNumber = ParentRoutingNumber RoutingNumber.Empty
+      PartnerBankLink = {
+         AccountNumber = PartnerBankAccountNumber AccountNumber.Empty
+         RoutingNumber = PartnerBankRoutingNumber RoutingNumber.Empty
+         PartnerBankAccountId = PartnerBankAccountId ""
+      }
       PrimaryVirtualAccountId = AccountId Guid.Empty
       VirtualAccounts = Map.empty
       LastBillingCycleDate = None
