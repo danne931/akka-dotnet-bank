@@ -428,11 +428,17 @@ let onEventPersisted
       }
 
    let createLegalEntityWithPartnerBank () =
-      registry.PartnerBankServiceActor()
-      <! PartnerBankServiceMessage.CreateLegalEntity {
-         Detail = application.BusinessDetails
-         SagaMetadata = sagaMetadata
+      let delayedCreate = async {
+         do! Async.Sleep 5000
+
+         return
+            PartnerBankServiceMessage.CreateLegalEntity {
+               Detail = application.BusinessDetails
+               SagaMetadata = sagaMetadata
+            }
       }
+
+      registry.PartnerBankServiceActor() <!| delayedCreate
 
    let createInternalAccountWithPartnerBank () =
       match updatedState.PartnerBankLegalEntity with

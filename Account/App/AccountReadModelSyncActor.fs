@@ -397,6 +397,9 @@ let sqlParamReducer
          "partnerBankAccountId",
          PartnerBankSqlMapper.SqlWriter.partnerBankAccountId
             e.Data.PartnerBankLink.PartnerBankAccountId
+         "partnerBankLegalEntityId",
+         PartnerBankSqlMapper.SqlWriter.partnerBankLegalEntityId
+            e.Data.PartnerBankLink.PartnerBankLegalEntityId
          "status",
          PartnerBankSqlMapper.SqlWriter.status ParentAccountStatus.Active
       ]
@@ -1036,6 +1039,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {PartnerBankSqlMapper.Fields.partnerBankAccountNumber},
           {PartnerBankSqlMapper.Fields.partnerBankRoutingNumber},
           {PartnerBankSqlMapper.Fields.partnerBankAccountId},
+          {PartnerBankSqlMapper.Fields.partnerBankLegalEntityId},
           {PartnerBankSqlMapper.Fields.status},
           {PartnerBankSqlMapper.Fields.orgId})
       VALUES
@@ -1043,6 +1047,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           @partnerBankAccountNumber,
           @partnerBankRoutingNumber,
           @partnerBankAccountId,
+          @partnerBankLegalEntityId,
           @status::{PartnerBankSqlMapper.TypeCast.status},
           @orgId)
       ON CONFLICT ({PartnerBankSqlMapper.Fields.parentAccountId})

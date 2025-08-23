@@ -503,6 +503,7 @@ type ParentAccountSnapshot = {
          AccountNumber = PartnerBankAccountNumber AccountNumber.Empty
          RoutingNumber = PartnerBankRoutingNumber RoutingNumber.Empty
          PartnerBankAccountId = PartnerBankAccountId ""
+         PartnerBankLegalEntityId = PartnerBankLegalEntityId ""
       }
       PrimaryVirtualAccountId = AccountId Guid.Empty
       VirtualAccounts = Map.empty

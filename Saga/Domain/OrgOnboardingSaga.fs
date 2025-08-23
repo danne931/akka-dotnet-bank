@@ -4,6 +4,7 @@ open System
 
 open Lib.SharedTypes
 open Bank.Org.Domain
+open Bank.Account.Domain
 open Lib.Saga
 open PartnerBank.Service.Domain
 
@@ -25,7 +26,7 @@ type OrgOnboardingSagaEvent =
    | CreateLegalEntityWithPartnerBankResponse of
       Result<LegalBusinessEntityCreateResponse, string>
    | CreateInternalAccountWithPartnerBankResponse of
-      Result<InternalAccountCreateResponse, string>
+      Result<PartnerBankInternalAccountLink, string>
    | InitializedPrimaryVirtualAccount
    | InitializeOrgSettingsCacheResponse of Result<unit, Err>
    | OrgActivated

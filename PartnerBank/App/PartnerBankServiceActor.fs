@@ -20,6 +20,7 @@ open PlatformTransferSaga
 open DomesticTransferSaga
 open PartnerBank.Service.Domain
 open BankActorRegistry
+open Bank.Account.Domain
 
 type private NetworkRequest =
    PartnerBankServiceMessage -> Task<Result<PartnerBankResponse, Err>>
@@ -41,12 +42,6 @@ let protectedAction
             logError mailbox errMsg
 
             {
-               Sender =
-                  PartnerBankDomesticTransferRequest.networkSender
-                     info.Transfer.Sender
-               Recipient =
-                  PartnerBankDomesticTransferRequest.networkRecipient
-                     info.Transfer.Recipient
                Ok = false
                Status = ""
                Reason = "CorruptData"
@@ -98,7 +93,12 @@ let actorProps
                | PartnerBankServiceMessage.CreateInternalAccount req,
                  PartnerBankResponse.CreateInternalAccount res ->
                   let msg =
-                     Ok res
+                     Ok {
+                        PartnerBankLegalEntityId = req.LegalEntityId
+                        PartnerBankAccountId = res.PartnerBankAccountId
+                        AccountNumber = res.AccountNumber
+                        RoutingNumber = res.RoutingNumber
+                     }
                      |> OrgOnboardingSagaEvent.CreateInternalAccountWithPartnerBankResponse
                      |> AppSaga.Message.orgOnboard orgId corrId
 
@@ -153,6 +153,12 @@ let actorProps
       breaker
       consumerQueueOpts
 
+let private tcp =
+   TCP.request
+      EnvPartnerBank.config.MockPartnerBank.Host
+      EnvPartnerBank.config.MockPartnerBank.Port
+      Encoding.UTF8
+
 let private networkRequest
    (msg: PartnerBankServiceMessage)
    : TaskResult<PartnerBankResponse, Err>
@@ -160,26 +166,34 @@ let private networkRequest
    taskResult {
       match msg with
       | PartnerBankServiceMessage.CreateLegalEntity req ->
-         do! Task.Delay 2000
+         let request = {|
+            Action = "CreateLegalBusinessEntity"
+            TransactionId = req.SagaMetadata.CorrelationId.ToString()
+            Data = req.AsDTO
+         |}
 
-         let res: LegalBusinessEntityCreateResponseDTO = {
-            id = "enti_2Q1fIwKjnf7TmZP37mAuKjWXB2o"
-            business_details = BusinessDetailsDTO.fromEntity req.Detail
-            verification_status = "VERIFIED"
-            review_reasons = []
-         }
+         let serialized = JsonSerializer.SerializeToUtf8Bytes request
+
+         let! res = tcp serialized
+
+         let! res =
+            Serialization.deserialize<LegalBusinessEntityCreateResponseDTO> res
 
          let! entity = LegalBusinessEntityDTO.toEntity res
-
          return PartnerBankResponse.CreateLegalEntity entity
       | PartnerBankServiceMessage.CreateInternalAccount req ->
-         do! Task.Delay 5000
+         let request = {|
+            Action = "CreateInternalAccount"
+            TransactionId = string req.SagaMetadata.CorrelationId
+            Data = req.AsDTO
+         |}
 
-         let res: InternalAccountCreateResponseDTO = {
-            account_number = AccountNumber.generate () |> string
-            routing_number = RoutingNumber.Empty |> string
-            account_id = "bacc_2YHAXVyuS2xcJW12Buh9zsxV7vC"
-         }
+         let serialized = JsonSerializer.SerializeToUtf8Bytes request
+
+         let! res = tcp serialized
+
+         let! res =
+            Serialization.deserialize<InternalAccountCreateResponseDTO> res
 
          let! entity = res.AsEntity
 
@@ -197,18 +211,12 @@ let private networkRequest
             PaymentNetwork = txn.Recipient.PaymentNetwork
          }
 
-         let serialized = JsonSerializer.SerializeToUtf8Bytes request.AsDTO
+         let serializedReq = JsonSerializer.SerializeToUtf8Bytes request.AsDTO
 
-         let! response =
-            TCP.request
-               EnvPartnerBank.config.MockPartnerBank.Host
-               EnvPartnerBank.config.MockPartnerBank.Port
-               Encoding.UTF8
-               serialized
+         let! res = tcp serializedReq
 
          let! res =
-            Serialization.deserialize<PartnerBankDomesticTransferResponse>
-               response
+            Serialization.deserialize<PartnerBankDomesticTransferResponse> res
 
          return PartnerBankResponse.TransferDomestic res
       | PartnerBankServiceMessage.Purchase info ->

@@ -206,6 +206,7 @@ CREATE TABLE partner_bank_parent_account (
    partner_bank_routing_number INT NOT NULL,
    partner_bank_account_number BIGINT NOT NULL,
    partner_bank_account_id VARCHAR(255) NOT NULL,
+   partner_bank_legal_entity_id VARCHAR(255) NOT NULL,
    status parent_account_status NOT NULL,
    last_billing_cycle_at TIMESTAMPTZ,
    org_id UUID NOT NULL REFERENCES organization

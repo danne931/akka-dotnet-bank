@@ -13,11 +13,15 @@ type InternalAccountCreateRequest = {
 } with
 
    member x.AsDTO = {|
-      legal_entity_id = x.LegalEntityId
+      legal_entity_id = string x.LegalEntityId
       description = x.AccountName
    |}
 
-type InternalAccountCreateResponse = PartnerBankInternalAccountLink
+type InternalAccountCreateResponse = {
+   AccountNumber: PartnerBankAccountNumber
+   RoutingNumber: PartnerBankRoutingNumber
+   PartnerBankAccountId: PartnerBankAccountId
+}
 
 type InternalAccountCreateResponseDTO = {
    account_number: string

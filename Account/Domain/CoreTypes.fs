@@ -93,9 +93,11 @@ type BillingPeriod = { Month: int; Year: int }
 type PartnerBankRoutingNumber = PartnerBankRoutingNumber of RoutingNumber
 type PartnerBankAccountNumber = PartnerBankAccountNumber of AccountNumber
 type PartnerBankAccountId = PartnerBankAccountId of string
+type PartnerBankLegalEntityId = PartnerBankLegalEntityId of string
 
 type PartnerBankInternalAccountLink = {
    AccountNumber: PartnerBankAccountNumber
    RoutingNumber: PartnerBankRoutingNumber
    PartnerBankAccountId: PartnerBankAccountId
+   PartnerBankLegalEntityId: PartnerBankLegalEntityId
 }

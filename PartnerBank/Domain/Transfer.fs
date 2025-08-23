@@ -46,15 +46,17 @@ type PartnerBankDomesticTransferRequest = {
          match x.Action with
          | DomesticTransferServiceAction.TransferAck -> "TransferRequest"
          | DomesticTransferServiceAction.ProgressCheck -> "ProgressCheck"
-      Sender = PartnerBankDomesticTransferRequest.networkSender x.Sender
-      Recipient =
-         PartnerBankDomesticTransferRequest.networkRecipient x.Recipient
-      Amount = x.Amount
-      Date = x.Date
       TransactionId = string x.TransactionId
-      PaymentNetwork =
-         match x.Recipient.PaymentNetwork with
-         | PaymentNetwork.ACH -> "ach"
+      Data = {|
+         Sender = PartnerBankDomesticTransferRequest.networkSender x.Sender
+         Recipient =
+            PartnerBankDomesticTransferRequest.networkRecipient x.Recipient
+         Amount = x.Amount
+         Date = x.Date
+         PaymentNetwork =
+            match x.Recipient.PaymentNetwork with
+            | PaymentNetwork.ACH -> "ach"
+      |}
    |}
 
    static member networkSender
@@ -85,8 +87,6 @@ type private InfraFailReason = DomesticTransferInfraFailReason
 type private FailReason = DomesticTransferThirdPartyFailReason
 
 type PartnerBankDomesticTransferResponse = {
-   Sender: DomesticTransferServiceSender
-   Recipient: DomesticTransferServiceRecipient
    Ok: bool
    Status: string
    ExpectedSettlementDate: DateTime option
