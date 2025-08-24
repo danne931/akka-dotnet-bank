@@ -15,6 +15,27 @@ type BusinessType =
    | NonProfit
    | Other
 
+module BusinessType =
+   let fromString =
+      function
+      | "LimitedPartnership" -> Ok BusinessType.LimitedPartnership
+      | "Trust" -> Ok BusinessType.Trust
+      | "SoleProprietorship" -> Ok BusinessType.SoleProprietorship
+      | "Corporation" -> Ok BusinessType.Corporation
+      | "LLC" -> Ok BusinessType.LLC
+      | "GeneralPartnership" -> Ok BusinessType.GeneralPartnership
+      | "ProfessionalAssociation" -> Ok BusinessType.ProfessionalAssociation
+      | "Government" -> Ok BusinessType.Government
+      | "NonProfit" -> Ok BusinessType.NonProfit
+      | "Other" -> Ok BusinessType.Other
+      | _ -> Error(Err.SerializationError "Invalid BusinessType")
+
+   let fromStringUnsafe =
+      fromString
+      >> function
+         | Ok x -> x
+         | Error err -> failwith err.HumanFriendly
+
 type Address = {
    City: string
    CountryCode: string

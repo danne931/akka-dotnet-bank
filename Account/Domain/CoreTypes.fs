@@ -1,8 +1,6 @@
 namespace Bank.Account.Domain
 
 open System
-open Validus
-open Validus.Operators
 
 open Lib.SharedTypes
 
@@ -92,8 +90,6 @@ type BillingPeriod = { Month: int; Year: int }
 
 type PartnerBankRoutingNumber = PartnerBankRoutingNumber of RoutingNumber
 type PartnerBankAccountNumber = PartnerBankAccountNumber of AccountNumber
-type PartnerBankAccountId = PartnerBankAccountId of string
-type PartnerBankLegalEntityId = PartnerBankLegalEntityId of string
 
 type PartnerBankInternalAccountLink = {
    AccountNumber: PartnerBankAccountNumber

@@ -295,8 +295,6 @@ let formDomestic
          Amount = amount
          Sender = {
             Name = sender.Name
-            AccountNumber = sender.AccountNumber
-            RoutingNumber = sender.RoutingNumber
             OrgId = sender.OrgId
             ParentAccountId = sender.ParentAccountId
             AccountId = sender.AccountId

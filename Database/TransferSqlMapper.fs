@@ -196,7 +196,11 @@ module TransferSqlReader =
          AccountNumber = read.int64 AccountFields.accountNumber |> AccountNumber
          RoutingNumber = read.int AccountFields.routingNumber |> RoutingNumber
          OrgId = senderOrgId read
-         ParentAccountId = Guid.NewGuid() |> ParentAccountId
+         ParentAccountId =
+            read.uuid AccountFields.parentAccountId |> ParentAccountId
+         PartnerBankAccountId =
+            read.string PartnerBankSqlMapper.Fields.partnerBankAccountId
+            |> PartnerBankAccountId
          AccountId = AccountSqlReader.accountId read
       }
 
@@ -322,12 +326,16 @@ module Query =
          a.{AccountFields.accountNumber} as sender_account_number,
          a.{AccountFields.routingNumber} as sender_routing_number,
          a.{AccountFields.accountId},
+         a.{AccountFields.parentAccountId},
+         pba.{PartnerBankSqlMapper.Fields.partnerBankAccountId},
          {employeeName} as initiated_by_name
       FROM {Table.domesticTransfer} dt
       JOIN {Table.domesticRecipient} dr using({TransferFields.Domestic.recipientAccountId})
       JOIN {Table.transfer} t using({TransferFields.transferId})
       JOIN {AccountSqlMapper.table} a
          ON t.{TransferFields.senderAccountId} = a.{AccountFields.accountId}
+      JOIN {PartnerBankSqlMapper.table} pba
+         ON a.{AccountFields.parentAccountId} = pba.{PartnerBankSqlMapper.Fields.parentAccountId}
       JOIN {EmployeeSqlMapper.table} employee
          ON t.{TransferFields.initiatedById} = employee.{employeeId}
       """

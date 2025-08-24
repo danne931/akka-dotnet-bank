@@ -45,8 +45,8 @@ let protectedAction
                Ok = false
                Status = ""
                Reason = "CorruptData"
-               TransactionId = string info.Transfer.TransferId
-               ExpectedSettlementDate = None
+               TransactionId = string info.TransferId
+               ExpectedSettlementDate = DateTime.MinValue
             }
             |> PartnerBankResponse.TransferDomestic
             |> Ok
@@ -121,8 +121,7 @@ let actorProps
                   registry.SagaActor corrId <! msg
                | PartnerBankServiceMessage.TransferDomestic info,
                  PartnerBankResponse.TransferDomestic res ->
-                  let txn = info.Transfer
-                  let updatedProgress = res.NewProgressToSave txn
+                  let updatedProgress = res.NewProgressToSave info.Status
 
                   match updatedProgress with
                   | Some progressUpdate ->
@@ -136,9 +135,9 @@ let actorProps
                      logDebug
                         mailbox
                         ("No domestic transfer progress update will be saved."
-                         + $" - Transfer ID ({txn.TransferId})"
-                         + $" - Existing status ({txn.Status})"
-                         + $" - Service status ({res.Progress txn.ExpectedSettlementDate})")
+                         + $" - Transfer ID ({info.TransferId})"
+                         + $" - Existing status ({info.Status})"
+                         + $" - Service status ({res.Progress})")
                | _ -> logError mailbox "Partner Bank Sync: Mixed req/res."
 
                response)
@@ -167,9 +166,9 @@ let private networkRequest
       match msg with
       | PartnerBankServiceMessage.CreateLegalEntity req ->
          let request = {|
-            Action = "CreateLegalBusinessEntity"
-            TransactionId = req.SagaMetadata.CorrelationId.ToString()
-            Data = req.AsDTO
+            action = "CreateLegalBusinessEntity"
+            transaction_id = string req.SagaMetadata.CorrelationId
+            data = req.AsDTO
          |}
 
          let serialized = JsonSerializer.SerializeToUtf8Bytes request
@@ -183,9 +182,9 @@ let private networkRequest
          return PartnerBankResponse.CreateLegalEntity entity
       | PartnerBankServiceMessage.CreateInternalAccount req ->
          let request = {|
-            Action = "CreateInternalAccount"
-            TransactionId = string req.SagaMetadata.CorrelationId
-            Data = req.AsDTO
+            action = "CreateInternalAccount"
+            transaction_id = string req.SagaMetadata.CorrelationId
+            data = req.AsDTO
          |}
 
          let serialized = JsonSerializer.SerializeToUtf8Bytes request
@@ -199,26 +198,15 @@ let private networkRequest
 
          return PartnerBankResponse.CreateInternalAccount entity
       | PartnerBankServiceMessage.TransferDomestic info ->
-         let txn = info.Transfer
-
-         let request: PartnerBankDomesticTransferRequest = {
-            Action = info.Action
-            Sender = txn.Sender
-            Recipient = txn.Recipient
-            Amount = txn.Amount
-            Date = txn.ScheduledDate
-            TransactionId = txn.TransferId
-            PaymentNetwork = txn.Recipient.PaymentNetwork
-         }
-
-         let serializedReq = JsonSerializer.SerializeToUtf8Bytes request.AsDTO
+         let serializedReq = JsonSerializer.SerializeToUtf8Bytes info.AsDTO
 
          let! res = tcp serializedReq
 
          let! res =
-            Serialization.deserialize<PartnerBankDomesticTransferResponse> res
+            Serialization.deserialize<PartnerBankDomesticTransferResponseDTO>
+               res
 
-         return PartnerBankResponse.TransferDomestic res
+         return PartnerBankResponse.TransferDomestic res.AsEntity
       | PartnerBankServiceMessage.Purchase info ->
          return PartnerBankResponse.Purchase { ConfirmationId = Guid.NewGuid() }
       | PartnerBankServiceMessage.TransferBetweenOrganizations info ->

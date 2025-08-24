@@ -55,8 +55,7 @@ module OrgSqlReader =
       read.text OrgFields.address |> Serialization.deserializeUnsafe<Address>
 
    let businessType (read: RowReader) =
-      read.text OrgFields.businessType
-      |> Serialization.deserializeUnsafe<BusinessType>
+      read.text OrgFields.businessType |> BusinessType.fromStringUnsafe
 
    let description (read: RowReader) = read.text OrgFields.description
 

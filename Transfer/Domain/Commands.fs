@@ -415,7 +415,7 @@ module NicknameDomesticTransferRecipientCommand =
 
 type DomesticTransferInput = {
    Amount: decimal
-   Sender: DomesticTransferSender
+   Sender: DomesticTransferSenderReference
    Recipient: DomesticTransferRecipient
    Memo: string option
    ScheduledDateSeedOverride: DateTime option

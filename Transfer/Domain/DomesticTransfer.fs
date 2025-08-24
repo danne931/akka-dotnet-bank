@@ -154,6 +154,14 @@ type DomesticTransferSender = {
    RoutingNumber: RoutingNumber
    OrgId: OrgId
    ParentAccountId: ParentAccountId
+   PartnerBankAccountId: PartnerBankAccountId
+   AccountId: AccountId
+}
+
+type DomesticTransferSenderReference = {
+   Name: string
+   OrgId: OrgId
+   ParentAccountId: ParentAccountId
    AccountId: AccountId
 }
 
@@ -161,7 +169,7 @@ type DomesticTransferSender = {
 // carry over unaltered for all event progressions
 // (ProgressUpdate/Settled/Failed/Retry).
 type BaseDomesticTransferInfo = {
-   Sender: DomesticTransferSender
+   Sender: DomesticTransferSenderReference
    Recipient: DomesticTransferRecipient
    Amount: decimal
    TransferId: TransferId

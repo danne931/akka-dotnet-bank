@@ -78,25 +78,6 @@ type NicknamedDomesticTransferRecipient = {
    Nickname: string option
 }
 
-module TransferEventToDomesticTransfer =
-   let fromPending
-      (evt: BankEvent<DomesticTransferPending>)
-      : DomesticTransfer
-      =
-      let info = evt.Data.BaseInfo
-
-      {
-         Sender = info.Sender
-         TransferId = evt.Data.BaseInfo.TransferId
-         Recipient = info.Recipient
-         InitiatedBy = evt.InitiatedBy
-         Amount = info.Amount
-         ScheduledDate = info.ScheduledDate
-         ExpectedSettlementDate = evt.Data.ExpectedSettlementDate
-         Memo = info.Memo
-         Status = DomesticTransferProgress.WaitingForTransferServiceAck
-      }
-
 type AutomaticTransferRuleConfigured = {
    AccountId: AccountId
    Config: AutomaticTransfer.AutomaticTransferConfig

@@ -18,11 +18,12 @@ let applyStartEvent
    : DomesticTransferSaga
    =
    match start with
-   | DomesticTransferSagaStartEvent.SenderReservedFunds evt -> {
+   | DomesticTransferSagaStartEvent.SenderReservedFunds(evt, link) -> {
       Status = DomesticTransferProgress.WaitingForTransferServiceAck
       StartEvent = start
       Events = []
       TransferInfo = evt.Data.BaseInfo
+      PartnerBankAccountLink = link
       ExpectedSettlementDate = evt.Data.ExpectedSettlementDate
       ReasonForRetryServiceAck = None
       LifeCycle = {
@@ -45,11 +46,12 @@ let applyStartEvent
             ]
       }
      }
-   | DomesticTransferSagaStartEvent.ScheduleTransferRequest evt -> {
+   | DomesticTransferSagaStartEvent.ScheduleTransferRequest(evt, link) -> {
       Status = DomesticTransferProgress.Scheduled
       StartEvent = start
       Events = []
       TransferInfo = evt.Data.BaseInfo
+      PartnerBankAccountLink = link
       ExpectedSettlementDate = evt.Data.ExpectedSettlementDate
       ReasonForRetryServiceAck = None
       LifeCycle =
@@ -272,15 +274,21 @@ let onStartEventPersisted
    (evt: DomesticTransferSagaStartEvent)
    =
    match evt with
-   | DomesticTransferSagaStartEvent.SenderReservedFunds e ->
-      let transfer = TransferEventToDomesticTransfer.fromPending e
+   | DomesticTransferSagaStartEvent.SenderReservedFunds(e, link) ->
+      let info = e.Data.BaseInfo
 
       let msg =
          PartnerBankServiceMessage.TransferDomestic {
             Action = DomesticTransferServiceAction.TransferAck
-            Transfer = transfer
+            OriginatingAccountId = link.PartnerBankAccountId
+            Recipient = info.Recipient
+            Amount = info.Amount
+            PaymentNetwork = info.Recipient.PaymentNetwork
+            Date = info.ScheduledDate
+            Status = DomesticTransferProgress.WaitingForTransferServiceAck
+            TransferId = info.TransferId
             SagaMetadata = {
-               OrgId = e.Data.BaseInfo.Sender.OrgId
+               OrgId = info.Sender.OrgId
                CorrelationId = e.CorrelationId
             }
          }
@@ -305,18 +313,6 @@ let onEventPersisted
    let info = currentState.TransferInfo
    let correlationId = info.TransferId.AsCorrelationId
 
-   let transfer = {
-      Sender = info.Sender
-      TransferId = info.TransferId
-      Recipient = info.Recipient
-      InitiatedBy = info.InitiatedBy
-      Amount = info.Amount
-      ScheduledDate = info.ScheduledDate
-      Memo = info.Memo
-      Status = currentState.Status
-      ExpectedSettlementDate = currentState.ExpectedSettlementDate
-   }
-
    let deductFromSenderAccount () =
       let cmd =
          DomesticTransferCommand.create correlationId info.InitiatedBy {
@@ -333,11 +329,18 @@ let onEventPersisted
 
       registry.AccountActor info.Sender.ParentAccountId <! msg
 
-   let sendTransferToProcessorService () =
+   let sendTransferToProcessorService action =
       let msg =
          PartnerBankServiceMessage.TransferDomestic {
-            Action = DomesticTransferServiceAction.TransferAck
-            Transfer = transfer
+            Action = action
+            OriginatingAccountId =
+               currentState.PartnerBankAccountLink.PartnerBankAccountId
+            Recipient = info.Recipient
+            Amount = info.Amount
+            PaymentNetwork = info.Recipient.PaymentNetwork
+            Date = info.ScheduledDate
+            Status = currentState.Status
+            TransferId = info.TransferId
             SagaMetadata = {
                OrgId = info.Sender.OrgId
                CorrelationId = correlationId
@@ -347,17 +350,7 @@ let onEventPersisted
       registry.PartnerBankServiceActor() <! msg
 
    let checkOnTransferProgress () =
-      let msg =
-         PartnerBankServiceMessage.TransferDomestic {
-            Action = DomesticTransferServiceAction.ProgressCheck
-            Transfer = transfer
-            SagaMetadata = {
-               OrgId = info.Sender.OrgId
-               CorrelationId = correlationId
-            }
-         }
-
-      registry.PartnerBankServiceActor() <! msg
+      sendTransferToProcessorService DomesticTransferServiceAction.ProgressCheck
 
    let updateTransferProgress (progress: DomesticTransferThirdPartyUpdate) =
       let cmd =
@@ -423,7 +416,7 @@ let onEventPersisted
    | DomesticTransferSagaEvent.ScheduledTransferActivated ->
       deductFromSenderAccount ()
    | DomesticTransferSagaEvent.SenderReservedFunds ->
-      sendTransferToProcessorService ()
+      sendTransferToProcessorService DomesticTransferServiceAction.TransferAck
    | DomesticTransferSagaEvent.SenderUnableToReserveFunds _ -> ()
    | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
       match progress with
@@ -460,12 +453,14 @@ let onEventPersisted
    | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
       // Development team provided fix for data incompatibility issue when
       // issuing a transfer request to the third party transfer processor.
-      sendTransferToProcessorService ()
+      sendTransferToProcessorService DomesticTransferServiceAction.TransferAck
    | DomesticTransferSagaEvent.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
          | Activity.ReserveSenderFunds -> deductFromSenderAccount ()
-         | Activity.TransferServiceAck -> sendTransferToProcessorService ()
+         | Activity.TransferServiceAck ->
+            sendTransferToProcessorService
+               DomesticTransferServiceAction.TransferAck
          | Activity.SendTransferInitiatedNotification ->
             sendTransferInitiatedEmail ()
          | Activity.ReleaseSenderReservedFunds ->

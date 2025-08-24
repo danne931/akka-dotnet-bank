@@ -12,76 +12,42 @@ type DomesticTransferServiceAction =
    | TransferAck
    | ProgressCheck
 
-type DomesticTransferServiceSender = {
-   Name: string
-   AccountNumber: string
-   RoutingNumber: string
-}
-
-type DomesticTransferServiceRecipient = {
-   Name: string
-   AccountNumber: string
-   RoutingNumber: string
-   Depository: string
-}
-
-type PartnerBankDomesticTransfer = {
-   Action: DomesticTransferServiceAction
-   Transfer: DomesticTransfer
-   SagaMetadata: PartnerBankSagaMetadata
-}
-
 type PartnerBankDomesticTransferRequest = {
    Action: DomesticTransferServiceAction
-   Sender: DomesticTransferSender
+   OriginatingAccountId: PartnerBankAccountId
    Recipient: DomesticTransferRecipient
    Amount: decimal
-   Date: DateTime
-   TransactionId: TransferId
    PaymentNetwork: PaymentNetwork
+   Date: DateTime
+   Status: DomesticTransferProgress
+   TransferId: TransferId
+   SagaMetadata: PartnerBankSagaMetadata
 } with
 
    member x.AsDTO = {|
-      Action =
+      transaction_id = string x.TransferId
+      action =
          match x.Action with
          | DomesticTransferServiceAction.TransferAck -> "TransferRequest"
          | DomesticTransferServiceAction.ProgressCheck -> "ProgressCheck"
-      TransactionId = string x.TransactionId
-      Data = {|
-         Sender = PartnerBankDomesticTransferRequest.networkSender x.Sender
-         Recipient =
-            PartnerBankDomesticTransferRequest.networkRecipient x.Recipient
-         Amount = x.Amount
-         Date = x.Date
-         PaymentNetwork =
+      data = {|
+         originating_account_id = string x.OriginatingAccountId
+         recipient = {|
+            name = x.Recipient.Name
+            account_number = string x.Recipient.AccountNumber
+            routing_number = string x.Recipient.RoutingNumber
+            depository =
+               match x.Recipient.Depository with
+               | DomesticRecipientAccountDepository.Checking -> "checking"
+               | DomesticRecipientAccountDepository.Savings -> "savings"
+         |}
+         amount = x.Amount
+         date = x.Date
+         payment_network =
             match x.Recipient.PaymentNetwork with
             | PaymentNetwork.ACH -> "ach"
       |}
    |}
-
-   static member networkSender
-      (sender: DomesticTransferSender)
-      : DomesticTransferServiceSender
-      =
-      {
-         Name = sender.Name
-         AccountNumber = string sender.AccountNumber
-         RoutingNumber = string sender.RoutingNumber
-      }
-
-   static member networkRecipient
-      (recipient: DomesticTransferRecipient)
-      : DomesticTransferServiceRecipient
-      =
-      {
-         Name = recipient.Name
-         AccountNumber = string recipient.AccountNumber
-         RoutingNumber = string recipient.RoutingNumber
-         Depository =
-            match recipient.Depository with
-            | DomesticRecipientAccountDepository.Checking -> "checking"
-            | DomesticRecipientAccountDepository.Savings -> "savings"
-      }
 
 type private InfraFailReason = DomesticTransferInfraFailReason
 type private FailReason = DomesticTransferThirdPartyFailReason
@@ -89,28 +55,21 @@ type private FailReason = DomesticTransferThirdPartyFailReason
 type PartnerBankDomesticTransferResponse = {
    Ok: bool
    Status: string
-   ExpectedSettlementDate: DateTime option
+   ExpectedSettlementDate: DateTime
    Reason: string
    TransactionId: string
 } with
 
-   member x.Progress
-      (defaultExpectedSettlementDate: DateTime)
-      : DomesticTransferThirdPartyUpdate
-      =
+   member x.Progress: DomesticTransferThirdPartyUpdate =
       if x.Ok then
          match x.Status with
          | "Complete" -> DomesticTransferThirdPartyUpdate.Settled
          | "ReceivedRequest" ->
             DomesticTransferThirdPartyUpdate.ServiceAckReceived
          | status ->
-            let expectedSettlementDate =
-               x.ExpectedSettlementDate
-               |> Option.defaultValue defaultExpectedSettlementDate
-
             DomesticTransferThirdPartyUpdate.ProgressDetail {
                Detail = status
-               ExpectedSettlementDate = expectedSettlementDate
+               ExpectedSettlementDate = x.ExpectedSettlementDate
             }
       else
          x.Reason
@@ -118,17 +77,15 @@ type PartnerBankDomesticTransferResponse = {
          |> DomesticTransferThirdPartyUpdate.Failed
 
    member x.NewProgressToSave
-      (transfer: DomesticTransfer)
+      (existingStatus: DomesticTransferProgress)
       : DomesticTransferThirdPartyUpdate option
       =
-      let fresh = x.Progress transfer.ExpectedSettlementDate
+      let fresh = x.Progress
 
-      match transfer.Status with
+      match existingStatus with
       | DomesticTransferProgress.WaitingForTransferServiceAck -> Some fresh
       // Don't save a new progress update if there has been no change.
-      | DomesticTransferProgress.ThirdParty existingProgressUpdate when
-         existingProgressUpdate <> fresh
-         ->
+      | DomesticTransferProgress.ThirdParty existing when existing <> fresh ->
          Some fresh
       | _ -> None
 
@@ -149,6 +106,22 @@ type PartnerBankDomesticTransferResponse = {
       | Contains "InactiveAccount" -> FailReason.RecipientAccountInvalidInfo
       | Contains "NoTransferProcessing" -> FailReason.NoTransferFound
       | e -> FailReason.Infra(InfraFailReason.Unknown e)
+
+type PartnerBankDomesticTransferResponseDTO = {
+   ok: bool
+   status: string
+   expected_settlement_date: DateTime
+   reason: string
+   transaction_id: string
+} with
+
+   member x.AsEntity = {
+      Ok = x.ok
+      Status = x.status
+      ExpectedSettlementDate = x.expected_settlement_date
+      Reason = x.reason
+      TransactionId = x.transaction_id
+   }
 
 type PartnerBankSyncTransferBetweenOrgs = {
    Amount: decimal

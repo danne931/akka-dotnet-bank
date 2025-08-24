@@ -284,7 +284,10 @@ let onPersisted
       | None -> ()
    | AccountEvent.DomesticTransferScheduled e ->
       let msg =
-         DomesticTransferSagaStartEvent.ScheduleTransferRequest e
+         DomesticTransferSagaStartEvent.ScheduleTransferRequest(
+            e,
+            state.PartnerBankLink
+         )
          |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
       registry.SagaGuaranteedDeliveryActor() <! msg
@@ -297,7 +300,10 @@ let onPersisted
          registry.SagaActor e.CorrelationId <! msg
       else
          let msg =
-            DomesticTransferSagaStartEvent.SenderReservedFunds e
+            DomesticTransferSagaStartEvent.SenderReservedFunds(
+               e,
+               state.PartnerBankLink
+            )
             |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
          registry.SagaGuaranteedDeliveryActor() <! msg

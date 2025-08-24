@@ -4,7 +4,7 @@ namespace PartnerBank.Service.Domain
 type PartnerBankServiceMessage =
    | CreateLegalEntity of LegalBusinessEntityCreateRequest
    | CreateInternalAccount of InternalAccountCreateRequest
-   | TransferDomestic of PartnerBankDomesticTransfer
+   | TransferDomestic of PartnerBankDomesticTransferRequest
    | TransferBetweenOrganizations of PartnerBankSyncTransferBetweenOrgs
    | Purchase of SyncPurchase
 

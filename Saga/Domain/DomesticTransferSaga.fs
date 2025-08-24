@@ -5,11 +5,16 @@ open System
 open Lib.SharedTypes
 open Bank.Transfer.Domain
 open Lib.Saga
+open Bank.Account.Domain
 
 [<RequireQualifiedAccess>]
 type DomesticTransferSagaStartEvent =
-   | SenderReservedFunds of BankEvent<DomesticTransferPending>
-   | ScheduleTransferRequest of BankEvent<DomesticTransferScheduled>
+   | SenderReservedFunds of
+      BankEvent<DomesticTransferPending> *
+      PartnerBankInternalAccountLink
+   | ScheduleTransferRequest of
+      BankEvent<DomesticTransferScheduled> *
+      PartnerBankInternalAccountLink
 
 [<RequireQualifiedAccess>]
 type DomesticTransferSagaEvent =
@@ -81,6 +86,7 @@ type DomesticTransferSaga = {
    Events: DomesticTransferSagaEvent list
    Status: DomesticTransferProgress
    TransferInfo: BaseDomesticTransferInfo
+   PartnerBankAccountLink: PartnerBankInternalAccountLink
    ExpectedSettlementDate: DateTime
    LifeCycle: SagaLifeCycle<Activity>
    ReasonForRetryServiceAck: DomesticTransferFailReason option

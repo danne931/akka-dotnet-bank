@@ -491,3 +491,6 @@ type RoutingNumber =
       >=> Check.String.equalsLen 9 *|* (Int32.Parse >> RoutingNumber)
 
    static member Empty = RoutingNumber 123456789
+
+type PartnerBankAccountId = PartnerBankAccountId of string
+type PartnerBankLegalEntityId = PartnerBankLegalEntityId of string

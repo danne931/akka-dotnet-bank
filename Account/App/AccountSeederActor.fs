@@ -1232,8 +1232,6 @@ let seedAccountOwnerActions
                Recipient = domesticRecipient
                Sender = {
                   Name = account.Name
-                  AccountNumber = account.AccountNumber
-                  RoutingNumber = account.RoutingNumber
                   AccountId = account.AccountId
                   OrgId = myOrg.OrgId
                   ParentAccountId = myOrg.ParentAccountId

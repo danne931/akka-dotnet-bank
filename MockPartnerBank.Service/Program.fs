@@ -14,25 +14,19 @@ open System.Collections.Concurrent
 let builder = WebApplication.CreateBuilder()
 let app = builder.Build()
 
-type Sender = {
-   Name: string
-   AccountNumber: string
-   RoutingNumber: string
-}
-
 type Recipient = {
-   Name: string
-   AccountNumber: string
-   RoutingNumber: string
-   Depository: string
+   name: string
+   account_number: string
+   routing_number: string
+   depository: string
 }
 
 type TransferRequest = {
-   Sender: Sender
-   Recipient: Recipient
-   Amount: decimal
-   Date: DateTime
-   PaymentNetwork: string
+   originating_account_id: string
+   recipient: Recipient
+   amount: decimal
+   date: DateTime
+   payment_network: string
 }
 
 type LegalEntityCreateRequest = {
@@ -69,17 +63,17 @@ type InternalAccount = {
 }
 
 type Request = {
-   Action: string
-   TransactionId: string
-   Data: obj
+   action: string
+   transaction_id: string
+   data: obj
 }
 
 type Response = {
-   Ok: bool
-   Status: string
-   Reason: string
-   TransactionId: string
-   ExpectedSettlementDate: DateTime option
+   ok: bool
+   status: string
+   reason: string
+   transaction_id: string
+   expected_settlement_date: DateTime
 }
 
 let transfersInProgress = ConcurrentDictionary<string, int * TransferRequest>()
@@ -94,56 +88,56 @@ let depository = [ "checking"; "savings" ]
 let processTransferRequest (req: TransferRequest) (res: Response) =
    if
       paymentNetworks
-      |> List.exists (fun p -> p = req.PaymentNetwork.ToLower())
+      |> List.exists (fun p -> p = req.payment_network.ToLower())
       |> not
    then
       {
          res with
-            Ok = false
-            Reason = "InvalidPaymentNetwork"
+            ok = false
+            reason = "InvalidPaymentNetwork"
       }
    elif
       depository
-      |> List.exists (fun d -> d = req.Recipient.Depository.ToLower())
+      |> List.exists (fun d -> d = req.recipient.depository.ToLower())
       |> not
    then
       {
          res with
-            Ok = false
-            Reason = "InvalidDepository"
+            ok = false
+            reason = "InvalidDepository"
       }
    elif
-      String.IsNullOrEmpty req.Recipient.AccountNumber
-      || String.IsNullOrEmpty req.Recipient.RoutingNumber
+      String.IsNullOrEmpty req.recipient.account_number
+      || String.IsNullOrEmpty req.recipient.routing_number
    then
       {
          res with
-            Ok = false
-            Reason = "InvalidAccountInfo"
+            ok = false
+            reason = "InvalidAccountInfo"
       }
-   elif req.Amount <= 0m then
+   elif req.amount <= 0m then
       {
          res with
-            Ok = false
-            Reason = "InvalidAmount"
+            ok = false
+            reason = "InvalidAmount"
       }
    else
-      transfersInProgress.TryAdd(res.TransactionId, (0, req)) |> ignore
-      { res with Status = "ReceivedRequest" }
+      transfersInProgress.TryAdd(res.transaction_id, (0, req)) |> ignore
+      { res with status = "ReceivedRequest" }
 
 let processProgressCheckRequest (req: TransferRequest) (res: Response) =
-   let exists, existing = transfersInProgress.TryGetValue res.TransactionId
+   let exists, existing = transfersInProgress.TryGetValue res.transaction_id
    let progressCheckCount, transfer = existing
 
    if not exists then
       {
          res with
-            Ok = false
-            Reason = "NoTransferProcessing"
+            ok = false
+            reason = "NoTransferProcessing"
       }
    else if progressCheckCount < 1 then
       transfersInProgress.TryUpdate(
-         res.TransactionId,
+         res.transaction_id,
          (progressCheckCount + 1, transfer),
          existing
       )
@@ -151,12 +145,12 @@ let processProgressCheckRequest (req: TransferRequest) (res: Response) =
 
       {
          res with
-            Status = "VerifyingAccountInfo"
-            ExpectedSettlementDate = Some(DateTime.UtcNow.AddDays 3)
+            status = "VerifyingAccountInfo"
+            expected_settlement_date = DateTime.UtcNow.AddDays 3
       }
    else
-      transfersInProgress.TryRemove res.TransactionId |> ignore
-      { res with Status = "Complete" }
+      transfersInProgress.TryRemove res.transaction_id |> ignore
+      { res with status = "Complete" }
 
 let serializeTransferResponse (response: Response) =
    response |> JsonSerializer.Serialize |> ByteString.ofUtf8String
@@ -177,33 +171,33 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
          printfn "Received request %A" req
 
          let transferRes = {
-            Ok = true
-            Status = ""
-            Reason = ""
-            TransactionId = req.TransactionId
-            ExpectedSettlementDate = None
+            ok = true
+            status = ""
+            reason = ""
+            transaction_id = req.transaction_id
+            expected_settlement_date = DateTime.MinValue
          }
 
          let serializedResponse =
-            if req.Action = "TransferRequest" then
+            if req.action = "TransferRequest" then
                let req =
-                  req.Data
+                  req.data
                   |> string
                   |> JsonSerializer.Deserialize<TransferRequest>
 
                processTransferRequest req transferRes
                |> serializeTransferResponse
-            elif req.Action = "ProgressCheck" then
+            elif req.action = "ProgressCheck" then
                let req =
-                  req.Data
+                  req.data
                   |> string
                   |> JsonSerializer.Deserialize<TransferRequest>
 
                processProgressCheckRequest req transferRes
                |> serializeTransferResponse
-            elif req.Action = "CreateLegalBusinessEntity" then
+            elif req.action = "CreateLegalBusinessEntity" then
                let req =
-                  req.Data
+                  req.data
                   |> string
                   |> JsonSerializer.Deserialize<LegalEntityCreateRequest>
 
@@ -219,9 +213,9 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
                |}
                |> JsonSerializer.Serialize
                |> ByteString.ofUtf8String
-            elif req.Action = "CreateInternalAccount" then
+            elif req.action = "CreateInternalAccount" then
                let req =
-                  req.Data
+                  req.data
                   |> string
                   |> JsonSerializer.Deserialize<InternalAccountRequest>
 
@@ -255,8 +249,8 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
             else
                serializeTransferResponse {
                   transferRes with
-                     Ok = false
-                     Reason = "InvalidAction"
+                     ok = false
+                     reason = "InvalidAction"
                }
 
          ctx.Sender() <! TcpMessage.Write serializedResponse
