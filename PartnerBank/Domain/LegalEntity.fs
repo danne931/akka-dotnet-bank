@@ -4,7 +4,6 @@ open System
 open FsToolkit.ErrorHandling
 
 open Bank.Org.Domain
-open Bank.Account.Domain
 open Lib.SharedTypes
 
 module BusinessTypeDTO =
@@ -165,7 +164,11 @@ type LegalBusinessEntityCreateRequest = {
    SagaMetadata: PartnerBankSagaMetadata
 } with
 
-   member x.AsDTO = BusinessDetailsDTO.fromEntity x.Detail
+   member x.AsDTO = {|
+      action = "CreateLegalBusinessEntity"
+      idempotency_key = string x.SagaMetadata.CorrelationId
+      data = BusinessDetailsDTO.fromEntity x.Detail
+   |}
 
 type LegalBusinessEntityCreateResponseDTO = LegalBusinessEntityDTO
 type LegalBusinessEntityCreateResponse = LegalBusinessEntity

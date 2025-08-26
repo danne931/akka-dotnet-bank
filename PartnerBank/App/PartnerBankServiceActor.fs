@@ -165,13 +165,7 @@ let private networkRequest
    taskResult {
       match msg with
       | PartnerBankServiceMessage.CreateLegalEntity req ->
-         let request = {|
-            action = "CreateLegalBusinessEntity"
-            transaction_id = string req.SagaMetadata.CorrelationId
-            data = req.AsDTO
-         |}
-
-         let serialized = JsonSerializer.SerializeToUtf8Bytes request
+         let serialized = JsonSerializer.SerializeToUtf8Bytes req.AsDTO
 
          let! res = tcp serialized
 
@@ -181,13 +175,7 @@ let private networkRequest
          let! entity = LegalBusinessEntityDTO.toEntity res
          return PartnerBankResponse.CreateLegalEntity entity
       | PartnerBankServiceMessage.CreateInternalAccount req ->
-         let request = {|
-            action = "CreateInternalAccount"
-            transaction_id = string req.SagaMetadata.CorrelationId
-            data = req.AsDTO
-         |}
-
-         let serialized = JsonSerializer.SerializeToUtf8Bytes request
+         let serialized = JsonSerializer.SerializeToUtf8Bytes req.AsDTO
 
          let! res = tcp serialized
 
@@ -207,15 +195,21 @@ let private networkRequest
                res
 
          return PartnerBankResponse.TransferDomestic res.AsEntity
+      | PartnerBankServiceMessage.TransferBetweenOrganizations info ->
+         let serializedReq = JsonSerializer.SerializeToUtf8Bytes info.AsDTO
+         let! res = tcp serializedReq
+
+         let! res =
+            Serialization.deserialize<
+               PartnerBankSyncTransferBetweenOrgsResponseDTO
+             >
+               res
+
+         let! entity = res.AsEntity
+
+         return PartnerBankResponse.TransferBetweenOrganizations entity
       | PartnerBankServiceMessage.Purchase info ->
          return PartnerBankResponse.Purchase { ConfirmationId = Guid.NewGuid() }
-      | PartnerBankServiceMessage.TransferBetweenOrganizations info ->
-         do! Task.Delay(5000)
-
-         return
-            PartnerBankResponse.TransferBetweenOrganizations {
-               ConfirmationId = Guid.NewGuid()
-            }
    }
 
 let initProps

@@ -492,5 +492,16 @@ type RoutingNumber =
 
    static member Empty = RoutingNumber 123456789
 
-type PartnerBankAccountId = PartnerBankAccountId of string
-type PartnerBankLegalEntityId = PartnerBankLegalEntityId of string
+type PartnerBankAccountId =
+   | PartnerBankAccountId of string
+
+   override x.ToString() = string x.Value
+
+   member x.Value = let (PartnerBankAccountId id) = x in id
+
+type PartnerBankLegalEntityId =
+   | PartnerBankLegalEntityId of string
+
+   override x.ToString() = string x.Value
+
+   member x.Value = let (PartnerBankLegalEntityId id) = x in id

@@ -29,6 +29,12 @@ type TransferRequest = {
    payment_network: string
 }
 
+type BookTransferRequest = {
+   amount: decimal
+   sender_bank_account_id: string
+   receiver_bank_account_id: string
+}
+
 type LegalEntityCreateRequest = {
    address: {|
       city: string
@@ -64,7 +70,7 @@ type InternalAccount = {
 
 type Request = {
    action: string
-   transaction_id: string
+   idempotency_key: string
    data: obj
 }
 
@@ -72,8 +78,18 @@ type Response = {
    ok: bool
    status: string
    reason: string
-   transaction_id: string
+   idempotency_key: string
    expected_settlement_date: DateTime
+}
+
+type BookTransferResponse = {
+   confirmation_id: string
+   idempotency_key: string
+   amount: decimal
+   sender_bank_account_id: string
+   receiver_bank_account_id: string
+   status: string
+   details: obj
 }
 
 let transfersInProgress = ConcurrentDictionary<string, int * TransferRequest>()
@@ -121,12 +137,18 @@ let processTransferRequest (req: TransferRequest) (res: Response) =
             ok = false
             reason = "InvalidAmount"
       }
+   elif not (internalAccounts.ContainsKey req.originating_account_id) then
+      {
+         res with
+            ok = false
+            reason = "SenderBankAccountNotFound"
+      }
    else
-      transfersInProgress.TryAdd(res.transaction_id, (0, req)) |> ignore
+      transfersInProgress.TryAdd(res.idempotency_key, (0, req)) |> ignore
       { res with status = "ReceivedRequest" }
 
 let processProgressCheckRequest (req: TransferRequest) (res: Response) =
-   let exists, existing = transfersInProgress.TryGetValue res.transaction_id
+   let exists, existing = transfersInProgress.TryGetValue res.idempotency_key
    let progressCheckCount, transfer = existing
 
    if not exists then
@@ -137,7 +159,7 @@ let processProgressCheckRequest (req: TransferRequest) (res: Response) =
       }
    else if progressCheckCount < 1 then
       transfersInProgress.TryUpdate(
-         res.transaction_id,
+         res.idempotency_key,
          (progressCheckCount + 1, transfer),
          existing
       )
@@ -149,7 +171,7 @@ let processProgressCheckRequest (req: TransferRequest) (res: Response) =
             expected_settlement_date = DateTime.UtcNow.AddDays 3
       }
    else
-      transfersInProgress.TryRemove res.transaction_id |> ignore
+      transfersInProgress.TryRemove res.idempotency_key |> ignore
       { res with status = "Complete" }
 
 let serializeTransferResponse (response: Response) =
@@ -174,7 +196,7 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
             ok = true
             status = ""
             reason = ""
-            transaction_id = req.transaction_id
+            idempotency_key = req.idempotency_key
             expected_settlement_date = DateTime.MinValue
          }
 
@@ -195,6 +217,58 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
 
                processProgressCheckRequest req transferRes
                |> serializeTransferResponse
+            elif req.action = "BookTransfer" then
+               let info =
+                  req.data
+                  |> string
+                  |> JsonSerializer.Deserialize<BookTransferRequest>
+
+               let res = {
+                  confirmation_id = Guid.NewGuid().ToString "N"
+                  idempotency_key = req.idempotency_key
+                  amount = info.amount
+                  sender_bank_account_id = info.sender_bank_account_id
+                  receiver_bank_account_id = info.receiver_bank_account_id
+                  status = "COMPLETED"
+                  details = {| |}
+               }
+
+               let res =
+                  if info.amount <= 0m then
+                     {
+                        res with
+                           status = "REJECTED"
+                           details = {| reason = "InvalidAmount" |}
+                     }
+                  elif
+                     not (
+                        internalAccounts.ContainsKey info.sender_bank_account_id
+                     )
+                  then
+                     {
+                        res with
+                           status = "REJECTED"
+                           details = {|
+                              reason = "InvalidSenderBankAccount"
+                           |}
+                     }
+                  elif
+                     not (
+                        internalAccounts.ContainsKey
+                           info.receiver_bank_account_id
+                     )
+                  then
+                     {
+                        res with
+                           status = "REJECTED"
+                           details = {|
+                              reason = "InvalidRecipientBankAccount"
+                           |}
+                     }
+                  else
+                     res
+
+               res |> JsonSerializer.Serialize |> ByteString.ofUtf8String
             elif req.action = "CreateLegalBusinessEntity" then
                let req =
                   req.data

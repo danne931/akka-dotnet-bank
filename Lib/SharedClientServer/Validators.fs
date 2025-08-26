@@ -7,6 +7,14 @@ open Validus.Operators
 /// Trim money symbols such as ($, %) typically present in forms.
 let trimMoneySymbols (input: string) = input.Replace("%", "").Replace("$", "")
 
+let parseGuid: Validator<string, Guid> =
+   fun field input ->
+      try
+         let guid = Guid.Parse input
+         Check.Guid.notEmpty field guid
+      with _ ->
+         Error <| ValidationErrors.create field [ $"Invalid {field}" ]
+
 let parseInt: Validator<string, int> =
    fun field input ->
       try

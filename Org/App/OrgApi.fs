@@ -2,7 +2,6 @@ module Bank.Org.Api
 
 open System.Threading.Tasks
 open Akkling
-open Akka.Actor
 open FsToolkit.ErrorHandling
 open Validus
 
@@ -92,7 +91,7 @@ let getOrgAndAccountProfiles
             o.{Fields.adminTeamEmail},
             o.{Fields.employerIdentificationNumber},
             o.{Fields.address},
-            o.{Fields.businessType}::business_type,
+            o.{Fields.businessType},
             o.{Fields.description},
             o.{Fields.website},
             features.{Fields.socialTransferDiscoveryAccountId},

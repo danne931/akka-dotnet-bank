@@ -13,8 +13,12 @@ type InternalAccountCreateRequest = {
 } with
 
    member x.AsDTO = {|
-      legal_entity_id = string x.LegalEntityId
-      description = x.AccountName
+      action = "CreateInternalAccount"
+      idempotency_key = string x.SagaMetadata.CorrelationId
+      data = {|
+         legal_entity_id = string x.LegalEntityId
+         description = x.AccountName
+      |}
    |}
 
 type InternalAccountCreateResponse = {

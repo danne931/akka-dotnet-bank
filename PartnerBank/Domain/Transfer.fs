@@ -1,6 +1,8 @@
 namespace PartnerBank.Service.Domain
 
 open System
+open FsToolkit.ErrorHandling
+open Lib.Validators
 
 open Lib.SharedTypes
 open Lib.ActivePatterns
@@ -25,7 +27,7 @@ type PartnerBankDomesticTransferRequest = {
 } with
 
    member x.AsDTO = {|
-      transaction_id = string x.TransferId
+      idempotency_key = string x.TransferId
       action =
          match x.Action with
          | DomesticTransferServiceAction.TransferAck -> "TransferRequest"
@@ -112,7 +114,7 @@ type PartnerBankDomesticTransferResponseDTO = {
    status: string
    expected_settlement_date: DateTime
    reason: string
-   transaction_id: string
+   idempotency_key: string
 } with
 
    member x.AsEntity = {
@@ -120,14 +122,75 @@ type PartnerBankDomesticTransferResponseDTO = {
       Status = x.status
       ExpectedSettlementDate = x.expected_settlement_date
       Reason = x.reason
-      TransactionId = x.transaction_id
+      TransactionId = x.idempotency_key
    }
 
+/// Moves money between accounts in the partner bank instantaneously.
 type PartnerBankSyncTransferBetweenOrgs = {
    Amount: decimal
    From: PartnerBankInternalAccountLink
    To: PartnerBankInternalAccountLink
    SagaMetadata: PartnerBankSagaMetadata
+} with
+
+   member x.AsDTO = {|
+      idempotency_key = string x.SagaMetadata.CorrelationId
+      action = "BookTransfer"
+      data = {|
+         sender_bank_account_id = string x.From.PartnerBankAccountId
+         receiver_bank_account_id = string x.To.PartnerBankAccountId
+         amount = x.Amount
+         currency_code = "USD"
+      |}
+   |}
+
+[<RequireQualifiedAccess>]
+type BookTransferStatus =
+   | Rejected
+   | Completed
+
+   static member fromString(status: string) : Result<BookTransferStatus, Err> =
+      match status with
+      | "REJECTED" -> Ok BookTransferStatus.Rejected
+      | "COMPLETED" -> Ok BookTransferStatus.Completed
+      | _ -> Error(Err.SerializationError $"Invalid status: {status}")
+
+type PartnerBankSyncTransferBetweenOrgsResponse = {
+   ConfirmationId: Guid
+   IdempotencyKey: CorrelationId
+   Amount: decimal
+   SenderBankAccountId: PartnerBankAccountId
+   RecipientBankAccountId: PartnerBankAccountId
+   Status: BookTransferStatus
 }
 
-type PartnerBankSyncTransferBetweenOrgsResponse = { ConfirmationId: Guid }
+type PartnerBankSyncTransferBetweenOrgsResponseDTO = {
+   confirmation_id: string
+   idempotency_key: string
+   amount: decimal
+   sender_bank_account_id: string
+   receiver_bank_account_id: string
+   status: string
+} with
+
+   member x.AsEntity = result {
+      let! status = BookTransferStatus.fromString x.status
+
+      let! idempotencyKey =
+         parseGuid "idempotency_key" x.idempotency_key
+         |> Result.mapError Err.ValidationError
+
+      let! confirmationId =
+         parseGuid "confirmation_id" x.confirmation_id
+         |> Result.mapError Err.ValidationError
+
+      return {
+         ConfirmationId = confirmationId
+         IdempotencyKey = CorrelationId idempotencyKey
+         Amount = x.amount
+         SenderBankAccountId = PartnerBankAccountId x.sender_bank_account_id
+         RecipientBankAccountId =
+            PartnerBankAccountId x.receiver_bank_account_id
+         Status = status
+      }
+   }
