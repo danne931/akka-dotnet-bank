@@ -333,7 +333,7 @@ let sagaHandler
                      fun transfer evt ->
                         let msg =
                            Message.domesticTransfer
-                              transfer.Sender.OrgId
+                              transfer.Originator.OrgId
                               transfer.TransferId.AsCorrelationId
                               evt
 

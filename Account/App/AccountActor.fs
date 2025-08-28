@@ -84,9 +84,9 @@ let private onValidationError
          match err with
          | AccountStateTransitionError ParentAccountNotActive
          | AccountStateTransitionError(AccountNotActive _) ->
-            Some DomesticTransferFailReason.SenderAccountNotActive
+            Some DomesticTransferFailReason.AccountNotActive
          | AccountStateTransitionError(InsufficientBalance _) ->
-            Some DomesticTransferFailReason.SenderAccountInsufficientFunds
+            Some DomesticTransferFailReason.AccountInsufficientFunds
          | _ -> None
 
       let msg =
@@ -319,12 +319,12 @@ let onPersisted
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
 
       registry.SagaActor e.CorrelationId <! msg
-   | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient e) ->
+   | AccountEvent.ParentAccount(ParentAccountEvent.EditedCounterparty e) ->
       // Retries domestic transfers which failed due to the mock third party
       // transfer service regarding the Recipient of the Transfer as having
       // invalid account info.
       let retryable =
-         getRetryableTransfers e.Data.Recipient.RecipientAccountId
+         getRetryableTransfers e.Data.Counterparty.CounterpartyId
          |> Async.AwaitTask
          |> Async.map AccountMessage.DomesticTransfersRetryableUponRecipientEdit
 
@@ -563,12 +563,12 @@ let actorProps
                      let corrId = transfer.TransferId.AsCorrelationId
 
                      let evt =
-                        Some transfer.Recipient
+                        Some transfer.Counterparty
                         |> DomesticTransferSagaEvent.RetryTransferServiceRequest
 
                      let msg =
                         AppSaga.Message.domesticTransfer
-                           transfer.Sender.OrgId
+                           transfer.Originator.OrgId
                            corrId
                            evt
 
@@ -631,7 +631,7 @@ let actorProps
                      *)
                      LifecyclePreStart =
                         fun _ ->
-                           logDebug mailbox $"ACCOUNT PRESTART"
+                           logDebug mailbox "ACCOUNT PRESTART"
 
                            // Start Guaranteed Delivery Consumer Controller
                            guaranteedDeliveryConsumerControllerRef
@@ -642,7 +642,7 @@ let actorProps
                            ignored ()
                      LifecyclePostStop =
                         fun _ ->
-                           logDebug mailbox $"ACCOUNT POSTSTOP"
+                           logDebug mailbox "ACCOUNT POSTSTOP"
                            SaveSnapshot state
                }
                mailbox

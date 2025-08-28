@@ -84,33 +84,33 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       match evt with
       | AccountEvent.ParentAccount evt ->
          match evt with
-         | ParentAccountEvent.RegisteredDomesticTransferRecipient e ->
-            let recipient = e.Data.Recipient
+         | ParentAccountEvent.RegisteredCounterparty e ->
+            let counterparty = e.Data.Counterparty
 
             {
                state with
                   DomesticTransferRecipients =
                      state.DomesticTransferRecipients.Add(
-                        recipient.RecipientAccountId,
-                        recipient
+                        counterparty.CounterpartyId,
+                        counterparty
                      )
             }
-         | ParentAccountEvent.EditedDomesticTransferRecipient e ->
-            let recipient = e.Data.Recipient
+         | ParentAccountEvent.EditedCounterparty e ->
+            let counterparty = e.Data.Counterparty
 
             {
                state with
                   DomesticTransferRecipients =
                      state.DomesticTransferRecipients.Change(
-                        recipient.RecipientAccountId,
-                        Option.map (fun _ -> recipient)
+                        counterparty.CounterpartyId,
+                        Option.map (fun _ -> counterparty)
                      )
             }
-         | ParentAccountEvent.NicknamedDomesticTransferRecipient e -> {
+         | ParentAccountEvent.NicknamedCounterparty e -> {
             state with
                DomesticTransferRecipients =
                   Map.change
-                     e.Data.RecipientId
+                     e.Data.CounterpartyId
                      (Option.map (fun acct -> {
                         acct with
                            Nickname = e.Data.Nickname
@@ -162,7 +162,7 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       | AccountEvent.DomesticTransferSettled e ->
          let previouslyFailedDueToInvalidRecipient =
             match e.Data.FromRetry with
-            | Some(DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo) ->
+            | Some(DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo) ->
                true
             | _ -> false
 
@@ -175,10 +175,10 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
                DomesticTransferRecipients =
                   if previouslyFailedDueToInvalidRecipient then
                      state.DomesticTransferRecipients.Change(
-                        e.Data.BaseInfo.Recipient.RecipientAccountId,
-                        Option.map (fun recipient -> {
-                           recipient with
-                              Status = RecipientRegistrationStatus.Confirmed
+                        e.Data.BaseInfo.Counterparty.CounterpartyId,
+                        Option.map (fun counterparty -> {
+                           counterparty with
+                              Status = CounterpartyRegistrationStatus.Confirmed
                         })
                      )
                   else
@@ -187,10 +187,10 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       | AccountEvent.DomesticTransferFailed e ->
          let updateStatusDueToRecipientRelatedFailure =
             match e.Data.Reason with
-            | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo ->
-               Some RecipientRegistrationStatus.InvalidAccount
-            | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountNotActive ->
-               Some RecipientRegistrationStatus.Closed
+            | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo ->
+               Some CounterpartyRegistrationStatus.InvalidAccount
+            | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountNotActive ->
+               Some CounterpartyRegistrationStatus.Closed
             | _ -> None
 
          {
@@ -199,9 +199,9 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
                   match updateStatusDueToRecipientRelatedFailure with
                   | Some failStatus ->
                      state.DomesticTransferRecipients.Change(
-                        e.Data.BaseInfo.Recipient.RecipientAccountId,
-                        Option.map (fun recipient -> {
-                           recipient with
+                        e.Data.BaseInfo.Counterparty.CounterpartyId,
+                        Option.map (fun counterparty -> {
+                           counterparty with
                               Status = failStatus
                         })
                      )
@@ -314,9 +314,9 @@ module private StateTransition =
          let evt = AccountEvent.ParentAccount(eventTransform evt)
          evt, applyEvent state evt)
 
-   let registerDomesticTransferRecipient
+   let registerCounterparty
       (state: ParentAccountSnapshot)
-      (cmd: RegisterDomesticTransferRecipientCommand)
+      (cmd: RegisterCounterpartyCommand)
       =
       if state.Status <> ParentAccountStatus.Active then
          Account.transitionErr
@@ -330,13 +330,13 @@ module private StateTransition =
          Account.transitionErr AccountStateTransitionError.RecipientRegistered
       else
          mapParent
-            ParentAccountEvent.RegisteredDomesticTransferRecipient
+            ParentAccountEvent.RegisteredCounterparty
             state
-            (RegisterDomesticTransferRecipientCommand.toEvent cmd)
+            (RegisterCounterpartyCommand.toEvent cmd)
 
-   let editDomesticTransferRecipient
+   let editCounterparty
       (state: ParentAccountSnapshot)
-      (cmd: EditDomesticTransferRecipientCommand)
+      (cmd: EditCounterpartyCommand)
       =
       if state.Status <> ParentAccountStatus.Active then
          Account.transitionErr
@@ -344,9 +344,9 @@ module private StateTransition =
       elif
          state.DomesticTransferRecipients
          |> Map.tryFind
-               cmd.Data.RecipientWithoutAppliedUpdates.RecipientAccountId
+               cmd.Data.CounterpartyWithoutAppliedUpdates.CounterpartyId
          |> Option.bind (fun recipient ->
-            if recipient.Status = RecipientRegistrationStatus.Closed then
+            if recipient.Status = CounterpartyRegistrationStatus.Closed then
                Some recipient
             else
                None)
@@ -355,21 +355,21 @@ module private StateTransition =
          Account.transitionErr AccountStateTransitionError.RecipientDeactivated
       else
          mapParent
-            ParentAccountEvent.EditedDomesticTransferRecipient
+            ParentAccountEvent.EditedCounterparty
             state
-            (EditDomesticTransferRecipientCommand.toEvent cmd)
+            (EditCounterpartyCommand.toEvent cmd)
 
-   let nicknameDomesticTransferRecipient
+   let nicknameCounterparty
       (state: ParentAccountSnapshot)
-      (cmd: NicknameDomesticTransferRecipientCommand)
+      (cmd: NicknameCounterpartyCommand)
       =
       let recipientExists, recipientIsActive =
          match
-            state.DomesticTransferRecipients.TryFind cmd.Data.RecipientId
+            state.DomesticTransferRecipients.TryFind cmd.Data.CounterpartyId
          with
          | None -> false, false
          | Some recipient ->
-            true, recipient.Status <> RecipientRegistrationStatus.Closed
+            true, recipient.Status <> CounterpartyRegistrationStatus.Closed
 
       if state.Status <> ParentAccountStatus.Active then
          Account.transitionErr
@@ -380,9 +380,9 @@ module private StateTransition =
          Account.transitionErr AccountStateTransitionError.RecipientDeactivated
       else
          mapParent
-            ParentAccountEvent.NicknamedDomesticTransferRecipient
+            ParentAccountEvent.NicknamedCounterparty
             state
-            (NicknameDomesticTransferRecipientCommand.toEvent cmd)
+            (NicknameCounterpartyCommand.toEvent cmd)
 
 let stateTransition
    (state: ParentAccountSnapshot)
@@ -395,12 +395,12 @@ let stateTransition
    match command, virtualAccount with
    | AccountCommand.ParentAccount cmd, _ ->
       match cmd with
-      | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
-         StateTransition.registerDomesticTransferRecipient state cmd
-      | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
-         StateTransition.editDomesticTransferRecipient state cmd
-      | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
-         StateTransition.nicknameDomesticTransferRecipient state cmd
+      | ParentAccountCommand.RegisterCounterparty cmd ->
+         StateTransition.registerCounterparty state cmd
+      | ParentAccountCommand.EditCounterparty cmd ->
+         StateTransition.editCounterparty state cmd
+      | ParentAccountCommand.NicknameCounterparty cmd ->
+         StateTransition.nicknameCounterparty state cmd
    | AccountCommand.InitializePrimaryCheckingAccount _, _ when
       not state.VirtualAccounts.IsEmpty
       ->

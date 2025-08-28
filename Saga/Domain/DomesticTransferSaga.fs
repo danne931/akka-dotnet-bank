@@ -24,8 +24,7 @@ type DomesticTransferSagaEvent =
    | TransferProcessorProgressUpdate of DomesticTransferThirdPartyUpdate
    | SenderDeductedFunds
    | TransferInitiatedNotificationSent
-   | RetryTransferServiceRequest of
-      updatedRecipient: DomesticTransferRecipient option
+   | RetryTransferServiceRequest of updated: Counterparty option
    | SenderUnableToReserveFunds of DomesticTransferFailReason
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts

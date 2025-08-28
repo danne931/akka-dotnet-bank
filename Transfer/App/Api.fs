@@ -11,15 +11,15 @@ open TransferSqlMapper
 
 let getDomesticTransferRecipients
    (orgId: OrgId)
-   : Result<DomesticTransferRecipient list option, Err> Task
+   : Result<Counterparty list option, Err> Task
    =
-   pgQuery<DomesticTransferRecipient>
+   pgQuery<Counterparty>
       $"""
-      {Query.domesticTransferRecipient}
-      WHERE dr.{TransferFields.DomesticRecipient.senderOrgId} = @orgId
+      {Query.counterparty}
+      WHERE cp.{TransferFields.Counterparty.orgId} = @orgId
       """
-      (Some [ "orgId", TransferSqlWriter.DomesticRecipient.senderOrgId orgId ])
-      TransferSqlReader.DomesticRecipient.recipient
+      (Some [ "orgId", TransferSqlWriter.Counterparty.orgId orgId ])
+      TransferSqlReader.Counterparty.counterparty
 
 let getFailedDomesticTransfersByRecipient
    (recipientAccountId: AccountId)
@@ -29,16 +29,15 @@ let getFailedDomesticTransfersByRecipient
       $"""
       {Query.domesticTransfer}
       WHERE
-         {TransferFields.Domestic.recipientAccountId} = @recipientId
+         {TransferFields.Counterparty.counterpartyId} = @counterpartyId
          AND {TransferFields.Domestic.status} = 'Failed'
       """
 
    pgQuery<DomesticTransfer>
       query
       (Some [
-         "recipientId",
-         TransferSqlWriter.DomesticRecipient.recipientAccountId
-            recipientAccountId
+         "counterpartyId",
+         TransferSqlWriter.Counterparty.counterpartyId recipientAccountId
       ])
       TransferSqlReader.Domestic.transfer
 
@@ -55,7 +54,7 @@ let getDomesticTransfersRetryableUponRecipientCorrection
       let! transfers = getFailedDomesticTransfersByRecipient recipientAccountId
 
       let retryableStatus =
-         DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo
+         DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo
          |> DomesticTransferFailReason.ThirdParty
          |> DomesticTransferProgress.Failed
 

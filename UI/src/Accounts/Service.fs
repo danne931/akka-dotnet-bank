@@ -46,12 +46,12 @@ let postJson (command: AccountCommand) =
          Serialization.serialize cmd, TransferPath.DeleteAutoTransferRule
       | AccountCommand.ParentAccount cmd ->
          match cmd with
-         | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
+         | ParentAccountCommand.RegisterCounterparty cmd ->
             Serialization.serialize cmd, TransferPath.DomesticTransferRecipient
-         | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
+         | ParentAccountCommand.EditCounterparty cmd ->
             Serialization.serialize cmd,
             TransferPath.DomesticTransferRecipientEdit
-         | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
+         | ParentAccountCommand.NicknameCounterparty cmd ->
             Serialization.serialize cmd, TransferPath.NicknameRecipient
       | other -> notImplemented other
 
@@ -123,15 +123,15 @@ let submitParentAccountCommand
       // during ParentAccount.stateTransition anyway.
       let evtResult =
          match command with
-         | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
-            RegisterDomesticTransferRecipientCommand.toEvent cmd
-            |> Result.map ParentAccountEvent.RegisteredDomesticTransferRecipient
-         | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
-            EditDomesticTransferRecipientCommand.toEvent cmd
-            |> Result.map ParentAccountEvent.EditedDomesticTransferRecipient
-         | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
-            NicknameDomesticTransferRecipientCommand.toEvent cmd
-            |> Result.map ParentAccountEvent.NicknamedDomesticTransferRecipient
+         | ParentAccountCommand.RegisterCounterparty cmd ->
+            RegisterCounterpartyCommand.toEvent cmd
+            |> Result.map ParentAccountEvent.RegisteredCounterparty
+         | ParentAccountCommand.EditCounterparty cmd ->
+            EditCounterpartyCommand.toEvent cmd
+            |> Result.map ParentAccountEvent.EditedCounterparty
+         | ParentAccountCommand.NicknameCounterparty cmd ->
+            NicknameCounterpartyCommand.toEvent cmd
+            |> Result.map ParentAccountEvent.NicknamedCounterparty
 
       let! evt = evtResult |> Result.mapError ValidationError
 

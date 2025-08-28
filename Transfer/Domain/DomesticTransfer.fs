@@ -5,44 +5,44 @@ open System
 open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
-type RecipientRegistrationStatus =
+type CounterpartyRegistrationStatus =
    | Confirmed
    | InvalidAccount
    | Closed
 
-module RecipientRegistrationStatus =
-   let fromString (str: string) : RecipientRegistrationStatus option =
+module CounterpartyRegistrationStatus =
+   let fromString (str: string) : CounterpartyRegistrationStatus option =
       match str.ToLower() with
-      | "confirmed" -> Some RecipientRegistrationStatus.Confirmed
-      | "invalidaccount" -> Some RecipientRegistrationStatus.InvalidAccount
-      | "closed" -> Some RecipientRegistrationStatus.Closed
+      | "confirmed" -> Some CounterpartyRegistrationStatus.Confirmed
+      | "invalidaccount" -> Some CounterpartyRegistrationStatus.InvalidAccount
+      | "closed" -> Some CounterpartyRegistrationStatus.Closed
       | _ -> None
 
-   let fromStringUnsafe str : RecipientRegistrationStatus =
+   let fromStringUnsafe str : CounterpartyRegistrationStatus =
       match fromString str with
       | Some s -> s
       | None ->
          failwith
-            "Error attempting to cast string to RecipientRegistrationStatus"
+            "Error attempting to cast string to CounterpartyRegistrationStatus"
 
 [<RequireQualifiedAccess>]
-type DomesticRecipientAccountDepository =
+type CounterpartyAccountDepository =
    | Checking
    | Savings
 
-module DomesticRecipientAccountDepository =
-   let fromString (str: string) : DomesticRecipientAccountDepository option =
+module CounterpartyAccountDepository =
+   let fromString (str: string) : CounterpartyAccountDepository option =
       match str.ToLower() with
-      | "checking" -> Some DomesticRecipientAccountDepository.Checking
-      | "savings" -> Some DomesticRecipientAccountDepository.Savings
+      | "checking" -> Some CounterpartyAccountDepository.Checking
+      | "savings" -> Some CounterpartyAccountDepository.Savings
       | _ -> None
 
-   let fromStringUnsafe str : DomesticRecipientAccountDepository =
+   let fromStringUnsafe str : CounterpartyAccountDepository =
       match fromString str with
       | Some s -> s
       | None ->
          failwith
-            "Error attempting to cast string to DomesticRecipientAccountDepository"
+            "Error attempting to cast string to CounterpartyAccountDepository"
 
 [<RequireQualifiedAccess>]
 type PaymentNetwork = | ACH
@@ -59,16 +59,16 @@ module PaymentNetwork =
       | Some s -> s
       | None -> failwith "Error attempting to cast string to PaymentNetwork"
 
-type DomesticTransferRecipient = {
+type Counterparty = {
    LastName: string
    FirstName: string
    Nickname: string option
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
-   Status: RecipientRegistrationStatus
-   RecipientAccountId: AccountId
-   SenderOrgId: OrgId
-   Depository: DomesticRecipientAccountDepository
+   Status: CounterpartyRegistrationStatus
+   CounterpartyId: AccountId
+   OrgId: OrgId
+   Depository: CounterpartyAccountDepository
    PaymentNetwork: PaymentNetwork
    CreatedAt: DateTime
 } with
@@ -86,7 +86,7 @@ type DomesticTransferInfraFailReason =
    | CorruptData
    | InvalidAction
    | InvalidPaymentNetwork
-   | RecipientAccountInvalidDepository
+   | InvalidDepository
    | Unknown of string
 
    member x.Display =
@@ -94,23 +94,23 @@ type DomesticTransferInfraFailReason =
       | CorruptData -> "Corrupt Data"
       | InvalidAction -> "Invalid Action"
       | InvalidPaymentNetwork -> "Invalid Payment Network"
-      | RecipientAccountInvalidDepository ->
-         "Invalid Recipient Account Depository"
+      | InvalidDepository -> "Invalid Counterparty Account Depository"
       | Unknown r -> r
 
 [<RequireQualifiedAccess>]
 type DomesticTransferThirdPartyFailReason =
    | InvalidAmount
-   | RecipientAccountInvalidInfo
-   | RecipientAccountNotActive
+   | CounterpartyAccountInvalidInfo
+   | CounterpartyAccountNotActive
    | NoTransferFound
    | Infra of DomesticTransferInfraFailReason
 
    member x.Display =
       match x with
       | InvalidAmount -> "Invalid Amount"
-      | RecipientAccountInvalidInfo -> "Invalid Recipient Account Info Provided"
-      | RecipientAccountNotActive -> "Recipient Account Not Active"
+      | CounterpartyAccountInvalidInfo ->
+         "Invalid Counterparty Account Info Provided"
+      | CounterpartyAccountNotActive -> "Counterparty Account Not Active"
       | NoTransferFound -> "No Transfer Found During Progress Check"
       | Infra infraRelated -> infraRelated.Display
 
@@ -128,27 +128,26 @@ type DomesticTransferThirdPartyUpdate =
 
 [<RequireQualifiedAccess>]
 type DomesticTransferFailReason =
-   | SenderAccountNotActive
-   | SenderAccountInsufficientFunds
+   | AccountNotActive
+   | AccountInsufficientFunds
    | ThirdParty of DomesticTransferThirdPartyFailReason
 
    member x.Display =
       match x with
-      | SenderAccountNotActive -> "Sender Account Not Active"
-      | SenderAccountInsufficientFunds ->
-         "Sender Account Has Insufficient Funds"
+      | AccountNotActive -> "Account Not Active"
+      | AccountInsufficientFunds -> "Account Has Insufficient Funds"
       | ThirdParty tp -> tp.Display
 
 [<RequireQualifiedAccess>]
 type DomesticTransferProgress =
    | Scheduled
-   | ProcessingSenderAccountDeduction
+   | ProcessingAccountDeduction
    | WaitingForTransferServiceAck
    | ThirdParty of DomesticTransferThirdPartyUpdate
    | Settled
    | Failed of DomesticTransferFailReason
 
-type DomesticTransferSender = {
+type DomesticTransferOriginator = {
    Name: string
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
@@ -158,7 +157,7 @@ type DomesticTransferSender = {
    AccountId: AccountId
 }
 
-type DomesticTransferSenderReference = {
+type DomesticTransferOriginatorReference = {
    Name: string
    OrgId: OrgId
    ParentAccountId: ParentAccountId
@@ -169,8 +168,8 @@ type DomesticTransferSenderReference = {
 // carry over unaltered for all event progressions
 // (ProgressUpdate/Settled/Failed/Retry).
 type BaseDomesticTransferInfo = {
-   Sender: DomesticTransferSenderReference
-   Recipient: DomesticTransferRecipient
+   Originator: DomesticTransferOriginatorReference
+   Counterparty: Counterparty
    Amount: decimal
    TransferId: TransferId
    InitiatedBy: Initiator
@@ -179,8 +178,8 @@ type BaseDomesticTransferInfo = {
 }
 
 type DomesticTransfer = {
-   Sender: DomesticTransferSender
-   Recipient: DomesticTransferRecipient
+   Originator: DomesticTransferOriginator
+   Counterparty: Counterparty
    TransferId: TransferId
    InitiatedBy: Initiator
    Amount: decimal

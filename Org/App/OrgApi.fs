@@ -67,12 +67,12 @@ type private OrgDBResult =
    | AccountProfilesWithOrg of (Org * AccountProfile) list option
    | CommandApprovalRules of CommandApprovalRule list option
    | CommandApprovalProgress of CommandApprovalProgress.T list option
-   | DomesticTransferRecipients of DomesticTransferRecipient list option
+   | DomesticTransferRecipients of Counterparty list option
 
 let getOrgAndAccountProfiles
    (orgId: OrgId)
    (getDomesticTransferRecipients:
-      OrgId -> Task<Result<DomesticTransferRecipient list option, Err>>)
+      OrgId -> Task<Result<Counterparty list option, Err>>)
    : Task<Result<Option<OrgWithAccountProfiles>, Err>>
    =
    taskResult {
@@ -213,7 +213,7 @@ let getOrgAndAccountProfiles
                DomesticTransferRecipients =
                   match recipientsOpt with
                   | Some recipients ->
-                     [ for r in recipients -> r.RecipientAccountId, r ]
+                     [ for r in recipients -> r.CounterpartyId, r ]
                      |> Map.ofList
                   | None -> Map.empty
             }

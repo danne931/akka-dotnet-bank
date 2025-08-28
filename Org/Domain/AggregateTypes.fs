@@ -155,7 +155,7 @@ type OrgWithAccountProfiles = {
    Org: Org
    AccountProfiles: Map<AccountId, AccountProfile>
    Balance: decimal
-   DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
+   DomesticTransferRecipients: Map<AccountId, Counterparty>
 } with
 
    member x.Accounts: Map<AccountId, Account> =

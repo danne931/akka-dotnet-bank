@@ -66,15 +66,12 @@ type DomesticTransferFailed = {
    Reason: DomesticTransferFailReason
 }
 
-type RegisteredDomesticTransferRecipient = {
-   Recipient: DomesticTransferRecipient
-}
+type RegisteredCounterparty = { Counterparty: Counterparty }
 
-type EditedDomesticTransferRecipient = { Recipient: DomesticTransferRecipient }
+type EditedCounterparty = { Counterparty: Counterparty }
 
-type NicknamedDomesticTransferRecipient = {
-   RecipientId: AccountId
-   RecipientAccountEnvironment: RecipientAccountEnvironment
+type NicknamedCounterparty = {
+   CounterpartyId: AccountId
    Nickname: string option
 }
 

@@ -269,11 +269,11 @@ let accountHistoryUIFriendly
       MoneyFlow = None
    }
 
-   let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
+   let domesticRecipientName (cp: Counterparty) =
       org.DomesticTransferRecipients
-      |> Map.tryFind recipientFromEvt.RecipientAccountId
+      |> Map.tryFind cp.CounterpartyId
       |> Option.map _.FullName
-      |> Option.defaultValue recipientFromEvt.FullName
+      |> Option.defaultValue cp.FullName
 
    let accountName =
       org.AccountProfiles.TryFind history.Event.AccountId
@@ -417,45 +417,45 @@ let accountHistoryUIFriendly
       }
    | DomesticTransferScheduled evt ->
       let info = evt.Data.BaseInfo
-      let recipientName = domesticRecipientName info.Recipient
-      let payNetwork = info.Recipient.PaymentNetwork
+      let recipientName = domesticRecipientName info.Counterparty
+      let payNetwork = info.Counterparty.PaymentNetwork
 
       {
          props with
             Name = "Domestic Transfer"
             Info =
-               $"{payNetwork} transfer scheduled from {info.Sender.Name} to {recipientName} for {DateTime.formatShort info.ScheduledDate}"
+               $"{payNetwork} transfer scheduled from {info.Originator.Name} to {recipientName} for {DateTime.formatShort info.ScheduledDate}"
             Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferPending evt ->
       let info = evt.Data.BaseInfo
-      let recipientName = domesticRecipientName info.Recipient
-      let payNetwork = info.Recipient.PaymentNetwork
+      let recipientName = domesticRecipientName info.Counterparty
+      let payNetwork = info.Counterparty.PaymentNetwork
 
       {
          props with
             Name = "Domestic Transfer"
             Info =
-               $"{payNetwork} transfer processing from {info.Sender.Name} to {recipientName}"
+               $"{payNetwork} transfer processing from {info.Originator.Name} to {recipientName}"
             Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferSettled evt ->
       let info = evt.Data.BaseInfo
-      let payNetwork = info.Recipient.PaymentNetwork
+      let payNetwork = info.Counterparty.PaymentNetwork
 
       {
          props with
             Name = "Domestic Transfer Settled"
             Info =
-               $"{payNetwork} transfer settled from {info.Sender.Name} to {domesticRecipientName info.Recipient}"
+               $"{payNetwork} transfer settled from {info.Originator.Name} to {domesticRecipientName info.Counterparty}"
             Amount = Some <| Money.format info.Amount
             MoneyFlow = Some MoneyFlow.Out
       }
    | DomesticTransferFailed evt ->
       let info = evt.Data.BaseInfo
 
-      let recipientName = domesticRecipientName info.Recipient
-      let payNetwork = info.Recipient.PaymentNetwork
+      let recipientName = domesticRecipientName info.Counterparty
+      let payNetwork = info.Counterparty.PaymentNetwork
 
       {
          props with
@@ -467,8 +467,8 @@ let accountHistoryUIFriendly
       }
    | DomesticTransferProgress evt ->
       let info = evt.Data.BaseInfo
-      let payNetwork = info.Recipient.PaymentNetwork
-      let recipientName = domesticRecipientName info.Recipient
+      let payNetwork = info.Counterparty.PaymentNetwork
+      let recipientName = domesticRecipientName info.Counterparty
 
       {
          props with
@@ -543,21 +543,21 @@ let accountHistoryUIFriendly
       }
    | ParentAccount evt ->
       match evt with
-      | ParentAccountEvent.RegisteredDomesticTransferRecipient evt ->
-         let name = domesticRecipientName evt.Data.Recipient
+      | ParentAccountEvent.RegisteredCounterparty evt ->
+         let name = domesticRecipientName evt.Data.Counterparty
 
          {
             props with
                Info = $"Created domestic recipient: {name}"
          }
-      | ParentAccountEvent.EditedDomesticTransferRecipient evt ->
-         let name = domesticRecipientName evt.Data.Recipient
+      | ParentAccountEvent.EditedCounterparty evt ->
+         let name = domesticRecipientName evt.Data.Counterparty
 
          {
             props with
                Info = $"Edited recipient: {name}"
          }
-      | ParentAccountEvent.NicknamedDomesticTransferRecipient evt -> {
+      | ParentAccountEvent.NicknamedCounterparty evt -> {
          props with
             Info =
                match evt.Data.Nickname with
@@ -617,9 +617,9 @@ let private matchesParentAccountEventFilter
    match filter with
    | ParentAccountEventGroupFilter.DomesticTransferRecipient ->
       match event with
-      | ParentAccountEvent.RegisteredDomesticTransferRecipient _
-      | ParentAccountEvent.EditedDomesticTransferRecipient _
-      | ParentAccountEvent.NicknamedDomesticTransferRecipient _ -> true
+      | ParentAccountEvent.RegisteredCounterparty _
+      | ParentAccountEvent.EditedCounterparty _
+      | ParentAccountEvent.NicknamedCounterparty _ -> true
 
 let private matchesAccountEventFilter
    (event: AccountEvent)

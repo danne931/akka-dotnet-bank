@@ -22,14 +22,10 @@ let start (app: WebApplication) processAccountCommand =
    app
       .MapPost(
          TransferPath.DomesticTransferRecipient,
-         Func<
-            BankActorRegistry,
-            RegisterDomesticTransferRecipientCommand,
-            Task<IResult>
-          >
+         Func<BankActorRegistry, RegisterCounterpartyCommand, Task<IResult>>
             (fun registry cmd ->
                cmd
-               |> ParentAccountCommand.RegisterDomesticTransferRecipient
+               |> ParentAccountCommand.RegisterCounterparty
                |> AccountCommand.ParentAccount
                |> processAccountCommand registry
                |> RouteUtil.unwrapTaskResult)
@@ -40,14 +36,10 @@ let start (app: WebApplication) processAccountCommand =
    app
       .MapPost(
          TransferPath.DomesticTransferRecipientEdit,
-         Func<
-            BankActorRegistry,
-            EditDomesticTransferRecipientCommand,
-            Task<IResult>
-          >
+         Func<BankActorRegistry, EditCounterpartyCommand, Task<IResult>>
             (fun registry cmd ->
                cmd
-               |> ParentAccountCommand.EditDomesticTransferRecipient
+               |> ParentAccountCommand.EditCounterparty
                |> AccountCommand.ParentAccount
                |> processAccountCommand registry
                |> RouteUtil.unwrapTaskResult)
@@ -177,14 +169,10 @@ let start (app: WebApplication) processAccountCommand =
    app
       .MapPost(
          TransferPath.NicknameRecipient,
-         Func<
-            BankActorRegistry,
-            NicknameDomesticTransferRecipientCommand,
-            Task<IResult>
-          >
+         Func<BankActorRegistry, NicknameCounterpartyCommand, Task<IResult>>
             (fun registry cmd ->
                cmd
-               |> ParentAccountCommand.NicknameDomesticTransferRecipient
+               |> ParentAccountCommand.NicknameCounterparty
                |> AccountCommand.ParentAccount
                |> processAccountCommand registry
                |> RouteUtil.unwrapTaskResult)

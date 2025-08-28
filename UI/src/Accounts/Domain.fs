@@ -311,11 +311,11 @@ let transactionUIFriendly
       Destination = ""
    }
 
-   let domesticRecipientName (recipientFromEvt: DomesticTransferRecipient) =
+   let counterpartyName (cp: Counterparty) =
       org.DomesticTransferRecipients
-      |> Map.tryFind recipientFromEvt.RecipientAccountId
+      |> Map.tryFind cp.CounterpartyId
       |> Option.map _.FullName
-      |> Option.defaultValue recipientFromEvt.FullName
+      |> Option.defaultValue cp.FullName
 
    let accountName accountId =
       org.AccountProfiles.TryFind accountId
@@ -460,9 +460,9 @@ let transactionUIFriendly
                | _ -> None
             | _ -> None)
          |> Option.map (fun info ->
-            info.Sender.Name,
-            domesticRecipientName info.Recipient,
-            string info.Recipient.PaymentNetwork)
+            info.Originator.Name,
+            counterpartyName info.Counterparty,
+            string info.Counterparty.PaymentNetwork)
          |> Option.defaultValue ("Unknown", "Unknown", "Unknown")
 
       {

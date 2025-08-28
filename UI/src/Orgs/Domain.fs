@@ -87,7 +87,7 @@ module ApprovableCommand =
          match c with
          | DomesticTransfer c ->
             $"{Money.format c.Data.Amount} domestic transfer from
-            {c.Data.Sender.Name} to {c.Data.Recipient.Name}"
+            {c.Data.Originator.Name} to {c.Data.Counterparty.Name}"
          | InternalTransferBetweenOrgs c ->
             let p = c.Data
 

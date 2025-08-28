@@ -17,7 +17,7 @@ type DomesticTransferServiceAction =
 type PartnerBankDomesticTransferRequest = {
    Action: DomesticTransferServiceAction
    OriginatingAccountId: PartnerBankAccountId
-   Recipient: DomesticTransferRecipient
+   Recipient: Counterparty
    Amount: decimal
    PaymentNetwork: PaymentNetwork
    Date: DateTime
@@ -40,8 +40,8 @@ type PartnerBankDomesticTransferRequest = {
             routing_number = string x.Recipient.RoutingNumber
             depository =
                match x.Recipient.Depository with
-               | DomesticRecipientAccountDepository.Checking -> "checking"
-               | DomesticRecipientAccountDepository.Savings -> "savings"
+               | CounterpartyAccountDepository.Checking -> "checking"
+               | CounterpartyAccountDepository.Savings -> "savings"
          |}
          amount = x.Amount
          date = x.Date
@@ -100,12 +100,13 @@ type PartnerBankDomesticTransferResponse = {
       | Contains "InvalidAction" ->
          FailReason.Infra InfraFailReason.InvalidAction
       | Contains "InvalidAmount" -> FailReason.InvalidAmount
-      | Contains "InvalidAccountInfo" -> FailReason.RecipientAccountInvalidInfo
+      | Contains "InvalidAccountInfo" ->
+         FailReason.CounterpartyAccountInvalidInfo
       | Contains "InvalidPaymentNetwork" ->
          FailReason.Infra InfraFailReason.InvalidPaymentNetwork
       | Contains "InvalidDepository" ->
-         FailReason.Infra InfraFailReason.RecipientAccountInvalidDepository
-      | Contains "InactiveAccount" -> FailReason.RecipientAccountInvalidInfo
+         FailReason.Infra InfraFailReason.InvalidDepository
+      | Contains "InactiveAccount" -> FailReason.CounterpartyAccountNotActive
       | Contains "NoTransferProcessing" -> FailReason.NoTransferFound
       | e -> FailReason.Infra(InfraFailReason.Unknown e)
 

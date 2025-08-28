@@ -22,7 +22,7 @@ DROP TABLE IF EXISTS transfer_internal_within_org;
 DROP TABLE IF EXISTS transfer_internal_between_orgs;
 DROP TABLE IF EXISTS transfer_domestic;
 DROP TABLE IF EXISTS transfer;
-DROP TABLE IF EXISTS transfer_domestic_recipient;
+DROP TABLE IF EXISTS counterparty;
 DROP TABLE IF EXISTS recurring_payment_schedule;
 DROP TABLE IF EXISTS invoice;
 DROP TABLE IF EXISTS merchant;
@@ -60,8 +60,8 @@ DROP TYPE IF EXISTS card_type;
 DROP TYPE IF EXISTS payment_request_status;
 DROP TYPE IF EXISTS payment_request_type;
 DROP TYPE IF EXISTS payment_network;
-DROP TYPE IF EXISTS domestic_transfer_recipient_account_depository;
-DROP TYPE IF EXISTS domestic_transfer_recipient_status;
+DROP TYPE IF EXISTS counterparty_account_depository;
+DROP TYPE IF EXISTS counterparty_status;
 DROP TYPE IF EXISTS domestic_transfer_status;
 DROP TYPE IF EXISTS internal_transfer_within_org_status;
 DROP TYPE IF EXISTS internal_transfer_between_orgs_status;
@@ -750,37 +750,37 @@ COMMENT ON TABLE transfer_internal_between_orgs IS
 'Child table of transfers represents transfers which occur between organizations.';
 
 --- DOMESTIC TRANSFER RECIPIENTS ---
-CREATE TYPE domestic_transfer_recipient_account_depository
+CREATE TYPE counterparty_account_depository
 AS ENUM ('Checking', 'Savings'); 
 
-CREATE TYPE domestic_transfer_recipient_status
+CREATE TYPE counterparty_status
 AS ENUM ('Confirmed', 'InvalidAccount', 'Closed');
 
 CREATE TYPE payment_network AS ENUM ('ACH');
 
-CREATE TABLE transfer_domestic_recipient(
-   recipient_account_id UUID PRIMARY KEY,
-   sender_org_id UUID REFERENCES organization(org_id),
+CREATE TABLE counterparty(
+   counterparty_id UUID PRIMARY KEY,
    first_name VARCHAR(50) NOT NULL,
    last_name VARCHAR(50) NOT NULL,
    nickname VARCHAR(100),
    routing_number INT NOT NULL,
    account_number BIGINT UNIQUE NOT NULL,
-   recipient_status domestic_transfer_recipient_status NOT NULL,
-   depository domestic_transfer_recipient_account_depository NOT NULL,
-   payment_network payment_network NOT NULL
+   counterparty_status counterparty_status NOT NULL,
+   depository counterparty_account_depository NOT NULL,
+   payment_network payment_network NOT NULL,
+   org_id UUID REFERENCES organization(org_id)
 );
 
-SELECT add_created_at_column('transfer_domestic_recipient');
-SELECT add_updated_at_column_and_trigger('transfer_domestic_recipient');
+SELECT add_created_at_column('counterparty');
+SELECT add_updated_at_column_and_trigger('counterparty');
 
-CREATE INDEX transfer_domestic_recipient_sender_org_id_idx ON transfer_domestic_recipient(sender_org_id);
+CREATE INDEX counterparty_org_id_idx ON counterparty(org_id);
 
 
 --- DOMESTIC TRANSFERS ---
 CREATE TYPE domestic_transfer_status AS ENUM (
    'Scheduled',
-   'ProcessingSenderAccountDeduction',
+   'ProcessingAccountDeduction',
    'WaitingForTransferServiceAck',
    'ThirdPartyProcessing',
    'Settled',
@@ -792,14 +792,14 @@ CREATE TABLE transfer_domestic(
    expected_settlement_date TIMESTAMPTZ NOT NULL,
    transfer_status domestic_transfer_status NOT NULL,
    transfer_status_detail JSONB NOT NULL,
-   recipient_account_id UUID REFERENCES transfer_domestic_recipient
+   counterparty_id UUID REFERENCES counterparty
 );
 
 SELECT add_created_at_column('transfer_domestic');
 SELECT add_updated_at_column_and_trigger('transfer_domestic');
 
-CREATE INDEX transfer_domestic_recipient_account_id_idx ON transfer_domestic (recipient_account_id)
-WHERE recipient_account_id IS NOT NULL;
+CREATE INDEX transfer_domestic_counterparty_id_idx ON transfer_domestic (counterparty_id)
+WHERE counterparty_id IS NOT NULL;
 
 COMMENT ON TABLE transfer_domestic IS
 'Child table of transfers represents transfers which occur outside the platform, domestically within the U.S.

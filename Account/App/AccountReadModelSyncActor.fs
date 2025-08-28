@@ -42,8 +42,8 @@ type SqlParamsDerivedFromAccountEvents = {
    DomesticTransferUpdate: SqlParams
    PartnerBankInitialized: SqlParams
    BillingCycle: SqlParams
-   DomesticTransferRecipient: SqlParams
-   DomesticTransferRecipientUpdate: SqlParams
+   Counterparty: SqlParams
+   CounterpartyUpdate: SqlParams
 }
 
 let private paymentRequestBaseSqlParams (p: PaymentRequested) =
@@ -78,9 +78,9 @@ let private internalTransferWithinOrgBaseSqlParams
 
       "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
 
-      "senderOrgId", TransferSqlWriter.orgId o.Sender.OrgId
+      "originatorOrgId", TransferSqlWriter.orgId o.Sender.OrgId
 
-      "senderAccountId", TransferSqlWriter.accountId o.Sender.AccountId
+      "originatorAccountId", TransferSqlWriter.accountId o.Sender.AccountId
 
       "recipientOrgId", TransferSqlWriter.orgId o.Recipient.OrgId
 
@@ -99,9 +99,9 @@ let private internalTransferBetweenOrgsBaseSqlParams
 
       "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
 
-      "senderOrgId", TransferSqlWriter.orgId o.Sender.OrgId
+      "originatorOrgId", TransferSqlWriter.orgId o.Sender.OrgId
 
-      "senderAccountId", TransferSqlWriter.accountId o.Sender.AccountId
+      "originatorAccountId", TransferSqlWriter.accountId o.Sender.AccountId
 
       "recipientOrgId", TransferSqlWriter.orgId o.Recipient.OrgId
 
@@ -117,16 +117,15 @@ let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
 
    "initiatedById", TransferSqlWriter.initiatedById o.InitiatedBy.Id
 
-   "senderOrgId", TransferSqlWriter.orgId o.Sender.OrgId
+   "originatorOrgId", TransferSqlWriter.orgId o.Originator.OrgId
 
-   "senderAccountId", TransferSqlWriter.accountId o.Sender.AccountId
+   "originatorAccountId", TransferSqlWriter.accountId o.Originator.AccountId
 
    "scheduledAt", TransferSqlWriter.scheduledAt o.ScheduledDate
 
    "amount", TransferSqlWriter.amount o.Amount
 
-   "recipientAccountId",
-   TransferSqlWriter.accountId o.Recipient.RecipientAccountId
+   "counterpartyId", TransferSqlWriter.accountId o.Counterparty.CounterpartyId
 
    "memo", TransferSqlWriter.memo o.Memo
 ]
@@ -219,37 +218,32 @@ let private internalTransferBetweenOrgsStatusReducer
             qParams :: acc.InternalTransferBetweenOrgs
    }
 
-let private domesticRecipientReducer
+let private counterpartyReducer
    (acc: SqlParamsDerivedFromAccountEvents)
-   (recipient: DomesticTransferRecipient)
+   (counterparty: Counterparty)
    =
    let qParams = [
-      "recipientAccountId",
-      TransferSqlWriter.DomesticRecipient.recipientAccountId
-         recipient.RecipientAccountId
-      "senderOrgId",
-      TransferSqlWriter.DomesticRecipient.senderOrgId recipient.SenderOrgId
-      "lastName",
-      TransferSqlWriter.DomesticRecipient.lastName recipient.LastName
+      "counterpartyId",
+      TransferSqlWriter.Counterparty.counterpartyId counterparty.CounterpartyId
+      "orgId", TransferSqlWriter.Counterparty.orgId counterparty.OrgId
+      "lastName", TransferSqlWriter.Counterparty.lastName counterparty.LastName
       "firstName",
-      TransferSqlWriter.DomesticRecipient.firstName recipient.FirstName
+      TransferSqlWriter.Counterparty.firstName counterparty.FirstName
       "accountNumber",
-      TransferSqlWriter.DomesticRecipient.accountNumber recipient.AccountNumber
+      TransferSqlWriter.Counterparty.accountNumber counterparty.AccountNumber
       "routingNumber",
-      TransferSqlWriter.DomesticRecipient.routingNumber recipient.RoutingNumber
-      "status", TransferSqlWriter.DomesticRecipient.status recipient.Status
+      TransferSqlWriter.Counterparty.routingNumber counterparty.RoutingNumber
+      "status", TransferSqlWriter.Counterparty.status counterparty.Status
       "depository",
-      TransferSqlWriter.DomesticRecipient.depository recipient.Depository
+      TransferSqlWriter.Counterparty.depository counterparty.Depository
       "paymentNetwork",
-      TransferSqlWriter.DomesticRecipient.paymentNetwork
-         recipient.PaymentNetwork
-      "nickname",
-      TransferSqlWriter.DomesticRecipient.nickname recipient.Nickname
+      TransferSqlWriter.Counterparty.paymentNetwork counterparty.PaymentNetwork
+      "nickname", TransferSqlWriter.Counterparty.nickname counterparty.Nickname
    ]
 
    {
       acc with
-         DomesticTransferRecipient = qParams :: acc.DomesticTransferRecipient
+         Counterparty = qParams :: acc.Counterparty
    }
 
 let private domesticTransferStatusReducer
@@ -365,23 +359,20 @@ let sqlParamReducer
       | _ -> accountEventReducer acc evt envelope
 
    match evt with
-   | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredDomesticTransferRecipient e) ->
-      domesticRecipientReducer acc e.Data.Recipient
-   | AccountEvent.ParentAccount(ParentAccountEvent.EditedDomesticTransferRecipient e) ->
-      domesticRecipientReducer acc e.Data.Recipient
-   | AccountEvent.ParentAccount(ParentAccountEvent.NicknamedDomesticTransferRecipient e) ->
+   | AccountEvent.ParentAccount(ParentAccountEvent.RegisteredCounterparty e) ->
+      counterpartyReducer acc e.Data.Counterparty
+   | AccountEvent.ParentAccount(ParentAccountEvent.EditedCounterparty e) ->
+      counterpartyReducer acc e.Data.Counterparty
+   | AccountEvent.ParentAccount(ParentAccountEvent.NicknamedCounterparty e) ->
       let qParams = [
-         "recipientAccountId",
-         TransferSqlWriter.DomesticRecipient.recipientAccountId
-            e.Data.RecipientId
-         "nickname",
-         TransferSqlWriter.DomesticRecipient.nickname e.Data.Nickname
+         "counterpartyId",
+         TransferSqlWriter.Counterparty.counterpartyId e.Data.CounterpartyId
+         "nickname", TransferSqlWriter.Counterparty.nickname e.Data.Nickname
       ]
 
       {
          acc with
-            DomesticTransferRecipientUpdate =
-               qParams :: acc.DomesticTransferRecipientUpdate
+            CounterpartyUpdate = qParams :: acc.CounterpartyUpdate
       }
    | AccountEvent.InitializedPrimaryCheckingAccount e ->
       let parentAccountQueryParams = [
@@ -764,26 +755,25 @@ let sqlParamReducer
 
       let updatedRecipientStatus =
          match e.Data.Reason with
-         | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountNotActive ->
-            Some RecipientRegistrationStatus.Closed
-         | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo ->
-            Some RecipientRegistrationStatus.InvalidAccount
+         | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountNotActive ->
+            Some CounterpartyRegistrationStatus.Closed
+         | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo ->
+            Some CounterpartyRegistrationStatus.InvalidAccount
          | _ -> None
 
       match updatedRecipientStatus with
       | Some status ->
          let qParams = [
-            "recipientAccountId",
-            TransferSqlWriter.DomesticRecipient.recipientAccountId
-               info.Recipient.RecipientAccountId
+            "counterpartyId",
+            TransferSqlWriter.Counterparty.counterpartyId
+               info.Counterparty.CounterpartyId
 
-            "status", TransferSqlWriter.DomesticRecipient.status status
+            "status", TransferSqlWriter.Counterparty.status status
          ]
 
          {
             acc with
-               DomesticTransferRecipientUpdate =
-                  qParams :: acc.DomesticTransferRecipientUpdate
+               CounterpartyUpdate = qParams :: acc.CounterpartyUpdate
          }
       | None -> acc
    | AccountEvent.DomesticTransferSettled e ->
@@ -797,21 +787,20 @@ let sqlParamReducer
          |> AccountBalanceReducer.settleFunds accountId info.Amount
 
       match e.Data.FromRetry with
-      | Some(DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo) ->
+      | Some(DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo) ->
          let qParams = [
-            "recipientAccountId",
-            TransferSqlWriter.DomesticRecipient.recipientAccountId
-               info.Recipient.RecipientAccountId
+            "counterpartyId",
+            TransferSqlWriter.Counterparty.counterpartyId
+               info.Counterparty.CounterpartyId
 
             "status",
-            TransferSqlWriter.DomesticRecipient.status
-               RecipientRegistrationStatus.Confirmed
+            TransferSqlWriter.Counterparty.status
+               CounterpartyRegistrationStatus.Confirmed
          ]
 
          {
             acc with
-               DomesticTransferRecipientUpdate =
-                  qParams :: acc.DomesticTransferRecipientUpdate
+               CounterpartyUpdate = qParams :: acc.CounterpartyUpdate
          }
       | _ -> acc
    | AccountEvent.PaymentRequested e ->
@@ -1028,8 +1017,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          InternalTransferBetweenOrgs = []
          DomesticTransfer = []
          DomesticTransferUpdate = []
-         DomesticTransferRecipient = []
-         DomesticTransferRecipientUpdate = []
+         Counterparty = []
+         CounterpartyUpdate = []
       }
 
    pgTransaction [
@@ -1309,8 +1298,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           @amount,
           @transferCategory::{TransferTypeCast.transferCategory},
           @scheduledAt,
-          @senderOrgId,
-          @senderAccountId,
+          @originatorOrgId,
+          @originatorAccountId,
           @memo)
       ON CONFLICT ({TransferFields.transferId})
       DO NOTHING;
@@ -1360,57 +1349,57 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       sqlParamsDerivedFromAccountEvents.InternalTransferBetweenOrgs
 
       $"""
-      INSERT into {TransferSqlMapper.Table.domesticRecipient}
-         ({TransferFields.DomesticRecipient.recipientAccountId},
-          {TransferFields.DomesticRecipient.senderOrgId},
-          {TransferFields.DomesticRecipient.firstName},
-          {TransferFields.DomesticRecipient.lastName},
-          {TransferFields.DomesticRecipient.nickname},
-          {TransferFields.DomesticRecipient.routingNumber},
-          {TransferFields.DomesticRecipient.accountNumber},
-          {TransferFields.DomesticRecipient.status},
-          {TransferFields.DomesticRecipient.depository},
-          {TransferFields.DomesticRecipient.paymentNetwork})
+      INSERT into {TransferSqlMapper.Table.counterparty}
+         ({TransferFields.Counterparty.counterpartyId},
+          {TransferFields.Counterparty.orgId},
+          {TransferFields.Counterparty.firstName},
+          {TransferFields.Counterparty.lastName},
+          {TransferFields.Counterparty.nickname},
+          {TransferFields.Counterparty.routingNumber},
+          {TransferFields.Counterparty.accountNumber},
+          {TransferFields.Counterparty.status},
+          {TransferFields.Counterparty.depository},
+          {TransferFields.Counterparty.paymentNetwork})
       VALUES
-         (@recipientAccountId,
-          @senderOrgId,
+         (@counterpartyId,
+          @orgId,
           @firstName,
           @lastName,
           @nickname,
           @routingNumber,
           @accountNumber,
-          @status::{TransferTypeCast.domesticRecipientStatus},
-          @depository::{TransferTypeCast.domesticRecipientAccountDepository},
+          @status::{TransferTypeCast.counterpartyStatus},
+          @depository::{TransferTypeCast.counterpartyAccountDepository},
           @paymentNetwork::{TransferTypeCast.paymentNetwork})
-      ON CONFLICT ({TransferFields.DomesticRecipient.recipientAccountId})
+      ON CONFLICT ({TransferFields.Counterparty.counterpartyId})
       DO UPDATE SET
-         {TransferFields.DomesticRecipient.firstName} = @firstName,
-         {TransferFields.DomesticRecipient.lastName} = @lastName,
-         {TransferFields.DomesticRecipient.nickname} = @nickname,
-         {TransferFields.DomesticRecipient.routingNumber} = @routingNumber,
-         {TransferFields.DomesticRecipient.accountNumber} = @accountNumber,
-         {TransferFields.DomesticRecipient.status} =
-            @status::{TransferTypeCast.domesticRecipientStatus},
-         {TransferFields.DomesticRecipient.depository} =
-            @depository::{TransferTypeCast.domesticRecipientAccountDepository},
-         {TransferFields.DomesticRecipient.paymentNetwork} =
+         {TransferFields.Counterparty.firstName} = @firstName,
+         {TransferFields.Counterparty.lastName} = @lastName,
+         {TransferFields.Counterparty.nickname} = @nickname,
+         {TransferFields.Counterparty.routingNumber} = @routingNumber,
+         {TransferFields.Counterparty.accountNumber} = @accountNumber,
+         {TransferFields.Counterparty.status} =
+            @status::{TransferTypeCast.counterpartyStatus},
+         {TransferFields.Counterparty.depository} =
+            @depository::{TransferTypeCast.counterpartyAccountDepository},
+         {TransferFields.Counterparty.paymentNetwork} =
             @paymentNetwork::{TransferTypeCast.paymentNetwork};
       """,
-      sqlParamsDerivedFromAccountEvents.DomesticTransferRecipient
+      sqlParamsDerivedFromAccountEvents.Counterparty
 
       $"""
-      UPDATE {TransferSqlMapper.Table.domesticRecipient}
+      UPDATE {TransferSqlMapper.Table.counterparty}
       SET 
-         {TransferFields.DomesticRecipient.nickname} =
-            COALESCE(@nickname, {TransferFields.DomesticRecipient.nickname}),
-         {TransferFields.DomesticRecipient.status} =
+         {TransferFields.Counterparty.nickname} =
+            COALESCE(@nickname, {TransferFields.Counterparty.nickname}),
+         {TransferFields.Counterparty.status} =
             COALESCE(
-               @status::{TransferTypeCast.domesticRecipientStatus},
-               {TransferFields.DomesticRecipient.status}
+               @status::{TransferTypeCast.counterpartyStatus},
+               {TransferFields.Counterparty.status}
             )
-      WHERE {TransferFields.DomesticRecipient.recipientAccountId} = @recipientAccountId;
+      WHERE {TransferFields.Counterparty.counterpartyId} = @recipientAccountId;
       """,
-      sqlParamsDerivedFromAccountEvents.DomesticTransferRecipientUpdate
+      sqlParamsDerivedFromAccountEvents.CounterpartyUpdate
       |> List.map (
          Lib.Postgres.addCoalescableParamsForUpdate [ "nickname"; "status" ]
       )
@@ -1421,13 +1410,13 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {TransferFields.Domestic.expectedSettlementDate},
           {TransferFields.Domestic.status},
           {TransferFields.Domestic.statusDetail},
-          {TransferFields.Domestic.recipientAccountId})
+          {TransferFields.Domestic.counterpartyId})
       VALUES
          (@transferId,
           @expectedSettlementDate,
           @status::{TransferTypeCast.domesticTransferStatus},
           @statusDetail,
-          @recipientAccountId)
+          @counterpartyId)
       ON CONFLICT ({TransferFields.transferId})
       DO UPDATE SET
          {TransferFields.Domestic.status} = @status::{TransferTypeCast.domesticTransferStatus},

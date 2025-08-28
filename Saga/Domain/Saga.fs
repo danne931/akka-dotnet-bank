@@ -283,7 +283,7 @@ type Saga =
          | Saga.EmployeeOnboarding s -> s.OrgId
          | Saga.CardSetup s -> s.OrgId
          | Saga.Purchase s -> s.PurchaseInfo.OrgId
-         | Saga.DomesticTransfer s -> s.TransferInfo.Sender.OrgId
+         | Saga.DomesticTransfer s -> s.TransferInfo.Originator.OrgId
          | Saga.PlatformTransfer s -> s.TransferInfo.Sender.OrgId
          | Saga.PaymentRequest s -> s.PaymentInfo.SharedDetails.Payee.OrgId
          | Saga.Billing s -> s.OrgId

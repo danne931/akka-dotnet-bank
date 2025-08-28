@@ -87,7 +87,7 @@ let applyEvent
                Activity.WaitForScheduledTransferActivation TimeSpan.Zero
             )
             |> addActivity Activity.ReserveSenderFunds
-         Status = DomesticTransferProgress.ProcessingSenderAccountDeduction
+         Status = DomesticTransferProgress.ProcessingAccountDeduction
      }
    | DomesticTransferSagaEvent.SenderReservedFunds -> {
       saga with
@@ -150,8 +150,8 @@ let applyEvent
            }
          | DomesticTransferThirdPartyFailReason.NoTransferFound
          | DomesticTransferThirdPartyFailReason.InvalidAmount
-         | DomesticTransferThirdPartyFailReason.RecipientAccountInvalidInfo
-         | DomesticTransferThirdPartyFailReason.RecipientAccountNotActive ->
+         | DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo
+         | DomesticTransferThirdPartyFailReason.CounterpartyAccountNotActive ->
             let refundIfNotRetrying =
                if saga.ReasonForRetryServiceAck.IsSome then
                   id
@@ -162,15 +162,15 @@ let applyEvent
                saga with
                   LifeCycle = refundIfNotRetrying saga.LifeCycle
             }
-   | DomesticTransferSagaEvent.RetryTransferServiceRequest updatedRecipient -> {
+   | DomesticTransferSagaEvent.RetryTransferServiceRequest updated -> {
       saga with
          ReasonForRetryServiceAck =
             match saga.Status with
             | DomesticTransferProgress.Failed reason -> Some reason
             | _ -> None
          Status = DomesticTransferProgress.WaitingForTransferServiceAck
-         TransferInfo.Recipient =
-            updatedRecipient |> Option.defaultValue saga.TransferInfo.Recipient
+         TransferInfo.Counterparty =
+            updated |> Option.defaultValue saga.TransferInfo.Counterparty
          LifeCycle =
             saga.LifeCycle
             |> addActivity Activity.TransferServiceAck
@@ -281,14 +281,14 @@ let onStartEventPersisted
          PartnerBankServiceMessage.TransferDomestic {
             Action = DomesticTransferServiceAction.TransferAck
             OriginatingAccountId = link.PartnerBankAccountId
-            Recipient = info.Recipient
+            Recipient = info.Counterparty
             Amount = info.Amount
-            PaymentNetwork = info.Recipient.PaymentNetwork
+            PaymentNetwork = info.Counterparty.PaymentNetwork
             Date = info.ScheduledDate
             Status = DomesticTransferProgress.WaitingForTransferServiceAck
             TransferId = info.TransferId
             SagaMetadata = {
-               OrgId = info.Sender.OrgId
+               OrgId = info.Originator.OrgId
                CorrelationId = e.CorrelationId
             }
          }
@@ -317,8 +317,8 @@ let onEventPersisted
       let cmd =
          DomesticTransferCommand.create correlationId info.InitiatedBy {
             Amount = info.Amount
-            Sender = info.Sender
-            Recipient = info.Recipient
+            Originator = info.Originator
+            Counterparty = info.Counterparty
             Memo = info.Memo
             ScheduledDateSeedOverride = None
             OriginatedFromSchedule = currentState.OriginatedFromSchedule
@@ -327,7 +327,7 @@ let onEventPersisted
       let msg =
          cmd |> AccountCommand.DomesticTransfer |> AccountMessage.StateChange
 
-      registry.AccountActor info.Sender.ParentAccountId <! msg
+      registry.AccountActor info.Originator.ParentAccountId <! msg
 
    let sendTransferToProcessorService action =
       let msg =
@@ -335,14 +335,14 @@ let onEventPersisted
             Action = action
             OriginatingAccountId =
                currentState.PartnerBankAccountLink.PartnerBankAccountId
-            Recipient = info.Recipient
+            Recipient = info.Counterparty
             Amount = info.Amount
-            PaymentNetwork = info.Recipient.PaymentNetwork
+            PaymentNetwork = info.Counterparty.PaymentNetwork
             Date = info.ScheduledDate
             Status = currentState.Status
             TransferId = info.TransferId
             SagaMetadata = {
-               OrgId = info.Sender.OrgId
+               OrgId = info.Originator.OrgId
                CorrelationId = correlationId
             }
          }
@@ -372,7 +372,7 @@ let onEventPersisted
          |> AccountCommand.UpdateDomesticTransferProgress
          |> AccountMessage.StateChange
 
-      registry.AccountActor info.Sender.ParentAccountId <! msg
+      registry.AccountActor info.Originator.ParentAccountId <! msg
 
    let updateTransferAsComplete () =
       let cmd =
@@ -386,16 +386,16 @@ let onEventPersisted
          |> AccountCommand.SettleDomesticTransfer
          |> AccountMessage.StateChange
 
-      registry.AccountActor info.Sender.ParentAccountId <! msg
+      registry.AccountActor info.Originator.ParentAccountId <! msg
 
    let sendTransferInitiatedEmail () =
       let emailMsg =
          EmailMessage.create
-            info.Sender.OrgId
+            info.Originator.OrgId
             info.TransferId.AsCorrelationId
             (EmailInfo.DomesticTransfer {
-               SenderAccountName = info.Sender.Name
-               RecipientName = info.Recipient.FullName
+               SenderAccountName = info.Originator.Name
+               RecipientName = info.Counterparty.FullName
                Amount = info.Amount
             })
 
@@ -410,7 +410,7 @@ let onEventPersisted
          |> AccountCommand.FailDomesticTransfer
          |> AccountMessage.StateChange
 
-      registry.AccountActor info.Sender.ParentAccountId <! msg
+      registry.AccountActor info.Originator.ParentAccountId <! msg
 
    match evt with
    | DomesticTransferSagaEvent.ScheduledTransferActivated ->
@@ -438,7 +438,7 @@ let onEventPersisted
 
             let msg =
                EmailMessage.create
-                  info.Sender.OrgId
+                  info.Originator.OrgId
                   info.TransferId.AsCorrelationId
                   (EmailInfo.ApplicationErrorRequiresSupport(string reason))
 

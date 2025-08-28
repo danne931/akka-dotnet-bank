@@ -491,8 +491,8 @@ let renderForm session org (view: AccountActionView) dispatch =
             None
             (fun conf ->
                match conf.PendingEvent with
-               | ParentAccountEvent.RegisteredDomesticTransferRecipient e ->
-                  let recipientId = e.Data.Recipient.RecipientAccountId
+               | ParentAccountEvent.RegisteredCounterparty e ->
+                  let recipientId = e.Data.Counterparty.CounterpartyId
 
                   let redirectTo =
                      (RecipientAccountEnvironment.Domestic, recipientId)

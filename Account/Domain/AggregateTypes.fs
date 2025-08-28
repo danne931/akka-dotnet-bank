@@ -12,11 +12,9 @@ open AutomaticTransfer
 /// than one of the subacounts.
 [<RequireQualifiedAccess>]
 type ParentAccountCommand =
-   | RegisterDomesticTransferRecipient of
-      RegisterDomesticTransferRecipientCommand
-   | EditDomesticTransferRecipient of EditDomesticTransferRecipientCommand
-   | NicknameDomesticTransferRecipient of
-      NicknameDomesticTransferRecipientCommand
+   | RegisterCounterparty of RegisterCounterpartyCommand
+   | EditCounterparty of EditCounterpartyCommand
+   | NicknameCounterparty of NicknameCounterpartyCommand
 
 [<RequireQualifiedAccess>]
 type AccountCommand =
@@ -86,12 +84,9 @@ type AccountCommand =
       | DepositInternalAutoTransfer cmd -> Command.envelope cmd
       | ParentAccount cmd ->
          match cmd with
-         | ParentAccountCommand.RegisterDomesticTransferRecipient cmd ->
-            Command.envelope cmd
-         | ParentAccountCommand.EditDomesticTransferRecipient cmd ->
-            Command.envelope cmd
-         | ParentAccountCommand.NicknameDomesticTransferRecipient cmd ->
-            Command.envelope cmd
+         | ParentAccountCommand.RegisterCounterparty cmd -> Command.envelope cmd
+         | ParentAccountCommand.EditCounterparty cmd -> Command.envelope cmd
+         | ParentAccountCommand.NicknameCounterparty cmd -> Command.envelope cmd
 
    member x.AccountId =
       match x with
@@ -114,11 +109,13 @@ type AccountCommand =
          cmd.Data.BaseInfo.Sender.AccountId
       | DepositTransferWithinOrg cmd -> cmd.Data.BaseInfo.Recipient.AccountId
       | DepositTransferBetweenOrgs cmd -> cmd.Data.BaseInfo.Recipient.AccountId
-      | ScheduleDomesticTransfer cmd -> cmd.Data.TransferInput.Sender.AccountId
-      | DomesticTransfer cmd -> cmd.Data.Sender.AccountId
-      | UpdateDomesticTransferProgress cmd -> cmd.Data.BaseInfo.Sender.AccountId
-      | SettleDomesticTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
-      | FailDomesticTransfer cmd -> cmd.Data.BaseInfo.Sender.AccountId
+      | ScheduleDomesticTransfer cmd ->
+         cmd.Data.TransferInput.Originator.AccountId
+      | DomesticTransfer cmd -> cmd.Data.Originator.AccountId
+      | UpdateDomesticTransferProgress cmd ->
+         cmd.Data.BaseInfo.Originator.AccountId
+      | SettleDomesticTransfer cmd -> cmd.Data.BaseInfo.Originator.AccountId
+      | FailDomesticTransfer cmd -> cmd.Data.BaseInfo.Originator.AccountId
       | RequestPayment cmd -> cmd.Data.SharedDetails.Payee.AccountId
       | CancelPaymentRequest cmd -> cmd.Data.SharedDetails.Payee.AccountId
       | DeclinePaymentRequest cmd -> cmd.Data.SharedDetails.Payee.AccountId
@@ -133,12 +130,9 @@ type AccountCommand =
 
 [<RequireQualifiedAccess>]
 type ParentAccountEvent =
-   | RegisteredDomesticTransferRecipient of
-      BankEvent<RegisteredDomesticTransferRecipient>
-   | EditedDomesticTransferRecipient of
-      BankEvent<EditedDomesticTransferRecipient>
-   | NicknamedDomesticTransferRecipient of
-      BankEvent<NicknamedDomesticTransferRecipient>
+   | RegisteredCounterparty of BankEvent<RegisteredCounterparty>
+   | EditedCounterparty of BankEvent<EditedCounterparty>
+   | NicknamedCounterparty of BankEvent<NicknamedCounterparty>
 
 type AccountEvent =
    | InitializedPrimaryCheckingAccount of
@@ -208,11 +202,11 @@ type AccountEvent =
          evt.Data.BaseInfo.Sender.AccountId
       | InternalTransferBetweenOrgsFailed evt ->
          evt.Data.BaseInfo.Sender.AccountId
-      | DomesticTransferScheduled evt -> evt.Data.BaseInfo.Sender.AccountId
-      | DomesticTransferPending evt -> evt.Data.BaseInfo.Sender.AccountId
-      | DomesticTransferProgress evt -> evt.Data.BaseInfo.Sender.AccountId
-      | DomesticTransferSettled evt -> evt.Data.BaseInfo.Sender.AccountId
-      | DomesticTransferFailed evt -> evt.Data.BaseInfo.Sender.AccountId
+      | DomesticTransferScheduled evt -> evt.Data.BaseInfo.Originator.AccountId
+      | DomesticTransferPending evt -> evt.Data.BaseInfo.Originator.AccountId
+      | DomesticTransferProgress evt -> evt.Data.BaseInfo.Originator.AccountId
+      | DomesticTransferSettled evt -> evt.Data.BaseInfo.Originator.AccountId
+      | DomesticTransferFailed evt -> evt.Data.BaseInfo.Originator.AccountId
       | PaymentRequested evt -> evt.Data.SharedDetails.Payee.AccountId
       | PaymentRequestCancelled evt -> evt.Data.SharedDetails.Payee.AccountId
       | PaymentRequestDeclined evt -> evt.Data.SharedDetails.Payee.AccountId
@@ -277,19 +271,19 @@ module AccountEvent =
       | AccountEvent.DomesticTransferScheduled evt ->
          Some evt.Data.BaseInfo.Amount,
          None,
-         Some evt.Data.BaseInfo.Recipient.Name
+         Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.DomesticTransferPending evt ->
          Some evt.Data.BaseInfo.Amount,
          None,
-         Some evt.Data.BaseInfo.Recipient.Name
+         Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.DomesticTransferSettled evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,
-         Some evt.Data.BaseInfo.Recipient.Name
+         Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.DomesticTransferFailed evt ->
          Some evt.Data.BaseInfo.Amount,
          None,
-         Some evt.Data.BaseInfo.Recipient.Name
+         Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.MaintenanceFeeDebited evt ->
          Some evt.Data.Amount, Some MoneyFlow.Out, Some "Maintenance Fee"
       | AccountEvent.PaymentRequested evt ->
@@ -367,17 +361,17 @@ module AccountEnvelope =
          InternalAutomatedTransferDeducted evt
       | :? BankEvent<InternalAutomatedTransferDeposited> as evt ->
          InternalAutomatedTransferDeposited evt
-      | :? BankEvent<RegisteredDomesticTransferRecipient> as evt ->
+      | :? BankEvent<RegisteredCounterparty> as evt ->
          evt
-         |> ParentAccountEvent.RegisteredDomesticTransferRecipient
+         |> ParentAccountEvent.RegisteredCounterparty
          |> AccountEvent.ParentAccount
-      | :? BankEvent<EditedDomesticTransferRecipient> as evt ->
+      | :? BankEvent<EditedCounterparty> as evt ->
          evt
-         |> ParentAccountEvent.EditedDomesticTransferRecipient
+         |> ParentAccountEvent.EditedCounterparty
          |> AccountEvent.ParentAccount
-      | :? BankEvent<NicknamedDomesticTransferRecipient> as evt ->
+      | :? BankEvent<NicknamedCounterparty> as evt ->
          evt
-         |> ParentAccountEvent.NicknamedDomesticTransferRecipient
+         |> ParentAccountEvent.NicknamedCounterparty
          |> AccountEvent.ParentAccount
       | _ -> failwith "Missing definition for AccountEvent message"
 
@@ -414,12 +408,9 @@ module AccountEnvelope =
       | InternalAutomatedTransferDeposited evt -> wrap evt, get evt
       | ParentAccount evt ->
          match evt with
-         | ParentAccountEvent.RegisteredDomesticTransferRecipient evt ->
-            wrap evt, get evt
-         | ParentAccountEvent.EditedDomesticTransferRecipient evt ->
-            wrap evt, get evt
-         | ParentAccountEvent.NicknamedDomesticTransferRecipient evt ->
-            wrap evt, get evt
+         | ParentAccountEvent.RegisteredCounterparty evt -> wrap evt, get evt
+         | ParentAccountEvent.EditedCounterparty evt -> wrap evt, get evt
+         | ParentAccountEvent.NicknamedCounterparty evt -> wrap evt, get evt
 
 type Account = {
    AccountId: AccountId
@@ -492,7 +483,7 @@ type ParentAccountSnapshot = {
    LastBillingCycleDate: DateTime option
    MaintenanceFeeCriteria: MaintenanceFeeCriteria
    Status: ParentAccountStatus
-   DomesticTransferRecipients: Map<AccountId, DomesticTransferRecipient>
+   DomesticTransferRecipients: Map<AccountId, Counterparty>
    Events: AccountEvent list
 } with
 

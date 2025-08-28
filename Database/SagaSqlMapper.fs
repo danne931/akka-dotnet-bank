@@ -114,7 +114,7 @@ module Writer =
          | AppSaga.Saga.DomesticTransfer s ->
             match s.Status with
             | DomesticTransferProgress.Scheduled -> "Scheduled"
-            | DomesticTransferProgress.ProcessingSenderAccountDeduction
+            | DomesticTransferProgress.ProcessingAccountDeduction
             | DomesticTransferProgress.WaitingForTransferServiceAck
             | DomesticTransferProgress.ThirdParty _ -> inProgressOrExhausted
             | DomesticTransferProgress.Settled -> "Completed"

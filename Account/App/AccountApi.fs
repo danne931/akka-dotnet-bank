@@ -70,14 +70,14 @@ let processCommand
          | AccountCommand.DeleteAutoTransferRule cmd ->
             DeleteAutoTransferRuleCommand.toEvent cmd
             |> Result.map AccountEnvelope.get
-         | AccountCommand.ParentAccount(ParentAccountCommand.RegisterDomesticTransferRecipient cmd) ->
-            RegisterDomesticTransferRecipientCommand.toEvent cmd
+         | AccountCommand.ParentAccount(ParentAccountCommand.RegisterCounterparty cmd) ->
+            RegisterCounterpartyCommand.toEvent cmd
             |> Result.map AccountEnvelope.get
-         | AccountCommand.ParentAccount(ParentAccountCommand.EditDomesticTransferRecipient cmd) ->
-            EditDomesticTransferRecipientCommand.toEvent cmd
+         | AccountCommand.ParentAccount(ParentAccountCommand.EditCounterparty cmd) ->
+            EditCounterpartyCommand.toEvent cmd
             |> Result.map AccountEnvelope.get
-         | AccountCommand.ParentAccount(ParentAccountCommand.NicknameDomesticTransferRecipient cmd) ->
-            NicknameDomesticTransferRecipientCommand.toEvent cmd
+         | AccountCommand.ParentAccount(ParentAccountCommand.NicknameCounterparty cmd) ->
+            NicknameCounterpartyCommand.toEvent cmd
             |> Result.map AccountEnvelope.get
          | cmd ->
             Error

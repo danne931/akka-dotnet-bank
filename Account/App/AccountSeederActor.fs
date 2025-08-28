@@ -1184,7 +1184,7 @@ let seedAccountOwnerActions
    let accountRef = registry.AccountGuaranteedDeliveryActor()
 
    let domesticRecipientCmd =
-      RegisterDomesticTransferRecipientCommand.create mockAccountOwner {
+      RegisterCounterpartyCommand.create mockAccountOwner {
          AccountId = Guid.NewGuid() |> AccountId
          Sender = {|
             OrgId = myOrg.OrgId
@@ -1194,20 +1194,20 @@ let seedAccountOwnerActions
          LastName = "Azure"
          AccountNumber = AccountNumber.generate () |> string
          RoutingNumber = "123456789"
-         Depository = DomesticRecipientAccountDepository.Checking
+         Depository = CounterpartyAccountDepository.Checking
          PaymentNetwork = PaymentNetwork.ACH
       }
 
    let domesticRecipient =
       domesticRecipientCmd
-      |> RegisterDomesticTransferRecipientCommand.toEvent
-      |> Result.map (fun evt -> evt.Data.Recipient)
+      |> RegisterCounterpartyCommand.toEvent
+      |> Result.map _.Data.Counterparty
       |> Result.toValueOption
       |> _.Value
 
    let msg =
       domesticRecipientCmd
-      |> ParentAccountCommand.RegisterDomesticTransferRecipient
+      |> ParentAccountCommand.RegisterCounterparty
       |> AccountCommand.ParentAccount
       |> AccountMessage.StateChange
       |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
@@ -1229,8 +1229,8 @@ let seedAccountOwnerActions
                OriginatedFromSchedule = false
                ScheduledDateSeedOverride = Some timestamp
                Amount = 30_000m + randomAmount 1000 7000
-               Recipient = domesticRecipient
-               Sender = {
+               Counterparty = domesticRecipient
+               Originator = {
                   Name = account.Name
                   AccountId = account.AccountId
                   OrgId = myOrg.OrgId

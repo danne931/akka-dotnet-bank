@@ -250,7 +250,7 @@ let formInternalBetweenOrgs
    )
 
 let formDomestic
-   (recipients: Map<AccountId, DomesticTransferRecipient>)
+   (recipients: Map<AccountId, Counterparty>)
    (senderAccounts: Map<AccountId, Account>)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
@@ -278,7 +278,7 @@ let formDomestic
       }
 
    let onSubmit
-      (recipient: DomesticTransferRecipient)
+      (recipient: Counterparty)
       (sender: Account)
       (amount: decimal)
       (memo: string option)
@@ -293,13 +293,13 @@ let formDomestic
 
       let transfer: DomesticTransferInput = {
          Amount = amount
-         Sender = {
+         Originator = {
             Name = sender.Name
             OrgId = sender.OrgId
             ParentAccountId = sender.ParentAccountId
             AccountId = sender.AccountId
          }
-         Recipient = recipient
+         Counterparty = recipient
          Memo = memo
          ScheduledDateSeedOverride = None
          OriginatedFromSchedule =
@@ -444,7 +444,7 @@ let TransferInternalBetweenOrgsComponent
 [<ReactComponent>]
 let TransferDomesticFormComponent
    (session: UserSession)
-   (recipients: Map<AccountId, DomesticTransferRecipient>)
+   (recipients: Map<AccountId, Counterparty>)
    (senderAccounts: Map<AccountId, Account>)
    (commandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule>)
    (employeeAccrual: CommandApprovalDailyAccrual)
@@ -459,7 +459,7 @@ let TransferDomesticFormComponent
       | _ ->
          recipients.Values
          |> Seq.tryHead
-         |> Option.map (_.RecipientAccountId >> string)
+         |> Option.map (_.CounterpartyId >> string)
          |> Option.defaultValue ""
 
    FormContainer {|

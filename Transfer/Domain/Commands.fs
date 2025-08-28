@@ -267,13 +267,13 @@ module SettleInternalTransferBetweenOrgsCommand =
       =
       BankEvent.create<InternalTransferBetweenOrgsSettled> cmd |> Ok
 
-type DomesticTransferRecipientInput = {
+type CounterpartyInput = {
    AccountId: AccountId
    LastName: string
    FirstName: string
    AccountNumber: string
    RoutingNumber: string
-   Depository: DomesticRecipientAccountDepository
+   Depository: CounterpartyAccountDepository
    PaymentNetwork: PaymentNetwork
    Sender: {|
       OrgId: OrgId
@@ -281,11 +281,10 @@ type DomesticTransferRecipientInput = {
    |}
 }
 
-type RegisterDomesticTransferRecipientCommand =
-   Command<DomesticTransferRecipientInput>
+type RegisterCounterpartyCommand = Command<CounterpartyInput>
 
-module RegisterDomesticTransferRecipientCommand =
-   let create (initiatedBy: Initiator) (data: DomesticTransferRecipientInput) =
+module RegisterCounterpartyCommand =
+   let create (initiatedBy: Initiator) (data: CounterpartyInput) =
       Command.create
          data.Sender.ParentAccountId.AsEntityId
          data.Sender.OrgId
@@ -294,8 +293,8 @@ module RegisterDomesticTransferRecipientCommand =
          data
 
    let toEvent
-      (cmd: RegisterDomesticTransferRecipientCommand)
-      : ValidationResult<BankEvent<RegisteredDomesticTransferRecipient>>
+      (cmd: RegisterCounterpartyCommand)
+      : ValidationResult<BankEvent<RegisteredCounterparty>>
       =
       validate {
          let! accountNumber =
@@ -307,48 +306,44 @@ module RegisterDomesticTransferRecipientCommand =
          and! firstName = firstNameValidator cmd.Data.FirstName
          and! lastName = lastNameValidator cmd.Data.LastName
 
-         let recipient = {
+         let counterparty = {
             FirstName = firstName
             LastName = lastName
             Nickname = None
             AccountNumber = accountNumber
             RoutingNumber = routingNumber
-            Status = RecipientRegistrationStatus.Confirmed
-            SenderOrgId = cmd.OrgId
-            RecipientAccountId = cmd.Data.AccountId
+            Status = CounterpartyRegistrationStatus.Confirmed
+            OrgId = cmd.OrgId
+            CounterpartyId = cmd.Data.AccountId
             Depository = cmd.Data.Depository
             PaymentNetwork = cmd.Data.PaymentNetwork
             CreatedAt = cmd.Timestamp
          }
 
          return
-            BankEvent.create2<
-               DomesticTransferRecipientInput,
-               RegisteredDomesticTransferRecipient
-             >
-               cmd
-               { Recipient = recipient }
+            BankEvent.create2<CounterpartyInput, RegisteredCounterparty> cmd {
+               Counterparty = counterparty
+            }
       }
 
-type EditDomesticTransferRecipientInput = {
-   RecipientWithoutAppliedUpdates: DomesticTransferRecipient
+type EditCounterpartyInput = {
+   CounterpartyWithoutAppliedUpdates: Counterparty
    LastName: string
    FirstName: string
    AccountNumber: string
    RoutingNumber: string
-   Depository: DomesticRecipientAccountDepository
+   Depository: CounterpartyAccountDepository
    PaymentNetwork: PaymentNetwork
 }
 
-type EditDomesticTransferRecipientCommand =
-   Command<EditDomesticTransferRecipientInput>
+type EditCounterpartyCommand = Command<EditCounterpartyInput>
 
-module EditDomesticTransferRecipientCommand =
+module EditCounterpartyCommand =
    let create
       (parentAccountId: ParentAccountId)
       (orgId: OrgId)
       (initiatedBy: Initiator)
-      (data: EditDomesticTransferRecipientInput)
+      (data: EditCounterpartyInput)
       =
       Command.create
          parentAccountId.AsEntityId
@@ -358,8 +353,8 @@ module EditDomesticTransferRecipientCommand =
          data
 
    let toEvent
-      (cmd: EditDomesticTransferRecipientCommand)
-      : ValidationResult<BankEvent<EditedDomesticTransferRecipient>>
+      (cmd: EditCounterpartyCommand)
+      : ValidationResult<BankEvent<EditedCounterparty>>
       =
       validate {
          let! accountNumber =
@@ -371,8 +366,8 @@ module EditDomesticTransferRecipientCommand =
          and! firstName = firstNameValidator cmd.Data.FirstName
          and! lastName = lastNameValidator cmd.Data.LastName
 
-         let recipient = {
-            cmd.Data.RecipientWithoutAppliedUpdates with
+         let counterparty = {
+            cmd.Data.CounterpartyWithoutAppliedUpdates with
                FirstName = firstName
                LastName = lastName
                AccountNumber = accountNumber
@@ -382,23 +377,19 @@ module EditDomesticTransferRecipientCommand =
          }
 
          return
-            BankEvent.create2<
-               EditDomesticTransferRecipientInput,
-               EditedDomesticTransferRecipient
-             >
-               cmd
-               { Recipient = recipient }
+            BankEvent.create2<EditCounterpartyInput, EditedCounterparty> cmd {
+               Counterparty = counterparty
+            }
       }
 
-type NicknameDomesticTransferRecipientCommand =
-   Command<NicknamedDomesticTransferRecipient>
+type NicknameCounterpartyCommand = Command<NicknamedCounterparty>
 
-module NicknameDomesticTransferRecipientCommand =
+module NicknameCounterpartyCommand =
    let create
       (orgId: OrgId)
       (parentAccountId: ParentAccountId)
       (initiatedBy: Initiator)
-      (data: NicknamedDomesticTransferRecipient)
+      (data: NicknamedCounterparty)
       =
       Command.create
          parentAccountId.AsEntityId
@@ -408,15 +399,15 @@ module NicknameDomesticTransferRecipientCommand =
          data
 
    let toEvent
-      (cmd: NicknameDomesticTransferRecipientCommand)
-      : ValidationResult<BankEvent<NicknamedDomesticTransferRecipient>>
+      (cmd: NicknameCounterpartyCommand)
+      : ValidationResult<BankEvent<NicknamedCounterparty>>
       =
-      BankEvent.create<NicknamedDomesticTransferRecipient> cmd |> Ok
+      BankEvent.create<NicknamedCounterparty> cmd |> Ok
 
 type DomesticTransferInput = {
    Amount: decimal
-   Sender: DomesticTransferSenderReference
-   Recipient: DomesticTransferRecipient
+   Originator: DomesticTransferOriginatorReference
+   Counterparty: Counterparty
    Memo: string option
    ScheduledDateSeedOverride: DateTime option
    OriginatedFromSchedule: bool
@@ -437,8 +428,8 @@ module DomesticTransferCommand =
       : DomesticTransferCommand
       =
       Command.create
-         data.Sender.ParentAccountId.AsEntityId
-         data.Sender.OrgId
+         data.Originator.ParentAccountId.AsEntityId
+         data.Originator.OrgId
          correlationId
          initiatedBy
          data
@@ -465,8 +456,8 @@ module DomesticTransferCommand =
                      InitiatedBy = cmd.InitiatedBy
                      ScheduledDate = scheduledDate
                      Amount = input.Amount
-                     Sender = input.Sender
-                     Recipient = input.Recipient
+                     Originator = input.Originator
+                     Counterparty = input.Counterparty
                      Memo = input.Memo
                   }
                }
@@ -481,8 +472,8 @@ module ScheduleDomesticTransferCommand =
       : ScheduleDomesticTransferCommand
       =
       Command.create
-         data.TransferInput.Sender.ParentAccountId.AsEntityId
-         data.TransferInput.Sender.OrgId
+         data.TransferInput.Originator.ParentAccountId.AsEntityId
+         data.TransferInput.Originator.OrgId
          (CorrelationId.create ())
          initiatedBy
          data
@@ -510,8 +501,8 @@ module ScheduleDomesticTransferCommand =
                      InitiatedBy = cmd.InitiatedBy
                      ScheduledDate = scheduledDate
                      Amount = input.Amount
-                     Sender = input.Sender
-                     Recipient = input.Recipient
+                     Originator = input.Originator
+                     Counterparty = input.Counterparty
                      Memo = input.Memo
                   }
                   ExpectedSettlementDate = scheduledDate.AddDays 5
@@ -527,8 +518,8 @@ module SettleDomesticTransferCommand =
       (data: DomesticTransferSettled)
       =
       Command.create
-         data.BaseInfo.Sender.ParentAccountId.AsEntityId
-         data.BaseInfo.Sender.OrgId
+         data.BaseInfo.Originator.ParentAccountId.AsEntityId
+         data.BaseInfo.Originator.OrgId
          correlationId
          initiatedBy
          data
@@ -548,8 +539,8 @@ module FailDomesticTransferCommand =
       (data: DomesticTransferFailed)
       =
       Command.create
-         data.BaseInfo.Sender.ParentAccountId.AsEntityId
-         data.BaseInfo.Sender.OrgId
+         data.BaseInfo.Originator.ParentAccountId.AsEntityId
+         data.BaseInfo.Originator.OrgId
          correlationId
          initiatedBy
          data
@@ -570,8 +561,8 @@ module UpdateDomesticTransferProgressCommand =
       (data: DomesticTransferProgressUpdated)
       =
       Command.create
-         data.BaseInfo.Sender.ParentAccountId.AsEntityId
-         data.BaseInfo.Sender.OrgId
+         data.BaseInfo.Originator.ParentAccountId.AsEntityId
+         data.BaseInfo.Originator.OrgId
          correlationId
          initiatedBy
          data

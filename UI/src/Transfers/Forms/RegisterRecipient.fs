@@ -27,7 +27,7 @@ type Values = {
 
 let domesticRecipientForm
    (org: Org)
-   (editingDomesticRecipient: DomesticTransferRecipient option)
+   (editingDomesticRecipient: Counterparty option)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -97,8 +97,8 @@ let domesticRecipientForm
             fun depository ->
                let depository =
                   match depository with
-                  | "checking" -> DomesticRecipientAccountDepository.Checking
-                  | "savings" -> DomesticRecipientAccountDepository.Savings
+                  | "checking" -> CounterpartyAccountDepository.Checking
+                  | "savings" -> CounterpartyAccountDepository.Savings
                   | other ->
                      failwith $"Not implemented account depository {other}"
 
@@ -147,7 +147,7 @@ let domesticRecipientForm
       let cmd =
          match editingDomesticRecipient with
          | None ->
-            RegisterDomesticTransferRecipientCommand.create initiatedBy {
+            RegisterCounterpartyCommand.create initiatedBy {
                AccountId = AccountId <| Guid.NewGuid()
                LastName = last
                FirstName = first
@@ -160,9 +160,9 @@ let domesticRecipientForm
                   ParentAccountId = org.ParentAccountId
                |}
             }
-            |> ParentAccountCommand.RegisterDomesticTransferRecipient
+            |> ParentAccountCommand.RegisterCounterparty
          | Some recipient ->
-            EditDomesticTransferRecipientCommand.create
+            EditCounterpartyCommand.create
                org.ParentAccountId
                org.OrgId
                initiatedBy
@@ -173,9 +173,9 @@ let domesticRecipientForm
                   RoutingNumber = routingNum
                   Depository = depository
                   PaymentNetwork = paymentNetwork
-                  RecipientWithoutAppliedUpdates = recipient
+                  CounterpartyWithoutAppliedUpdates = recipient
                }
-            |> ParentAccountCommand.EditDomesticTransferRecipient
+            |> ParentAccountCommand.EditCounterparty
 
       Msg.Submit(
          FormEntity.ParentAccount,
@@ -197,7 +197,7 @@ let domesticRecipientForm
 
 let form
    (org: Org)
-   (editingDomesticRecipient: DomesticTransferRecipient option)
+   (editingCounterparty: Counterparty option)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -228,7 +228,7 @@ let form
 
    fieldAccountEnvironment
    |> Form.andThen (fun _ ->
-      domesticRecipientForm org editingDomesticRecipient initiatedBy)
+      domesticRecipientForm org editingCounterparty initiatedBy)
 
 [<ReactComponent>]
 let RegisterTransferRecipientFormComponent
@@ -251,7 +251,7 @@ let RegisterTransferRecipientFormComponent
          async {
             let! res =
                PaymentService.getDomesticTransfersRetryableUponRecipientEdit
-                  r.RecipientAccountId
+                  r.CounterpartyId
 
             match res with
             | Error err ->

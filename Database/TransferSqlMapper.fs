@@ -12,15 +12,14 @@ module Table =
    let internalTransferWithinOrg = "transfer_internal_within_org"
    let internalTransferBetweenOrgs = "transfer_internal_between_orgs"
    let domesticTransfer = "transfer_domestic"
-   let domesticRecipient = "transfer_domestic_recipient"
+   let counterparty = "counterparty"
 
 module TransferTypeCast =
    let paymentNetwork = "payment_network"
 
-   let domesticRecipientAccountDepository =
-      "domestic_transfer_recipient_account_depository"
+   let counterpartyAccountDepository = "counterparty_account_depository"
 
-   let domesticRecipientStatus = "domestic_transfer_recipient_status"
+   let counterpartyStatus = "counterparty_status"
    let domesticTransferStatus = "domestic_transfer_status"
 
    let internalTransferBetweenOrgsStatus =
@@ -58,19 +57,19 @@ module TransferFields =
    module Domestic =
       let status = "transfer_status"
       let statusDetail = "transfer_status_detail"
-      let recipientAccountId = "recipient_account_id"
+      let counterpartyId = "counterparty_id"
       let expectedSettlementDate = "expected_settlement_date"
 
-   // Specific to domestic_transfer_recipient table
-   module DomesticRecipient =
-      let recipientAccountId = "recipient_account_id"
-      let senderOrgId = "sender_org_id"
+   // Specific to counterparty table
+   module Counterparty =
+      let counterpartyId = "counterparty_id"
+      let orgId = "org_id"
       let firstName = "first_name"
       let lastName = "last_name"
       let nickname = "nickname"
       let routingNumber = "routing_number"
       let accountNumber = "account_number"
-      let status = "recipient_status"
+      let status = "counterparty_status"
       let depository = "depository"
       let paymentNetwork = "payment_network"
 
@@ -132,51 +131,49 @@ module TransferSqlReader =
          |> read.uuid
          |> AccountId
 
-   module DomesticRecipient =
-      let recipientAccountId (read: RowReader) =
-         TransferFields.DomesticRecipient.recipientAccountId
-         |> read.uuid
-         |> AccountId
+   module Counterparty =
+      let id (read: RowReader) =
+         TransferFields.Counterparty.counterpartyId |> read.uuid |> AccountId
 
-      let senderOrgId (read: RowReader) =
-         TransferFields.DomesticRecipient.senderOrgId |> read.uuid |> OrgId
+      let orgId (read: RowReader) =
+         TransferFields.Counterparty.orgId |> read.uuid |> OrgId
 
       let firstName (read: RowReader) =
-         TransferFields.DomesticRecipient.firstName |> read.string
+         TransferFields.Counterparty.firstName |> read.string
 
       let lastName (read: RowReader) =
-         TransferFields.DomesticRecipient.lastName |> read.string
+         TransferFields.Counterparty.lastName |> read.string
 
       let nickname (read: RowReader) =
-         TransferFields.DomesticRecipient.nickname |> read.stringOrNone
+         TransferFields.Counterparty.nickname |> read.stringOrNone
 
       let routingNumber = AccountSqlReader.routingNumber
       let accountNumber = AccountSqlReader.accountNumber
 
       let status (read: RowReader) =
-         TransferFields.DomesticRecipient.status
+         TransferFields.Counterparty.status
          |> read.string
-         |> RecipientRegistrationStatus.fromStringUnsafe
+         |> CounterpartyRegistrationStatus.fromStringUnsafe
 
       let depository (read: RowReader) =
-         TransferFields.DomesticRecipient.depository
+         TransferFields.Counterparty.depository
          |> read.string
-         |> DomesticRecipientAccountDepository.fromStringUnsafe
+         |> CounterpartyAccountDepository.fromStringUnsafe
 
       let paymentNetwork (read: RowReader) =
-         TransferFields.DomesticRecipient.paymentNetwork
+         TransferFields.Counterparty.paymentNetwork
          |> read.string
          |> PaymentNetwork.fromStringUnsafe
 
-      let recipient (read: RowReader) : DomesticTransferRecipient = {
+      let counterparty (read: RowReader) : Counterparty = {
          FirstName = firstName read
          LastName = lastName read
          Nickname = nickname read
          AccountNumber = accountNumber read
          RoutingNumber = routingNumber read
          Status = status read
-         RecipientAccountId = recipientAccountId read
-         SenderOrgId = senderOrgId read
+         CounterpartyId = id read
+         OrgId = orgId read
          Depository = depository read
          PaymentNetwork = paymentNetwork read
          CreatedAt = createdAt read
@@ -188,10 +185,10 @@ module TransferSqlReader =
          |> read.text
          |> Serialization.deserializeUnsafe<DomesticTransferProgress>
 
-      let recipientAccountId (read: RowReader) =
-         TransferFields.Domestic.recipientAccountId |> read.uuid |> AccountId
+      let counterpartyId (read: RowReader) =
+         TransferFields.Domestic.counterpartyId |> read.uuid |> AccountId
 
-      let sender (read: RowReader) : DomesticTransferSender = {
+      let originator (read: RowReader) : DomesticTransferOriginator = {
          Name = AccountSqlReader.name read
          AccountNumber = read.int64 AccountFields.accountNumber |> AccountNumber
          RoutingNumber = read.int AccountFields.routingNumber |> RoutingNumber
@@ -215,8 +212,8 @@ module TransferSqlReader =
          }
          Memo = memo read
          Status = status read
-         Sender = sender read
-         Recipient = DomesticRecipient.recipient read
+         Originator = originator read
+         Counterparty = Counterparty.counterparty read
          Amount = amount read
          ScheduledDate = scheduledAt read
          ExpectedSettlementDate = expectedSettlementDate read
@@ -262,8 +259,8 @@ module TransferSqlWriter =
       let status =
          function
          | DomesticTransferProgress.Scheduled -> "Scheduled"
-         | DomesticTransferProgress.ProcessingSenderAccountDeduction ->
-            "ProcessingSenderAccountDeduction"
+         | DomesticTransferProgress.ProcessingAccountDeduction ->
+            "ProcessingAccountDeduction"
          | DomesticTransferProgress.WaitingForTransferServiceAck ->
             "WaitingForTransferServiceAck"
          | DomesticTransferProgress.Settled -> "Settled"
@@ -276,19 +273,19 @@ module TransferSqlWriter =
 
       let expectedSettlementDate (date: DateTime) = Sql.timestamptz date
 
-   module DomesticRecipient =
-      let recipientAccountId = AccountSqlWriter.accountId
-      let senderOrgId = OrgSqlWriter.orgId
+   module Counterparty =
+      let counterpartyId = AccountSqlWriter.accountId
+      let orgId = OrgSqlWriter.orgId
       let firstName = Sql.string
       let lastName = Sql.string
       let nickname = Sql.stringOrNone
       let routingNumber = AccountSqlWriter.routingNumber
       let accountNumber = AccountSqlWriter.accountNumber
 
-      let status (status: RecipientRegistrationStatus) =
+      let status (status: CounterpartyRegistrationStatus) =
          Sql.string (string status)
 
-      let depository (status: DomesticRecipientAccountDepository) =
+      let depository (status: CounterpartyAccountDepository) =
          Sql.string (string status)
 
       let paymentNetwork (network: PaymentNetwork) = Sql.string (string network)
@@ -303,7 +300,7 @@ module Query =
 
       $"""
       SELECT
-         dt.{TransferFields.Domestic.recipientAccountId},
+         dt.{TransferFields.Domestic.counterpartyId},
          dt.{TransferFields.Domestic.status},
          dt.{TransferFields.Domestic.statusDetail},
          t.{TransferFields.transferId},
@@ -313,15 +310,15 @@ module Query =
          t.{TransferFields.senderAccountId},
          t.{TransferFields.amount},
          t.{TransferFields.memo},
-         dr.{TransferFields.DomesticRecipient.firstName},
-         dr.{TransferFields.DomesticRecipient.lastName},
-         dr.{TransferFields.DomesticRecipient.nickname},
-         dr.{TransferFields.DomesticRecipient.accountNumber},
-         dr.{TransferFields.DomesticRecipient.routingNumber},
-         dr.{TransferFields.DomesticRecipient.depository},
-         dr.{TransferFields.DomesticRecipient.paymentNetwork},
-         dr.{TransferFields.DomesticRecipient.status},
-         dr.{TransferFields.createdAt},
+         cp.{TransferFields.Counterparty.firstName},
+         cp.{TransferFields.Counterparty.lastName},
+         cp.{TransferFields.Counterparty.nickname},
+         cp.{TransferFields.Counterparty.accountNumber},
+         cp.{TransferFields.Counterparty.routingNumber},
+         cp.{TransferFields.Counterparty.depository},
+         cp.{TransferFields.Counterparty.paymentNetwork},
+         cp.{TransferFields.Counterparty.status},
+         cp.{TransferFields.createdAt},
          a.{AccountFields.name},
          a.{AccountFields.accountNumber} as sender_account_number,
          a.{AccountFields.routingNumber} as sender_routing_number,
@@ -330,7 +327,7 @@ module Query =
          pba.{PartnerBankSqlMapper.Fields.partnerBankAccountId},
          {employeeName} as initiated_by_name
       FROM {Table.domesticTransfer} dt
-      JOIN {Table.domesticRecipient} dr using({TransferFields.Domestic.recipientAccountId})
+      JOIN {Table.counterparty} cp using({TransferFields.Domestic.counterpartyId})
       JOIN {Table.transfer} t using({TransferFields.transferId})
       JOIN {AccountSqlMapper.table} a
          ON t.{TransferFields.senderAccountId} = a.{AccountFields.accountId}
@@ -340,19 +337,19 @@ module Query =
          ON t.{TransferFields.initiatedById} = employee.{employeeId}
       """
 
-   let domesticTransferRecipient =
+   let counterparty =
       $"""
       SELECT
-         dr.{TransferFields.DomesticRecipient.recipientAccountId},
-         dr.{TransferFields.DomesticRecipient.senderOrgId},
-         dr.{TransferFields.DomesticRecipient.firstName},
-         dr.{TransferFields.DomesticRecipient.lastName},
-         dr.{TransferFields.DomesticRecipient.nickname},
-         dr.{TransferFields.DomesticRecipient.accountNumber},
-         dr.{TransferFields.DomesticRecipient.routingNumber},
-         dr.{TransferFields.DomesticRecipient.depository},
-         dr.{TransferFields.DomesticRecipient.paymentNetwork},
-         dr.{TransferFields.DomesticRecipient.status},
-         dr.{TransferFields.createdAt}
-      FROM {Table.domesticRecipient} dr
+         cp.{TransferFields.Counterparty.counterpartyId},
+         cp.{TransferFields.Counterparty.orgId},
+         cp.{TransferFields.Counterparty.firstName},
+         cp.{TransferFields.Counterparty.lastName},
+         cp.{TransferFields.Counterparty.nickname},
+         cp.{TransferFields.Counterparty.accountNumber},
+         cp.{TransferFields.Counterparty.routingNumber},
+         cp.{TransferFields.Counterparty.depository},
+         cp.{TransferFields.Counterparty.paymentNetwork},
+         cp.{TransferFields.Counterparty.status},
+         cp.{TransferFields.createdAt}
+      FROM {Table.counterparty} cp
       """

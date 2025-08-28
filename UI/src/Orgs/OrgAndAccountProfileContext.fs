@@ -71,31 +71,31 @@ let update msg state =
    | ParentAccountUpdated conf ->
       let state =
          match conf.EventPersisted with
-         | ParentAccountEvent.RegisteredDomesticTransferRecipient e ->
+         | ParentAccountEvent.RegisteredCounterparty e ->
             updateState state (fun o -> {
                o with
                   DomesticTransferRecipients =
                      o.DomesticTransferRecipients
                      |> Map.add
-                           e.Data.Recipient.RecipientAccountId
-                           e.Data.Recipient
+                           e.Data.Counterparty.CounterpartyId
+                           e.Data.Counterparty
             })
-         | ParentAccountEvent.EditedDomesticTransferRecipient e ->
+         | ParentAccountEvent.EditedCounterparty e ->
             updateState state (fun o -> {
                o with
                   DomesticTransferRecipients =
                      o.DomesticTransferRecipients
                      |> Map.add
-                           e.Data.Recipient.RecipientAccountId
-                           e.Data.Recipient
+                           e.Data.Counterparty.CounterpartyId
+                           e.Data.Counterparty
             })
-         | ParentAccountEvent.NicknamedDomesticTransferRecipient e ->
+         | ParentAccountEvent.NicknamedCounterparty e ->
             updateState state (fun o -> {
                o with
                   DomesticTransferRecipients =
                      o.DomesticTransferRecipients
                      |> Map.change
-                           e.Data.RecipientId
+                           e.Data.CounterpartyId
                            (Option.map (fun recipient -> {
                               recipient with
                                  Nickname = e.Data.Nickname

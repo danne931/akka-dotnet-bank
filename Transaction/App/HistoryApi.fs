@@ -51,9 +51,9 @@ let parentAccountEventFilterNames
          acc
          @ match e with
            | ParentAccountEventGroupFilter.DomesticTransferRecipient -> [
-              typeof<RegisteredDomesticTransferRecipient>.Name
-              typeof<EditedDomesticTransferRecipient>.Name
-              typeof<NicknamedDomesticTransferRecipient>.Name
+              typeof<RegisteredCounterparty>.Name
+              typeof<EditedCounterparty>.Name
+              typeof<NicknamedCounterparty>.Name
              ])
       []
    |> List.toArray

@@ -166,20 +166,20 @@ let update msg state =
 
 /// May edit transfer recipient if domestic and status is not Closed.
 let private canEditTransferRecipient
-   (recipients: Map<AccountId, DomesticTransferRecipient>)
+   (recipients: Map<AccountId, Counterparty>)
    (txn: Transaction)
-   : DomesticTransferRecipient option
+   : Counterparty option
    =
    txn.History
    |> List.tryPick (function
       | History.Account accountHistory ->
          match accountHistory.Event with
          | AccountEvent.DomesticTransferPending e ->
-            Some e.Data.BaseInfo.Recipient.RecipientAccountId
+            Some e.Data.BaseInfo.Counterparty.CounterpartyId
          | _ -> None
       | _ -> None)
    |> Option.bind (fun recipientId -> Map.tryFind recipientId recipients)
-   |> Option.filter (fun r -> r.Status <> RecipientRegistrationStatus.Closed)
+   |> Option.filter (fun r -> r.Status <> CounterpartyRegistrationStatus.Closed)
 
 let private canAddCategoryAndNotes =
    function
@@ -241,13 +241,15 @@ let private renderTransactionHistory
                | History.Account accountHistory ->
                   match accountHistory.Event with
                   | AccountEvent.DomesticTransferPending e ->
-                     Html.p $"Funds reserved from {e.Data.BaseInfo.Sender.Name}"
+                     Html.p
+                        $"Funds reserved from {e.Data.BaseInfo.Originator.Name}"
                   | AccountEvent.DomesticTransferProgress _ ->
                      Html.p $"Transfer service processing transfer"
                   | AccountEvent.DomesticTransferFailed e ->
                      Html.p $"Failed: {e.Data.Reason.Display}"
 
-                     Html.p $"Refunded account: {e.Data.BaseInfo.Sender.Name}"
+                     Html.p
+                        $"Refunded account: {e.Data.BaseInfo.Originator.Name}"
                   | AccountEvent.DomesticTransferSettled _ ->
                      Html.p "Transfer service settled transfer"
                   | AccountEvent.DomesticTransferScheduled e ->
@@ -385,7 +387,7 @@ let renderTransactionInfo
             editableRecipient
          with
          | true, TransactionType.DomesticTransfer, _, Some recipient ->
-            let recipientId = recipient.RecipientAccountId
+            let recipientId = recipient.CounterpartyId
             let domesticRecipients = org.DomesticTransferRecipients
             let org = org.Org
 
@@ -402,17 +404,15 @@ let renderTransactionInfo
                persistNickname =
                   fun alias -> async {
                      let command =
-                        NicknameDomesticTransferRecipientCommand.create
+                        NicknameCounterpartyCommand.create
                            org.OrgId
                            org.ParentAccountId
                            session.AsInitiator
                            {
-                              RecipientId = recipientId
-                              RecipientAccountEnvironment =
-                                 RecipientAccountEnvironment.Domestic
+                              CounterpartyId = recipientId
                               Nickname = alias |> Option.map _.Trim()
                            }
-                        |> ParentAccountCommand.NicknameDomesticTransferRecipient
+                        |> ParentAccountCommand.NicknameCounterparty
 
                      let! res =
                         AccountService.submitParentAccountCommand command
@@ -551,7 +551,7 @@ let renderFooterMenuControls
                        Text = "Edit recipient"
                        OnClick =
                           fun _ ->
-                             recipient.RecipientAccountId
+                             recipient.CounterpartyId
                              |> Msg.EditTransferRecipient
                              |> dispatch
                        IsSelected = isEditingNickname
