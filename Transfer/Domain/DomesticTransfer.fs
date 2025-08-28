@@ -76,7 +76,7 @@ type DomesticTransferInfraFailReason =
       | Unknown r -> r
 
 [<RequireQualifiedAccess>]
-type DomesticTransferThirdPartyFailReason =
+type DomesticTransferPartnerBankFailReason =
    | InvalidAmount
    | CounterpartyAccountInvalidInfo
    | CounterpartyAccountNotActive
@@ -92,36 +92,36 @@ type DomesticTransferThirdPartyFailReason =
       | NoTransferFound -> "No Transfer Found During Progress Check"
       | Infra infraRelated -> infraRelated.Display
 
-type DomesticTransferThirdPartyProgressDetail = {
+type DomesticTransferPartnerBankProgressDetail = {
    Detail: string
    ExpectedSettlementDate: DateTime
 }
 
 [<RequireQualifiedAccess>]
-type DomesticTransferThirdPartyUpdate =
+type DomesticTransferPartnerBankUpdate =
    | ServiceAckReceived
-   | ProgressDetail of DomesticTransferThirdPartyProgressDetail
+   | ProgressDetail of DomesticTransferPartnerBankProgressDetail
    | Settled
-   | Failed of DomesticTransferThirdPartyFailReason
+   | Failed of DomesticTransferPartnerBankFailReason
 
 [<RequireQualifiedAccess>]
 type DomesticTransferFailReason =
    | AccountNotActive
    | AccountInsufficientFunds
-   | ThirdParty of DomesticTransferThirdPartyFailReason
+   | PartnerBank of DomesticTransferPartnerBankFailReason
 
    member x.Display =
       match x with
       | AccountNotActive -> "Account Not Active"
       | AccountInsufficientFunds -> "Account Has Insufficient Funds"
-      | ThirdParty tp -> tp.Display
+      | PartnerBank p -> p.Display
 
 [<RequireQualifiedAccess>]
 type DomesticTransferProgress =
    | Scheduled
    | ProcessingAccountDeduction
    | WaitingForTransferServiceAck
-   | ThirdParty of DomesticTransferThirdPartyUpdate
+   | PartnerBank of DomesticTransferPartnerBankUpdate
    | Settled
    | Failed of DomesticTransferFailReason
 

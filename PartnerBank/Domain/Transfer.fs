@@ -52,7 +52,7 @@ type PartnerBankDomesticTransferRequest = {
    |}
 
 type private InfraFailReason = DomesticTransferInfraFailReason
-type private FailReason = DomesticTransferThirdPartyFailReason
+type private FailReason = DomesticTransferPartnerBankFailReason
 
 type PartnerBankDomesticTransferResponse = {
    Ok: bool
@@ -62,38 +62,38 @@ type PartnerBankDomesticTransferResponse = {
    TransactionId: string
 } with
 
-   member x.Progress: DomesticTransferThirdPartyUpdate =
+   member x.Progress: DomesticTransferPartnerBankUpdate =
       if x.Ok then
          match x.Status with
-         | "Complete" -> DomesticTransferThirdPartyUpdate.Settled
+         | "Complete" -> DomesticTransferPartnerBankUpdate.Settled
          | "ReceivedRequest" ->
-            DomesticTransferThirdPartyUpdate.ServiceAckReceived
+            DomesticTransferPartnerBankUpdate.ServiceAckReceived
          | status ->
-            DomesticTransferThirdPartyUpdate.ProgressDetail {
+            DomesticTransferPartnerBankUpdate.ProgressDetail {
                Detail = status
                ExpectedSettlementDate = x.ExpectedSettlementDate
             }
       else
          x.Reason
          |> PartnerBankDomesticTransferResponse.FailReasonFromErrorResponse
-         |> DomesticTransferThirdPartyUpdate.Failed
+         |> DomesticTransferPartnerBankUpdate.Failed
 
    member x.NewProgressToSave
       (existingStatus: DomesticTransferProgress)
-      : DomesticTransferThirdPartyUpdate option
+      : DomesticTransferPartnerBankUpdate option
       =
       let fresh = x.Progress
 
       match existingStatus with
       | DomesticTransferProgress.WaitingForTransferServiceAck -> Some fresh
       // Don't save a new progress update if there has been no change.
-      | DomesticTransferProgress.ThirdParty existing when existing <> fresh ->
+      | DomesticTransferProgress.PartnerBank existing when existing <> fresh ->
          Some fresh
       | _ -> None
 
    static member FailReasonFromErrorResponse
       (err: string)
-      : DomesticTransferThirdPartyFailReason
+      : DomesticTransferPartnerBankFailReason
       =
       match err with
       | Contains "CorruptData" -> FailReason.Infra InfraFailReason.CorruptData

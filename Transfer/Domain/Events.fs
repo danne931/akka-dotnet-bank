@@ -50,7 +50,7 @@ type DomesticTransferPending = {
 
 type DomesticTransferProgressUpdated = {
    BaseInfo: BaseDomesticTransferInfo
-   InProgressInfo: DomesticTransferThirdPartyUpdate
+   InProgressInfo: DomesticTransferPartnerBankUpdate
    NewExpectedSettlementDate: DateTime option
 }
 

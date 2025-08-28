@@ -320,8 +320,8 @@ let onPersisted
 
       registry.SagaActor e.CorrelationId <! msg
    | AccountEvent.ParentAccount(ParentAccountEvent.EditedCounterparty e) ->
-      // Retries domestic transfers which failed due to the mock third party
-      // transfer service regarding the Recipient of the Transfer as having
+      // Retries domestic transfers which failed due to the mock partner bank
+      // regarding the Recipient of the Transfer as having
       // invalid account info.
       let retryable =
          getRetryableTransfers e.Data.Counterparty.CounterpartyId

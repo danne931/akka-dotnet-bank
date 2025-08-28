@@ -777,7 +777,7 @@ CREATE TYPE domestic_transfer_status AS ENUM (
    'Scheduled',
    'ProcessingAccountDeduction',
    'WaitingForTransferServiceAck',
-   'ThirdPartyProcessing',
+   'PartnerBankProcessing',
    'Settled',
    'Failed'
 );

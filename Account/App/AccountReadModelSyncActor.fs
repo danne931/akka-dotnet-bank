@@ -721,7 +721,7 @@ let sqlParamReducer
       }
       |> AccountBalanceReducer.reserveFunds accountId info.Amount
    | AccountEvent.DomesticTransferProgress e ->
-      let status = DomesticTransferProgress.ThirdParty e.Data.InProgressInfo
+      let status = DomesticTransferProgress.PartnerBank e.Data.InProgressInfo
 
       let qParams = [
          "transferId", TransferSqlWriter.transferId e.Data.BaseInfo.TransferId

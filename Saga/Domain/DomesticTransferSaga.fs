@@ -21,7 +21,7 @@ type DomesticTransferSagaEvent =
    | ScheduledTransferActivated
    | SenderReservedFunds
    | SenderReleasedReservedFunds
-   | TransferProcessorProgressUpdate of DomesticTransferThirdPartyUpdate
+   | PartnerBankProgressUpdate of DomesticTransferPartnerBankUpdate
    | SenderDeductedFunds
    | TransferInitiatedNotificationSent
    | RetryTransferServiceRequest of updated: Counterparty option

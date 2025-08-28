@@ -98,19 +98,19 @@ let applyEvent
             |> addActivity Activity.WaitForTransferServiceComplete
          Status = DomesticTransferProgress.WaitingForTransferServiceAck
      }
-   | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
+   | DomesticTransferSagaEvent.PartnerBankProgressUpdate progress ->
       match progress with
-      | DomesticTransferThirdPartyUpdate.ServiceAckReceived -> {
+      | DomesticTransferPartnerBankUpdate.ServiceAckReceived -> {
          saga with
-            Status = DomesticTransferProgress.ThirdParty progress
+            Status = DomesticTransferProgress.PartnerBank progress
             LifeCycle =
                saga.LifeCycle
                |> finishActivity Activity.TransferServiceAck
                |> addActivity Activity.SendTransferInitiatedNotification
         }
-      | DomesticTransferThirdPartyUpdate.ProgressDetail detail -> {
+      | DomesticTransferPartnerBankUpdate.ProgressDetail detail -> {
          saga with
-            Status = DomesticTransferProgress.ThirdParty progress
+            Status = DomesticTransferProgress.PartnerBank progress
             ExpectedSettlementDate =
                if
                   detail.ExpectedSettlementDate.Date
@@ -120,15 +120,15 @@ let applyEvent
                else
                   saga.ExpectedSettlementDate
         }
-      | DomesticTransferThirdPartyUpdate.Settled -> {
+      | DomesticTransferPartnerBankUpdate.Settled -> {
          saga with
-            Status = DomesticTransferProgress.ThirdParty progress
+            Status = DomesticTransferProgress.PartnerBank progress
             LifeCycle =
                saga.LifeCycle
                |> finishActivity Activity.WaitForTransferServiceComplete
                |> addActivity Activity.DeductSenderFunds
         }
-      | DomesticTransferThirdPartyUpdate.Failed reason ->
+      | DomesticTransferPartnerBankUpdate.Failed reason ->
          let saga = {
             saga with
                LifeCycle =
@@ -137,21 +137,21 @@ let applyEvent
                   |> failActivity Activity.WaitForTransferServiceComplete
                Status =
                   reason
-                  |> DomesticTransferFailReason.ThirdParty
+                  |> DomesticTransferFailReason.PartnerBank
                   |> DomesticTransferProgress.Failed
          }
 
          match reason with
-         | DomesticTransferThirdPartyFailReason.Infra _ -> {
+         | DomesticTransferPartnerBankFailReason.Infra _ -> {
             saga with
                LifeCycle =
                   saga.LifeCycle
                   |> addActivity Activity.WaitForDevelopmentTeamFix
            }
-         | DomesticTransferThirdPartyFailReason.NoTransferFound
-         | DomesticTransferThirdPartyFailReason.InvalidAmount
-         | DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo
-         | DomesticTransferThirdPartyFailReason.CounterpartyAccountNotActive ->
+         | DomesticTransferPartnerBankFailReason.NoTransferFound
+         | DomesticTransferPartnerBankFailReason.InvalidAmount
+         | DomesticTransferPartnerBankFailReason.CounterpartyAccountInvalidInfo
+         | DomesticTransferPartnerBankFailReason.CounterpartyAccountNotActive ->
             let refundIfNotRetrying =
                if saga.ReasonForRetryServiceAck.IsSome then
                   id
@@ -250,7 +250,7 @@ let stateTransition
          )
       | DomesticTransferSagaEvent.SenderReservedFunds ->
          activityIsDone Activity.ReserveSenderFunds
-      | DomesticTransferSagaEvent.TransferProcessorProgressUpdate _ ->
+      | DomesticTransferSagaEvent.PartnerBankProgressUpdate _ ->
          activityIsDone Activity.WaitForTransferServiceComplete
       | DomesticTransferSagaEvent.RetryTransferServiceRequest _ ->
          saga.LifeCycle.ActivityHasFailed Activity.TransferServiceAck |> not
@@ -352,7 +352,7 @@ let onEventPersisted
    let checkOnTransferProgress () =
       sendTransferToProcessorService DomesticTransferServiceAction.ProgressCheck
 
-   let updateTransferProgress (progress: DomesticTransferThirdPartyUpdate) =
+   let updateTransferProgress (progress: DomesticTransferPartnerBankUpdate) =
       let cmd =
          UpdateDomesticTransferProgressCommand.create
             correlationId
@@ -362,7 +362,7 @@ let onEventPersisted
                InProgressInfo = progress
                NewExpectedSettlementDate =
                   match progress with
-                  | DomesticTransferThirdPartyUpdate.ProgressDetail p ->
+                  | DomesticTransferPartnerBankUpdate.ProgressDetail p ->
                      Some p.ExpectedSettlementDate
                   | _ -> None
             }
@@ -418,21 +418,21 @@ let onEventPersisted
    | DomesticTransferSagaEvent.SenderReservedFunds ->
       sendTransferToProcessorService DomesticTransferServiceAction.TransferAck
    | DomesticTransferSagaEvent.SenderUnableToReserveFunds _ -> ()
-   | DomesticTransferSagaEvent.TransferProcessorProgressUpdate progress ->
+   | DomesticTransferSagaEvent.PartnerBankProgressUpdate progress ->
       match progress with
-      | DomesticTransferThirdPartyUpdate.ServiceAckReceived ->
+      | DomesticTransferPartnerBankUpdate.ServiceAckReceived ->
          if currentState.ReasonForRetryServiceAck.IsNone then
             updateTransferProgress progress
 
          sendTransferInitiatedEmail ()
-      | DomesticTransferThirdPartyUpdate.ProgressDetail detail ->
+      | DomesticTransferPartnerBankUpdate.ProgressDetail detail ->
          if
             detail.ExpectedSettlementDate.Date
             <> previousState.ExpectedSettlementDate.Date
          then
             updateTransferProgress progress
-      | DomesticTransferThirdPartyUpdate.Settled -> updateTransferAsComplete ()
-      | DomesticTransferThirdPartyUpdate.Failed reason ->
+      | DomesticTransferPartnerBankUpdate.Settled -> updateTransferAsComplete ()
+      | DomesticTransferPartnerBankUpdate.Failed reason ->
          if currentState.RequiresTransferServiceDevelopmentFix then
             operationEnv.logError $"Transfer API requires code update: {reason}"
 
@@ -444,7 +444,7 @@ let onEventPersisted
 
             registry.EmailActor() <! msg
          elif currentState.RequiresAccountRefund then
-            DomesticTransferFailReason.ThirdParty reason
+            DomesticTransferFailReason.PartnerBank reason
             |> releaseSenderAccountReservedFunds
    | DomesticTransferSagaEvent.SenderReleasedReservedFunds -> ()
    | DomesticTransferSagaEvent.SenderDeductedFunds -> ()

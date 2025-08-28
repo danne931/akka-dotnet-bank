@@ -198,7 +198,7 @@ module TransferSqlWriter =
          | DomesticTransferProgress.WaitingForTransferServiceAck ->
             "WaitingForTransferServiceAck"
          | DomesticTransferProgress.Settled -> "Settled"
-         | DomesticTransferProgress.ThirdParty _ -> "ThirdPartyProcessing"
+         | DomesticTransferProgress.PartnerBank _ -> "PartnerBankProcessing"
          | DomesticTransferProgress.Failed _ -> "Failed"
          >> Sql.string
 

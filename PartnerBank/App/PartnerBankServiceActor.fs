@@ -127,7 +127,7 @@ let actorProps
                   | Some progressUpdate ->
                      let msg =
                         progressUpdate
-                        |> DomesticTransferSagaEvent.TransferProcessorProgressUpdate
+                        |> DomesticTransferSagaEvent.PartnerBankProgressUpdate
                         |> AppSaga.Message.domesticTransfer orgId corrId
 
                      registry.SagaActor corrId <! msg
