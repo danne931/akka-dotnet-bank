@@ -164,7 +164,6 @@ let update msg state =
 
       state, Cmd.navigate path
 
-/// May edit transfer recipient if domestic and status is not Closed.
 let private canEditTransferRecipient
    (recipients: Map<AccountId, Counterparty>)
    (txn: Transaction)
@@ -179,7 +178,6 @@ let private canEditTransferRecipient
          | _ -> None
       | _ -> None)
    |> Option.bind (fun recipientId -> Map.tryFind recipientId recipients)
-   |> Option.filter (fun r -> r.Status <> CounterpartyRegistrationStatus.Closed)
 
 let private canAddCategoryAndNotes =
    function

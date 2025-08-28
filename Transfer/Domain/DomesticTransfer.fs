@@ -5,27 +5,6 @@ open System
 open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
-type CounterpartyRegistrationStatus =
-   | Confirmed
-   | InvalidAccount
-   | Closed
-
-module CounterpartyRegistrationStatus =
-   let fromString (str: string) : CounterpartyRegistrationStatus option =
-      match str.ToLower() with
-      | "confirmed" -> Some CounterpartyRegistrationStatus.Confirmed
-      | "invalidaccount" -> Some CounterpartyRegistrationStatus.InvalidAccount
-      | "closed" -> Some CounterpartyRegistrationStatus.Closed
-      | _ -> None
-
-   let fromStringUnsafe str : CounterpartyRegistrationStatus =
-      match fromString str with
-      | Some s -> s
-      | None ->
-         failwith
-            "Error attempting to cast string to CounterpartyRegistrationStatus"
-
-[<RequireQualifiedAccess>]
 type CounterpartyAccountDepository =
    | Checking
    | Savings
@@ -65,7 +44,6 @@ type Counterparty = {
    Nickname: string option
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
-   Status: CounterpartyRegistrationStatus
    CounterpartyId: AccountId
    OrgId: OrgId
    Depository: CounterpartyAccountDepository

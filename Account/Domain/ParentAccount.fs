@@ -156,57 +156,14 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
                   state.MaintenanceFeeCriteria
                   updated.Balance
         }
-      // When a domestic transfer lifecycle is as follows:
-      // (fails due to invalid account info -> retries -> settled)
-      // then update the recipient status to Confirmed.
-      | AccountEvent.DomesticTransferSettled e ->
-         let previouslyFailedDueToInvalidRecipient =
-            match e.Data.FromRetry with
-            | Some(DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo) ->
-               true
-            | _ -> false
-
-         {
-            updated with
-               MaintenanceFeeCriteria =
-                  MaintenanceFee.fromDebit
-                     state.MaintenanceFeeCriteria
-                     updated.Balance
-               DomesticTransferRecipients =
-                  if previouslyFailedDueToInvalidRecipient then
-                     state.DomesticTransferRecipients.Change(
-                        e.Data.BaseInfo.Counterparty.CounterpartyId,
-                        Option.map (fun counterparty -> {
-                           counterparty with
-                              Status = CounterpartyRegistrationStatus.Confirmed
-                        })
-                     )
-                  else
-                     state.DomesticTransferRecipients
-         }
-      | AccountEvent.DomesticTransferFailed e ->
-         let updateStatusDueToRecipientRelatedFailure =
-            match e.Data.Reason with
-            | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountInvalidInfo ->
-               Some CounterpartyRegistrationStatus.InvalidAccount
-            | DomesticTransferFailReason.ThirdParty DomesticTransferThirdPartyFailReason.CounterpartyAccountNotActive ->
-               Some CounterpartyRegistrationStatus.Closed
-            | _ -> None
-
-         {
-            updated with
-               DomesticTransferRecipients =
-                  match updateStatusDueToRecipientRelatedFailure with
-                  | Some failStatus ->
-                     state.DomesticTransferRecipients.Change(
-                        e.Data.BaseInfo.Counterparty.CounterpartyId,
-                        Option.map (fun counterparty -> {
-                           counterparty with
-                              Status = failStatus
-                        })
-                     )
-                  | None -> state.DomesticTransferRecipients
-         }
+      | AccountEvent.DomesticTransferSettled e -> {
+         updated with
+            MaintenanceFeeCriteria =
+               MaintenanceFee.fromDebit
+                  state.MaintenanceFeeCriteria
+                  updated.Balance
+        }
+      | AccountEvent.DomesticTransferFailed e -> updated
       | AccountEvent.DebitRefunded _ -> {
          updated with
             MaintenanceFeeCriteria =
@@ -341,18 +298,6 @@ module private StateTransition =
       if state.Status <> ParentAccountStatus.Active then
          Account.transitionErr
             AccountStateTransitionError.ParentAccountNotActive
-      elif
-         state.DomesticTransferRecipients
-         |> Map.tryFind
-               cmd.Data.CounterpartyWithoutAppliedUpdates.CounterpartyId
-         |> Option.bind (fun recipient ->
-            if recipient.Status = CounterpartyRegistrationStatus.Closed then
-               Some recipient
-            else
-               None)
-         |> Option.isSome
-      then
-         Account.transitionErr AccountStateTransitionError.RecipientDeactivated
       else
          mapParent
             ParentAccountEvent.EditedCounterparty
@@ -363,21 +308,14 @@ module private StateTransition =
       (state: ParentAccountSnapshot)
       (cmd: NicknameCounterpartyCommand)
       =
-      let recipientExists, recipientIsActive =
-         match
-            state.DomesticTransferRecipients.TryFind cmd.Data.CounterpartyId
-         with
-         | None -> false, false
-         | Some recipient ->
-            true, recipient.Status <> CounterpartyRegistrationStatus.Closed
+      let recipient =
+         state.DomesticTransferRecipients.TryFind cmd.Data.CounterpartyId
 
       if state.Status <> ParentAccountStatus.Active then
          Account.transitionErr
             AccountStateTransitionError.ParentAccountNotActive
-      elif not recipientExists then
+      elif recipient.IsNone then
          Account.transitionErr AccountStateTransitionError.RecipientNotFound
-      else if not recipientIsActive then
-         Account.transitionErr AccountStateTransitionError.RecipientDeactivated
       else
          mapParent
             ParentAccountEvent.NicknamedCounterparty

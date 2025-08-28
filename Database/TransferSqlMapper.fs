@@ -5,6 +5,7 @@ open System
 open Lib.SharedTypes
 open OrganizationSqlMapper
 open AccountSqlMapper
+open CounterpartySqlMapper
 open Bank.Transfer.Domain
 
 module Table =
@@ -12,14 +13,8 @@ module Table =
    let internalTransferWithinOrg = "transfer_internal_within_org"
    let internalTransferBetweenOrgs = "transfer_internal_between_orgs"
    let domesticTransfer = "transfer_domestic"
-   let counterparty = "counterparty"
 
 module TransferTypeCast =
-   let paymentNetwork = "payment_network"
-
-   let counterpartyAccountDepository = "counterparty_account_depository"
-
-   let counterpartyStatus = "counterparty_status"
    let domesticTransferStatus = "domestic_transfer_status"
 
    let internalTransferBetweenOrgsStatus =
@@ -59,19 +54,6 @@ module TransferFields =
       let statusDetail = "transfer_status_detail"
       let counterpartyId = "counterparty_id"
       let expectedSettlementDate = "expected_settlement_date"
-
-   // Specific to counterparty table
-   module Counterparty =
-      let counterpartyId = "counterparty_id"
-      let orgId = "org_id"
-      let firstName = "first_name"
-      let lastName = "last_name"
-      let nickname = "nickname"
-      let routingNumber = "routing_number"
-      let accountNumber = "account_number"
-      let status = "counterparty_status"
-      let depository = "depository"
-      let paymentNetwork = "payment_network"
 
 module TransferSqlReader =
    let transferId (read: RowReader) =
@@ -131,54 +113,6 @@ module TransferSqlReader =
          |> read.uuid
          |> AccountId
 
-   module Counterparty =
-      let id (read: RowReader) =
-         TransferFields.Counterparty.counterpartyId |> read.uuid |> AccountId
-
-      let orgId (read: RowReader) =
-         TransferFields.Counterparty.orgId |> read.uuid |> OrgId
-
-      let firstName (read: RowReader) =
-         TransferFields.Counterparty.firstName |> read.string
-
-      let lastName (read: RowReader) =
-         TransferFields.Counterparty.lastName |> read.string
-
-      let nickname (read: RowReader) =
-         TransferFields.Counterparty.nickname |> read.stringOrNone
-
-      let routingNumber = AccountSqlReader.routingNumber
-      let accountNumber = AccountSqlReader.accountNumber
-
-      let status (read: RowReader) =
-         TransferFields.Counterparty.status
-         |> read.string
-         |> CounterpartyRegistrationStatus.fromStringUnsafe
-
-      let depository (read: RowReader) =
-         TransferFields.Counterparty.depository
-         |> read.string
-         |> CounterpartyAccountDepository.fromStringUnsafe
-
-      let paymentNetwork (read: RowReader) =
-         TransferFields.Counterparty.paymentNetwork
-         |> read.string
-         |> PaymentNetwork.fromStringUnsafe
-
-      let counterparty (read: RowReader) : Counterparty = {
-         FirstName = firstName read
-         LastName = lastName read
-         Nickname = nickname read
-         AccountNumber = accountNumber read
-         RoutingNumber = routingNumber read
-         Status = status read
-         CounterpartyId = id read
-         OrgId = orgId read
-         Depository = depository read
-         PaymentNetwork = paymentNetwork read
-         CreatedAt = createdAt read
-      }
-
    module Domestic =
       let status (read: RowReader) =
          TransferFields.Domestic.statusDetail
@@ -213,7 +147,7 @@ module TransferSqlReader =
          Memo = memo read
          Status = status read
          Originator = originator read
-         Counterparty = Counterparty.counterparty read
+         Counterparty = CounterpartyReader.counterparty read
          Amount = amount read
          ScheduledDate = scheduledAt read
          ExpectedSettlementDate = expectedSettlementDate read
@@ -272,84 +206,3 @@ module TransferSqlWriter =
          status |> Serialization.serialize |> Sql.jsonb
 
       let expectedSettlementDate (date: DateTime) = Sql.timestamptz date
-
-   module Counterparty =
-      let counterpartyId = AccountSqlWriter.accountId
-      let orgId = OrgSqlWriter.orgId
-      let firstName = Sql.string
-      let lastName = Sql.string
-      let nickname = Sql.stringOrNone
-      let routingNumber = AccountSqlWriter.routingNumber
-      let accountNumber = AccountSqlWriter.accountNumber
-
-      let status (status: CounterpartyRegistrationStatus) =
-         Sql.string (string status)
-
-      let depository (status: CounterpartyAccountDepository) =
-         Sql.string (string status)
-
-      let paymentNetwork (network: PaymentNetwork) = Sql.string (string network)
-
-module Query =
-   let domesticTransfer =
-      let employeeId = EmployeeSqlMapper.EmployeeFields.employeeId
-
-      let employeeName =
-         $"employee.{EmployeeSqlMapper.EmployeeFields.firstName} || ' ' ||
-           employee.{EmployeeSqlMapper.EmployeeFields.lastName}"
-
-      $"""
-      SELECT
-         dt.{TransferFields.Domestic.counterpartyId},
-         dt.{TransferFields.Domestic.status},
-         dt.{TransferFields.Domestic.statusDetail},
-         t.{TransferFields.transferId},
-         t.{TransferFields.initiatedById},
-         t.{TransferFields.scheduledAt},
-         t.{TransferFields.senderOrgId},
-         t.{TransferFields.senderAccountId},
-         t.{TransferFields.amount},
-         t.{TransferFields.memo},
-         cp.{TransferFields.Counterparty.firstName},
-         cp.{TransferFields.Counterparty.lastName},
-         cp.{TransferFields.Counterparty.nickname},
-         cp.{TransferFields.Counterparty.accountNumber},
-         cp.{TransferFields.Counterparty.routingNumber},
-         cp.{TransferFields.Counterparty.depository},
-         cp.{TransferFields.Counterparty.paymentNetwork},
-         cp.{TransferFields.Counterparty.status},
-         cp.{TransferFields.createdAt},
-         a.{AccountFields.name},
-         a.{AccountFields.accountNumber} as sender_account_number,
-         a.{AccountFields.routingNumber} as sender_routing_number,
-         a.{AccountFields.accountId},
-         a.{AccountFields.parentAccountId},
-         pba.{PartnerBankSqlMapper.Fields.partnerBankAccountId},
-         {employeeName} as initiated_by_name
-      FROM {Table.domesticTransfer} dt
-      JOIN {Table.counterparty} cp using({TransferFields.Domestic.counterpartyId})
-      JOIN {Table.transfer} t using({TransferFields.transferId})
-      JOIN {AccountSqlMapper.table} a
-         ON t.{TransferFields.senderAccountId} = a.{AccountFields.accountId}
-      JOIN {PartnerBankSqlMapper.table} pba
-         ON a.{AccountFields.parentAccountId} = pba.{PartnerBankSqlMapper.Fields.parentAccountId}
-      JOIN {EmployeeSqlMapper.table} employee
-         ON t.{TransferFields.initiatedById} = employee.{employeeId}
-      """
-
-   let counterparty =
-      $"""
-      SELECT
-         cp.{TransferFields.Counterparty.counterpartyId},
-         cp.{TransferFields.Counterparty.orgId},
-         cp.{TransferFields.Counterparty.firstName},
-         cp.{TransferFields.Counterparty.lastName},
-         cp.{TransferFields.Counterparty.nickname},
-         cp.{TransferFields.Counterparty.accountNumber},
-         cp.{TransferFields.Counterparty.routingNumber},
-         cp.{TransferFields.Counterparty.depository},
-         cp.{TransferFields.Counterparty.paymentNetwork},
-         cp.{TransferFields.Counterparty.status},
-         cp.{TransferFields.createdAt}
-      FROM {Table.counterparty} cp
-      """

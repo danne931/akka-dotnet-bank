@@ -14,6 +14,7 @@
     <Compile Include="AccountEventSqlMapper.fs" />
     <Compile Include="AncillaryTransactionInfoSqlMapper.fs" />
     <Compile Include="PaymentSqlMapper.fs" />
+    <Compile Include="CounterpartySqlMapper.fs" />
     <Compile Include="TransferSqlMapper.fs" />
     <Compile Include="RecurringPaymentScheduleSqlMapper.fs" />
     <Compile Include="InvoiceSqlMapper.fs" />

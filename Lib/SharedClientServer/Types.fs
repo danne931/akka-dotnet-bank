@@ -279,7 +279,6 @@ type AccountStateTransitionError =
    | AutoTransferRuleDoesNotExist
    | AutoTransferCycleDetected
    | RecipientRegistered
-   | RecipientDeactivated
    | RecipientNotFound
    | RecipientAlreadyConfirmed
 
@@ -391,8 +390,6 @@ type Err =
             "Attempted to add a rule which would create cyclic transfers."
          | AccountStateTransitionError.RecipientRegistered ->
             "Recipient Registered"
-         | AccountStateTransitionError.RecipientDeactivated ->
-            "Recipient Deactivated"
          | AccountStateTransitionError.RecipientNotFound ->
             "Recipient Not Found"
          | AccountStateTransitionError.RecipientAlreadyConfirmed ->

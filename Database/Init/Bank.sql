@@ -61,7 +61,6 @@ DROP TYPE IF EXISTS payment_request_status;
 DROP TYPE IF EXISTS payment_request_type;
 DROP TYPE IF EXISTS payment_network;
 DROP TYPE IF EXISTS counterparty_account_depository;
-DROP TYPE IF EXISTS counterparty_status;
 DROP TYPE IF EXISTS domestic_transfer_status;
 DROP TYPE IF EXISTS internal_transfer_within_org_status;
 DROP TYPE IF EXISTS internal_transfer_between_orgs_status;
@@ -753,9 +752,6 @@ COMMENT ON TABLE transfer_internal_between_orgs IS
 CREATE TYPE counterparty_account_depository
 AS ENUM ('Checking', 'Savings'); 
 
-CREATE TYPE counterparty_status
-AS ENUM ('Confirmed', 'InvalidAccount', 'Closed');
-
 CREATE TYPE payment_network AS ENUM ('ACH');
 
 CREATE TABLE counterparty(
@@ -765,7 +761,6 @@ CREATE TABLE counterparty(
    nickname VARCHAR(100),
    routing_number INT NOT NULL,
    account_number BIGINT UNIQUE NOT NULL,
-   counterparty_status counterparty_status NOT NULL,
    depository counterparty_account_depository NOT NULL,
    payment_network payment_network NOT NULL,
    org_id UUID REFERENCES organization(org_id)

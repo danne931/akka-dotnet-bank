@@ -312,7 +312,6 @@ module RegisterCounterpartyCommand =
             Nickname = None
             AccountNumber = accountNumber
             RoutingNumber = routingNumber
-            Status = CounterpartyRegistrationStatus.Confirmed
             OrgId = cmd.OrgId
             CounterpartyId = cmd.Data.AccountId
             Depository = cmd.Data.Depository
