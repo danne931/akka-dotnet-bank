@@ -14,6 +14,15 @@ open System.Collections.Concurrent
 let builder = WebApplication.CreateBuilder()
 let app = builder.Build()
 
+type Address = {
+   city: string
+   country_code: string
+   line_1: string
+   line_2: string
+   postal_code: string
+   state: string
+}
+
 type Recipient = {
    name: string
    account_number: string
@@ -27,23 +36,36 @@ type TransferRequest = {
    amount: decimal
    date: DateTime
    payment_network: string
+   idempotency_key: string
 }
 
 type BookTransferRequest = {
    amount: decimal
    sender_bank_account_id: string
    receiver_bank_account_id: string
+   idempotency_key: string
+}
+
+type BookTransferResponse = {
+   confirmation_id: string
+   idempotency_key: string
+   amount: decimal
+   sender_bank_account_id: string
+   receiver_bank_account_id: string
+   status: string
+   details: obj
+}
+
+type CounterpartyRequest = {
+   name: string
+   account_number: string
+   routing_number: string
+   depository: string
+   address: Address
 }
 
 type LegalEntityCreateRequest = {
-   address: {|
-      city: string
-      country_code: string
-      line_1: string
-      line_2: string
-      postal_code: string
-      state: string
-   |}
+   address: Address
    business_name: string
    description: string
    ein: string
@@ -68,28 +90,14 @@ type InternalAccount = {
    routing_number: string
 }
 
-type Request = {
-   action: string
-   idempotency_key: string
-   data: obj
-}
+type Request = { action: string; data: obj }
 
-type Response = {
+type TransferResponse = {
    ok: bool
    status: string
    reason: string
-   idempotency_key: string
    expected_settlement_date: DateTime
-}
-
-type BookTransferResponse = {
-   confirmation_id: string
    idempotency_key: string
-   amount: decimal
-   sender_bank_account_id: string
-   receiver_bank_account_id: string
-   status: string
-   details: obj
 }
 
 let transfersInProgress = ConcurrentDictionary<string, int * TransferRequest>()
@@ -101,7 +109,7 @@ let paymentNetworks = [ "ach" ]
 let depository = [ "checking"; "savings" ]
 
 // Compute response & mutate in-memory state of in-progress transfers.
-let processTransferRequest (req: TransferRequest) (res: Response) =
+let processTransferRequest (req: TransferRequest) (res: TransferResponse) =
    if
       paymentNetworks
       |> List.exists (fun p -> p = req.payment_network.ToLower())
@@ -144,11 +152,11 @@ let processTransferRequest (req: TransferRequest) (res: Response) =
             reason = "SenderBankAccountNotFound"
       }
    else
-      transfersInProgress.TryAdd(res.idempotency_key, (0, req)) |> ignore
+      transfersInProgress.TryAdd(req.idempotency_key, (0, req)) |> ignore
       { res with status = "ReceivedRequest" }
 
-let processProgressCheckRequest (req: TransferRequest) (res: Response) =
-   let exists, existing = transfersInProgress.TryGetValue res.idempotency_key
+let processProgressCheckRequest (req: TransferRequest) (res: TransferResponse) =
+   let exists, existing = transfersInProgress.TryGetValue req.idempotency_key
    let progressCheckCount, transfer = existing
 
    if not exists then
@@ -159,7 +167,7 @@ let processProgressCheckRequest (req: TransferRequest) (res: Response) =
       }
    else if progressCheckCount < 1 then
       transfersInProgress.TryUpdate(
-         res.idempotency_key,
+         req.idempotency_key,
          (progressCheckCount + 1, transfer),
          existing
       )
@@ -171,10 +179,10 @@ let processProgressCheckRequest (req: TransferRequest) (res: Response) =
             expected_settlement_date = DateTime.UtcNow.AddDays 3
       }
    else
-      transfersInProgress.TryRemove res.idempotency_key |> ignore
+      transfersInProgress.TryRemove req.idempotency_key |> ignore
       { res with status = "Complete" }
 
-let serializeTransferResponse (response: Response) =
+let serializeTransferResponse (response: TransferResponse) =
    response |> JsonSerializer.Serialize |> ByteString.ofUtf8String
 
 let actorSystem =
@@ -192,20 +200,31 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
          let req = data |> string |> JsonSerializer.Deserialize<Request>
          printfn "Received request %A" req
 
-         let transferRes = {
-            ok = true
-            status = ""
-            reason = ""
-            idempotency_key = req.idempotency_key
-            expected_settlement_date = DateTime.MinValue
-         }
-
          let serializedResponse =
-            if req.action = "TransferRequest" then
+            if req.action = "CreateCounterparty" then
+               let info =
+                  req.data
+                  |> string
+                  |> JsonSerializer.Deserialize<CounterpartyRequest>
+
+               {|
+                  id = "ctpy-" + Guid.NewGuid().ToString "N"
+               |}
+               |> JsonSerializer.Serialize
+               |> ByteString.ofUtf8String
+            elif req.action = "TransferRequest" then
                let req =
                   req.data
                   |> string
                   |> JsonSerializer.Deserialize<TransferRequest>
+
+               let transferRes = {
+                  ok = true
+                  status = ""
+                  reason = ""
+                  expected_settlement_date = DateTime.MinValue
+                  idempotency_key = req.idempotency_key
+               }
 
                processTransferRequest req transferRes
                |> serializeTransferResponse
@@ -214,6 +233,14 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
                   req.data
                   |> string
                   |> JsonSerializer.Deserialize<TransferRequest>
+
+               let transferRes = {
+                  ok = true
+                  status = ""
+                  reason = ""
+                  expected_settlement_date = DateTime.MinValue
+                  idempotency_key = req.idempotency_key
+               }
 
                processProgressCheckRequest req transferRes
                |> serializeTransferResponse
@@ -225,7 +252,7 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
 
                let res = {
                   confirmation_id = Guid.NewGuid().ToString "N"
-                  idempotency_key = req.idempotency_key
+                  idempotency_key = info.idempotency_key
                   amount = info.amount
                   sender_bank_account_id = info.sender_bank_account_id
                   receiver_bank_account_id = info.receiver_bank_account_id
@@ -322,9 +349,11 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
                |> ByteString.ofUtf8String
             else
                serializeTransferResponse {
-                  transferRes with
-                     ok = false
-                     reason = "InvalidAction"
+                  ok = false
+                  status = ""
+                  reason = "InvalidAction"
+                  expected_settlement_date = DateTime.MinValue
+                  idempotency_key = ""
                }
 
          ctx.Sender() <! TcpMessage.Write serializedResponse

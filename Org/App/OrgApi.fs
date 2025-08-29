@@ -67,12 +67,11 @@ type private OrgDBResult =
    | AccountProfilesWithOrg of (Org * AccountProfile) list option
    | CommandApprovalRules of CommandApprovalRule list option
    | CommandApprovalProgress of CommandApprovalProgress.T list option
-   | DomesticTransferRecipients of Counterparty list option
+   | Counterparties of Counterparty list option
 
 let getOrgAndAccountProfiles
    (orgId: OrgId)
-   (getDomesticTransferRecipients:
-      OrgId -> Task<Result<Counterparty list option, Err>>)
+   (getCounterparties: OrgId -> Task<Result<Counterparty list option, Err>>)
    : Task<Result<Option<OrgWithAccountProfiles>, Err>>
    =
    taskResult {
@@ -159,16 +158,15 @@ let getOrgAndAccountProfiles
          Bank.CommandApproval.Api.getCommandApprovals orgId
          |> TaskResult.map OrgDBResult.CommandApprovalProgress
 
-      let domesticTransferRecipientTask =
-         getDomesticTransferRecipients orgId
-         |> TaskResult.map OrgDBResult.DomesticTransferRecipients
+      let counterpartiesTask =
+         getCounterparties orgId |> TaskResult.map OrgDBResult.Counterparties
 
       let! res =
          Task.WhenAll [|
             orgTask
             approvalRuleTask
             approvalProgressTask
-            domesticTransferRecipientTask
+            counterpartiesTask
          |]
 
       let! res = res |> List.ofArray |> List.traverseResultM id
@@ -178,7 +176,7 @@ let getOrgAndAccountProfiles
          | [ OrgDBResult.AccountProfilesWithOrg(Some accountProfilesWithOrg)
              OrgDBResult.CommandApprovalRules rulesOpt
              OrgDBResult.CommandApprovalProgress progressOpt
-             OrgDBResult.DomesticTransferRecipients recipientsOpt ] ->
+             OrgDBResult.Counterparties counterpartiesOpt ] ->
             let org = fst (List.head accountProfilesWithOrg)
 
             let org =
@@ -210,10 +208,10 @@ let getOrgAndAccountProfiles
                Balance =
                   accountProfilesWithOrg
                   |> List.sumBy (snd >> _.Account.Balance)
-               DomesticTransferRecipients =
-                  match recipientsOpt with
-                  | Some recipients ->
-                     [ for r in recipients -> r.CounterpartyId, r ]
+               Counterparties =
+                  match counterpartiesOpt with
+                  | Some counterparties ->
+                     [ for c in counterparties -> c.CounterpartyId, c ]
                      |> Map.ofList
                   | None -> Map.empty
             }

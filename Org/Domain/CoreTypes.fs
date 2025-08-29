@@ -36,25 +36,6 @@ module BusinessType =
          | Ok x -> x
          | Error err -> failwith err.HumanFriendly
 
-type Address = {
-   City: string
-   CountryCode: string
-   Line1: string
-   Line2: string
-   PostalCode: string
-   State: string
-}
-
-module Address =
-   let empty = {
-      City = ""
-      CountryCode = ""
-      Line1 = ""
-      Line2 = ""
-      PostalCode = ""
-      State = ""
-   }
-
 type BusinessDetails = {
    Address: Address
    BusinessName: string

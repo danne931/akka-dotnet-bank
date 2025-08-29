@@ -69,21 +69,21 @@ module TransferPath =
    let ScheduleInternalBetweenOrgs = InternalBetweenOrgs + "/schedule"
    let Domestic = Base + "/domestic"
    let ScheduleDomestic = Domestic + "/domestic"
-   let DomesticTransferRecipient = Domestic + "/register-recipient"
-   let DomesticTransferRecipientEdit = Domestic + "/edit-recipient"
-   let NicknameRecipient = Base + "/recipient-nickname"
+   let RegisterCounterparty = Domestic + "/register-counterparty"
+   let EditCounterparty = Domestic + "/edit-counterparty"
+   let NicknameCounterparty = Base + "/counterparty-nickname"
    let ConfigureAutoTransferRule = Base + "/configure-auto-transfer-rule"
    let DeleteAutoTransferRule = Base + "/delete-auto-transfer-rule"
 
-   let RetryableDomesticTransfersUponRecipientCorrection =
+   let RetryableDomesticTransfersUponCounterpartyCorrection =
       Base
-      + "/retryable-domestic-transfers-upon-recipient-correction/{recipientAccountId}"
+      + "/retryable-domestic-transfers-upon-counterparty-correction/{counterpartyId}"
 
-   let retryableDomesticTransfersUponRecipientCorrection
-      (recipientAccountId: AccountId)
+   let retryableDomesticTransfersUponCounterpartyCorrection
+      (counterpartyId: CounterpartyId)
       =
       Base
-      + $"/retryable-domestic-transfers-upon-recipient-correction/{recipientAccountId}"
+      + $"/retryable-domestic-transfers-upon-counterparty-correction/{counterpartyId}"
 
 module PaymentPath =
    let Base = $"{API}/payments"

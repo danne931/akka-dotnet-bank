@@ -120,7 +120,7 @@ module TransferSqlReader =
          |> Serialization.deserializeUnsafe<DomesticTransferProgress>
 
       let counterpartyId (read: RowReader) =
-         TransferFields.Domestic.counterpartyId |> read.uuid |> AccountId
+         TransferFields.Domestic.counterpartyId |> read.uuid |> CounterpartyId
 
       let originator (read: RowReader) : DomesticTransferOriginator = {
          Name = AccountSqlReader.name read
@@ -206,3 +206,5 @@ module TransferSqlWriter =
          status |> Serialization.serialize |> Sql.jsonb
 
       let expectedSettlementDate (date: DateTime) = Sql.timestamptz date
+
+      let counterpartyId (CounterpartyId id) = Sql.uuid id

@@ -27,5 +27,6 @@
     <ProjectReference Include="../Billing/App/Billing.App.fsproj" />
     <ProjectReference Include="../Transaction/App/Transaction.App.fsproj" />
     <ProjectReference Include="../Analytics/App/Analytics.App.fsproj" />
+    <ProjectReference Include="../PartnerBank/App/PartnerBank.App.fsproj" />
   </ItemGroup>
 </Project>

@@ -89,8 +89,8 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
 
             {
                state with
-                  DomesticTransferRecipients =
-                     state.DomesticTransferRecipients.Add(
+                  Counterparties =
+                     state.Counterparties.Add(
                         counterparty.CounterpartyId,
                         counterparty
                      )
@@ -100,22 +100,22 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
 
             {
                state with
-                  DomesticTransferRecipients =
-                     state.DomesticTransferRecipients.Change(
+                  Counterparties =
+                     state.Counterparties.Change(
                         counterparty.CounterpartyId,
                         Option.map (fun _ -> counterparty)
                      )
             }
          | ParentAccountEvent.NicknamedCounterparty e -> {
             state with
-               DomesticTransferRecipients =
+               Counterparties =
                   Map.change
                      e.Data.CounterpartyId
                      (Option.map (fun acct -> {
                         acct with
                            Nickname = e.Data.Nickname
                      }))
-                     state.DomesticTransferRecipients
+                     state.Counterparties
            }
       | _ -> {
          state with
@@ -279,7 +279,7 @@ module private StateTransition =
          Account.transitionErr
             AccountStateTransitionError.ParentAccountNotActive
       elif
-         state.DomesticTransferRecipients
+         state.Counterparties
          |> Map.exists (fun _ recipient ->
             string recipient.AccountNumber = cmd.Data.AccountNumber
             && string recipient.RoutingNumber = cmd.Data.RoutingNumber)
@@ -308,8 +308,7 @@ module private StateTransition =
       (state: ParentAccountSnapshot)
       (cmd: NicknameCounterpartyCommand)
       =
-      let recipient =
-         state.DomesticTransferRecipients.TryFind cmd.Data.CounterpartyId
+      let recipient = state.Counterparties.TryFind cmd.Data.CounterpartyId
 
       if state.Status <> ParentAccountStatus.Active then
          Account.transitionErr

@@ -13,6 +13,7 @@ module CounterpartyTypeCast =
 
 module CounterpartyFields =
    let counterpartyId = "counterparty_id"
+   let partnerBankCounterpartyId = "partner_bank_counterparty_id"
    let orgId = "org_id"
    let firstName = "first_name"
    let lastName = "last_name"
@@ -21,10 +22,16 @@ module CounterpartyFields =
    let accountNumber = "account_number"
    let depository = "depository"
    let paymentNetwork = "payment_network"
+   let address = "address"
 
 module CounterpartyReader =
    let id (read: RowReader) =
-      CounterpartyFields.counterpartyId |> read.uuid |> AccountId
+      CounterpartyFields.counterpartyId |> read.uuid |> CounterpartyId
+
+   let partnerBankCounterpartyId (read: RowReader) =
+      CounterpartyFields.partnerBankCounterpartyId
+      |> read.string
+      |> PartnerBankCounterpartyId
 
    let orgId (read: RowReader) =
       CounterpartyFields.orgId |> read.uuid |> OrgId
@@ -51,6 +58,10 @@ module CounterpartyReader =
       |> read.string
       |> PaymentNetwork.fromStringUnsafe
 
+   let address (read: RowReader) =
+      read.text CounterpartyFields.address
+      |> Serialization.deserializeUnsafe<Address>
+
    let counterparty (read: RowReader) : Counterparty = {
       FirstName = firstName read
       LastName = lastName read
@@ -58,20 +69,26 @@ module CounterpartyReader =
       AccountNumber = accountNumber read
       RoutingNumber = routingNumber read
       CounterpartyId = id read
+      PartnerBankCounterpartyId = partnerBankCounterpartyId read
       OrgId = orgId read
       Depository = depository read
       PaymentNetwork = paymentNetwork read
+      Address = address read
       CreatedAt = read.dateTime "created_at"
    }
 
 module CounterpartyWriter =
-   let counterpartyId (AccountId id) = Sql.uuid id
+   let counterpartyId (CounterpartyId id) = Sql.uuid id
+   let partnerBankCounterpartyId (PartnerBankCounterpartyId id) = Sql.string id
    let orgId = OrgSqlWriter.orgId
    let firstName = Sql.string
    let lastName = Sql.string
    let nickname = Sql.stringOrNone
    let routingNumber = AccountSqlWriter.routingNumber
    let accountNumber = AccountSqlWriter.accountNumber
+
+   let address (address: Address) =
+      Sql.jsonb (Serialization.serialize address)
 
    let depository (status: CounterpartyAccountDepository) =
       Sql.string (string status)

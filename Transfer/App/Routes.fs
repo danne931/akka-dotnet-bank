@@ -17,17 +17,48 @@ open CommandApproval
 open RoutePaths
 open Bank.UserSession.Middleware
 open BankActorRegistry
+open PartnerBank.Service.Domain
 
-let start (app: WebApplication) processAccountCommand =
+let start
+   (app: WebApplication)
+   (processAccountCommand: _ -> AccountCommand -> TaskResult<Envelope, Err>)
+   (createCounterPartyInPartnerBank:
+      PartnerBankCounterpartyRequest
+         -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
+   =
    app
       .MapPost(
-         TransferPath.DomesticTransferRecipient,
+         TransferPath.RegisterCounterparty,
          Func<BankActorRegistry, RegisterCounterpartyCommand, Task<IResult>>
             (fun registry cmd ->
-               cmd
-               |> ParentAccountCommand.RegisterCounterparty
-               |> AccountCommand.ParentAccount
-               |> processAccountCommand registry
+               taskResult {
+                  let! evt =
+                     RegisterCounterpartyCommand.toEvent cmd
+                     |> Result.mapError Err.ValidationError
+
+                  let cp = evt.Data.Counterparty
+
+                  let! partnerBankRes =
+                     createCounterPartyInPartnerBank {
+                        Name = cp.FirstName + " " + cp.LastName
+                        AccountNumber = cp.AccountNumber
+                        RoutingNumber = cp.RoutingNumber
+                        Depository = cp.Depository
+                        Address = cp.Address
+                     }
+
+                  let cmd = {
+                     cmd with
+                        Data.PartnerBankCounterpartyId =
+                           partnerBankRes.PartnerBankCounterpartyId
+                  }
+
+                  return!
+                     cmd
+                     |> ParentAccountCommand.RegisterCounterparty
+                     |> AccountCommand.ParentAccount
+                     |> processAccountCommand registry
+               }
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -35,7 +66,7 @@ let start (app: WebApplication) processAccountCommand =
 
    app
       .MapPost(
-         TransferPath.DomesticTransferRecipientEdit,
+         TransferPath.EditCounterparty,
          Func<BankActorRegistry, EditCounterpartyCommand, Task<IResult>>
             (fun registry cmd ->
                cmd
@@ -49,10 +80,10 @@ let start (app: WebApplication) processAccountCommand =
 
    app
       .MapGet(
-         TransferPath.RetryableDomesticTransfersUponRecipientCorrection,
-         Func<Guid, Task<IResult>>(fun recipientAccountId ->
-            AccountId recipientAccountId
-            |> getDomesticTransfersRetryableUponRecipientCorrection
+         TransferPath.RetryableDomesticTransfersUponCounterpartyCorrection,
+         Func<Guid, Task<IResult>>(fun counterpartyId ->
+            CounterpartyId counterpartyId
+            |> getDomesticTransfersRetryableUponCounterpartyCorrection
             |> RouteUtil.unwrapTaskResultOption)
       )
       .RBAC(Permissions.ManageTransferRecipient)
@@ -70,7 +101,6 @@ let start (app: WebApplication) processAccountCommand =
       )
       .RBAC(Permissions.SubmitTransfer)
    |> ignore
-
 
    app
       .MapPost(
@@ -168,7 +198,7 @@ let start (app: WebApplication) processAccountCommand =
 
    app
       .MapPost(
-         TransferPath.NicknameRecipient,
+         TransferPath.NicknameCounterparty,
          Func<BankActorRegistry, NicknameCounterpartyCommand, Task<IResult>>
             (fun registry cmd ->
                cmd

@@ -270,7 +270,7 @@ let accountHistoryUIFriendly
    }
 
    let domesticRecipientName (cp: Counterparty) =
-      org.DomesticTransferRecipients
+      org.Counterparties
       |> Map.tryFind cp.CounterpartyId
       |> Option.map _.FullName
       |> Option.defaultValue cp.FullName

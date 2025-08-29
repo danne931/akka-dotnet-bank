@@ -27,7 +27,6 @@ type PartnerBankDomesticTransferRequest = {
 } with
 
    member x.AsDTO = {|
-      idempotency_key = string x.TransferId
       action =
          match x.Action with
          | DomesticTransferServiceAction.TransferAck -> "TransferRequest"
@@ -48,6 +47,7 @@ type PartnerBankDomesticTransferRequest = {
          payment_network =
             match x.Recipient.PaymentNetwork with
             | PaymentNetwork.ACH -> "ach"
+         idempotency_key = string x.TransferId
       |}
    |}
 
@@ -135,13 +135,13 @@ type PartnerBankSyncTransferBetweenOrgs = {
 } with
 
    member x.AsDTO = {|
-      idempotency_key = string x.SagaMetadata.CorrelationId
       action = "BookTransfer"
       data = {|
          sender_bank_account_id = string x.From.PartnerBankAccountId
          receiver_bank_account_id = string x.To.PartnerBankAccountId
          amount = x.Amount
          currency_code = "USD"
+         idempotency_key = string x.SagaMetadata.CorrelationId
       |}
    |}
 

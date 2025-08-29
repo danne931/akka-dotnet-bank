@@ -44,10 +44,12 @@ type Counterparty = {
    Nickname: string option
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
-   CounterpartyId: AccountId
-   OrgId: OrgId
    Depository: CounterpartyAccountDepository
    PaymentNetwork: PaymentNetwork
+   Address: Address
+   CounterpartyId: CounterpartyId
+   PartnerBankCounterpartyId: PartnerBankCounterpartyId
+   OrgId: OrgId
    CreatedAt: DateTime
 } with
 

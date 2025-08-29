@@ -31,14 +31,14 @@ let getPayments
             |> Result.map Some
    }
 
-let getDomesticTransfersRetryableUponRecipientEdit
-   (recipientId: AccountId)
+let getDomesticTransfersRetryableUponCounterpartyEdit
+   (counterpartyId: CounterpartyId)
    : Async<Result<DomesticTransfer list option, Err>>
    =
    async {
       let path =
-         TransferPath.retryableDomesticTransfersUponRecipientCorrection
-            recipientId
+         TransferPath.retryableDomesticTransfersUponCounterpartyCorrection
+            counterpartyId
 
       let! code, responseText = Http.get path
 

@@ -38,6 +38,8 @@ module Query =
          cp.{CounterpartyFields.routingNumber},
          cp.{CounterpartyFields.depository},
          cp.{CounterpartyFields.paymentNetwork},
+         cp.{CounterpartyFields.address},
+         cp.{CounterpartyFields.partnerBankCounterpartyId},
          created_at,
          a.{AccountFields.name},
          a.{AccountFields.accountNumber} as sender_account_number,
@@ -61,6 +63,7 @@ module Query =
       $"""
       SELECT
          cp.{CounterpartyFields.counterpartyId},
+         cp.{CounterpartyFields.partnerBankCounterpartyId},
          cp.{CounterpartyFields.orgId},
          cp.{CounterpartyFields.firstName},
          cp.{CounterpartyFields.lastName},
@@ -69,6 +72,7 @@ module Query =
          cp.{CounterpartyFields.routingNumber},
          cp.{CounterpartyFields.depository},
          cp.{CounterpartyFields.paymentNetwork},
+         cp.{CounterpartyFields.address},
          cp.created_at
       FROM {table} cp
       """
@@ -85,8 +89,8 @@ let getDomesticTransferRecipients
       (Some [ "orgId", CounterpartyWriter.orgId orgId ])
       CounterpartyReader.counterparty
 
-let getFailedDomesticTransfersByRecipient
-   (recipientAccountId: AccountId)
+let getFailedDomesticTransfersByCounterparty
+   (counterpartyId: CounterpartyId)
    : Task<Result<DomesticTransfer list option, Err>>
    =
    let query =
@@ -100,21 +104,17 @@ let getFailedDomesticTransfersByRecipient
    pgQuery<DomesticTransfer>
       query
       (Some [
-         "counterpartyId", CounterpartyWriter.counterpartyId recipientAccountId
+         "counterpartyId", CounterpartyWriter.counterpartyId counterpartyId
       ])
       TransferSqlReader.Domestic.transfer
 
-// Get domestic transfers which may be retried if recipient
-// (with InvalidAccountInfo status) info edited via
-// EditDomesticTransferRecipient command.
-// Any recipient with InvalidAccountInfo status will have their failed domestic
-// transfers retried upon editing the recipient data.
-let getDomesticTransfersRetryableUponRecipientCorrection
-   (recipientAccountId: AccountId)
+// Failed domestic transfers will be retried upon editing the counterparty.
+let getDomesticTransfersRetryableUponCounterpartyCorrection
+   (counterpartyId: CounterpartyId)
    : Task<Result<DomesticTransfer list option, Err>>
    =
    taskResultOption {
-      let! transfers = getFailedDomesticTransfersByRecipient recipientAccountId
+      let! transfers = getFailedDomesticTransfersByCounterparty counterpartyId
 
       let retryableStatus =
          DomesticTransferPartnerBankFailReason.CounterpartyAccountInvalidInfo

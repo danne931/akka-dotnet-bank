@@ -20,7 +20,7 @@ type private TransactionMaybe =
 type State = {
    TransactionId: TransactionId
    Transaction: TransactionMaybe
-   // Nickname may refer to domestic transfer recipient or
+   // Nickname may refer to external account or
    // merchant of purchase depending on the AccountEvent rendered.
    EditingNickname: bool
    // Sometimes the user clicks on a persisted event in the table
@@ -50,7 +50,7 @@ type Msg =
       AsyncOperationStatus<Result<int, Err>>
    | SaveNote of note: string * AsyncOperationStatus<Result<int, Err>>
    | ToggleNicknameEdit
-   | EditTransferRecipient of recipientId: AccountId
+   | EditCounterparty of CounterpartyId
 
 let init txnId () =
    {
@@ -150,22 +150,21 @@ let update msg state =
             EditingNickname = not state.EditingNickname
       },
       Cmd.none
-   | EditTransferRecipient recipientId ->
+   | EditCounterparty cpId ->
       let browserQuery = Routes.IndexUrl.transactionBrowserQuery ()
 
       let path =
          {
             browserQuery with
                Transaction = None
-               Action =
-                  Some(AccountActionView.EditTransferRecipient recipientId)
+               Action = Some(AccountActionView.EditCounterparty cpId)
          }
          |> Routes.TransactionsUrl.queryPath
 
       state, Cmd.navigate path
 
-let private canEditTransferRecipient
-   (recipients: Map<AccountId, Counterparty>)
+let private canEditCounterparty
+   (counterparties: Map<CounterpartyId, Counterparty>)
    (txn: Transaction)
    : Counterparty option
    =
@@ -177,7 +176,7 @@ let private canEditTransferRecipient
             Some e.Data.BaseInfo.Counterparty.CounterpartyId
          | _ -> None
       | _ -> None)
-   |> Option.bind (fun recipientId -> Map.tryFind recipientId recipients)
+   |> Option.bind (fun cpId -> Map.tryFind cpId counterparties)
 
 let private canAddCategoryAndNotes =
    function
@@ -242,14 +241,14 @@ let private renderTransactionHistory
                      Html.p
                         $"Funds reserved from {e.Data.BaseInfo.Originator.Name}"
                   | AccountEvent.DomesticTransferProgress _ ->
-                     Html.p $"Transfer service processing transfer"
+                     Html.p $"Partner bank processing transfer"
                   | AccountEvent.DomesticTransferFailed e ->
                      Html.p $"Failed: {e.Data.Reason.Display}"
 
                      Html.p
                         $"Refunded account: {e.Data.BaseInfo.Originator.Name}"
                   | AccountEvent.DomesticTransferSettled _ ->
-                     Html.p "Transfer service settled transfer"
+                     Html.p "Partner bank settled transfer"
                   | AccountEvent.DomesticTransferScheduled e ->
                      let date =
                         DateTime.dateUIFriendly e.Data.BaseInfo.ScheduledDate
@@ -325,10 +324,8 @@ let renderTransactionInfo
             | _ -> None
          | _ -> None)
 
-   let editableRecipient =
-      canEditTransferRecipient
-         org.DomesticTransferRecipients
-         txnInfo.Transaction
+   let editableCounterparty =
+      canEditCounterparty org.Counterparties txnInfo.Transaction
 
    let expectedSettlementDate =
       match txnInfo.Transaction.Type with
@@ -382,16 +379,16 @@ let renderTransactionInfo
             isEditingNickname,
             txnInfo.Transaction.Type,
             merchantNameFromPurchase,
-            editableRecipient
+            editableCounterparty
          with
-         | true, TransactionType.DomesticTransfer, _, Some recipient ->
-            let recipientId = recipient.CounterpartyId
-            let domesticRecipients = org.DomesticTransferRecipients
+         | true, TransactionType.DomesticTransfer, _, Some cp ->
+            let counterpartyId = cp.CounterpartyId
+            let counterparties = org.Counterparties
             let org = org.Org
 
             let originalName, nickname =
-               domesticRecipients
-               |> Map.tryFind recipientId
+               counterparties
+               |> Map.tryFind counterpartyId
                |> Option.map (fun r -> r.Name, r.Nickname)
                |> Option.defaultValue ("", None)
 
@@ -407,7 +404,7 @@ let renderTransactionInfo
                            org.ParentAccountId
                            session.AsInitiator
                            {
-                              CounterpartyId = recipientId
+                              CounterpartyId = counterpartyId
                               Nickname = alias |> Option.map _.Trim()
                            }
                         |> ParentAccountCommand.NicknameCounterparty
@@ -526,17 +523,14 @@ let renderFooterMenuControls
    let dropdownItems =
       match txnInfo with
       | Deferred.Resolved(Ok(Some txn)) ->
-         let isEditable =
-            canEditTransferRecipient
-               org.DomesticTransferRecipients
-               txn.Transaction
+         let isEditable = canEditCounterparty org.Counterparties txn.Transaction
 
          match txn.Transaction.Type with
          | TransactionType.DomesticTransfer ->
             Some(
                [
                   {
-                     Text = "Nickname recipient"
+                     Text = "Nickname external account"
                      OnClick = fun _ -> dispatch ToggleNicknameEdit
                      IsSelected = isEditingNickname
                   }
@@ -544,13 +538,13 @@ let renderFooterMenuControls
                ]
                @ match isEditable with
                  | None -> []
-                 | Some recipient -> [
+                 | Some cp -> [
                     {
-                       Text = "Edit recipient"
+                       Text = "Edit external account"
                        OnClick =
                           fun _ ->
-                             recipient.CounterpartyId
-                             |> Msg.EditTransferRecipient
+                             cp.CounterpartyId
+                             |> Msg.EditCounterparty
                              |> dispatch
                        IsSelected = isEditingNickname
                     }

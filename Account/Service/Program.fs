@@ -164,7 +164,7 @@ builder.Services.AddAkka(
                         (getBroadcaster provider)
                         Env.config.AccountActorSupervisor
                         persistenceId
-                        Bank.Transfer.Api.getDomesticTransfersRetryableUponRecipientCorrection
+                        Bank.Transfer.Api.getDomesticTransfersRetryableUponCounterpartyCorrection
                         (typed controllerRef))),
             ClusterMetadata.accountShardRegion.messageExtractor,
             ShardOptions(

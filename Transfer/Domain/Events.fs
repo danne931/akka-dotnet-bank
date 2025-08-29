@@ -71,7 +71,7 @@ type RegisteredCounterparty = { Counterparty: Counterparty }
 type EditedCounterparty = { Counterparty: Counterparty }
 
 type NicknamedCounterparty = {
-   CounterpartyId: AccountId
+   CounterpartyId: CounterpartyId
    Nickname: string option
 }
 

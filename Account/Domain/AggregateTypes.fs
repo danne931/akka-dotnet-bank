@@ -483,7 +483,7 @@ type ParentAccountSnapshot = {
    LastBillingCycleDate: DateTime option
    MaintenanceFeeCriteria: MaintenanceFeeCriteria
    Status: ParentAccountStatus
-   DomesticTransferRecipients: Map<AccountId, Counterparty>
+   Counterparties: Map<CounterpartyId, Counterparty>
    Events: AccountEvent list
 } with
 
@@ -504,7 +504,7 @@ type ParentAccountSnapshot = {
          QualifyingDepositFound = false
          DailyBalanceThreshold = false
       }
-      DomesticTransferRecipients = Map.empty
+      Counterparties = Map.empty
       Events = []
    }
 

@@ -763,6 +763,8 @@ CREATE TABLE counterparty(
    account_number BIGINT UNIQUE NOT NULL,
    depository counterparty_account_depository NOT NULL,
    payment_network payment_network NOT NULL,
+   address JSONB NOT NULL,
+   partner_bank_counterparty_id VARCHAR(255),
    org_id UUID REFERENCES organization(org_id)
 );
 

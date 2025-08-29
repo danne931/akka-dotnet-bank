@@ -47,12 +47,11 @@ let postJson (command: AccountCommand) =
       | AccountCommand.ParentAccount cmd ->
          match cmd with
          | ParentAccountCommand.RegisterCounterparty cmd ->
-            Serialization.serialize cmd, TransferPath.DomesticTransferRecipient
+            Serialization.serialize cmd, TransferPath.RegisterCounterparty
          | ParentAccountCommand.EditCounterparty cmd ->
-            Serialization.serialize cmd,
-            TransferPath.DomesticTransferRecipientEdit
+            Serialization.serialize cmd, TransferPath.EditCounterparty
          | ParentAccountCommand.NicknameCounterparty cmd ->
-            Serialization.serialize cmd, TransferPath.NicknameRecipient
+            Serialization.serialize cmd, TransferPath.NicknameCounterparty
       | other -> notImplemented other
 
    Http.postJson url serialized

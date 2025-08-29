@@ -1,4 +1,4 @@
-module Bank.Org.Forms.RegisterTransferRecipientForm
+module Bank.Org.Forms.RegisterCounterpartyForm
 
 open Feliz
 open Fable.Form.Simple
@@ -25,9 +25,9 @@ type Values = {
    PaymentNetwork: string
 }
 
-let domesticRecipientForm
+let counterpartyForm
    (org: Org)
-   (editingDomesticRecipient: Counterparty option)
+   (editingCounterparty: Counterparty option)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -145,10 +145,12 @@ let domesticRecipientForm
       let first, last = name
 
       let cmd =
-         match editingDomesticRecipient with
+         match editingCounterparty with
          | None ->
             RegisterCounterpartyCommand.create initiatedBy {
-               AccountId = AccountId <| Guid.NewGuid()
+               CounterpartyId = CounterpartyId <| Guid.NewGuid()
+               PartnerBankCounterpartyId = PartnerBankCounterpartyId ""
+               Address = Address.empty
                LastName = last
                FirstName = first
                AccountNumber = accountNum
@@ -161,7 +163,7 @@ let domesticRecipientForm
                |}
             }
             |> ParentAccountCommand.RegisterCounterparty
-         | Some recipient ->
+         | Some counterparty ->
             EditCounterpartyCommand.create
                org.ParentAccountId
                org.OrgId
@@ -173,7 +175,7 @@ let domesticRecipientForm
                   RoutingNumber = routingNum
                   Depository = depository
                   PaymentNetwork = paymentNetwork
-                  CounterpartyWithoutAppliedUpdates = recipient
+                  CounterpartyWithoutAppliedUpdates = counterparty
                }
             |> ParentAccountCommand.EditCounterparty
 
@@ -228,29 +230,28 @@ let form
 
    fieldAccountEnvironment
    |> Form.andThen (fun _ ->
-      domesticRecipientForm org editingCounterparty initiatedBy)
+      counterpartyForm org editingCounterparty initiatedBy)
 
 [<ReactComponent>]
-let RegisterTransferRecipientFormComponent
+let RegisterCounterpartyFormComponent
    (session: UserSession)
    (org: OrgWithAccountProfiles)
-   (recipientIdForEdit: AccountId option)
+   (counterpartyIdForEdit: CounterpartyId option)
    (onSubmit: ParentAccountCommandReceipt -> unit)
    =
    let transfersToRetry, setTransfersToRetry =
       React.useState<Deferred<DomesticTransfer list option>> Deferred.Idle
 
-   let recipient =
-      recipientIdForEdit
-      |> Option.bind (fun accountId ->
-         Map.tryFind accountId org.DomesticTransferRecipients)
+   let counterparty =
+      counterpartyIdForEdit
+      |> Option.bind (fun id -> Map.tryFind id org.Counterparties)
 
    React.useEffectOnce (fun () ->
-      match recipient with
+      match counterparty with
       | Some r ->
          async {
             let! res =
-               PaymentService.getDomesticTransfersRetryableUponRecipientEdit
+               PaymentService.getDomesticTransfersRetryableUponCounterpartyEdit
                   r.CounterpartyId
 
             match res with
@@ -275,13 +276,13 @@ let RegisterTransferRecipientFormComponent
    }
 
    let formProps =
-      match recipient with
-      | Some recipient -> {
+      match counterparty with
+      | Some counterparty -> {
          formProps with
-            FirstName = recipient.FirstName
-            LastName = recipient.LastName
-            AccountNumber = string recipient.AccountNumber
-            RoutingNumber = string recipient.RoutingNumber
+            FirstName = counterparty.FirstName
+            LastName = counterparty.LastName
+            AccountNumber = string counterparty.AccountNumber
+            RoutingNumber = string counterparty.RoutingNumber
         }
       | _ -> formProps
 
@@ -292,7 +293,7 @@ let RegisterTransferRecipientFormComponent
          | None -> ()
          | Some transfers ->
             let count = transfers.Length
-            let msg = "will be retried upon editing recipient info."
+            let msg = "will be retried upon editing external account info."
 
             let msg =
                match count with
@@ -314,17 +315,17 @@ let RegisterTransferRecipientFormComponent
 
          FormContainer {|
             InitialValues = formProps
-            Form = form org.Org recipient session.AsInitiator
+            Form = form org.Org counterparty session.AsInitiator
             Action = None
             OnSubmit =
                function
                | FormSubmitReceipt.ParentAccount receipt -> onSubmit receipt
                | _ -> ()
             Session = session
-            ComponentName = "RegisterTransferRecipientForm"
+            ComponentName = "RegisterCounterpartyForm"
             UseEventSubscription =
                Some [
-                  // Listen for recipient registered/edited
+                  // Listen for counterparty registered/edited
                   SignalREventProvider.EventType.ParentAccount
                ]
          |}

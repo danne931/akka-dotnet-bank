@@ -42,17 +42,17 @@ type SelectedAccount = {
 type AccountActionView =
    | Purchase
    | Deposit
-   | Transfer of (RecipientAccountEnvironment * AccountId) option
-   | RegisterTransferRecipient
-   | EditTransferRecipient of AccountId
+   | Transfer of (RecipientAccountEnvironment * CounterpartyId) option
+   | RegisterCounterparty
+   | EditCounterparty of CounterpartyId
 
    member x.Display =
       match x with
       | Purchase -> "Purchase"
       | Deposit -> "Deposit"
       | Transfer _ -> "Transfer"
-      | RegisterTransferRecipient -> "Add a Transfer Recipient"
-      | EditTransferRecipient _ -> "Edit a Transfer Recipient"
+      | RegisterCounterparty -> "Add an External Account"
+      | EditCounterparty _ -> "Edit an External Account"
 
 type TransactionBrowserQuery = {
    Accounts: (SelectedAccount list) option
@@ -111,20 +111,16 @@ module TransactionBrowserQuery =
 
       let agg =
          match query.Action with
-         | Some(AccountActionView.EditTransferRecipient accountId) ->
-            [
-               "action", "EditTransferRecipient"
-               "transferRecipient", string accountId
-            ]
-            @ agg
+         | Some(AccountActionView.EditCounterparty cpId) ->
+            [ "action", "EditCounterparty"; "counterparty", string cpId ] @ agg
          | Some(AccountActionView.Transfer qParamsOpt) ->
             match qParamsOpt with
             | None -> ("action", "Transfer") :: agg
-            | Some(accountEnvironment, recipientId) ->
+            | Some(accountEnvironment, counterpartyId) ->
                [
                   "action", "Transfer"
                   "accountEnvironment", string accountEnvironment
-                  "transferRecipient", string recipientId
+                  "counterparty", string counterpartyId
                ]
                @ agg
          | Some view -> ("action", string view) :: agg
@@ -186,26 +182,26 @@ module TransactionBrowserQuery =
                      Map.tryFind "accountEnvironment" queryParams
                      |> Option.bind RecipientAccountEnvironment.fromString
 
-                  let recipientIdOpt =
-                     Map.tryFind "transferRecipient" queryParams
+                  let counterpartyIdOpt =
+                     Map.tryFind "counterparty" queryParams
                      |> Option.bind Guid.parseOptional
 
                   Option.map2
-                     (fun env recipientId ->
+                     (fun env counterpartyId ->
                         AccountActionView.Transfer(
-                           Some(env, AccountId recipientId)
+                           Some(env, CounterpartyId counterpartyId)
                         ))
                      envOpt
-                     recipientIdOpt
+                     counterpartyIdOpt
                   |> Option.orElse (Some(AccountActionView.Transfer None))
-               | "RegisterTransferRecipient" ->
-                  Some AccountActionView.RegisterTransferRecipient
-               | "EditTransferRecipient" ->
-                  Map.tryFind "transferRecipient" queryParams
+               | "RegisterCounterparty" ->
+                  Some AccountActionView.RegisterCounterparty
+               | "EditCounterparty" ->
+                  Map.tryFind "counterparty" queryParams
                   |> Option.map (
                      Guid.Parse
-                     >> AccountId
-                     >> AccountActionView.EditTransferRecipient
+                     >> CounterpartyId
+                     >> AccountActionView.EditCounterparty
                   )
                | view ->
                   Log.error $"Account action view not implemented: {view}"
@@ -312,7 +308,7 @@ let transactionUIFriendly
    }
 
    let counterpartyName (cp: Counterparty) =
-      org.DomesticTransferRecipients
+      org.Counterparties
       |> Map.tryFind cp.CounterpartyId
       |> Option.map _.FullName
       |> Option.defaultValue cp.FullName

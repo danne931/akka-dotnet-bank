@@ -82,7 +82,7 @@ let businessDetails (name: string) =
       LegalType = BusinessType.LLC
       Website = Some website
       Address = {
-         Line1 = "123 Main St"
+         Line1 = "931 Lane Less Traveled"
          Line2 = "40931"
          City = "Mill Valley"
          State = "CA"
@@ -1185,7 +1185,9 @@ let seedAccountOwnerActions
 
    let domesticRecipientCmd =
       RegisterCounterpartyCommand.create mockAccountOwner {
-         AccountId = Guid.NewGuid() |> AccountId
+         CounterpartyId = Guid.NewGuid() |> CounterpartyId
+         PartnerBankCounterpartyId =
+            PartnerBankCounterpartyId("ctpy-" + Guid.NewGuid().ToString "N")
          Sender = {|
             OrgId = myOrg.OrgId
             ParentAccountId = myOrg.ParentAccountId
@@ -1196,6 +1198,14 @@ let seedAccountOwnerActions
          RoutingNumber = "123456789"
          Depository = CounterpartyAccountDepository.Checking
          PaymentNetwork = PaymentNetwork.ACH
+         Address = {
+            Line1 = "123 Main St"
+            Line2 = "Suite 100"
+            City = "Mill Valley"
+            State = "CA"
+            CountryCode = "US"
+            PostalCode = "94941"
+         }
       }
 
    let domesticRecipient =

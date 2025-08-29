@@ -194,7 +194,12 @@ app.MapAkkaHealthCheckRoutes(
 
 Bank.Routes.Org.start app Bank.Transfer.Api.getDomesticTransferRecipients
 Bank.Routes.UserSession.start app
-Bank.Routes.Transfer.start app Bank.Account.Api.processCommand
+
+Bank.Routes.Transfer.start
+   app
+   Bank.Account.Api.processCommand
+   PartnerBankServiceActor.createCounterParty
+
 Bank.Routes.PaymentRequest.start app Bank.Account.Api.processCommand
 Bank.Routes.Account.start app
 Bank.Routes.Diagnostic.start app

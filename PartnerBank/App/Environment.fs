@@ -12,7 +12,10 @@ let builder = Env.builder
 type MockPartnerBank = { Host: IPAddress; Port: int }
 
 type private PartnerBankConfigInput = {
-   MockPartnerBank: {| Host: string option; Port: int |}
+   MockPartnerBank: {|
+      Host: string option
+      Port: int option
+   |}
    PartnerBankCircuitBreaker: {|
       MaxFailures: int option
       CallTimeoutSeconds: float option
@@ -54,7 +57,7 @@ let config =
    | Ok input -> {
       MockPartnerBank = {
          Host = getMockPartnerBankHost input.MockPartnerBank.Host
-         Port = input.MockPartnerBank.Port
+         Port = input.MockPartnerBank.Port |> Option.defaultValue 5007
       }
       CircuitBreaker =
          fun system ->

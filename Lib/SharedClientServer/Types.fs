@@ -136,6 +136,13 @@ type PaymentRequestId =
 
    member x.AsCorrelationId = CorrelationId x.Value
 
+type CounterpartyId =
+   | CounterpartyId of Guid
+
+   override x.ToString() = string x.Value
+
+   member x.Value = let (CounterpartyId id) = x in id
+
 type TransferId =
    | TransferId of Guid
 
@@ -502,3 +509,29 @@ type PartnerBankLegalEntityId =
    override x.ToString() = string x.Value
 
    member x.Value = let (PartnerBankLegalEntityId id) = x in id
+
+type PartnerBankCounterpartyId =
+   | PartnerBankCounterpartyId of string
+
+   override x.ToString() = string x.Value
+
+   member x.Value = let (PartnerBankCounterpartyId id) = x in id
+
+type Address = {
+   City: string
+   CountryCode: string
+   Line1: string
+   Line2: string
+   PostalCode: string
+   State: string
+}
+
+module Address =
+   let empty = {
+      City = ""
+      CountryCode = ""
+      Line1 = ""
+      Line2 = ""
+      PostalCode = ""
+      State = ""
+   }

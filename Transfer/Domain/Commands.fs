@@ -268,11 +268,13 @@ module SettleInternalTransferBetweenOrgsCommand =
       BankEvent.create<InternalTransferBetweenOrgsSettled> cmd |> Ok
 
 type CounterpartyInput = {
-   AccountId: AccountId
+   CounterpartyId: CounterpartyId
+   PartnerBankCounterpartyId: PartnerBankCounterpartyId
    LastName: string
    FirstName: string
    AccountNumber: string
    RoutingNumber: string
+   Address: Address
    Depository: CounterpartyAccountDepository
    PaymentNetwork: PaymentNetwork
    Sender: {|
@@ -313,7 +315,9 @@ module RegisterCounterpartyCommand =
             AccountNumber = accountNumber
             RoutingNumber = routingNumber
             OrgId = cmd.OrgId
-            CounterpartyId = cmd.Data.AccountId
+            CounterpartyId = cmd.Data.CounterpartyId
+            PartnerBankCounterpartyId = cmd.Data.PartnerBankCounterpartyId
+            Address = cmd.Data.Address
             Depository = cmd.Data.Depository
             PaymentNetwork = cmd.Data.PaymentNetwork
             CreatedAt = cmd.Timestamp

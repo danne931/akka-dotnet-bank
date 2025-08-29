@@ -74,8 +74,8 @@ let update msg state =
          | ParentAccountEvent.RegisteredCounterparty e ->
             updateState state (fun o -> {
                o with
-                  DomesticTransferRecipients =
-                     o.DomesticTransferRecipients
+                  Counterparties =
+                     o.Counterparties
                      |> Map.add
                            e.Data.Counterparty.CounterpartyId
                            e.Data.Counterparty
@@ -83,8 +83,8 @@ let update msg state =
          | ParentAccountEvent.EditedCounterparty e ->
             updateState state (fun o -> {
                o with
-                  DomesticTransferRecipients =
-                     o.DomesticTransferRecipients
+                  Counterparties =
+                     o.Counterparties
                      |> Map.add
                            e.Data.Counterparty.CounterpartyId
                            e.Data.Counterparty
@@ -92,8 +92,8 @@ let update msg state =
          | ParentAccountEvent.NicknamedCounterparty e ->
             updateState state (fun o -> {
                o with
-                  DomesticTransferRecipients =
-                     o.DomesticTransferRecipients
+                  Counterparties =
+                     o.Counterparties
                      |> Map.change
                            e.Data.CounterpartyId
                            (Option.map (fun recipient -> {
@@ -165,7 +165,7 @@ let update msg state =
                Org = state.Org
                AccountProfiles = profiles
                Balance = profiles |> Map.values |> Seq.sumBy _.Account.Balance
-               DomesticTransferRecipients = state.DomesticTransferRecipients
+               Counterparties = state.Counterparties
             })
          |> Option.defaultValue state
 
@@ -205,7 +205,7 @@ let update msg state =
             Org = state.Org
             AccountProfiles = profiles
             Balance = state.Balance
-            DomesticTransferRecipients = state.DomesticTransferRecipients
+            Counterparties = state.Counterparties
          }
 
       let state = updateState state internalTransferTransform

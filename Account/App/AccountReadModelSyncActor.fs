@@ -126,9 +126,10 @@ let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
 
    "amount", TransferSqlWriter.amount o.Amount
 
-   "counterpartyId", TransferSqlWriter.accountId o.Counterparty.CounterpartyId
-
    "memo", TransferSqlWriter.memo o.Memo
+
+   "counterpartyId",
+   TransferSqlWriter.Domestic.counterpartyId o.Counterparty.CounterpartyId
 ]
 
 module private AccountBalanceReducer =
@@ -226,6 +227,9 @@ let private counterpartyReducer
    let qParams = [
       "counterpartyId",
       CounterpartyWriter.counterpartyId counterparty.CounterpartyId
+      "partnerBankCounterpartyId",
+      CounterpartyWriter.partnerBankCounterpartyId
+         counterparty.PartnerBankCounterpartyId
       "orgId", CounterpartyWriter.orgId counterparty.OrgId
       "lastName", CounterpartyWriter.lastName counterparty.LastName
       "firstName", CounterpartyWriter.firstName counterparty.FirstName
@@ -237,6 +241,7 @@ let private counterpartyReducer
       "paymentNetwork",
       CounterpartyWriter.paymentNetwork counterparty.PaymentNetwork
       "nickname", CounterpartyWriter.nickname counterparty.Nickname
+      "address", CounterpartyWriter.address counterparty.Address
    ]
 
    {
@@ -1305,6 +1310,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       $"""
       INSERT into {CounterpartySqlMapper.table}
          ({CounterpartyFields.counterpartyId},
+          {CounterpartyFields.partnerBankCounterpartyId},
           {CounterpartyFields.orgId},
           {CounterpartyFields.firstName},
           {CounterpartyFields.lastName},
@@ -1312,9 +1318,11 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {CounterpartyFields.routingNumber},
           {CounterpartyFields.accountNumber},
           {CounterpartyFields.depository},
-          {CounterpartyFields.paymentNetwork})
+          {CounterpartyFields.paymentNetwork},
+          {CounterpartyFields.address})
       VALUES
          (@counterpartyId,
+          @partnerBankCounterpartyId,
           @orgId,
           @firstName,
           @lastName,
@@ -1322,7 +1330,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           @routingNumber,
           @accountNumber,
           @depository::{CounterpartyTypeCast.accountDepository},
-          @paymentNetwork::{CounterpartyTypeCast.paymentNetwork})
+          @paymentNetwork::{CounterpartyTypeCast.paymentNetwork},
+          @address)
       ON CONFLICT ({CounterpartyFields.counterpartyId})
       DO UPDATE SET
          {CounterpartyFields.firstName} = @firstName,
@@ -1333,7 +1342,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
          {CounterpartyFields.depository} =
             @depository::{CounterpartyTypeCast.accountDepository},
          {CounterpartyFields.paymentNetwork} =
-            @paymentNetwork::{CounterpartyTypeCast.paymentNetwork};
+            @paymentNetwork::{CounterpartyTypeCast.paymentNetwork},
+         {CounterpartyFields.address} = @address;
       """,
       sqlParamsDerivedFromAccountEvents.Counterparty
 

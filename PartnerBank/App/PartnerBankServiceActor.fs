@@ -212,6 +212,16 @@ let private networkRequest
          return PartnerBankResponse.Purchase { ConfirmationId = Guid.NewGuid() }
    }
 
+let createCounterParty (req: PartnerBankCounterpartyRequest) = taskResult {
+   let serializedReq = JsonSerializer.SerializeToUtf8Bytes req.AsDTO
+   let! res = tcp serializedReq
+
+   let! res =
+      Serialization.deserialize<PartnerBankCreateCounterpartyResponseDTO> res
+
+   return res.AsEntity
+}
+
 let initProps
    registry
    (queueConnection: AmqpConnectionDetails)

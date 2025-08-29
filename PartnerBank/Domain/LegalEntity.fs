@@ -35,14 +35,7 @@ module BusinessTypeDTO =
       | BusinessType.Other -> "other"
 
 type BusinessDetailsDTO = {
-   address: {|
-      city: string
-      country_code: string
-      line_1: string
-      line_2: string
-      postal_code: string
-      state: string
-   |}
+   address: AddressDTO
    business_name: string
    description: string
    ein: string
@@ -56,14 +49,7 @@ type BusinessDetailsDTO = {
 
 module BusinessDetailsDTO =
    let fromEntity (bd: BusinessDetails) = {
-      address = {|
-         city = bd.Address.City
-         country_code = bd.Address.CountryCode
-         line_1 = bd.Address.Line1
-         line_2 = bd.Address.Line2
-         postal_code = bd.Address.PostalCode
-         state = bd.Address.State
-      |}
+      address = AddressDTO.fromAddress bd.Address
       business_name = bd.BusinessName
       description = bd.Description
       ein = bd.EmployerIdentificationNumber
@@ -83,14 +69,7 @@ module BusinessDetailsDTO =
 
       legalType
       |> Result.map (fun legalType -> {
-         Address = {
-            City = bd.address.city
-            CountryCode = bd.address.country_code
-            Line1 = bd.address.line_1
-            Line2 = bd.address.line_2
-            PostalCode = bd.address.postal_code
-            State = bd.address.state
-         }
+         Address = bd.address.AsEntity
          BusinessName = bd.business_name
          Description = bd.description
          EmployerIdentificationNumber = bd.ein
@@ -166,7 +145,6 @@ type LegalBusinessEntityCreateRequest = {
 
    member x.AsDTO = {|
       action = "CreateLegalBusinessEntity"
-      idempotency_key = string x.SagaMetadata.CorrelationId
       data = BusinessDetailsDTO.fromEntity x.Detail
    |}
 

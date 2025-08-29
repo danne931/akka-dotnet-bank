@@ -70,7 +70,7 @@
     <Compile Include="Diagnostic/ServiceHealthComponent.fs" />
     <Compile Include="Transfers/SocialTransferDiscoveryComponent.fs" />
     <Compile Include="Transfers/Forms/Transfer.fs" />
-    <Compile Include="Transfers/Forms/RegisterRecipient.fs" />
+    <Compile Include="Transfers/Forms/RegisterCounterparty.fs" />
     <Compile Include="Transactions/DetailComponent.fs" />
     <Compile Include="Transactions/CategoryFilterComponent.fs" />
     <Compile Include="Transactions/DashboardComponent.fs" />

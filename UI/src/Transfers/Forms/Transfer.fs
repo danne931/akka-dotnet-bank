@@ -250,7 +250,7 @@ let formInternalBetweenOrgs
    )
 
 let formDomestic
-   (recipients: Map<AccountId, Counterparty>)
+   (counterparties: Map<CounterpartyId, Counterparty>)
    (senderAccounts: Map<AccountId, Account>)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
@@ -265,7 +265,7 @@ let formDomestic
             Label = "Recipient:"
             Placeholder = "No selection"
             Options =
-               recipients
+               counterparties
                |> Map.toList
                |> List.map (fun (recipientId, recipient) ->
                   let name =
@@ -331,8 +331,8 @@ let formDomestic
          let sender = senderAccounts[senderId]
 
          Form.succeed (fun (recipientId: string) amount memo scheduledAt ->
-            let recipientId = recipientId |> Guid.Parse |> AccountId
-            let recipient = recipients[recipientId]
+            let recipientId = recipientId |> Guid.Parse |> CounterpartyId
+            let recipient = counterparties[recipientId]
             sender, recipient, amount, memo, scheduledAt)
          |> Form.append fieldDomesticSelect
          |> Form.append (amountField sender)
@@ -444,18 +444,18 @@ let TransferInternalBetweenOrgsComponent
 [<ReactComponent>]
 let TransferDomesticFormComponent
    (session: UserSession)
-   (recipients: Map<AccountId, Counterparty>)
+   (recipients: Map<CounterpartyId, Counterparty>)
    (senderAccounts: Map<AccountId, Account>)
    (commandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule>)
    (employeeAccrual: CommandApprovalDailyAccrual)
-   (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
+   (selectedRecipient: (RecipientAccountEnvironment * CounterpartyId) option)
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
    let defaultRecipientId =
       match selectedRecipient with
-      | Some(env, accountId) when env = RecipientAccountEnvironment.Domestic ->
-         string accountId
+      | Some(env, id) when env = RecipientAccountEnvironment.Domestic ->
+         string id
       | _ ->
          recipients.Values
          |> Seq.tryHead
@@ -512,7 +512,7 @@ let TransferDomesticFormComponent
 let TransferFormComponent
    (session: UserSession)
    (org: OrgWithAccountProfiles)
-   (selectedRecipient: (RecipientAccountEnvironment * AccountId) option)
+   (selectedRecipient: (RecipientAccountEnvironment * CounterpartyId) option)
    (onSubmit: AccountCommandReceipt -> unit)
    (onSubmitForApproval: CommandApprovalProgress.RequestCommandApproval -> unit)
    =
@@ -595,15 +595,14 @@ let TransferFormComponent
       | RecipientAccountEnvironment.InternalWithinOrg ->
          TransferInternalWithinOrgComponent session org.Accounts onSubmit
       | RecipientAccountEnvironment.Domestic ->
-         if org.DomesticTransferRecipients.Count = 0 then
+         if org.Counterparties.Count = 0 then
             Html.button [
                attr.classes [ "outline" ]
                attr.text "No recipients.  Click here to create."
                attr.onClick (fun _ ->
                   {
                      TransactionBrowserQuery.empty with
-                        Action =
-                           Some AccountActionView.RegisterTransferRecipient
+                        Action = Some AccountActionView.RegisterCounterparty
                   }
                   |> Routes.TransactionsUrl.queryPath
                   |> Router.navigate)
@@ -613,7 +612,7 @@ let TransferFormComponent
             | Deferred.Resolved(Ok accrual) ->
                TransferDomesticFormComponent
                   session
-                  org.DomesticTransferRecipients
+                  org.Counterparties
                   org.CheckingAccounts
                   org.Org.CommandApprovalRules
                   accrual

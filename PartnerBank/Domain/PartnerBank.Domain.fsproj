@@ -4,6 +4,7 @@
     <Compile Include="Account.fs" />
     <Compile Include="LegalEntity.fs" /> 
     <Compile Include="Transfer.fs" />
+    <Compile Include="Counterparty.fs" /> 
     <Compile Include="AggregateTypes.fs" />
   </ItemGroup>
 

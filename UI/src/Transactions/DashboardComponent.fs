@@ -466,7 +466,7 @@ let renderMenuButton (view: AccountActionView) =
             Html.span [ Fa.i [ Fa.Solid.CreditCard ] [] ]
          | AccountActionView.Transfer _ ->
             Html.span [ Fa.i [ Fa.Solid.ArrowsAltH ] [] ]
-         | AccountActionView.RegisterTransferRecipient ->
+         | AccountActionView.RegisterCounterparty ->
             Html.span [ Fa.i [ Fa.Solid.UserPlus ] [] ]
          | _ -> ()
 
@@ -484,8 +484,8 @@ let renderForm session org (view: AccountActionView) dispatch =
       | AccountActionView.Deposit ->
          DepositForm.DepositFormComponent session org (fun _ ->
             dispatch (Msg.CommandProcessed("Deposit", None)))
-      | AccountActionView.RegisterTransferRecipient ->
-         RegisterTransferRecipientForm.RegisterTransferRecipientFormComponent
+      | AccountActionView.RegisterCounterparty ->
+         RegisterCounterpartyForm.RegisterCounterpartyFormComponent
             session
             org
             None
@@ -506,11 +506,11 @@ let renderForm session org (view: AccountActionView) dispatch =
                | evt ->
                   Log.error
                      $"Unknown evt {evt} in RegisterTransferRecipient submit handler")
-      | AccountActionView.EditTransferRecipient accountId ->
-         RegisterTransferRecipientForm.RegisterTransferRecipientFormComponent
+      | AccountActionView.EditCounterparty counterpartyId ->
+         RegisterCounterpartyForm.RegisterCounterpartyFormComponent
             session
             org
-            (Some accountId)
+            (Some counterpartyId)
             (fun _ ->
                ("Edit Domestic Transfer Recipient", None)
                |> Msg.CommandProcessed
@@ -749,8 +749,7 @@ let TransactionDashboardComponent
                      ]
 
                      classyNode Html.div [ "grid" ] [
-                        renderMenuButton
-                           AccountActionView.RegisterTransferRecipient
+                        renderMenuButton AccountActionView.RegisterCounterparty
                      ]
                   ]
                ]

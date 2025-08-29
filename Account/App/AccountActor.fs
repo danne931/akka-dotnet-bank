@@ -153,7 +153,7 @@ let private onValidationError
 let onPersisted
    (registry: #IEmailActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (getRetryableTransfers:
-      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+      CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
    (mailbox: Eventsourced<obj>)
    (state: ParentAccountSnapshot)
    (evt: AccountEvent)
@@ -408,7 +408,7 @@ let actorProps
    (registry: #IBillingStatementActor)
    (broadcaster: SignalRBroadcast)
    (getDomesticTransfersRetryableUponRecipientEdit:
-      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+      CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
    (guaranteedDeliveryConsumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<AccountMessage>>)
    =
@@ -659,7 +659,7 @@ let initProps
    (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (persistenceId: string)
    (getDomesticTransfersRetryableUponRecipientEdit:
-      AccountId -> Task<Result<DomesticTransfer list option, Err>>)
+      CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
    (guaranteedDeliveryConsumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<AccountMessage>>)
    =
