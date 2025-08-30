@@ -23,16 +23,9 @@ type Address = {
    state: string
 }
 
-type Recipient = {
-   name: string
-   account_number: string
-   routing_number: string
-   depository: string
-}
-
 type TransferRequest = {
    originating_account_id: string
-   recipient: Recipient
+   counterparty_id: string
    amount: decimal
    date: DateTime
    payment_network: string
@@ -104,12 +97,16 @@ let transfersInProgress = ConcurrentDictionary<string, int * TransferRequest>()
 
 let legalEntities = ConcurrentDictionary<string, LegalEntityCreateRequest>()
 let internalAccounts = ConcurrentDictionary<string, InternalAccount>()
+let counterparties = ConcurrentDictionary<string, CounterpartyRequest>()
 
 let paymentNetworks = [ "ach" ]
 let depository = [ "checking"; "savings" ]
 
 // Compute response & mutate in-memory state of in-progress transfers.
 let processTransferRequest (req: TransferRequest) (res: TransferResponse) =
+   let counterpartyExists, counterparty =
+      counterparties.TryGetValue req.counterparty_id
+
    if
       paymentNetworks
       |> List.exists (fun p -> p = req.payment_network.ToLower())
@@ -120,24 +117,21 @@ let processTransferRequest (req: TransferRequest) (res: TransferResponse) =
             ok = false
             reason = "InvalidPaymentNetwork"
       }
+   elif not counterpartyExists then
+      {
+         res with
+            ok = false
+            reason = "CounterpartyNotFound"
+      }
    elif
       depository
-      |> List.exists (fun d -> d = req.recipient.depository.ToLower())
+      |> List.exists (fun d -> d = counterparty.depository.ToLower())
       |> not
    then
       {
          res with
             ok = false
             reason = "InvalidDepository"
-      }
-   elif
-      String.IsNullOrEmpty req.recipient.account_number
-      || String.IsNullOrEmpty req.recipient.routing_number
-   then
-      {
-         res with
-            ok = false
-            reason = "InvalidAccountInfo"
       }
    elif req.amount <= 0m then
       {
@@ -207,11 +201,24 @@ let tcpMessageHandler connection (ctx: Actor<obj>) =
                   |> string
                   |> JsonSerializer.Deserialize<CounterpartyRequest>
 
-               {|
-                  id = "ctpy-" + Guid.NewGuid().ToString "N"
-               |}
-               |> JsonSerializer.Serialize
-               |> ByteString.ofUtf8String
+               if
+                  String.IsNullOrEmpty info.account_number
+                  || String.IsNullOrEmpty info.routing_number
+               then
+                  {|
+                     ok = false
+                     reason = "InvalidAccountInfo"
+                  |}
+                  |> JsonSerializer.Serialize
+                  |> ByteString.ofUtf8String
+               else
+                  let cpId = "ctpy-" + Guid.NewGuid().ToString "N"
+
+                  counterparties.TryAdd(cpId, info) |> ignore
+
+                  {| id = cpId |}
+                  |> JsonSerializer.Serialize
+                  |> ByteString.ofUtf8String
             elif req.action = "TransferRequest" then
                let req =
                   req.data

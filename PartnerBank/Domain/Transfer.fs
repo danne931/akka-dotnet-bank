@@ -17,7 +17,7 @@ type DomesticTransferServiceAction =
 type PartnerBankDomesticTransferRequest = {
    Action: DomesticTransferServiceAction
    OriginatingAccountId: PartnerBankAccountId
-   Recipient: Counterparty
+   CounterpartyId: PartnerBankCounterpartyId
    Amount: decimal
    PaymentNetwork: PaymentNetwork
    Date: DateTime
@@ -33,19 +33,11 @@ type PartnerBankDomesticTransferRequest = {
          | DomesticTransferServiceAction.ProgressCheck -> "ProgressCheck"
       data = {|
          originating_account_id = string x.OriginatingAccountId
-         recipient = {|
-            name = x.Recipient.Name
-            account_number = string x.Recipient.AccountNumber
-            routing_number = string x.Recipient.RoutingNumber
-            depository =
-               match x.Recipient.Depository with
-               | CounterpartyAccountDepository.Checking -> "checking"
-               | CounterpartyAccountDepository.Savings -> "savings"
-         |}
+         counterparty_id = string x.CounterpartyId
          amount = x.Amount
          date = x.Date
          payment_network =
-            match x.Recipient.PaymentNetwork with
+            match x.PaymentNetwork with
             | PaymentNetwork.ACH -> "ach"
          idempotency_key = string x.TransferId
       |}

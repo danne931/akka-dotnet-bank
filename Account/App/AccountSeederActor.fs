@@ -28,6 +28,7 @@ open AutomaticTransfer
 open RecurringPaymentSchedule
 open BankActorRegistry
 open Email
+open PartnerBank.Service.Domain
 
 module aeFields = AccountEventSqlMapper.Fields
 
@@ -1176,230 +1177,270 @@ let configureAutoTransferRules
 
    socialTransferCandidates |> List.iter initZeroBalanceRule
 
-let seedAccountOwnerActions
+let createCounterparty
    (registry: #IAccountGuaranteedDeliveryActor)
-   (timestamp: DateTime)
-   (account: Account)
+   (createCounterPartyInPartnerBank:
+      PartnerBankCounterpartyRequest
+         -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
    =
-   let accountRef = registry.AccountGuaranteedDeliveryActor()
+   taskResult {
+      let accountRef = registry.AccountGuaranteedDeliveryActor()
 
-   let domesticRecipientCmd =
-      RegisterCounterpartyCommand.create mockAccountOwner {
-         CounterpartyId = Guid.NewGuid() |> CounterpartyId
-         PartnerBankCounterpartyId =
-            PartnerBankCounterpartyId("ctpy-" + Guid.NewGuid().ToString "N")
-         Sender = {|
-            OrgId = myOrg.OrgId
-            ParentAccountId = myOrg.ParentAccountId
-         |}
-         FirstName = "Microsoft"
-         LastName = "Azure"
-         AccountNumber = AccountNumber.generate () |> string
-         RoutingNumber = "123456789"
-         Depository = CounterpartyAccountDepository.Checking
-         PaymentNetwork = PaymentNetwork.ACH
-         Address = {
-            Line1 = "123 Main St"
-            Line2 = "Suite 100"
-            City = "Mill Valley"
-            State = "CA"
-            CountryCode = "US"
-            PostalCode = "94941"
+      let domesticCounterpartyCmd =
+         RegisterCounterpartyCommand.create mockAccountOwner {
+            CounterpartyId = Guid.NewGuid() |> CounterpartyId
+            PartnerBankCounterpartyId =
+               PartnerBankCounterpartyId("ctpy-" + Guid.NewGuid().ToString "N")
+            Sender = {|
+               OrgId = myOrg.OrgId
+               ParentAccountId = myOrg.ParentAccountId
+            |}
+            FirstName = "Microsoft"
+            LastName = "Azure"
+            AccountNumber = AccountNumber.generate () |> string
+            RoutingNumber = "123456789"
+            Depository = CounterpartyAccountDepository.Checking
+            PaymentNetwork = PaymentNetwork.ACH
+            Address = {
+               Line1 = "123 Main St"
+               Line2 = "Suite 100"
+               City = "Mill Valley"
+               State = "CA"
+               CountryCode = "US"
+               PostalCode = "94941"
+            }
          }
-      }
 
-   let domesticRecipient =
-      domesticRecipientCmd
-      |> RegisterCounterpartyCommand.toEvent
-      |> Result.map _.Data.Counterparty
-      |> Result.toValueOption
-      |> _.Value
+      let domesticCounterparty =
+         domesticCounterpartyCmd
+         |> RegisterCounterpartyCommand.toEvent
+         |> Result.map _.Data.Counterparty
+         |> Result.toValueOption
+         |> _.Value
 
-   let msg =
-      domesticRecipientCmd
-      |> ParentAccountCommand.RegisterCounterparty
-      |> AccountCommand.ParentAccount
-      |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
+      let! cpCreateResponse =
+         createCounterPartyInPartnerBank {
+            Name =
+               domesticCounterparty.FirstName
+               + " "
+               + domesticCounterparty.LastName
+            AccountNumber = domesticCounterparty.AccountNumber
+            RoutingNumber = domesticCounterparty.RoutingNumber
+            Depository = domesticCounterparty.Depository
+            Address = domesticCounterparty.Address
+         }
 
-   accountRef <! msg
-
-   for month in [ 1..3 ] do
-      let timestamp =
-         if month = 3 then
-            timestamp.AddMonths(month).AddDays -2
-         else
-            timestamp.AddMonths month
-
-      let transferCmd = {
-         DomesticTransferCommand.create
-            (Guid.NewGuid() |> CorrelationId)
-            mockAccountOwner
-            {
-               OriginatedFromSchedule = false
-               ScheduledDateSeedOverride = Some timestamp
-               Amount = 30_000m + randomAmount 1000 7000
-               Counterparty = domesticRecipient
-               Originator = {
-                  Name = account.Name
-                  AccountId = account.AccountId
-                  OrgId = myOrg.OrgId
-                  ParentAccountId = myOrg.ParentAccountId
-               }
-               Memo = Some "Azure Bill"
-            } with
-            Timestamp = timestamp
+      let domesticCounterparty = {
+         domesticCounterparty with
+            PartnerBankCounterpartyId =
+               cpCreateResponse.PartnerBankCounterpartyId
       }
 
       let msg =
-         transferCmd
-         |> AccountCommand.DomesticTransfer
+         domesticCounterpartyCmd
+         |> ParentAccountCommand.RegisterCounterparty
+         |> AccountCommand.ParentAccount
          |> AccountMessage.StateChange
          |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
       accountRef <! msg
 
-      for num in [ 1..3 ] do
-         let maxDays =
-            let daysToAdd = num * (5 + num)
+      return domesticCounterparty
+   }
 
+let seedAccountOwnerActions
+   (registry: #IAccountGuaranteedDeliveryActor)
+   (createCounterPartyInPartnerBank:
+      PartnerBankCounterpartyRequest
+         -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
+   (timestamp: DateTime)
+   (account: Account)
+   =
+   taskResult {
+      let accountRef = registry.AccountGuaranteedDeliveryActor()
+
+      let! domesticCounterparty =
+         createCounterparty registry createCounterPartyInPartnerBank
+
+      for month in [ 1..3 ] do
+         let timestamp =
             if month = 3 then
-               let buffer = DateTime.UtcNow.AddDays(-2).Day
-               if buffer / daysToAdd >= 1 then daysToAdd else 0
+               timestamp.AddMonths(month).AddDays -2
             else
-               daysToAdd
+               timestamp.AddMonths month
 
-         if maxDays = 0 && num > 1 then
-            ()
-         else
-            let msg =
+         let transferCmd = {
+            DomesticTransferCommand.create
+               (Guid.NewGuid() |> CorrelationId)
+               mockAccountOwner
                {
-                  DepositCashCommand.create
-                     (myOrg.ParentAccountId, myOrg.OrgId)
-                     mockAccountOwner
-                     {
-                        AccountId = apCheckingAccountId
-                        Amount = randomAmount 5000 20_000
-                        Origin = Some "ATM"
-                     } with
-                     Timestamp = timestamp.AddDays(float maxDays)
-               }
-               |> AccountCommand.DepositCash
-               |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
+                  OriginatedFromSchedule = false
+                  ScheduledDateSeedOverride = Some timestamp
+                  Amount = 30_000m + randomAmount 1000 7000
+                  Counterparty = domesticCounterparty
+                  Originator = {
+                     Name = account.Name
+                     AccountId = account.AccountId
+                     OrgId = myOrg.OrgId
+                     ParentAccountId = myOrg.ParentAccountId
+                  }
+                  Memo = Some "Azure Bill"
+               } with
+               Timestamp = timestamp
+         }
 
-            accountRef <! msg
+         let msg =
+            transferCmd
+            |> AccountCommand.DomesticTransfer
+            |> AccountMessage.StateChange
+            |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-            let ind = int (randomAmount 0 (socialTransferSenders.Length - 1))
-            let sender = socialTransferSenders |> List.item ind
+         accountRef <! msg
 
-            // Transfers from other orgs on the platform to the primary demo org
-            let msg =
-               let ts = timestamp.AddDays(float (maxDays - 1))
+         for num in [ 1..3 ] do
+            let maxDays =
+               let daysToAdd = num * (5 + num)
 
-               {
-                  InternalTransferBetweenOrgsCommand.create
-                     {
-                        Name = sender.BusinessDetails.BusinessName
-                        Id = InitiatedById sender.AccountOwnerId
-                     }
-                     {
+               if month = 3 then
+                  let buffer = DateTime.UtcNow.AddDays(-2).Day
+                  if buffer / daysToAdd >= 1 then daysToAdd else 0
+               else
+                  daysToAdd
+
+            if maxDays = 0 && num > 1 then
+               ()
+            else
+               let msg =
+                  {
+                     DepositCashCommand.create
+                        (myOrg.ParentAccountId, myOrg.OrgId)
+                        mockAccountOwner
+                        {
+                           AccountId = apCheckingAccountId
+                           Amount = randomAmount 5000 20_000
+                           Origin = Some "ATM"
+                        } with
+                        Timestamp = timestamp.AddDays(float maxDays)
+                  }
+                  |> AccountCommand.DepositCash
+                  |> AccountMessage.StateChange
+                  |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
+
+               accountRef <! msg
+
+               let ind = int (randomAmount 0 (socialTransferSenders.Length - 1))
+               let sender = socialTransferSenders |> List.item ind
+
+               // Transfers from other orgs on the platform to the primary demo org
+               let msg =
+                  let ts = timestamp.AddDays(float (maxDays - 1))
+
+                  {
+                     InternalTransferBetweenOrgsCommand.create
+                        {
+                           Name = sender.BusinessDetails.BusinessName
+                           Id = InitiatedById sender.AccountOwnerId
+                        }
+                        {
+                           Memo = None
+                           OriginatedFromSchedule = false
+                           OriginatedFromPaymentRequest = None
+                           Amount = 10_000m + randomAmount 1000 10_000
+                           Recipient = {
+                              OrgId = myOrg.OrgId
+                              AccountId = apCheckingAccountId
+                              ParentAccountId = myOrg.ParentAccountId
+                              Name = myOrg.BusinessDetails.BusinessName
+                           }
+                           ScheduledDateSeedOverride = Some ts
+                           Sender = {
+                              Name = sender.BusinessDetails.BusinessName
+                              AccountId = sender.PrimaryAccountId
+                              ParentAccountId = sender.ParentAccountId
+                              OrgId = sender.OrgId
+                           }
+                        } with
+                        Timestamp = ts
+                  }
+                  |> AccountCommand.InternalTransferBetweenOrgs
+                  |> AccountMessage.StateChange
+                  |> GuaranteedDelivery.message sender.ParentAccountId.Value
+
+               accountRef <! msg
+
+               let timestamp = timestamp.AddDays(float (maxDays - 1))
+
+               // Transfers from primary demo org to other orgs on the platform
+               let msg =
+                  {
+                     InternalTransferBetweenOrgsCommand.create mockAccountOwner {
                         Memo = None
                         OriginatedFromSchedule = false
                         OriginatedFromPaymentRequest = None
-                        Amount = 10_000m + randomAmount 1000 10_000
-                        Recipient = {
-                           OrgId = myOrg.OrgId
-                           AccountId = apCheckingAccountId
-                           ParentAccountId = myOrg.ParentAccountId
-                           Name = myOrg.BusinessDetails.BusinessName
-                        }
-                        ScheduledDateSeedOverride = Some ts
+                        Recipient =
+                           let ind =
+                              randomAmount
+                                 0
+                                 (socialTransferCandidates.Length - 1)
+                              |> int
+
+                           let recipient =
+                              socialTransferCandidates |> List.item ind
+
+                           {
+                              OrgId = recipient.OrgId
+                              ParentAccountId = recipient.ParentAccountId
+                              AccountId = recipient.PrimaryAccountId
+                              Name = recipient.BusinessDetails.BusinessName
+                           }
+                        Amount = 3000m + randomAmount 1000 8000
+                        ScheduledDateSeedOverride = Some timestamp
                         Sender = {
-                           Name = sender.BusinessDetails.BusinessName
-                           AccountId = sender.PrimaryAccountId
-                           ParentAccountId = sender.ParentAccountId
-                           OrgId = sender.OrgId
+                           Name = myOrg.BusinessDetails.BusinessName
+                           ParentAccountId = myOrg.ParentAccountId
+                           AccountId = myOrg.OpsAccountId
+                           OrgId = myOrg.OrgId
                         }
                      } with
-                     Timestamp = ts
-               }
-               |> AccountCommand.InternalTransferBetweenOrgs
-               |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message sender.ParentAccountId.Value
+                        Timestamp = timestamp
+                  }
+                  |> AccountCommand.InternalTransferBetweenOrgs
+                  |> AccountMessage.StateChange
+                  |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-            accountRef <! msg
+               accountRef <! msg
 
-            let timestamp = timestamp.AddDays(float (maxDays - 1))
+               let msg =
+                  {
+                     InternalTransferWithinOrgCommand.create mockAccountOwner {
+                        Memo = None
+                        OriginatedFromSchedule = false
+                        Recipient =
+                           let recipient = mockAccounts[apCheckingAccountId]
 
-            // Transfers from primary demo org to other orgs on the platform
-            let msg =
-               {
-                  InternalTransferBetweenOrgsCommand.create mockAccountOwner {
-                     Memo = None
-                     OriginatedFromSchedule = false
-                     OriginatedFromPaymentRequest = None
-                     Recipient =
-                        let ind =
-                           randomAmount 0 (socialTransferCandidates.Length - 1)
-                           |> int
-
-                        let recipient =
-                           socialTransferCandidates |> List.item ind
-
-                        {
-                           OrgId = recipient.OrgId
-                           ParentAccountId = recipient.ParentAccountId
-                           AccountId = recipient.PrimaryAccountId
-                           Name = recipient.BusinessDetails.BusinessName
+                           {
+                              OrgId = recipient.OrgId
+                              AccountId = recipient.Data.AccountId
+                              ParentAccountId = recipient.Data.ParentAccountId
+                              Name = recipient.Data.Name
+                           }
+                        Amount = 2000m + randomAmount 1000 2000
+                        ScheduledDateSeedOverride = Some timestamp
+                        Sender = {
+                           Name = mockAccounts[myOrg.OpsAccountId].Data.Name
+                           AccountId = myOrg.OpsAccountId
+                           ParentAccountId = myOrg.ParentAccountId
+                           OrgId = myOrg.OrgId
                         }
-                     Amount = 3000m + randomAmount 1000 8000
-                     ScheduledDateSeedOverride = Some timestamp
-                     Sender = {
-                        Name = myOrg.BusinessDetails.BusinessName
-                        ParentAccountId = myOrg.ParentAccountId
-                        AccountId = myOrg.OpsAccountId
-                        OrgId = myOrg.OrgId
-                     }
-                  } with
-                     Timestamp = timestamp
-               }
-               |> AccountCommand.InternalTransferBetweenOrgs
-               |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
+                     } with
+                        Timestamp = timestamp
+                  }
+                  |> AccountCommand.InternalTransfer
+                  |> AccountMessage.StateChange
+                  |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-            accountRef <! msg
-
-            let msg =
-               {
-                  InternalTransferWithinOrgCommand.create mockAccountOwner {
-                     Memo = None
-                     OriginatedFromSchedule = false
-                     Recipient =
-                        let recipient = mockAccounts[apCheckingAccountId]
-
-                        {
-                           OrgId = recipient.OrgId
-                           AccountId = recipient.Data.AccountId
-                           ParentAccountId = recipient.Data.ParentAccountId
-                           Name = recipient.Data.Name
-                        }
-                     Amount = 2000m + randomAmount 1000 2000
-                     ScheduledDateSeedOverride = Some timestamp
-                     Sender = {
-                        Name = mockAccounts[myOrg.OpsAccountId].Data.Name
-                        AccountId = myOrg.OpsAccountId
-                        ParentAccountId = myOrg.ParentAccountId
-                        OrgId = myOrg.OrgId
-                     }
-                  } with
-                     Timestamp = timestamp
-               }
-               |> AccountCommand.InternalTransfer
-               |> AccountMessage.StateChange
-               |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
-
-            accountRef <! msg
+               accountRef <! msg
+   }
 
 let seedEmployeeActions
    (card: Card)
@@ -1646,6 +1687,9 @@ let seedAccountTransactions
    (mailbox: Actor<AccountSeederMessage>)
    (registry:
       #IAccountGuaranteedDeliveryActor & #IEmployeeGuaranteedDeliveryActor & #IAccountActor & #IEmployeeActor)
+   (createCounterPartyInPartnerBank:
+      PartnerBankCounterpartyRequest
+         -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
    (command: CreateVirtualAccountCommand)
    =
    task {
@@ -1696,7 +1740,17 @@ let seedAccountTransactions
             logError
                mailbox
                $"Can not proceed with account owner actions - eId: {accountOwnerId}"
-         | Some account -> seedAccountOwnerActions registry timestamp account
+         | Some account ->
+            let! res =
+               seedAccountOwnerActions
+                  registry
+                  createCounterPartyInPartnerBank
+                  timestamp
+                  account
+
+            match res with
+            | Error err -> logError mailbox $"Error seeding counterparty {err}"
+            | _ -> ()
 
          for cmd in
             cardCreateCmds.AccountOwnerTravelCard :: cardCreateCmds.Employee do
@@ -1767,7 +1821,12 @@ let private initState = {
       Map [ for acctId in mockAccounts.Keys -> acctId, true ]
 }
 
-let actorProps (registry: #IAccountGuaranteedDeliveryActor) =
+let actorProps
+   (registry: #IAccountGuaranteedDeliveryActor)
+   (createCounterPartyInPartnerBank:
+      PartnerBankCounterpartyRequest
+         -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
+   =
    let handler (ctx: Actor<AccountSeederMessage>) =
       let logInfo = logInfo ctx
 
@@ -1842,6 +1901,7 @@ let actorProps (registry: #IAccountGuaranteedDeliveryActor) =
                   seedAccountTransactions
                      ctx
                      registry
+                     createCounterPartyInPartnerBank
                      state.AccountsToCreate[acct.AccountId]
 
                ()

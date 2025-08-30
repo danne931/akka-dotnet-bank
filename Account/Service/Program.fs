@@ -404,7 +404,9 @@ builder.Services.AddAkka(
          .WithSingleton<ActorMarker.AccountSeeder>(
             ActorMetadata.accountSeeder.Name,
             (fun _ _ _ ->
-               AccountSeederActor.actorProps (getActorRegistry provider)
+               AccountSeederActor.actorProps
+                  (getActorRegistry provider)
+                  PartnerBankServiceActor.createCounterParty
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )

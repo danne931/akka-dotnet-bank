@@ -281,7 +281,7 @@ let onStartEventPersisted
          PartnerBankServiceMessage.TransferDomestic {
             Action = DomesticTransferServiceAction.TransferAck
             OriginatingAccountId = link.PartnerBankAccountId
-            Recipient = info.Counterparty
+            CounterpartyId = info.Counterparty.PartnerBankCounterpartyId
             Amount = info.Amount
             PaymentNetwork = info.Counterparty.PaymentNetwork
             Date = info.ScheduledDate
@@ -335,7 +335,7 @@ let onEventPersisted
             Action = action
             OriginatingAccountId =
                currentState.PartnerBankAccountLink.PartnerBankAccountId
-            Recipient = info.Counterparty
+            CounterpartyId = info.Counterparty.PartnerBankCounterpartyId
             Amount = info.Amount
             PaymentNetwork = info.Counterparty.PaymentNetwork
             Date = info.ScheduledDate
