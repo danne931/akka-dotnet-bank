@@ -1,9 +1,5 @@
 module InvoiceSqlMapper
 
-open System
-open Npgsql.FSharp
-open NpgsqlTypes
-open Lib.SharedTypes
 open Bank.Payment.Domain
 
 let table = "invoice"

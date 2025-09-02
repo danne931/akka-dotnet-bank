@@ -46,16 +46,19 @@ let scheduledAtField =
       }
    }
 
-let amountField (account: Account) =
+let amountField (availableBalance: decimal option) =
    Form.textField {
       Parser =
          amountValidatorFromString "Transfer amount"
          >> validationErrorsHumanFriendly
          >> Result.bind (fun amt ->
-            if account.AvailableBalance - amt < 0m then
-               Result.Error $"Insufficient Balance ${account.AvailableBalance}"
-            else
-               Ok amt)
+            match availableBalance with
+            | Some balance ->
+               if balance - amt < 0m then
+                  Error $"Insufficient Balance ${balance}"
+               else
+                  Ok amt
+            | None -> Ok amt)
       Value = _.Amount
       Update = fun newValue values -> { values with Amount = newValue }
       Error = fun _ -> None
@@ -88,18 +91,18 @@ let fieldSenderSelect accounts =
       Update = fun a b -> { b with SenderId = a.AccountId }
    }
 
-let fieldRecipientSelect accounts =
-   accountSelect (Some "Move money to account:") accounts
-   |> Form.mapValues {
-      Value = fun a -> { AccountId = a.RecipientId }
-      Update = fun a b -> { b with RecipientId = a.AccountId }
-   }
-
 let formInternalWithinOrg
    (accounts: Map<AccountId, Account>)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
+   let fieldRecipientSelect accounts =
+      accountSelect (Some "Move money to account:") accounts
+      |> Form.mapValues {
+         Value = fun a -> { AccountId = a.RecipientId }
+         Update = fun a b -> { b with RecipientId = a.AccountId }
+      }
+
    let onSubmit (sender: Account) (recipient: Account) (amount: decimal) =
       let orgId = sender.OrgId
       let parentAccountId = sender.ParentAccountId
@@ -151,7 +154,7 @@ let formInternalWithinOrg
             Form.succeed (fun recipientId amount ->
                sender, recipientId, amount)
             |> Form.append (fieldRecipientSelect recipientOptions)
-            |> Form.append (amountField sender))
+            |> Form.append (amountField (Some sender.AvailableBalance)))
       ))
 
 let formInternalBetweenOrgs
@@ -244,45 +247,112 @@ let formInternalBetweenOrgs
 
          Form.succeed (fun amount memo scheduledAt ->
             sender, amount, memo, scheduledAt)
-         |> Form.append (amountField sender)
+         |> Form.append (amountField (Some sender.AvailableBalance))
          |> Form.append memoForm
          |> Form.append scheduledAtField)
    )
 
+type private DomesticAccountInterchange =
+   | Internal of Account
+   | External of Counterparty
+
 let formDomestic
    (counterparties: Map<CounterpartyId, Counterparty>)
-   (senderAccounts: Map<AccountId, Account>)
+   (internalAccounts: Map<AccountId, Account>)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
-   let fieldDomesticSelect =
+   let internalAccountOptions =
+      internalAccounts
+      |> Map.toList
+      |> List.map (fun (accountId, account) ->
+         string accountId,
+         $"{account.Name} ({Money.format account.AvailableBalance})")
+
+   let externalAccountOptions =
+      counterparties
+      |> Map.toList
+      |> List.map (fun (recipientId, recipient) ->
+         let name = recipient.Nickname |> Option.defaultValue recipient.Name
+
+         string recipientId, $"{name} **{recipient.AccountNumber.Last4}")
+
+   let options = internalAccountOptions @ externalAccountOptions
+
+   let fieldSenderSelect values =
       Form.selectField {
          Parser = Ok
-         Value = fun values -> values.RecipientId
+         Value = _.SenderId
+         Update =
+            fun newValue values ->
+               let internalCount =
+                  internalAccountOptions
+                  |> List.filter (fun (id, _) ->
+                     id = values.RecipientId || id = newValue)
+                  |> List.length
+
+               let externalCount =
+                  externalAccountOptions
+                  |> List.filter (fun (id, _) ->
+                     id = values.RecipientId || id = newValue)
+                  |> List.length
+
+               // Resetting the recipient ensures that the transfer flows from an
+               // internal account to an external account or vice versa.
+               // Reset if:
+               //    1. Sender is already selected as the recipient.
+               //    2. Both sender & recipient are internal accounts.
+               //    3. Both sender & recipient are external accounts.
+               let resetRecipient =
+                  internalCount = 2
+                  || externalCount = 2
+                  || newValue = values.RecipientId
+
+               {
+                  values with
+                     SenderId = newValue
+                     RecipientId =
+                        if resetRecipient then "" else values.RecipientId
+               }
+         Error = fun _ -> None
+         Attributes = {
+            Label = "Sender:"
+            Placeholder = "No account selected"
+            Options = options |> List.sortBy snd
+         }
+      }
+
+   let fieldRecipientSelect values =
+      // Restrict recipient to accounts of the opposite type to the sender
+      // (internal accounts can only send to external accounts and vice versa)
+      let recipientOptions =
+         let senderIsInternal =
+            Guid.parseOptional values.SenderId
+            |> Option.exists (AccountId >> internalAccounts.ContainsKey)
+
+         if String.IsNullOrWhiteSpace values.SenderId then options
+         elif senderIsInternal then externalAccountOptions
+         else internalAccountOptions
+
+      Form.selectField {
+         Parser = Ok
+         Value = _.RecipientId
          Update = fun newValue values -> { values with RecipientId = newValue }
          Error = fun _ -> None
          Attributes = {
             Label = "Recipient:"
-            Placeholder = "No selection"
-            Options =
-               counterparties
-               |> Map.toList
-               |> List.map (fun (recipientId, recipient) ->
-                  let name =
-                     recipient.Nickname |> Option.defaultValue recipient.Name
-
-                  string recipientId,
-                  $"{name} **{recipient.AccountNumber.Last4}")
-               |> List.sortBy snd
+            Placeholder = "No recipient selected"
+            Options = recipientOptions |> List.sortBy snd
          }
       }
 
    let onSubmit
-      (recipient: Counterparty)
-      (sender: Account)
       (amount: decimal)
       (memo: string option)
       (scheduledAt: DateTime)
+      (originator: Account)
+      (counterparty: Counterparty)
+      (moneyFlow: MoneyFlow)
       =
       let memo =
          memo
@@ -294,13 +364,14 @@ let formDomestic
       let transfer: DomesticTransferInput = {
          Amount = amount
          Originator = {
-            Name = sender.Name
-            OrgId = sender.OrgId
-            ParentAccountId = sender.ParentAccountId
-            AccountId = sender.AccountId
+            Name = originator.Name
+            OrgId = originator.OrgId
+            ParentAccountId = originator.ParentAccountId
+            AccountId = originator.AccountId
          }
-         Counterparty = recipient
+         Counterparty = counterparty
          Memo = memo
+         MoneyFlow = moneyFlow
          ScheduledDateSeedOverride = None
          OriginatedFromSchedule =
             scheduledAt <> DateTime.Today.ToUniversalTime()
@@ -320,25 +391,46 @@ let formDomestic
                transfer
             |> AccountCommand.DomesticTransfer
 
-      Msg.Submit(FormEntity.Account sender, FormCommand.Account cmd, Started)
+      Msg.Submit(
+         FormEntity.Account originator,
+         FormCommand.Account cmd,
+         Started
+      )
 
-   Form.succeed (fun props ->
-      let sender, recipient, amount, memo, scheduledAt = props
-      onSubmit recipient sender amount memo scheduledAt)
-   |> Form.append (
-      fieldSenderSelect senderAccounts
-      |> Form.andThen (fun senderId ->
-         let sender = senderAccounts[senderId]
+   let interchange (id: Guid) =
+      internalAccounts.TryFind(AccountId id)
+      |> Option.map DomesticAccountInterchange.Internal
+      |> Option.orElseWith (fun () ->
+         counterparties.TryFind(CounterpartyId id)
+         |> Option.map DomesticAccountInterchange.External)
 
-         Form.succeed (fun (recipientId: string) amount memo scheduledAt ->
-            let recipientId = recipientId |> Guid.Parse |> CounterpartyId
-            let recipient = counterparties[recipientId]
-            sender, recipient, amount, memo, scheduledAt)
-         |> Form.append fieldDomesticSelect
-         |> Form.append (amountField sender)
-         |> Form.append memoForm
-         |> Form.append scheduledAtField)
-   )
+   Form.meta (fun values ->
+      let availableBalance =
+         Guid.parseOptional values.SenderId
+         |> Option.bind (AccountId >> internalAccounts.TryFind)
+         |> Option.map _.AvailableBalance
+
+      Form.succeed
+         (fun (senderId: string) (recipientId: string) amount memo scheduledAt ->
+            let sender = interchange (Guid.Parse senderId)
+            let recipient = interchange (Guid.Parse recipientId)
+
+            let onSubmit = onSubmit amount memo scheduledAt
+
+            match sender, recipient with
+            | Some(DomesticAccountInterchange.Internal sender),
+              Some(DomesticAccountInterchange.External receiver) ->
+               onSubmit sender receiver MoneyFlow.Out
+            | Some(DomesticAccountInterchange.External sender),
+              Some(DomesticAccountInterchange.Internal receiver) ->
+               onSubmit receiver sender MoneyFlow.In
+            | o -> failwith $"Invalid account interchange: {o}")
+      |> Form.append (fieldSenderSelect values)
+      |> Form.append (fieldRecipientSelect values)
+      |> Form.append (amountField availableBalance)
+      |> Form.append memoForm
+      |> Form.append scheduledAtField)
+
 
 [<ReactComponent>]
 let TransferInternalWithinOrgComponent
@@ -456,11 +548,7 @@ let TransferDomesticFormComponent
       match selectedRecipient with
       | Some(env, id) when env = RecipientAccountEnvironment.Domestic ->
          string id
-      | _ ->
-         recipients.Values
-         |> Seq.tryHead
-         |> Option.map (_.CounterpartyId >> string)
-         |> Option.defaultValue ""
+      | _ -> ""
 
    FormContainer {|
       Session = session

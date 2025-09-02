@@ -282,6 +282,7 @@ let onStartEventPersisted
             Action = DomesticTransferServiceAction.TransferAck
             OriginatingAccountId = link.PartnerBankAccountId
             CounterpartyId = info.Counterparty.PartnerBankCounterpartyId
+            Direction = info.MoneyFlow
             Amount = info.Amount
             PaymentNetwork = info.Counterparty.PaymentNetwork
             Date = info.ScheduledDate
@@ -319,6 +320,7 @@ let onEventPersisted
             Amount = info.Amount
             Originator = info.Originator
             Counterparty = info.Counterparty
+            MoneyFlow = info.MoneyFlow
             Memo = info.Memo
             ScheduledDateSeedOverride = None
             OriginatedFromSchedule = currentState.OriginatedFromSchedule
@@ -336,6 +338,7 @@ let onEventPersisted
             OriginatingAccountId =
                currentState.PartnerBankAccountLink.PartnerBankAccountId
             CounterpartyId = info.Counterparty.PartnerBankCounterpartyId
+            Direction = info.MoneyFlow
             Amount = info.Amount
             PaymentNetwork = info.Counterparty.PaymentNetwork
             Date = info.ScheduledDate

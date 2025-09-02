@@ -38,12 +38,25 @@ module PaymentNetwork =
       | Some s -> s
       | None -> failwith "Error attempting to cast string to PaymentNetwork"
 
+// TODO:
+// Need to differentiate between:
+//    1. External accounts we can pull money from or transfer money to.
+//       Ex: We link our Chase bank account
+//    2. Recipients we can only send money to (external accounts we don't
+//        control)
 type Counterparty = {
    LastName: string
    FirstName: string
    Nickname: string option
+
+   // TODO: Avoid storing this sensitive data
+   // The counterparty will most likely be created from a Plaid
+   // linking flow.  We will instead store the plaid id to the linked resource
+   // and can request the account/routing number from plaid before making
+   // a request to the partner bank to create the counterparty.
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
+
    Depository: CounterpartyAccountDepository
    PaymentNetwork: PaymentNetwork
    Address: Address
@@ -151,6 +164,7 @@ type BaseDomesticTransferInfo = {
    Originator: DomesticTransferOriginatorReference
    Counterparty: Counterparty
    Amount: decimal
+   MoneyFlow: MoneyFlow
    TransferId: TransferId
    InitiatedBy: Initiator
    Memo: string option
@@ -163,6 +177,7 @@ type DomesticTransfer = {
    TransferId: TransferId
    InitiatedBy: Initiator
    Amount: decimal
+   MoneyFlow: MoneyFlow
    ScheduledDate: DateTime
    ExpectedSettlementDate: DateTime
    Status: DomesticTransferProgress

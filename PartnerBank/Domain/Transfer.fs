@@ -20,6 +20,7 @@ type PartnerBankDomesticTransferRequest = {
    CounterpartyId: PartnerBankCounterpartyId
    Amount: decimal
    PaymentNetwork: PaymentNetwork
+   Direction: MoneyFlow
    Date: DateTime
    Status: DomesticTransferProgress
    TransferId: TransferId
@@ -39,6 +40,15 @@ type PartnerBankDomesticTransferRequest = {
          payment_network =
             match x.PaymentNetwork with
             | PaymentNetwork.ACH -> "ach"
+         flow =
+            match x.Direction with
+            // Pulls money from the counterparty account to an internal account.
+            // An ACH debit will usually generate more returns (insufficient funds,
+            // invalid account details, etc.) as you are pulling money from a
+            // counterparty (usually external) account into one you control.
+            | MoneyFlow.In -> "debit"
+            // Pushes money from internal account to a counterparty account.
+            | MoneyFlow.Out -> "credit"
          idempotency_key = string x.TransferId
       |}
    |}

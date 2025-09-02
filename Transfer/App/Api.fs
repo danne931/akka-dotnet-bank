@@ -24,6 +24,7 @@ module Query =
          dt.{TransferFields.Domestic.counterpartyId},
          dt.{TransferFields.Domestic.status},
          dt.{TransferFields.Domestic.statusDetail},
+         dt.{TransferFields.Domestic.counterpartyId},
          t.{TransferFields.transferId},
          t.{TransferFields.initiatedById},
          t.{TransferFields.scheduledAt},

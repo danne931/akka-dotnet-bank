@@ -28,6 +28,7 @@ type TransferRequest = {
    counterparty_id: string
    amount: decimal
    date: DateTime
+   flow: string
    payment_network: string
    idempotency_key: string
 }
@@ -101,6 +102,7 @@ let counterparties = ConcurrentDictionary<string, CounterpartyRequest>()
 
 let paymentNetworks = [ "ach" ]
 let depository = [ "checking"; "savings" ]
+let achDirection = [ "credit"; "debit" ]
 
 // Compute response & mutate in-memory state of in-progress transfers.
 let processTransferRequest (req: TransferRequest) (res: TransferResponse) =
@@ -138,6 +140,16 @@ let processTransferRequest (req: TransferRequest) (res: TransferResponse) =
          res with
             ok = false
             reason = "InvalidAmount"
+      }
+   elif
+      depository
+      |> List.exists (fun d -> d = counterparty.depository.ToLower())
+      |> not
+   then
+      {
+         res with
+            ok = false
+            reason = "InvalidACHDirection"
       }
    elif not (internalAccounts.ContainsKey req.originating_account_id) then
       {

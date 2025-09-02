@@ -278,7 +278,7 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.DomesticTransferSettled evt ->
          Some evt.Data.BaseInfo.Amount,
-         Some MoneyFlow.Out,
+         Some evt.Data.BaseInfo.MoneyFlow,
          Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.DomesticTransferFailed evt ->
          Some evt.Data.BaseInfo.Amount,
@@ -421,7 +421,8 @@ type Account = {
    Currency: Currency
    Status: AccountStatus
    Balance: decimal
-   PendingDeductions: PendingDeductions
+   PendingAdditions: PendingFunds
+   PendingDeductions: PendingFunds
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
    AutoTransferRule: AutomaticTransferConfig option
@@ -468,7 +469,8 @@ type Account = {
       Currency = Currency.USD
       Status = AccountStatus.InitialEmptyState
       Balance = 0m
-      PendingDeductions = PendingDeductions.Zero
+      PendingAdditions = PendingFunds.Zero
+      PendingDeductions = PendingFunds.Zero
       AccountNumber = AccountNumber.Empty
       RoutingNumber = RoutingNumber.Empty
       AutoTransferRule = None
@@ -483,6 +485,12 @@ type ParentAccountSnapshot = {
    LastBillingCycleDate: DateTime option
    MaintenanceFeeCriteria: MaintenanceFeeCriteria
    Status: ParentAccountStatus
+   // TODO:
+   // Need to differentiate between:
+   //    1. External accounts we can pull money from or transfer money to.
+   //       Ex: We link our Chase bank account
+   //    2. Recipients we can only send money to (external accounts we don't
+   //        control)
    Counterparties: Map<CounterpartyId, Counterparty>
    Events: AccountEvent list
 } with

@@ -175,13 +175,13 @@ type Employee = {
 type EmployeeSnapshot = {
    Info: Employee
    Events: EmployeeEvent list
-   PendingPurchaseDeductions: PendingDeductions
+   PendingPurchaseDeductions: PendingFunds
 } with
 
    static member Empty = {
       Info = Employee.Empty
       Events = []
-      PendingPurchaseDeductions = PendingDeductions.Zero
+      PendingPurchaseDeductions = PendingFunds.Zero
    }
 
 type CardWithMetrics = {

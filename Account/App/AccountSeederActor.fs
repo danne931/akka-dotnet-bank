@@ -1284,6 +1284,7 @@ let seedAccountOwnerActions
                      OrgId = myOrg.OrgId
                      ParentAccountId = myOrg.ParentAccountId
                   }
+                  MoneyFlow = MoneyFlow.Out
                   Memo = Some "Azure Bill"
                } with
                Timestamp = timestamp

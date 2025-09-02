@@ -169,7 +169,7 @@ type OrgWithAccountProfiles = {
 
    member x.PendingDeductions =
       Seq.fold
-         (fun (acc: PendingDeductions) account ->
+         (fun (acc: PendingFunds) account ->
             if account.PendingDeductions.Count > 0 then
                {
                   Money = acc.Money + account.PendingDeductions.Money
@@ -177,7 +177,7 @@ type OrgWithAccountProfiles = {
                }
             else
                acc)
-         PendingDeductions.Zero
+         PendingFunds.Zero
          x.Accounts.Values
 
    member x.Metrics: AccountMetrics =

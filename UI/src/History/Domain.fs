@@ -417,64 +417,87 @@ let accountHistoryUIFriendly
       }
    | DomesticTransferScheduled evt ->
       let info = evt.Data.BaseInfo
-      let recipientName = domesticRecipientName info.Counterparty
       let payNetwork = info.Counterparty.PaymentNetwork
+      let counterpartyName = domesticRecipientName info.Counterparty
+
+      let from, receiver =
+         match info.MoneyFlow with
+         | MoneyFlow.Out -> info.Originator.Name, counterpartyName
+         | MoneyFlow.In -> counterpartyName, info.Originator.Name
 
       {
          props with
             Name = "Domestic Transfer"
             Info =
-               $"{payNetwork} transfer scheduled from {info.Originator.Name} to {recipientName} for {DateTime.formatShort info.ScheduledDate}"
+               $"{payNetwork} transfer scheduled from {from} to {receiver} for {DateTime.formatShort info.ScheduledDate}"
             Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferPending evt ->
       let info = evt.Data.BaseInfo
-      let recipientName = domesticRecipientName info.Counterparty
       let payNetwork = info.Counterparty.PaymentNetwork
+      let counterpartyName = domesticRecipientName info.Counterparty
+
+      let from, receiver =
+         match info.MoneyFlow with
+         | MoneyFlow.Out -> info.Originator.Name, counterpartyName
+         | MoneyFlow.In -> counterpartyName, info.Originator.Name
 
       {
          props with
             Name = "Domestic Transfer"
-            Info =
-               $"{payNetwork} transfer processing from {info.Originator.Name} to {recipientName}"
+            Info = $"{payNetwork} transfer processing from {from} to {receiver}"
             Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferSettled evt ->
       let info = evt.Data.BaseInfo
       let payNetwork = info.Counterparty.PaymentNetwork
+      let counterpartyName = domesticRecipientName info.Counterparty
+
+      let from, receiver =
+         match info.MoneyFlow with
+         | MoneyFlow.Out -> info.Originator.Name, counterpartyName
+         | MoneyFlow.In -> counterpartyName, info.Originator.Name
 
       {
          props with
             Name = "Domestic Transfer Settled"
-            Info =
-               $"{payNetwork} transfer settled from {info.Originator.Name} to {domesticRecipientName info.Counterparty}"
+            Info = $"{payNetwork} transfer settled from {from} to {receiver}"
             Amount = Some <| Money.format info.Amount
-            MoneyFlow = Some MoneyFlow.Out
+            MoneyFlow = Some info.MoneyFlow
       }
    | DomesticTransferFailed evt ->
       let info = evt.Data.BaseInfo
-
-      let recipientName = domesticRecipientName info.Counterparty
       let payNetwork = info.Counterparty.PaymentNetwork
+      let counterpartyName = domesticRecipientName info.Counterparty
+
+      let from, receiver =
+         match info.MoneyFlow with
+         | MoneyFlow.Out -> info.Originator.Name, counterpartyName
+         | MoneyFlow.In -> counterpartyName, info.Originator.Name
 
       {
          props with
             Name = "Domestic Transfer Failed"
             Info =
-               $"{payNetwork} transfer failed from {accountName} to {recipientName}
+               $"{payNetwork} transfer failed from {from} to {receiver}
                - Reason: {evt.Data.Reason.Display}"
             Amount = Some <| Money.format info.Amount
       }
    | DomesticTransferProgress evt ->
       let info = evt.Data.BaseInfo
       let payNetwork = info.Counterparty.PaymentNetwork
-      let recipientName = domesticRecipientName info.Counterparty
+      let counterpartyName = domesticRecipientName info.Counterparty
+
+      let from, receiver =
+         match info.MoneyFlow with
+         | MoneyFlow.Out -> info.Originator.Name, counterpartyName
+         | MoneyFlow.In -> counterpartyName, info.Originator.Name
 
       {
          props with
             Info =
                $"Progress update received for {payNetwork} transfer 
-                 to {recipientName} from {accountName}"
+                 to {receiver} from {from}"
             Amount = Some <| Money.format info.Amount
       }
    | AccountClosed evt -> {

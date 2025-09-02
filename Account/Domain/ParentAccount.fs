@@ -159,11 +159,17 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       | AccountEvent.DomesticTransferSettled e -> {
          updated with
             MaintenanceFeeCriteria =
-               MaintenanceFee.fromDebit
-                  state.MaintenanceFeeCriteria
-                  updated.Balance
+               match e.Data.BaseInfo.MoneyFlow with
+               | MoneyFlow.Out ->
+                  MaintenanceFee.fromDebit
+                     state.MaintenanceFeeCriteria
+                     updated.Balance
+               | MoneyFlow.In ->
+                  MaintenanceFee.fromDeposit
+                     state.MaintenanceFeeCriteria
+                     updated.Balance
         }
-      | AccountEvent.DomesticTransferFailed e -> updated
+      | AccountEvent.DomesticTransferFailed _ -> updated
       | AccountEvent.DebitRefunded _ -> {
          updated with
             MaintenanceFeeCriteria =

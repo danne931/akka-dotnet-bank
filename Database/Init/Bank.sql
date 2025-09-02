@@ -244,6 +244,8 @@ CREATE TABLE account (
    account_name VARCHAR(50) NOT NULL,
    depository account_depository NOT NULL,
    balance MONEY NOT NULL,
+   pending_additions_money MONEY NOT NULL,
+   pending_additions_count INT NOT NULL,
    pending_deductions_money MONEY NOT NULL,
    pending_deductions_count INT NOT NULL,
    currency VARCHAR(3) NOT NULL,
@@ -266,7 +268,8 @@ TODO: Research potential for "treasury accounts".
 TODO: Research potential for "credit accounts".
 TODO: Create a separate table for "LinkedAccounts".  A linked account should refer to an account outside 
 the platform, a Chase bank account for example, which the organization can set up (likely via Plaid), 
-to be able to deposit funds into their accounts on the platform.';
+to be able to deposit funds into their accounts on the platform. A linked account may contain 
+a Plaid ID, balance, and a pointer to a counterparty.';
 
 COMMENT ON COLUMN account.auto_transfer_rule IS
 'This optional configuration allows an organization to automatically
@@ -754,13 +757,25 @@ AS ENUM ('Checking', 'Savings');
 
 CREATE TYPE payment_network AS ENUM ('ACH');
 
+-- TODO:
+-- Need to differentiate between:
+--    1. External accounts we can pull money from or transfer money to.
+--       Ex: We link our Chase bank account
+--    2. Recipients we can only send money to (external accounts we don't control)
 CREATE TABLE counterparty(
    counterparty_id UUID PRIMARY KEY,
    first_name VARCHAR(50) NOT NULL,
    last_name VARCHAR(50) NOT NULL,
    nickname VARCHAR(100),
+
+   -- TODO: Avoid storing this sensitive data
+   -- The counterparty will most likely be created from a Plaid
+   -- linking flow.  We will instead store the plaid id to the linked resource 
+   -- and can request the account/routing number from plaid before making
+   -- a request to the partner bank to create the counterparty.
    routing_number INT NOT NULL,
    account_number BIGINT UNIQUE NOT NULL,
+
    depository counterparty_account_depository NOT NULL,
    payment_network payment_network NOT NULL,
    address JSONB NOT NULL,
@@ -789,6 +804,7 @@ CREATE TABLE transfer_domestic(
    expected_settlement_date TIMESTAMPTZ NOT NULL,
    transfer_status domestic_transfer_status NOT NULL,
    transfer_status_detail JSONB NOT NULL,
+   money_flow money_flow,
    counterparty_id UUID REFERENCES counterparty
 );
 
@@ -803,8 +819,8 @@ COMMENT ON TABLE transfer_domestic IS
 
 There is currently a server, defined in MockPartnerBank.Service folder, which supports mocking
 the interaction of sending transfers domestically from accounts on the platform to accounts outside the platform.
-Transfer request and progress check messages are sent over TCP from the platform (Transfer.App/DomesticTransferRecipientActor.fs)
-to a mock 3rd party transfer processor (MockPartnerBank.Service/Program.fs).';
+Transfer request and progress check messages are sent over TCP from the platform
+(PartnerBank/App/PartnerBankServiceActor.fs) to a mock 3rd party transfer processor (MockPartnerBank.Service/Program.fs).';
 
 
 --- PAYMENT REQUESTS ---

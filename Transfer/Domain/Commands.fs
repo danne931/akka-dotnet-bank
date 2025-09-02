@@ -414,6 +414,7 @@ type DomesticTransferInput = {
    Memo: string option
    ScheduledDateSeedOverride: DateTime option
    OriginatedFromSchedule: bool
+   MoneyFlow: MoneyFlow
 }
 
 type ScheduleDomesticTransferInput = {
@@ -462,6 +463,7 @@ module DomesticTransferCommand =
                      Originator = input.Originator
                      Counterparty = input.Counterparty
                      Memo = input.Memo
+                     MoneyFlow = input.MoneyFlow
                   }
                }
       }
@@ -507,6 +509,7 @@ module ScheduleDomesticTransferCommand =
                      Originator = input.Originator
                      Counterparty = input.Counterparty
                      Memo = input.Memo
+                     MoneyFlow = input.MoneyFlow
                   }
                   ExpectedSettlementDate = scheduledDate.AddDays 5
                }

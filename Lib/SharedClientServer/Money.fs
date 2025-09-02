@@ -59,7 +59,7 @@ module MoneyFlow =
          | "out" -> Some MoneyFlow.Out
          | _ -> None
 
-type PendingDeductions = {
+type PendingFunds = {
    Count: int
    Money: decimal
 } with

@@ -126,6 +126,8 @@ let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
 
    "amount", TransferSqlWriter.amount o.Amount
 
+   "moneyFlow", TransferSqlWriter.Domestic.moneyFlow o.MoneyFlow
+
    "memo", TransferSqlWriter.memo o.Memo
 
    "counterpartyId",
@@ -133,11 +135,29 @@ let private domesticTransferBaseSqlParams (o: BaseDomesticTransferInfo) = [
 ]
 
 module private AccountBalanceReducer =
-   let reserveFunds accountId txnAmount acc =
+   type Transaction =
+      | Purchase
+      | InternalTransferBetweenOrgs
+      | DomesticTransfer of MoneyFlow
+
+   let private flow =
+      function
+      | Purchase -> MoneyFlow.Out
+      | InternalTransferBetweenOrgs -> MoneyFlow.Out
+      | DomesticTransfer flow -> flow
+
+   let private flowDescriptor (txnType: Transaction) =
+      match flow txnType with
+      | MoneyFlow.In -> "Additions"
+      | MoneyFlow.Out -> "Deductions"
+
+   let reserveFunds accountId txnAmount txnType acc =
+      let direction = flowDescriptor txnType
+
       let qParams = [
          "accountId", AccountSqlWriter.accountId accountId
-         "pendingDeductionsMoneyDelta", Sql.money txnAmount
-         "pendingDeductionsCountDelta", Sql.int 1
+         $"pending{direction}MoneyDelta", Sql.money txnAmount
+         $"pending{direction}CountDelta", Sql.int 1
       ]
 
       {
@@ -145,11 +165,13 @@ module private AccountBalanceReducer =
             AccountUpdate = qParams :: acc.AccountUpdate
       }
 
-   let releaseReservedFunds accountId txnAmount acc =
+   let releaseReservedFunds accountId txnAmount txnType acc =
+      let direction = flowDescriptor txnType
+
       let qParams = [
          "accountId", AccountSqlWriter.accountId accountId
-         "pendingDeductionsMoneyDelta", Sql.money -txnAmount
-         "pendingDeductionsCountDelta", Sql.int -1
+         $"pending{direction}MoneyDelta", Sql.money -txnAmount
+         $"pending{direction}CountDelta", Sql.int -1
       ]
 
       {
@@ -157,12 +179,17 @@ module private AccountBalanceReducer =
             AccountUpdate = qParams :: acc.AccountUpdate
       }
 
-   let settleFunds accountId txnAmount acc =
+   let settleFunds accountId txnAmount txnType acc =
+      let direction = flowDescriptor txnType
+
       let qParams = [
          "accountId", AccountSqlWriter.accountId accountId
-         "balanceDelta", Sql.money -txnAmount
-         "pendingDeductionsMoneyDelta", Sql.money -txnAmount
-         "pendingDeductionsCountDelta", Sql.int -1
+         $"pending{direction}MoneyDelta", Sql.money -txnAmount
+         $"pending{direction}CountDelta", Sql.int -1
+
+         match flow txnType with
+         | MoneyFlow.In -> "balanceDelta", Sql.money txnAmount
+         | MoneyFlow.Out -> "balanceDelta", Sql.money -txnAmount
       ]
 
       {
@@ -414,10 +441,14 @@ let sqlParamReducer
          "depository", AccountSqlWriter.depository AccountDepository.Checking
          "currency", AccountSqlWriter.currency Currency.USD
          "balance", AccountSqlWriter.balance 0m
+         "pendingAdditionsMoney",
+         AccountSqlWriter.pendingFundsMoney PendingFunds.Zero
+         "pendingAdditionsCount",
+         AccountSqlWriter.pendingFundsCount PendingFunds.Zero
          "pendingDeductionsMoney",
-         AccountSqlWriter.pendingDeductionsMoney PendingDeductions.Zero
+         AccountSqlWriter.pendingFundsMoney PendingFunds.Zero
          "pendingDeductionsCount",
-         AccountSqlWriter.pendingDeductionsCount PendingDeductions.Zero
+         AccountSqlWriter.pendingFundsCount PendingFunds.Zero
          "status", AccountSqlWriter.status AccountStatus.Active
          "autoTransferRule", AccountSqlWriter.autoTransferRule None
          "autoTransferRuleFrequency",
@@ -444,10 +475,14 @@ let sqlParamReducer
          "depository", AccountSqlWriter.depository e.Data.Depository
          "currency", AccountSqlWriter.currency e.Data.Currency
          "balance", AccountSqlWriter.balance 0m
+         "pendingAdditionsMoney",
+         AccountSqlWriter.pendingFundsMoney PendingFunds.Zero
+         "pendingAdditionsCount",
+         AccountSqlWriter.pendingFundsCount PendingFunds.Zero
          "pendingDeductionsMoney",
-         AccountSqlWriter.pendingDeductionsMoney PendingDeductions.Zero
+         AccountSqlWriter.pendingFundsMoney PendingFunds.Zero
          "pendingDeductionsCount",
-         AccountSqlWriter.pendingDeductionsCount PendingDeductions.Zero
+         AccountSqlWriter.pendingFundsCount PendingFunds.Zero
          "status", AccountSqlWriter.status AccountStatus.Active
          "autoTransferRule", AccountSqlWriter.autoTransferRule None
          "autoTransferRuleFrequency",
@@ -484,7 +519,11 @@ let sqlParamReducer
             AccountUpdate = qParams :: acc.AccountUpdate
       }
    | AccountEvent.DebitFailed e ->
-      AccountBalanceReducer.releaseReservedFunds accountId e.Data.Amount acc
+      AccountBalanceReducer.releaseReservedFunds
+         accountId
+         e.Data.Amount
+         AccountBalanceReducer.Transaction.Purchase
+         acc
    | AccountEvent.DebitRefunded e ->
       AccountBalanceReducer.depositFunds accountId e.Data.Amount acc
    | AccountEvent.InternalTransferWithinOrgDeducted e ->
@@ -615,14 +654,20 @@ let sqlParamReducer
                TransferCategory.InternalBetweenOrgs
          ]
 
-      internalTransferBetweenOrgsStatusReducer
-         {
-            acc with
-               Transfer = transferParams :: acc.Transfer
-         }
-         InternalTransferBetweenOrgsStatus.Pending
-         info
-      |> AccountBalanceReducer.reserveFunds accountId info.Amount
+      let acc =
+         internalTransferBetweenOrgsStatusReducer
+            {
+               acc with
+                  Transfer = transferParams :: acc.Transfer
+            }
+            InternalTransferBetweenOrgsStatus.Pending
+            info
+
+      AccountBalanceReducer.reserveFunds
+         accountId
+         info.Amount
+         AccountBalanceReducer.Transaction.InternalTransferBetweenOrgs
+         acc
    | AccountEvent.InternalTransferBetweenOrgsSettled e ->
       let info = e.Data.BaseInfo
 
@@ -631,7 +676,13 @@ let sqlParamReducer
             acc
             InternalTransferBetweenOrgsStatus.Settled
             info
-         |> AccountBalanceReducer.settleFunds accountId info.Amount
+
+      let acc =
+         AccountBalanceReducer.settleFunds
+            accountId
+            info.Amount
+            AccountBalanceReducer.Transaction.InternalTransferBetweenOrgs
+            acc
 
       match info.FromPaymentRequest with
       | Some paymentId ->
@@ -658,11 +709,17 @@ let sqlParamReducer
    | AccountEvent.InternalTransferBetweenOrgsFailed e ->
       let info = e.Data.BaseInfo
 
-      internalTransferBetweenOrgsStatusReducer
+      let acc =
+         internalTransferBetweenOrgsStatusReducer
+            acc
+            (InternalTransferBetweenOrgsStatus.Failed e.Data.Reason)
+            info
+
+      AccountBalanceReducer.releaseReservedFunds
+         accountId
+         info.Amount
+         AccountBalanceReducer.Transaction.InternalTransferBetweenOrgs
          acc
-         (InternalTransferBetweenOrgsStatus.Failed e.Data.Reason)
-         info
-      |> AccountBalanceReducer.releaseReservedFunds accountId info.Amount
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       let info = e.Data.BaseInfo
 
@@ -719,12 +776,17 @@ let sqlParamReducer
                e.Data.ExpectedSettlementDate
          ]
 
-      {
+      let acc = {
          acc with
             Transfer = transferParams :: acc.Transfer
             DomesticTransfer = domesticTransferParams :: acc.DomesticTransfer
       }
-      |> AccountBalanceReducer.reserveFunds accountId info.Amount
+
+      AccountBalanceReducer.reserveFunds
+         accountId
+         info.Amount
+         (AccountBalanceReducer.Transaction.DomesticTransfer info.MoneyFlow)
+         acc
    | AccountEvent.DomesticTransferProgress e ->
       let status = DomesticTransferProgress.PartnerBank e.Data.InProgressInfo
 
@@ -749,19 +811,31 @@ let sqlParamReducer
    | AccountEvent.DomesticTransferFailed e ->
       let info = e.Data.BaseInfo
 
-      domesticTransferStatusReducer
+      let acc =
+         domesticTransferStatusReducer
+            acc
+            (DomesticTransferProgress.Failed e.Data.Reason)
+            info.TransferId
+
+      AccountBalanceReducer.releaseReservedFunds
+         accountId
+         info.Amount
+         (AccountBalanceReducer.Transaction.DomesticTransfer info.MoneyFlow)
          acc
-         (DomesticTransferProgress.Failed e.Data.Reason)
-         info.TransferId
-      |> AccountBalanceReducer.releaseReservedFunds accountId info.Amount
    | AccountEvent.DomesticTransferSettled e ->
       let info = e.Data.BaseInfo
 
-      domesticTransferStatusReducer
+      let acc =
+         domesticTransferStatusReducer
+            acc
+            DomesticTransferProgress.Settled
+            info.TransferId
+
+      AccountBalanceReducer.settleFunds
+         accountId
+         info.Amount
+         (AccountBalanceReducer.Transaction.DomesticTransfer info.MoneyFlow)
          acc
-         DomesticTransferProgress.Settled
-         info.TransferId
-      |> AccountBalanceReducer.settleFunds accountId info.Amount
    | AccountEvent.PaymentRequested e ->
       let shared = e.Data.SharedDetails
       let status = PaymentRequestStatus.Requested
@@ -1022,6 +1096,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {AccountFields.balance},
           {AccountFields.pendingDeductionsMoney},
           {AccountFields.pendingDeductionsCount},
+          {AccountFields.pendingAdditionsMoney},
+          {AccountFields.pendingAdditionsCount},
           {AccountFields.currency},
           {AccountFields.status},
           {AccountFields.autoTransferRule},
@@ -1037,6 +1113,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           @balance,
           @pendingDeductionsMoney,
           @pendingDeductionsCount,
+          @pendingAdditionsMoney,
+          @pendingAdditionsCount,
           @currency,
           @status::{AccountTypeCast.status},
           @autoTransferRule,
@@ -1054,6 +1132,10 @@ let upsertReadModels (accountEvents: AccountEvent list) =
             {AccountFields.pendingDeductionsMoney} + COALESCE(@pendingDeductionsMoneyDelta, 0::money),
          {AccountFields.pendingDeductionsCount} =
             {AccountFields.pendingDeductionsCount} + COALESCE(@pendingDeductionsCountDelta, 0::int),
+         {AccountFields.pendingAdditionsMoney} =
+            {AccountFields.pendingAdditionsMoney} + COALESCE(@pendingAdditionsMoneyDelta, 0::money),
+         {AccountFields.pendingAdditionsCount} =
+            {AccountFields.pendingAdditionsCount} + COALESCE(@pendingAdditionsCountDelta, 0::int),
          {AccountFields.status} = COALESCE(@status::{AccountTypeCast.status}, {AccountFields.status}),
          {AccountFields.autoTransferRule} = COALESCE(@autoTransferRule, {AccountFields.autoTransferRule}),
          {AccountFields.autoTransferRuleFrequency} =
@@ -1069,6 +1151,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
             "balanceDelta"
             "pendingDeductionsMoneyDelta"
             "pendingDeductionsCountDelta"
+            "pendingAdditionsMoneyDelta"
+            "pendingAdditionsCountDelta"
             "status"
             "autoTransferRule"
             "autoTransferRuleFrequency"
@@ -1363,13 +1447,15 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {TransferFields.Domestic.expectedSettlementDate},
           {TransferFields.Domestic.status},
           {TransferFields.Domestic.statusDetail},
-          {TransferFields.Domestic.counterpartyId})
+          {TransferFields.Domestic.counterpartyId},
+          {TransferFields.Domestic.moneyFlow})
       VALUES
          (@transferId,
           @expectedSettlementDate,
           @status::{TransferTypeCast.domesticTransferStatus},
           @statusDetail,
-          @counterpartyId)
+          @counterpartyId,
+          @moneyFlow::{TransferTypeCast.moneyFlow})
       ON CONFLICT ({TransferFields.transferId})
       DO UPDATE SET
          {TransferFields.Domestic.status} = @status::{TransferTypeCast.domesticTransferStatus},

@@ -23,6 +23,8 @@ module AccountFields =
    let currency = "currency"
    let status = "status"
    let balance = "balance"
+   let pendingAdditionsMoney = "pending_additions_money"
+   let pendingAdditionsCount = "pending_additions_count"
    let pendingDeductionsMoney = "pending_deductions_money"
    let pendingDeductionsCount = "pending_deductions_count"
    let autoTransferRule = "auto_transfer_rule"
@@ -58,7 +60,12 @@ module AccountSqlReader =
 
    let balance (read: RowReader) = read.decimal AccountFields.balance
 
-   let pendingDeductions (read: RowReader) : PendingDeductions = {
+   let pendingAdditions (read: RowReader) : PendingFunds = {
+      Count = read.int AccountFields.pendingAdditionsCount
+      Money = read.decimal AccountFields.pendingAdditionsMoney
+   }
+
+   let pendingDeductions (read: RowReader) : PendingFunds = {
       Count = read.int AccountFields.pendingDeductionsCount
       Money = read.decimal AccountFields.pendingDeductionsMoney
    }
@@ -78,6 +85,7 @@ module AccountSqlReader =
       Currency = currency read
       Status = status read
       Balance = balance read
+      PendingAdditions = pendingAdditions read
       PendingDeductions = pendingDeductions read
       AutoTransferRule = autoTransferRule read
    }
@@ -97,11 +105,9 @@ module AccountSqlWriter =
    let name = Sql.string
    let balance = Sql.money
 
-   let pendingDeductionsMoney (deductions: PendingDeductions) =
-      Sql.money deductions.Money
+   let pendingFundsMoney (funds: PendingFunds) = Sql.money funds.Money
 
-   let pendingDeductionsCount (deductions: PendingDeductions) =
-      Sql.int deductions.Count
+   let pendingFundsCount (funds: PendingFunds) = Sql.int funds.Count
 
    let currency (currency: Currency) = Sql.string <| string currency
    let status (status: AccountStatus) = status |> string |> Sql.string

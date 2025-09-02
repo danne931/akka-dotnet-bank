@@ -445,7 +445,7 @@ let transactionUIFriendly
             Destination = recipient
       }
    | TransactionType.DomesticTransfer ->
-      let sender, recipient, payNetwork =
+      let sender, recipient, payNetwork, moneyFlow =
          txn.History
          |> List.tryPick (function
             | History.Account accountHistory ->
@@ -456,10 +456,18 @@ let transactionUIFriendly
                | _ -> None
             | _ -> None)
          |> Option.map (fun info ->
-            info.Originator.Name,
-            counterpartyName info.Counterparty,
-            string info.Counterparty.PaymentNetwork)
-         |> Option.defaultValue ("Unknown", "Unknown", "Unknown")
+            match info.MoneyFlow with
+            | MoneyFlow.Out ->
+               info.Originator.Name,
+               counterpartyName info.Counterparty,
+               string info.Counterparty.PaymentNetwork,
+               info.MoneyFlow
+            | MoneyFlow.In ->
+               counterpartyName info.Counterparty,
+               info.Originator.Name,
+               string info.Counterparty.PaymentNetwork,
+               info.MoneyFlow)
+         |> Option.defaultValue ("Unknown", "Unknown", "Unknown", MoneyFlow.Out)
 
       {
          props with
@@ -470,7 +478,7 @@ let transactionUIFriendly
                match txn.Status with
                | TransactionStatus.Complete
                | TransactionStatus.Scheduled
-               | TransactionStatus.InProgress -> Some MoneyFlow.Out
+               | TransactionStatus.InProgress -> Some moneyFlow
                | TransactionStatus.Failed -> None
             Source = sender
             Destination = recipient

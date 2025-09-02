@@ -16,6 +16,7 @@ module Table =
 
 module TransferTypeCast =
    let domesticTransferStatus = "domestic_transfer_status"
+   let moneyFlow = "money_flow"
 
    let internalTransferBetweenOrgsStatus =
       "internal_transfer_between_orgs_status"
@@ -54,6 +55,7 @@ module TransferFields =
       let statusDetail = "transfer_status_detail"
       let counterpartyId = "counterparty_id"
       let expectedSettlementDate = "expected_settlement_date"
+      let moneyFlow = "money_flow"
 
 module TransferSqlReader =
    let transferId (read: RowReader) =
@@ -122,6 +124,12 @@ module TransferSqlReader =
       let counterpartyId (read: RowReader) =
          TransferFields.Domestic.counterpartyId |> read.uuid |> CounterpartyId
 
+      let moneyFlow (read: RowReader) =
+         TransferFields.Domestic.moneyFlow
+         |> read.string
+         |> MoneyFlow.fromString
+         |> _.Value
+
       let originator (read: RowReader) : DomesticTransferOriginator = {
          Name = AccountSqlReader.name read
          AccountNumber = read.int64 AccountFields.accountNumber |> AccountNumber
@@ -149,6 +157,7 @@ module TransferSqlReader =
          Originator = originator read
          Counterparty = CounterpartyReader.counterparty read
          Amount = amount read
+         MoneyFlow = moneyFlow read
          ScheduledDate = scheduledAt read
          ExpectedSettlementDate = expectedSettlementDate read
       }
@@ -208,3 +217,5 @@ module TransferSqlWriter =
       let expectedSettlementDate (date: DateTime) = Sql.timestamptz date
 
       let counterpartyId (CounterpartyId id) = Sql.uuid id
+
+      let moneyFlow (flow: MoneyFlow) = Sql.string (string flow)
