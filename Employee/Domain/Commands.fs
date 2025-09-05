@@ -139,6 +139,7 @@ type CreateCardInput = {
    OrgId: OrgId
    EmployeeId: EmployeeId
    CardId: CardId
+   OriginatedFromEmployeeOnboarding: CorrelationId option
 }
 
 type CreateCardCommand = Command<CreateCardInput>
@@ -158,11 +159,6 @@ module CreateCardCommand =
       =
       validate {
          let input = cmd.Data
-         let random = System.Random()
-
-         let last4 =
-            List.init 4 (fun _ -> random.Next(1, 9) |> string)
-            |> String.concat ""
 
          let! dailyPurchaseLimit =
             match input.DailyPurchaseLimit with
@@ -180,8 +176,10 @@ module CreateCardCommand =
          return
             BankEvent.create2<CreateCardInput, CreatedCard> cmd {
                PersonName = input.PersonName
+               OriginatedFromEmployeeOnboarding =
+                  input.OriginatedFromEmployeeOnboarding
                Card = {
-                  CardNumberLast4 = last4
+                  CardNumberLast4 = ""
                   CardNickname = input.CardNickname
                   CardId = cmd.Data.CardId
                   AccountId = cmd.Data.AccountId

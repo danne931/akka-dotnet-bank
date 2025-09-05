@@ -178,6 +178,7 @@ let sqlParamReducer
          "statusDetail", CardSqlWriter.statusDetail status
          "thirdPartyProviderCardId",
          CardSqlWriter.thirdPartyProviderCardId (Some e.Data.ProviderCardId)
+         "cardNumberLast4", CardSqlWriter.cardNumberLast4 e.Data.CardNumberLast4
       ]
 
       {
@@ -472,6 +473,7 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
          {CardFields.monthlyPurchaseLimit} = COALESCE(@monthlyPurchaseLimit::money, {CardFields.monthlyPurchaseLimit}),
          {CardFields.lastPurchaseAt} = COALESCE(@lastPurchaseAt, {CardFields.lastPurchaseAt}),
          {CardFields.cardNickname} = COALESCE(@cardNickname, {CardFields.cardNickname}),
+         {CardFields.cardNumberLast4} = COALESCE(@cardNumberLast4, {CardFields.cardNumberLast4}),
          {CardFields.thirdPartyProviderCardId} = COALESCE(@thirdPartyProviderCardId, {CardFields.thirdPartyProviderCardId})
       WHERE {CardFields.cardId} = @cardId;
       """,
@@ -484,6 +486,7 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
             "monthlyPurchaseLimit"
             "lastPurchaseAt"
             "cardNickname"
+            "cardNumberLast4"
             "thirdPartyProviderCardId"
          ]
       )

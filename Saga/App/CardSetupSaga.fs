@@ -9,6 +9,7 @@ open EmailMessage
 open Lib.Saga
 open CardIssuer.Service.Domain
 open CardSetupSaga
+open EmployeeOnboardingSaga
 open BankActorRegistry
 
 let applyStartEvent
@@ -17,21 +18,24 @@ let applyStartEvent
    : CardSetupSaga
    =
    let evt = start.Event
+   let card = evt.Data.Card
 
    {
       Status = CardSetupSagaStatus.InProgress
       StartEvent = start
       Events = []
       OrgId = evt.OrgId
-      CardId = evt.Data.Card.CardId
-      CardNumberLast4 = evt.Data.Card.CardNumberLast4
+      CardId = card.CardId
+      Expiration = card.Expiration
+      CardNickname = card.CardNickname
       CorrelationId = evt.CorrelationId
       InitiatedBy = evt.InitiatedBy
       EmployeeId = EmployeeId.fromEntityId evt.EntityId
       EmployeeName = start.EmployeeName
       EmployeeEmail = start.EmployeeEmail
-      CardType = evt.Data.Card.CardType
-      ProviderCardId = None
+      OriginatedFromEmployeeOnboarding =
+         start.Event.Data.OriginatedFromEmployeeOnboarding
+      CardType = card.CardType
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -85,9 +89,8 @@ let applyEvent
       let activity = Activity.CreateCardViaThirdPartyProvider
 
       match res with
-      | Ok providerCardId -> {
+      | Ok res -> {
          saga with
-            ProviderCardId = Some providerCardId
             LifeCycle =
                saga.LifeCycle
                |> finishActivity activity
@@ -161,20 +164,23 @@ let onStartEventPersisted
    (registry: #ICardIssuerServiceActor)
    (evt: CardSetupSagaStartEvent)
    =
+   let card = evt.Event.Data.Card
+
    let request = {
-      CardHolderName = evt.EmployeeName
-      CardType = evt.Event.Data.Card.CardType
+      CardNickname = card.CardNickname
+      CardType = card.CardType
+      Expiration = card.Expiration
       Metadata = {
          OrgId = evt.Event.OrgId
          CorrelationId = evt.Event.CorrelationId
       }
-      ReplyTo = SagaReplyTo.CardSetup
    }
 
    registry.CardIssuerServiceActor() <! CardIssuerMessage.CreateCard request
 
 let onEventPersisted
-   (registry: #ICardIssuerServiceActor & #IEmailActor & #IEmployeeActor)
+   (registry:
+      #ICardIssuerServiceActor & #IEmailActor & #IEmployeeActor & #ISagaGuaranteedDeliveryActor)
    (previousState: CardSetupSaga)
    (updatedState: CardSetupSaga)
    (evt: CardSetupSagaEvent)
@@ -202,12 +208,12 @@ let onEventPersisted
 
       registry.EmailActor() <! emailMsg
 
-   let linkProviderCardId (providerCardId: ThirdPartyProviderCardId) =
+   let linkProviderCardId (res: CardCreateResponse) =
       let msg =
          LinkThirdPartyProviderCardCommand.create {
             CardId = updatedState.CardId
-            ProviderCardId = providerCardId
-            CardNumberLast4 = updatedState.CardNumberLast4
+            ProviderCardId = res.ProviderCardId
+            CardNumberLast4 = res.CardNumberLast4
             OrgId = orgId
             EmployeeId = updatedState.EmployeeId
             CorrelationId = corrId
@@ -221,12 +227,23 @@ let onEventPersisted
    match evt with
    | CardSetupSagaEvent.CardCreateResponse res ->
       match res with
-      | Ok providerCardId -> linkProviderCardId providerCardId
+      | Ok res -> linkProviderCardId res
       | Error _ ->
          sendCardSetupFailEmail
             CardSetupFailureReason.CardProviderCardCreateFail
    | CardSetupSagaEvent.ProviderCardIdLinked -> sendCardSetupSuccessEmail ()
-   | CardSetupSagaEvent.CardSetupSuccessNotificationSent
+   | CardSetupSagaEvent.CardSetupSuccessNotificationSent ->
+      match updatedState.OriginatedFromEmployeeOnboarding with
+      | Some employeeOnboardingSagaId ->
+         let msg =
+            EmployeeOnboardingSagaEvent.CardSetupSagaCompleted(
+               CardSetupSagaId corrId
+            )
+            |> AppSaga.Message.employeeOnboard orgId employeeOnboardingSagaId
+            |> GuaranteedDelivery.message employeeOnboardingSagaId.Value
+
+         registry.SagaGuaranteedDeliveryActor() <! msg
+      | None -> ()
    | CardSetupSagaEvent.CardSetupFailNotificationSent
    | CardSetupSagaEvent.ResetInProgressActivityAttempts -> ()
    | CardSetupSagaEvent.EvaluateRemainingWork ->
@@ -241,16 +258,16 @@ let onEventPersisted
             | _ -> ()
          | Activity.CreateCardViaThirdPartyProvider ->
             let request = {
-               CardHolderName = updatedState.EmployeeName
+               CardNickname = updatedState.CardNickname
                CardType = updatedState.CardType
+               Expiration = updatedState.Expiration
                Metadata = {
                   OrgId = orgId
                   CorrelationId = corrId
                }
-               ReplyTo = SagaReplyTo.CardSetup
             }
 
             registry.CardIssuerServiceActor()
             <! CardIssuerMessage.CreateCard request
          | Activity.LinkProviderCardId ->
-            updatedState.ProviderCardId |> Option.iter linkProviderCardId
+            updatedState.CardCreateResponse |> Option.iter linkProviderCardId

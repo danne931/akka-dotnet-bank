@@ -98,7 +98,7 @@ module Writer =
          | AppSaga.Saga.EmployeeOnboarding s ->
             match s.Status with
             | EmployeeOnboardingSagaStatus.InProgress -> inProgressOrExhausted
-            | EmployeeOnboardingSagaStatus.Failed _ -> compensatingOrFailed
+            | EmployeeOnboardingSagaStatus.Failed -> compensatingOrFailed
             | EmployeeOnboardingSagaStatus.Completed -> "Completed"
             | EmployeeOnboardingSagaStatus.Aborted _ -> "Aborted"
          | AppSaga.Saga.CardSetup s ->

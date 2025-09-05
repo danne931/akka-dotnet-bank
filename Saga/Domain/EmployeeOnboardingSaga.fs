@@ -8,13 +8,10 @@ open Lib.Saga
 open Email
 
 [<RequireQualifiedAccess>]
-type OnboardingFailureReason = | CardProviderCardCreateFail
-
-[<RequireQualifiedAccess>]
 type EmployeeOnboardingSagaStatus =
    | InProgress
    | Completed
-   | Failed of OnboardingFailureReason
+   | Failed
    | Aborted of reason: string option
 
 [<RequireQualifiedAccess>]
@@ -29,17 +26,17 @@ type EmployeeOnboardingSagaStartEvent =
          InviteToken: InviteToken
       |}
 
+type CardSetupSagaId = CardSetupSagaId of CorrelationId
+
 [<RequireQualifiedAccess>]
 type EmployeeOnboardingSagaEvent =
    | AccessRequestPending
    | AccessApproved
    | InviteNotificationSent
    | InviteTokenRefreshed of InviteToken
-   | OnboardingFailNotificationSent
    | InviteConfirmed
    | InviteCancelled of reason: string option
-   | CardCreateResponse of Result<ThirdPartyProviderCardId, string>
-   | CardAssociatedWithEmployee
+   | CardSetupSagaCompleted of CardSetupSagaId
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
@@ -51,15 +48,14 @@ type Activity =
    | WaitForAccessApproval
    | SendEmployeeInviteNotification
    | WaitForInviteConfirmation
-   | CreateCardViaThirdPartyProvider
-   | AssociateCardWithEmployee
-   | SendEmployeeOnboardingFailNotification
+   | CardSetup
 
    interface IActivity with
       member x.MaxAttempts =
          match x with
          | WaitForAccessApproval
          | WaitForInviteConfirmation -> 0
+         | CardSetup
          | CreateEmployee -> 1
          | _ -> 3
 
@@ -69,12 +65,9 @@ type Activity =
          | RestoreEmployeeAccess
          | WaitForAccessApproval
          | WaitForInviteConfirmation -> None
-         | CreateCardViaThirdPartyProvider -> Some(TimeSpan.FromMinutes 2.)
+         | CardSetup -> Some(TimeSpan.FromMinutes 30.)
          | SendEmployeeInviteNotification
-         | SendEmployeeOnboardingFailNotification ->
-            Some(TimeSpan.FromMinutes 4.)
-         | RequestAccessApproval
-         | AssociateCardWithEmployee -> Some(TimeSpan.FromSeconds 5.)
+         | RequestAccessApproval -> Some(TimeSpan.FromSeconds 5.)
 
 type EmployeeOnboardingSaga = {
    EmployeeId: EmployeeId
@@ -89,7 +82,6 @@ type EmployeeOnboardingSaga = {
    Events: EmployeeOnboardingSagaEvent list
    Status: EmployeeOnboardingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
-   ProviderCardId: ThirdPartyProviderCardId option
 } with
 
    member x.IsWaitingForInviteConfirmation =

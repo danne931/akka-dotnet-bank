@@ -17,6 +17,7 @@
     <PackageReference Include="FSharp.Control.TaskSeq" />
     <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
     <PackageReference Include="Validus" />
+    <PackageReference Include="Flurl.Http" />
     <PackageReference Include="FsConfig" />
   </ItemGroup>
 

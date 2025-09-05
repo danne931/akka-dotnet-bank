@@ -200,15 +200,6 @@ let private emailPropsFromMessage (msg: EmailMessage) : EmailRequest =
             $"localhost:8080{RoutePaths.UserSessionPath.AuthorizeInvite}?token={info.Token}"
       |}
      }
-   | EmailInfo.EmployeeOnboardingFail info -> {
-      OrgId = msg.OrgId
-      Event = "employee-onboarding-fail"
-      Email = null
-      Data = {|
-         name = info.Name
-         reason = info.Reason
-      |}
-     }
    | EmailInfo.CardSetupSuccess info -> {
       OrgId = msg.OrgId
       Event = "card-setup-success"
@@ -335,10 +326,6 @@ let onSuccessfulServiceResponse
          |> Some
       | EmailInfo.EmployeeInvite _ ->
          EmployeeOnboardingSagaEvent.InviteNotificationSent
-         |> AppSaga.Message.employeeOnboard orgId corrId
-         |> Some
-      | EmailInfo.EmployeeOnboardingFail _ ->
-         EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent
          |> AppSaga.Message.employeeOnboard orgId corrId
          |> Some
       | EmailInfo.CardSetupSuccess _ ->

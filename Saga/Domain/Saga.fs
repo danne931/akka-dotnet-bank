@@ -111,12 +111,8 @@ type Event =
             "EmployeeOnboardingInviteNotificationSent"
          | EmployeeOnboardingSagaEvent.AccessApproved ->
             "EmployeeOnboardingAccessApproved"
-         | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee ->
-            "EmployeeOnboardingCardAssociatedWithEmployee"
-         | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent ->
-            "EmployeeOnboardingFailNotificationSent"
-         | EmployeeOnboardingSagaEvent.CardCreateResponse _ ->
-            "EmployeeOnboardingCardCreateResponse"
+         | EmployeeOnboardingSagaEvent.CardSetupSagaCompleted _ ->
+            "EmployeeOnboardingCardSetupSagaCompleted"
          | EmployeeOnboardingSagaEvent.InviteCancelled _ ->
             "EmployeeOnboardingInviteCancelled"
          | EmployeeOnboardingSagaEvent.InviteConfirmed ->

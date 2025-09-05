@@ -6,6 +6,7 @@ open Lib.SharedTypes
 open Bank.Employee.Domain
 open Lib.Saga
 open Email
+open CardIssuer.Service.Domain
 
 [<RequireQualifiedAccess>]
 type CardSetupFailureReason = | CardProviderCardCreateFail
@@ -27,7 +28,7 @@ type CardSetupSagaStartEvent = {
 type CardSetupSagaEvent =
    | CardSetupSuccessNotificationSent
    | CardSetupFailNotificationSent
-   | CardCreateResponse of Result<ThirdPartyProviderCardId, string>
+   | CardCreateResponse of Result<CardCreateResponse, string>
    | ProviderCardIdLinked
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
@@ -56,17 +57,24 @@ type Activity =
 
 type CardSetupSaga = {
    CardId: CardId
-   CardNumberLast4: string
+   CardNickname: string option
+   Expiration: CardExpiration
    EmployeeId: EmployeeId
    OrgId: OrgId
    CorrelationId: CorrelationId
    InitiatedBy: Initiator
    EmployeeName: string
+   OriginatedFromEmployeeOnboarding: CorrelationId option
    EmployeeEmail: Email
    CardType: CardType
    StartEvent: CardSetupSagaStartEvent
    Events: CardSetupSagaEvent list
    Status: CardSetupSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
-   ProviderCardId: ThirdPartyProviderCardId option
-}
+} with
+
+   member x.CardCreateResponse =
+      x.Events
+      |> List.tryPick (function
+         | CardSetupSagaEvent.CardCreateResponse(Ok res) -> Some res
+         | _ -> None)

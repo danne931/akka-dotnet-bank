@@ -14,34 +14,9 @@ open SignalRBroadcast
 open Lib.Types
 open Lib.Queue
 open CardSetupSaga
-open EmployeeOnboardingSaga
 open CardIssuer.Service.Domain
 open BankActorRegistry
-
-let private networkRequestToCardIssuerService
-   (msg: CardIssuerMessage)
-   : Task<Result<CardIssuerResponse, Err>>
-   =
-   taskResult {
-      match msg with
-      | CardIssuerMessage.CreateCard req ->
-         // TODO: HTTP request to the card issuer API
-         do! Task.Delay(TimeSpan.FromSeconds 1.3)
-
-         return
-            CardIssuerResponse.CreateCard {
-               ProviderCardId = Guid.NewGuid() |> ThirdPartyProviderCardId
-            }
-      | CardIssuerMessage.CloseCard req ->
-         // TODO: HTTP request to the card issuer API
-         do! Task.Delay(TimeSpan.FromSeconds 3.3)
-
-         return
-            CardIssuerResponse.CloseCard {
-               Customer = null
-               ProviderCardId = req.ProviderCardId
-            }
-   }
+open Flurl.Http
 
 let protectedAction
    (networkRequest: CardIssuerMessage -> Task<Result<CardIssuerResponse, Err>>)
@@ -80,21 +55,12 @@ let actorProps
                match queueMessage, response with
                | CardIssuerMessage.CreateCard req,
                  CardIssuerResponse.CreateCard res ->
-                  match req.ReplyTo with
-                  | SagaReplyTo.CardSetup ->
-                     let msg =
-                        Ok res.ProviderCardId
-                        |> CardSetupSagaEvent.CardCreateResponse
-                        |> AppSaga.Message.cardSetup orgId corrId
+                  let msg =
+                     Ok res
+                     |> CardSetupSagaEvent.CardCreateResponse
+                     |> AppSaga.Message.cardSetup orgId corrId
 
-                     registry.SagaActor corrId <! msg
-                  | SagaReplyTo.EmployeeOnboard ->
-                     let onboardingMsg =
-                        Ok res.ProviderCardId
-                        |> EmployeeOnboardingSagaEvent.CardCreateResponse
-                        |> AppSaga.Message.employeeOnboard orgId corrId
-
-                     registry.SagaActor corrId <! onboardingMsg
+                  registry.SagaActor corrId <! msg
                | CardIssuerMessage.CloseCard _,
                  CardIssuerResponse.CloseCard res ->
                   logDebug mailbox $"Card detached {res.ProviderCardId}"
@@ -115,6 +81,92 @@ let actorProps
       breaker
       consumerQueueOpts
 
+let private networkRequestToCardIssuerService
+   (cardIssuerApiKey: string)
+   (msg: CardIssuerMessage)
+   : Task<Result<CardIssuerResponse, Err>>
+   =
+   task {
+      match msg with
+      | CardIssuerMessage.CreateCard req ->
+         try
+            let url = EnvEmployee.config.CardIssuerURI + "/cards"
+
+            let! response =
+               url
+                  .WithHeader("Authorization", cardIssuerApiKey)
+                  .PostJsonAsync(req.AsDTO)
+
+            if not response.ResponseMessage.IsSuccessStatusCode then
+               let errMsg =
+                  $"Error creating card with card issuer: {response.StatusCode}"
+
+               return Error(Err.UnexpectedError errMsg)
+            else
+               let! res = response.GetJsonAsync<CardCreateResponseDTO>()
+
+               return Ok(CardIssuerResponse.CreateCard res.AsEntity)
+         with e ->
+            return Error(Err.UnexpectedError e.Message)
+      | CardIssuerMessage.CloseCard req ->
+         // TODO: HTTP request to the card issuer API
+         do! Task.Delay(TimeSpan.FromSeconds 3.3)
+
+         return
+            CardIssuerResponse.CloseCard {
+               Customer = null
+               ProviderCardId = req.ProviderCardId
+            }
+            |> Ok
+   }
+
+let private mockNetworkRequestToCardIssuerService
+   (msg: CardIssuerMessage)
+   : Task<Result<CardIssuerResponse, Err>>
+   =
+   taskResult {
+      match msg with
+      | CardIssuerMessage.CreateCard _ ->
+         do! Task.Delay(TimeSpan.FromSeconds 1.3)
+
+         return
+            CardIssuerResponse.CreateCard {
+               ProviderCardId = Guid.NewGuid() |> ThirdPartyProviderCardId
+               CardNumberLast4 =
+                  List.init 4 (fun _ -> Random().Next(1, 9) |> string)
+                  |> String.concat ""
+            }
+      | CardIssuerMessage.CloseCard req ->
+         // TODO: HTTP request to the card issuer API
+         do! Task.Delay(TimeSpan.FromSeconds 3.3)
+
+         return
+            CardIssuerResponse.CloseCard {
+               Customer = null
+               ProviderCardId = req.ProviderCardId
+            }
+   }
+
+// Will not consume messages off of RabbitMq if no CardIssuerApiKey
+// configured for interaction with 3rd party card issuer service.
+let private idleActor () =
+   let handler ctx msg =
+      match msg with
+      | LifecycleEvent e ->
+         match e with
+         | PreStart ->
+            logWarning
+               ctx
+               $"CardIssuerApiKey not set. Will not process messages."
+
+            ignored ()
+         | _ -> ignored ()
+      | msg ->
+         logError ctx $"Unknown Message: {msg}"
+         unhandled ()
+
+   props (actorOf2 handler)
+
 let initProps
    registry
    (queueConnection: AmqpConnectionDetails)
@@ -124,11 +176,18 @@ let initProps
    (broadcaster: SignalRBroadcast)
    : Props<obj>
    =
-   actorProps
-      registry
-      queueConnection
-      queueSettings
-      streamRestartSettings
-      breaker
-      broadcaster
-      networkRequestToCardIssuerService
+   let actorProps =
+      actorProps
+         registry
+         queueConnection
+         queueSettings
+         streamRestartSettings
+         breaker
+         broadcaster
+
+   let conf = EnvEmployee.config
+
+   match conf.CardIssuerMockRequests, conf.CardIssuerApiKey with
+   | true, _ -> actorProps mockNetworkRequestToCardIssuerService
+   | false, Some apiKey -> actorProps (networkRequestToCardIssuerService apiKey)
+   | false, None -> idleActor ()

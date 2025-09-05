@@ -24,8 +24,6 @@ type EmployeeInviteEmailInfo = {
    Token: string
 }
 
-type EmployeeOnboardingFailInfo = { Name: string; Reason: string }
-
 type CardSetupSuccessEmailInfo = {
    EmployeeName: string
    EmployeeEmail: Email
@@ -109,7 +107,6 @@ type EmailInfo =
       ScheduledTransferInsufficientBalanceWarning
    | ApplicationErrorRequiresSupport of error: string
    | EmployeeInvite of EmployeeInviteEmailInfo
-   | EmployeeOnboardingFail of EmployeeOnboardingFailInfo
    | CardSetupSuccess of CardSetupSuccessEmailInfo
    | CardSetupFail of CardSetupFailEmailInfo
 

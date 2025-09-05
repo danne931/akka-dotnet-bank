@@ -36,7 +36,13 @@ type InvitationTokenRefreshed = {
 
 type InvitationCancelled = { Reason: string option }
 
-type CreatedCard = { PersonName: string; Card: Card }
+type CreatedCard = {
+   PersonName: string
+   Card: Card
+   /// Refers to the employee onboarding saga id if this card
+   /// creation originated as an activity in the employee onboarding saga.
+   OriginatedFromEmployeeOnboarding: CorrelationId option
+}
 
 type ThirdPartyProviderCardLinked = {
    CardId: CardId

@@ -107,6 +107,7 @@ let applyEvent
                      card with
                         Status = CardStatus.Active
                         ThirdPartyProviderCardId = Some e.Data.ProviderCardId
+                        CardNumberLast4 = e.Data.CardNumberLast4
                   }))
                   em.Cards
 

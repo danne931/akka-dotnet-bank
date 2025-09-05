@@ -9,7 +9,6 @@ open Bank.Org.Domain
 open CommandApproval
 open EmailMessage
 open Lib.Saga
-open CardIssuer.Service.Domain
 open EmployeeOnboardingSaga
 open BankActorRegistry
 
@@ -31,7 +30,6 @@ let applyStartEvent
       EmployeeEmail = evt.Data.Email
       CardInfo = evt.Data.CardInfo
       InviteToken = evt.Data.InviteToken
-      ProviderCardId = None
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -72,7 +70,6 @@ let applyStartEvent
       EmployeeEmail = evt.Data.Email
       CardInfo = None
       InviteToken = evt.Data.InviteToken
-      ProviderCardId = None
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -108,7 +105,6 @@ let applyStartEvent
       EmployeeEmail = o.EmployeeEmail
       CardInfo = None
       InviteToken = o.Event.Data.InviteToken
-      ProviderCardId = None
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -166,12 +162,6 @@ let applyEvent
             saga.LifeCycle
             |> finishActivity Activity.SendEmployeeInviteNotification
      }
-   | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.SendEmployeeOnboardingFailNotification
-     }
    | EmployeeOnboardingSagaEvent.AccessRequestPending -> {
       saga with
          LifeCycle =
@@ -203,41 +193,16 @@ let applyEvent
       match saga.CardInfo with
       | Some _ -> {
          saga with
-            LifeCycle =
-               saga.LifeCycle
-               |> addActivity Activity.CreateCardViaThirdPartyProvider
+            LifeCycle = saga.LifeCycle |> addActivity Activity.CardSetup
         }
       | None -> {
          saga with
             Status = EmployeeOnboardingSagaStatus.Completed
         }
-   | EmployeeOnboardingSagaEvent.CardCreateResponse res ->
-      let activity = Activity.CreateCardViaThirdPartyProvider
-
-      match res with
-      | Ok providerCardId -> {
-         saga with
-            ProviderCardId = Some providerCardId
-            LifeCycle =
-               saga.LifeCycle
-               |> finishActivity activity
-               |> addActivity Activity.AssociateCardWithEmployee
-        }
-      | Error _ -> {
-         saga with
-            Status =
-               OnboardingFailureReason.CardProviderCardCreateFail
-               |> EmployeeOnboardingSagaStatus.Failed
-            LifeCycle =
-               saga.LifeCycle
-               |> SagaLifeCycle.failActivity timestamp activity
-               |> addActivity Activity.SendEmployeeOnboardingFailNotification
-        }
-   | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee -> {
+   | EmployeeOnboardingSagaEvent.CardSetupSagaCompleted _ -> {
       saga with
          Status = EmployeeOnboardingSagaStatus.Completed
-         LifeCycle =
-            saga.LifeCycle |> finishActivity Activity.AssociateCardWithEmployee
+         LifeCycle = saga.LifeCycle |> finishActivity Activity.CardSetup
      }
    | EmployeeOnboardingSagaEvent.EvaluateRemainingWork -> {
       saga with
@@ -274,12 +239,8 @@ let stateTransition
          activityIsDone Activity.WaitForInviteConfirmation
       | EmployeeOnboardingSagaEvent.InviteNotificationSent ->
          activityIsDone Activity.SendEmployeeInviteNotification
-      | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent ->
-         activityIsDone Activity.SendEmployeeOnboardingFailNotification
-      | EmployeeOnboardingSagaEvent.CardCreateResponse _ ->
-         activityIsDone Activity.CreateCardViaThirdPartyProvider
-      | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee ->
-         activityIsDone Activity.AssociateCardWithEmployee
+      | EmployeeOnboardingSagaEvent.CardSetupSagaCompleted _ ->
+         activityIsDone Activity.CardSetup
       | EmployeeOnboardingSagaEvent.AccessRequestPending ->
          activityIsDone Activity.RequestAccessApproval
       | EmployeeOnboardingSagaEvent.AccessApproved ->
@@ -352,7 +313,7 @@ let onStartEventPersisted
 
 let onEventPersisted
    (registry:
-      #IEmployeeActor & #IOrgActor & #IEmailActor & #ICardIssuerServiceActor)
+      #IEmployeeGuaranteedDeliveryActor & #IOrgActor & #IEmailActor & #ICardIssuerServiceActor)
    (previousState: EmployeeOnboardingSaga)
    (updatedState: EmployeeOnboardingSaga)
    (evt: EmployeeOnboardingSagaEvent)
@@ -389,77 +350,39 @@ let onEventPersisted
 
       registry.OrgActor orgId <! msg
 
-   let associateCardWithEmployee
-      (providerCardId: ThirdPartyProviderCardId)
-      (info: EmployeeInviteSupplementaryCardInfo)
-      =
+   let associateCardWithEmployee (info: EmployeeInviteSupplementaryCardInfo) =
       let msg =
-         {
-            CreateCardCommand.create {
-               AccountId = info.LinkedAccountId
-               DailyPurchaseLimit = Some info.DailyPurchaseLimit
-               MonthlyPurchaseLimit = Some info.MonthlyPurchaseLimit
-               PersonName = employeeName
-               CardNickname = None
-               OrgId = orgId
-               EmployeeId = employeeId
-               CardId = CardId <| Guid.NewGuid()
-               Virtual = true
-               CardType = CardType.Debit
-               InitiatedBy = updatedState.InitiatedBy
-            } with
-               CorrelationId = updatedState.CorrelationId
+         CreateCardCommand.create {
+            AccountId = info.LinkedAccountId
+            DailyPurchaseLimit = Some info.DailyPurchaseLimit
+            MonthlyPurchaseLimit = Some info.MonthlyPurchaseLimit
+            PersonName = employeeName
+            CardNickname = None
+            OrgId = orgId
+            EmployeeId = employeeId
+            CardId = CardId <| Guid.NewGuid()
+            Virtual = true
+            CardType = CardType.Debit
+            InitiatedBy = updatedState.InitiatedBy
+            OriginatedFromEmployeeOnboarding = Some corrId
          }
          |> EmployeeCommand.CreateCard
          |> EmployeeMessage.StateChange
+         |> GuaranteedDelivery.message employeeId.Value
 
-      registry.EmployeeActor employeeId <! msg
-
-   let sendEmployeeOnboardingFailEmail (reason: OnboardingFailureReason) =
-      let emailMsg =
-         EmailInfo.EmployeeOnboardingFail {
-            Name = employeeName
-            Reason = string reason
-         }
-         |> EmailMessage.create orgId corrId
-
-      registry.EmailActor() <! emailMsg
-
-   let createCardViaThirdPartyProvider
-      (info: EmployeeInviteSupplementaryCardInfo)
-      =
-      let request = {
-         CardHolderName = employeeName
-         CardType = info.CardType
-         Metadata = {
-            OrgId = orgId
-            CorrelationId = corrId
-         }
-         ReplyTo = SagaReplyTo.EmployeeOnboard
-      }
-
-      registry.CardIssuerServiceActor() <! CardIssuerMessage.CreateCard request
+      registry.EmployeeGuaranteedDeliveryActor() <! msg
 
    match evt with
    | EmployeeOnboardingSagaEvent.InviteTokenRefreshed _ ->
       if updatedState.IsWaitingForInviteConfirmation then
          sendEmployeeInviteEmail ()
    | EmployeeOnboardingSagaEvent.InviteConfirmed ->
-      updatedState.CardInfo |> Option.iter createCardViaThirdPartyProvider
-   | EmployeeOnboardingSagaEvent.CardCreateResponse res ->
-      match res with
-      | Ok providerCardId ->
-         updatedState.CardInfo
-         |> Option.iter (associateCardWithEmployee providerCardId)
-      | Error _ ->
-         sendEmployeeOnboardingFailEmail
-            OnboardingFailureReason.CardProviderCardCreateFail
+      updatedState.CardInfo |> Option.iter associateCardWithEmployee
    | EmployeeOnboardingSagaEvent.AccessApproved -> sendEmployeeInviteEmail ()
    | EmployeeOnboardingSagaEvent.InviteCancelled _
    | EmployeeOnboardingSagaEvent.InviteNotificationSent
-   | EmployeeOnboardingSagaEvent.OnboardingFailNotificationSent
    | EmployeeOnboardingSagaEvent.AccessRequestPending
-   | EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee
+   | EmployeeOnboardingSagaEvent.CardSetupSagaCompleted _
    | EmployeeOnboardingSagaEvent.ResetInProgressActivityAttempts -> ()
    | EmployeeOnboardingSagaEvent.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
@@ -470,15 +393,5 @@ let onEventPersisted
          | Activity.WaitForInviteConfirmation -> ()
          | Activity.RequestAccessApproval -> requestAccessApproval ()
          | Activity.SendEmployeeInviteNotification -> sendEmployeeInviteEmail ()
-         | Activity.SendEmployeeOnboardingFailNotification ->
-            match updatedState.Status with
-            | EmployeeOnboardingSagaStatus.Failed fail ->
-               sendEmployeeOnboardingFailEmail fail
-            | _ -> ()
-         | Activity.CreateCardViaThirdPartyProvider ->
-            updatedState.CardInfo |> Option.iter createCardViaThirdPartyProvider
-         | Activity.AssociateCardWithEmployee ->
-            match updatedState.ProviderCardId, updatedState.CardInfo with
-            | Some providerCardId, Some cardInfo ->
-               associateCardWithEmployee providerCardId cardInfo
-            | _ -> ()
+         | Activity.CardSetup ->
+            updatedState.CardInfo |> Option.iter associateCardWithEmployee

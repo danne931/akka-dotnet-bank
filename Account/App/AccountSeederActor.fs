@@ -648,6 +648,7 @@ let mockAccountOwnerCards =
          DailyPurchaseLimit = Some 9_310m
          MonthlyPurchaseLimit = None
          InitiatedBy = mockAccountOwner
+         OriginatedFromEmployeeOnboarding = None
       } with
          Timestamp = cmd.Timestamp.AddHours 1
    }
@@ -665,6 +666,7 @@ let mockAccountOwnerCards =
          DailyPurchaseLimit = None
          MonthlyPurchaseLimit = None
          InitiatedBy = mockAccountOwner
+         OriginatedFromEmployeeOnboarding = None
       } with
          Timestamp = cmd.Timestamp.AddHours 1.1
    }
@@ -742,6 +744,7 @@ let mockEmployees =
          DailyPurchaseLimit = Some 10_000m
          MonthlyPurchaseLimit = None
          InitiatedBy = mockAccountOwner
+         OriginatedFromEmployeeOnboarding = None
       } with
          Timestamp = cmd.Timestamp.AddHours 1
    }

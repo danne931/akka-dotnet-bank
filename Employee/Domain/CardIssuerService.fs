@@ -1,12 +1,9 @@
 module CardIssuer.Service.Domain
 
+open System
+
 open Lib.SharedTypes
 open Bank.Employee.Domain
-
-[<RequireQualifiedAccess>]
-type SagaReplyTo =
-   | EmployeeOnboard
-   | CardSetup
 
 [<RequireQualifiedAccess>]
 type CardIssuerMetadata = {
@@ -16,10 +13,40 @@ type CardIssuerMetadata = {
 
 type CardIssuerCreateCardRequest = {
    CardType: CardType
-   CardHolderName: string
+   CardNickname: string option
+   Expiration: CardExpiration
    Metadata: CardIssuerMetadata
-   ReplyTo: SagaReplyTo
+} with
+
+   member x.AsDTO: obj =
+      let dto = {|
+         ``type`` = "VIRTUAL"
+         exp_year = string x.Expiration.Year
+         exp_month = sprintf "%02i" x.Expiration.Month
+      |}
+
+      match x.CardNickname with
+      | None -> dto
+      | Some name -> {| dto with memo = name |}
+
+type CardCreateResponse = {
+   ProviderCardId: ThirdPartyProviderCardId
+   CardNumberLast4: string
 }
+
+type CardCreateResponseDTO = {
+   token: Guid
+   state: string
+   ``type``: string
+   last_four: string
+   exp_month: string
+   exp_year: string
+} with
+
+   member x.AsEntity = {
+      ProviderCardId = ThirdPartyProviderCardId x.token
+      CardNumberLast4 = x.last_four
+   }
 
 type CardIssuerCloseCardRequest = {
    ProviderCardId: ThirdPartyProviderCardId
@@ -35,10 +62,6 @@ type CardIssuerMessage =
       match x with
       | CreateCard req -> req.Metadata
       | CloseCard req -> req.Metadata
-
-type CardCreateResponse = {
-   ProviderCardId: ThirdPartyProviderCardId
-}
 
 type CardCloseResponse = {
    Customer: obj

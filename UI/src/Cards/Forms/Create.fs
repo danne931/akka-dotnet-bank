@@ -104,6 +104,7 @@ let private form
             AccountId = selectedAccountId
             EmployeeId = employee.EmployeeId
             InitiatedBy = session.AsInitiator
+            OriginatedFromEmployeeOnboarding = None
          }
          |> EmployeeCommand.CreateCard
          |> FormCommand.Employee

@@ -142,23 +142,14 @@ let private onPersist
 
       registry.SagaActor e.CorrelationId <! msg
    | EmployeeEvent.CreatedCard e ->
-      match e.Data.Card.Status with
-      | CardStatus.Pending ->
-         let msg =
-            AppSaga.Message.cardSetupStart e.OrgId e.CorrelationId {
-               Event = e
-               EmployeeName = employee.Name
-               EmployeeEmail = employee.Email
-            }
+      let msg =
+         AppSaga.Message.cardSetupStart e.OrgId e.CorrelationId {
+            Event = e
+            EmployeeName = employee.Name
+            EmployeeEmail = employee.Email
+         }
 
-         registry.SagaGuaranteedDeliveryActor() <! msg
-      | CardStatus.Active ->
-         let msg =
-            EmployeeOnboardingSagaEvent.CardAssociatedWithEmployee
-            |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
-
-         registry.SagaActor e.CorrelationId <! msg
-      | _ -> ()
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.UpdatedRole e ->
       match e.Data.Role, e.Data.CardInfo with
       | Role.Scholar, _ ->
@@ -181,6 +172,7 @@ let private onPersist
                Virtual = true
                CardType = CardType.Debit
                InitiatedBy = e.InitiatedBy
+               OriginatedFromEmployeeOnboarding = None
             }
             |> EmployeeCommand.CreateCard
             |> EmployeeMessage.StateChange
