@@ -4,7 +4,6 @@ open System
 
 [<RequireQualifiedAccess>]
 type CircuitBreakerService =
-   | DomesticTransfer
    | Email
    | KnowYourCustomer
    | PartnerBank
@@ -28,7 +27,6 @@ type CircuitBreakerMessage =
    | CircuitBreaker of CircuitBreakerEvent
 
 type CircuitBreakerState = {
-   DomesticTransfer: CircuitBreakerStatus
    Email: CircuitBreakerStatus
    KnowYourCustomer: CircuitBreakerStatus
    PartnerBank: CircuitBreakerStatus

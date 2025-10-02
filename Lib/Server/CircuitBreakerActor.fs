@@ -13,10 +13,6 @@ let private persistAsync (msg: CircuitBreakerEvent) = msg |> box |> PersistAsync
 
 let private apply (state: CircuitBreakerState) (evt: CircuitBreakerEvent) =
    match evt.Service with
-   | CircuitBreakerService.DomesticTransfer -> {
-      state with
-         DomesticTransfer = evt.Status
-     }
    | CircuitBreakerService.Email -> { state with Email = evt.Status }
    | CircuitBreakerService.KnowYourCustomer -> {
       state with
@@ -44,15 +40,6 @@ let actorProps () =
                   ignored ()
                | CircuitBreakerMessage.CircuitBreaker evt ->
                   match evt.Service with
-                  | CircuitBreakerService.DomesticTransfer ->
-                     if evt.Status = state.DomesticTransfer then
-                        ignored ()
-                     else
-                        loop {
-                           state with
-                              DomesticTransfer = evt.Status
-                        }
-                        <@> persistAsync evt
                   | CircuitBreakerService.Email ->
                      if evt.Status = state.Email then
                         ignored ()
@@ -89,7 +76,6 @@ let actorProps () =
       }
 
       loop {
-         DomesticTransfer = CircuitBreakerStatus.Closed
          Email = CircuitBreakerStatus.Closed
          KnowYourCustomer = CircuitBreakerStatus.Closed
          PartnerBank = CircuitBreakerStatus.Closed

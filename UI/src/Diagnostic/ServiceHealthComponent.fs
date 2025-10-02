@@ -13,7 +13,6 @@ type Msg =
    | ServiceHealthEventReceived of CircuitBreakerEvent
 
 type State = {
-   DomesticTransfer: ServiceHealth
    Email: ServiceHealth
    KnowYourCustomer: ServiceHealth
    PartnerBank: ServiceHealth
@@ -22,7 +21,6 @@ type State = {
 
 let init () =
    {
-      DomesticTransfer = ServiceHealth.Good
       Email = ServiceHealth.Good
       KnowYourCustomer = ServiceHealth.Good
       PartnerBank = ServiceHealth.Good
@@ -43,7 +41,9 @@ let update msg (state: State) =
       {
          state with
             Email = status.Email
-            DomesticTransfer = status.DomesticTransfer
+            KnowYourCustomer = status.KnowYourCustomer
+            PartnerBank = status.PartnerBank
+            CardIssuer = status.CardIssuer
       },
       Cmd.none
    | Load(Finished(Error err)) ->
@@ -54,10 +54,6 @@ let update msg (state: State) =
 
       let state =
          match evt.Service with
-         | CircuitBreakerService.DomesticTransfer -> {
-            state with
-               DomesticTransfer = health
-           }
          | CircuitBreakerService.Email -> { state with Email = health }
          | CircuitBreakerService.KnowYourCustomer -> {
             state with
@@ -115,7 +111,6 @@ let ServiceHealthComponent () =
                attr.text "Service Health"
             ]
 
-            renderServiceHealth "Domestic Transfer" state.DomesticTransfer
             renderServiceHealth "Email" state.Email
             renderServiceHealth "Know Your Customer" state.KnowYourCustomer
             renderServiceHealth "Partner Bank" state.PartnerBank

@@ -17,7 +17,6 @@ let health circuitBreakerState =
 
 [<RequireQualifiedAccess>]
 type ServiceDiagnostics = {
-   DomesticTransfer: ServiceHealth
    Email: ServiceHealth
    KnowYourCustomer: ServiceHealth
    PartnerBank: ServiceHealth
@@ -34,7 +33,6 @@ let getServiceHealth () : Async<Result<ServiceDiagnostics, Err>> = async {
          responseText
          |> Serialization.deserialize<CircuitBreakerState>
          |> Result.map (fun circuitBreaker -> {
-            DomesticTransfer = health circuitBreaker.DomesticTransfer
             Email = health circuitBreaker.Email
             KnowYourCustomer = health circuitBreaker.KnowYourCustomer
             PartnerBank = health circuitBreaker.PartnerBank
