@@ -133,7 +133,8 @@ module TransferSqlReader =
       let originator (read: RowReader) : DomesticTransferOriginator = {
          Name = AccountSqlReader.name read
          AccountNumber = read.int64 AccountFields.accountNumber |> AccountNumber
-         RoutingNumber = read.int AccountFields.routingNumber |> RoutingNumber
+         RoutingNumber =
+            read.string AccountFields.routingNumber |> RoutingNumber
          OrgId = senderOrgId read
          ParentAccountId =
             read.uuid AccountFields.parentAccountId |> ParentAccountId

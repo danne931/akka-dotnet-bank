@@ -33,7 +33,7 @@ module SqlReader =
       |> PartnerBankAccountNumber
 
    let partnerBankRoutingNumber (read: RowReader) =
-      read.int Fields.partnerBankRoutingNumber
+      read.string Fields.partnerBankRoutingNumber
       |> RoutingNumber
       |> PartnerBankRoutingNumber
 
@@ -58,7 +58,7 @@ module SqlWriter =
       Sql.int64 num
 
    let partnerBankRoutingNumber (PartnerBankRoutingNumber(RoutingNumber num)) =
-      Sql.int num
+      Sql.string num
 
    let partnerBankAccountId (PartnerBankAccountId id) = Sql.string id
 

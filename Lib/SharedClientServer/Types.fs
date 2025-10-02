@@ -484,17 +484,18 @@ type AccountNumber =
    static member Empty = AccountNumber 1234567
 
 type RoutingNumber =
-   | RoutingNumber of int
+   | RoutingNumber of string
 
    override x.ToString() =
       let (RoutingNumber num) = x
       string num
 
    static member fromString: Validator<string, RoutingNumber> =
-      Lib.Validators.parseInt *|* string
-      >=> Check.String.equalsLen 9 *|* (Int32.Parse >> RoutingNumber)
+      Check.String.equalsLen 9
+      // Ensure each character is a digit
+      >=> Check.String.pattern @"^\d+$" *|* RoutingNumber
 
-   static member Empty = RoutingNumber 123456789
+   static member Empty = RoutingNumber "123456789"
 
 type PartnerBankAccountId =
    | PartnerBankAccountId of string

@@ -43,7 +43,7 @@ module AccountSqlReader =
       read.int64 AccountFields.accountNumber |> AccountNumber
 
    let routingNumber (read: RowReader) =
-      read.int AccountFields.routingNumber |> RoutingNumber
+      read.string AccountFields.routingNumber |> RoutingNumber
 
    let name (read: RowReader) = read.string AccountFields.name
 
@@ -99,7 +99,7 @@ module AccountSqlWriter =
       let (AccountNumber acctNum) = num
       Sql.int64 acctNum
 
-   let routingNumber (RoutingNumber num) = Sql.int num
+   let routingNumber (RoutingNumber num) = Sql.string num
 
    let depository (dep: AccountDepository) = dep |> string |> Sql.string
    let name = Sql.string

@@ -44,6 +44,7 @@ DROP TABLE IF EXISTS partner_bank_parent_account;
 DROP TABLE IF EXISTS organization;
 DROP TABLE IF EXISTS purchase_category;
 
+DROP DOMAIN IF EXISTS routing_number;
 DROP TYPE IF EXISTS money_flow CASCADE;
 DROP TYPE IF EXISTS monthly_time_series_filter_by CASCADE;
 DROP TYPE IF EXISTS time_frame CASCADE;
@@ -197,12 +198,14 @@ requests received.
 TODO: Consider creating extra fields on org_feature_flag table to allow the
 org to disable notifications pertaining to certain events.';
 
+CREATE DOMAIN routing_number AS VARCHAR(9);
+
 CREATE TYPE parent_account_status AS ENUM ('Active', 'Closed', 'Frozen');
 
 --- PARTNER BANK PARENT ACCOUNT ---
 CREATE TABLE partner_bank_parent_account (
    parent_account_id UUID PRIMARY KEY,
-   partner_bank_routing_number INT NOT NULL,
+   partner_bank_routing_number routing_number NOT NULL,
    partner_bank_account_number BIGINT NOT NULL,
    partner_bank_account_id VARCHAR(255) NOT NULL,
    partner_bank_legal_entity_id VARCHAR(255) NOT NULL,
@@ -239,7 +242,7 @@ CREATE TYPE auto_transfer_rule_frequency AS ENUM ('PerTransaction', 'Daily', 'Tw
 
 CREATE TABLE account (
    account_id UUID PRIMARY KEY,
-   routing_number INT NOT NULL,
+   routing_number routing_number NOT NULL,
    account_number BIGINT UNIQUE NOT NULL,
    account_name VARCHAR(50) NOT NULL,
    depository account_depository NOT NULL,
@@ -773,7 +776,7 @@ CREATE TABLE counterparty(
    -- linking flow.  We will instead store the plaid id to the linked resource 
    -- and can request the account/routing number from plaid before making
    -- a request to the partner bank to create the counterparty.
-   routing_number INT NOT NULL,
+   routing_number routing_number NOT NULL,
    account_number BIGINT UNIQUE NOT NULL,
 
    depository counterparty_account_depository NOT NULL,

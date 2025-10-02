@@ -18,14 +18,14 @@ let parseGuid: Validator<string, Guid> =
 let parseInt: Validator<string, int> =
    fun field input ->
       try
-         Int32.Parse input |> Ok
+         int32 input |> Ok
       with _ ->
          Error <| ValidationErrors.create field [ $"Invalid {field}" ]
 
 let parseInt64: Validator<string, int64> =
    fun field input ->
       try
-         Int64.Parse input |> Ok
+         int64 input |> Ok
       with _ ->
          Error <| ValidationErrors.create field [ $"Invalid {field}" ]
 
