@@ -55,6 +55,13 @@ type FeatureFlagOrgSettings = {
    SocialTransferDiscoveryPrimaryAccountId: AccountId option
 }
 
+type SocialTransferDiscoveryCandidate = {
+   OrgId: OrgId
+   OrgName: string
+   ParentAccountId: ParentAccountId
+   PrimaryReceivingAccountId: AccountId
+}
+
 [<RequireQualifiedAccess>]
 type OrgStatus =
    | InitialEmptyState

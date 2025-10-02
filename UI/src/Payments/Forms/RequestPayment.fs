@@ -154,15 +154,13 @@ let asInvoiceFormMaybe: Form.Form<Values, decimal * Invoice option, _> =
 let formPlatformPayment
    (payeeOrg: Org)
    (payeeDestinationAccounts: Map<AccountId, Account>)
-   (orgs: Org list)
+   (orgs: SocialTransferDiscoveryCandidate list)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let orgPayerOptions =
       orgs
-      |> List.choose (fun org ->
-         org.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId
-         |> Option.map (fun _ -> string org.OrgId, org.Name))
+      |> List.map (fun org -> string org.OrgId, org.OrgName)
       |> List.sortBy snd
 
    let fieldOrgPayerSelect =
@@ -200,7 +198,7 @@ let formPlatformPayment
          PaymentRequested.Platform {
             Payer = {
                OrgId = payerOrg.OrgId
-               OrgName = payerOrg.Name
+               OrgName = payerOrg.OrgName
                ParentAccountId = payerOrg.ParentAccountId
             }
             SharedDetails = {

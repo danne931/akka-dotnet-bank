@@ -11,7 +11,7 @@ open Lib.SharedTypes
 type State = {
    SearchInput: string option
    PreviousSearchQuery: string option
-   Orgs: Deferred<Result<Org list option, Err>>
+   Orgs: Deferred<Result<SocialTransferDiscoveryCandidate list option, Err>>
 }
 
 type Msg =
@@ -19,7 +19,9 @@ type Msg =
    | SearchOrgs of
       orgToExclude: OrgId *
       searchQuery: string *
-      AsyncOperationStatus<Result<Org list option, Err>>
+      AsyncOperationStatus<
+         Result<SocialTransferDiscoveryCandidate list option, Err>
+       >
 
 let init () =
    {
@@ -82,7 +84,9 @@ let update msg state =
 let OrgSearchComponent
    (orgId: OrgId)
    (makeChildren:
-      string option -> Deferred<Result<Org list option, Err>> -> ReactElement)
+      string option
+         -> Deferred<Result<SocialTransferDiscoveryCandidate list option, Err>>
+         -> ReactElement)
    =
    let state, dispatch = React.useElmish (init, update, [||])
 

@@ -159,7 +159,7 @@ let formInternalWithinOrg
 
 let formInternalBetweenOrgs
    (senderAccounts: Map<AccountId, Account>)
-   (destinationOrgs: Org list)
+   (destinations: SocialTransferDiscoveryCandidate list)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
@@ -173,10 +173,9 @@ let formInternalBetweenOrgs
             Label = "Transfer to organization:"
             Placeholder = "No organization selected"
             Options =
-               destinationOrgs
-               |> List.choose (fun org ->
-                  org.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId
-                  |> Option.map (fun id -> string id, org.Name))
+               destinations
+               |> List.map (fun candidate ->
+                  string candidate.PrimaryReceivingAccountId, candidate.OrgName)
                |> List.sortBy snd
          }
       }
@@ -193,13 +192,10 @@ let formInternalBetweenOrgs
          |> Option.bind (fun memo ->
             if String.IsNullOrWhiteSpace memo then None else Some memo)
 
-      let parentAccountId, orgId, orgName =
-         destinationOrgs
-         |> List.pick (fun o ->
-            match o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId with
-            | Some id when id = selectedRecipientId ->
-               Some(o.ParentAccountId, o.OrgId, o.Name)
-            | _ -> None)
+      let recipient =
+         destinations
+         |> List.find (fun o ->
+            o.PrimaryReceivingAccountId = selectedRecipientId)
 
       let transfer: InternalTransferBetweenOrgsInput = {
          ScheduledDateSeedOverride = None
@@ -211,10 +207,10 @@ let formInternalBetweenOrgs
             Name = sender.Name
          }
          Recipient = {
-            OrgId = orgId
-            ParentAccountId = parentAccountId
+            OrgId = recipient.OrgId
+            ParentAccountId = recipient.ParentAccountId
             AccountId = selectedRecipientId
-            Name = orgName
+            Name = recipient.OrgName
          }
          Memo = memo
          OriginatedFromSchedule =
@@ -459,7 +455,7 @@ let TransferInternalWithinOrgComponent
 
 [<ReactComponent>]
 let TransferInternalBetweenOrgsComponent
-   (destinationOrgs: Org list)
+   (destinationCandidates: SocialTransferDiscoveryCandidate list)
    (session: UserSession)
    (senderAccounts: Map<AccountId, Account>)
    (rules: Map<CommandApprovalRuleId, CommandApprovalRule>)
@@ -476,10 +472,8 @@ let TransferInternalBetweenOrgsComponent
    }
 
    let initValues =
-      destinationOrgs
+      destinationCandidates
       |> List.tryHead
-      |> Option.map (fun o ->
-         o.FeatureFlags.SocialTransferDiscoveryPrimaryAccountId)
       |> Option.map (fun accountId -> {
          initValues with
             RecipientId = string accountId
@@ -492,7 +486,7 @@ let TransferInternalBetweenOrgsComponent
       Form =
          formInternalBetweenOrgs
             senderAccounts
-            destinationOrgs
+            destinationCandidates
             session.AsInitiator
       Action = None
       OnSubmit =
@@ -663,13 +657,13 @@ let TransferFormComponent
       | RecipientAccountEnvironment.InternalBetweenOrgs ->
          OrgSocialTransferDiscovery.OrgSearchComponent
             session.OrgId
-            (fun searchInput destinationOrgs ->
-               match destinationOrgs with
-               | Deferred.Resolved(Ok(Some destinationOrgs)) ->
+            (fun searchInput destinationCandidates ->
+               match destinationCandidates with
+               | Deferred.Resolved(Ok(Some destinations)) ->
                   match dailyAccrual with
                   | Deferred.Resolved(Ok accrual) ->
                      TransferInternalBetweenOrgsComponent
-                        destinationOrgs
+                        destinations
                         session
                         org.CheckingAccounts
                         org.Org.CommandApprovalRules

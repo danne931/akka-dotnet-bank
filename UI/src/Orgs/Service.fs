@@ -93,7 +93,7 @@ let getOrgAndAccountProfiles
 let searchOrgTransferSocialDiscovery
    (orgId: OrgId)
    (nameQuery: string)
-   : Async<Result<Org list option, Err>>
+   : Async<Result<SocialTransferDiscoveryCandidate list option, Err>>
    =
    async {
       let path = OrgPath.search orgId nameQuery
@@ -107,7 +107,7 @@ let searchOrgTransferSocialDiscovery
       else
          return
             responseText
-            |> Serialization.deserialize<Org list>
+            |> Serialization.deserialize<SocialTransferDiscoveryCandidate list>
             |> Result.map Some
    }
 

@@ -222,29 +222,31 @@ let searchOrgTransferSocialDiscovery (fromOrgId: OrgId) (nameQuery: string) =
    let query =
       $$"""
       SELECT
-         o.{{Fields.orgId}},
-         o.{{Fields.name}},
-         o.{{Fields.statusDetail}},
-         o.{{Fields.adminTeamEmail}},
-         o.{{Fields.employerIdentificationNumber}},
-         o.{{Fields.parentAccountId}},
-         features.{{Fields.socialTransferDiscoveryAccountId}}
-      FROM {{table}} o
+         {{Fields.orgId}},
+         {{Fields.name}},
+         {{Fields.parentAccountId}},
+         features.{{Fields.socialTransferDiscoveryAccountId}} AS account_id
+      FROM {{table}}
       LEFT JOIN {{OrganizationSqlMapper.featureFlagsTable}} features using({{Fields.orgId}})
       WHERE
-         o.{{Fields.orgId}} <> @orgIdToExclude
-         AND o.{{Fields.name}} %> @nameQuery
+         {{Fields.orgId}} <> @orgIdToExclude
+         AND {{Fields.name}} %> @nameQuery
          AND features.{{Fields.socialTransferDiscoveryAccountId}} IS NOT NULL
-      ORDER BY o.{{Fields.name}} <-> @nameQuery DESC
+      ORDER BY {{Fields.name}} <-> @nameQuery DESC
       """
 
-   pgQuery<Org>
+   pgQuery<SocialTransferDiscoveryCandidate>
       query
       (Some [
          "orgIdToExclude", Writer.orgId fromOrgId
          "nameQuery", Writer.name nameQuery
       ])
-      Reader.org
+      (fun read -> {
+         OrgName = Reader.name read
+         OrgId = Reader.orgId read
+         ParentAccountId = Reader.parentAccountId read
+         PrimaryReceivingAccountId = read.uuid "account_id" |> AccountId
+      })
 
 module Fields = MerchantFields
 module Writer = MerchantSqlWriter
