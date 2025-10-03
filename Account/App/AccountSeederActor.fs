@@ -424,6 +424,7 @@ let seedBalanceHistory () = taskResultOption {
          AND {EmployeeEventFields.name} <> 'PurchaseApplied';
       """,
       sqlParams
+
       $"""
       UPDATE {AccountEventSqlMapper.table}
       SET
@@ -1266,11 +1267,18 @@ let seedAccountOwnerActions
          createCounterparty registry createCounterPartyInPartnerBank
 
       for month in [ 1..3 ] do
+         let nextMonth = timestamp.AddMonths month
+
          let timestamp =
             if month = 3 then
-               timestamp.AddMonths(month).AddDays -2
+               let today = DateTime.UtcNow
+
+               if today.Day < nextMonth.Day then
+                  today.AddDays -2
+               else
+                  nextMonth.AddDays -2
             else
-               timestamp.AddMonths month
+               nextMonth
 
          let transferCmd = {
             DomesticTransferCommand.create
