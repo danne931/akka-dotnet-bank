@@ -254,7 +254,7 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Recipient.Name
       | AccountEvent.InternalTransferBetweenOrgsPending evt ->
          Some evt.Data.BaseInfo.Amount,
-         None,
+         Some MoneyFlow.Out,
          Some evt.Data.BaseInfo.Recipient.Name
       | AccountEvent.InternalTransferBetweenOrgsDeposited evt ->
          Some evt.Data.BaseInfo.Amount,
@@ -262,7 +262,7 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Sender.Name
       | AccountEvent.InternalTransferBetweenOrgsSettled evt ->
          Some evt.Data.BaseInfo.Amount,
-         Some MoneyFlow.Out,
+         None,
          Some evt.Data.BaseInfo.Recipient.Name
       | AccountEvent.InternalTransferBetweenOrgsFailed evt ->
          Some evt.Data.BaseInfo.Amount,
@@ -274,11 +274,11 @@ module AccountEvent =
          Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.DomesticTransferPending evt ->
          Some evt.Data.BaseInfo.Amount,
-         None,
+         Some evt.Data.BaseInfo.MoneyFlow,
          Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.DomesticTransferSettled evt ->
          Some evt.Data.BaseInfo.Amount,
-         Some evt.Data.BaseInfo.MoneyFlow,
+         None,
          Some evt.Data.BaseInfo.Counterparty.Name
       | AccountEvent.DomesticTransferFailed evt ->
          Some evt.Data.BaseInfo.Amount,

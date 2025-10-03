@@ -1274,7 +1274,7 @@ let seedAccountOwnerActions
                let today = DateTime.UtcNow
 
                if today.Day < nextMonth.Day then
-                  today.AddDays -2
+                  today
                else
                   nextMonth.AddDays -2
             else
