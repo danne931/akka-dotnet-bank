@@ -1,13 +1,11 @@
-module CardIssuerServiceActor
+module CardIssuerService
 
 open System
 open System.Threading.Tasks
 open Akkling
 open Akkling.Streams
 open Akka.Streams.Amqp.RabbitMq
-open FsToolkit.ErrorHandling
 
-open Bank.Employee.Domain
 open Lib.SharedTypes
 open Lib.CircuitBreaker
 open SignalRBroadcast
@@ -15,19 +13,9 @@ open Lib.Types
 open Lib.Queue
 open CardSetupSaga
 open CardIssuer.Service.Domain
+open Bank.Employee.Domain
 open BankActorRegistry
 open Flurl.Http
-
-let protectedAction
-   (networkRequest: CardIssuerMessage -> Task<Result<CardIssuerResponse, Err>>)
-   (mailbox: Actor<_>)
-   (msg: CardIssuerMessage)
-   : TaskResult<CardIssuerResponse, Err>
-   =
-   task {
-      let! result = networkRequest msg
-      return result
-   }
 
 let actorProps
    (registry: #ISagaActor)
@@ -36,14 +24,23 @@ let actorProps
    (streamRestartSettings: Akka.Streams.RestartSettings)
    (breaker: Akka.Pattern.CircuitBreaker)
    (broadcaster: SignalRBroadcast)
-   (networkRequest: CardIssuerMessage -> Task<Result<CardIssuerResponse, Err>>)
+   (networkRequest: CardIssuerMessage -> Task<CardIssuerResponse>)
    : Props<obj>
    =
    let consumerQueueOpts = {
       Service = CircuitBreakerService.CardIssuer
       onCircuitBreakerEvent = broadcaster.circuitBreaker
       protectedAction =
-         fun mailbox msg -> protectedAction networkRequest mailbox msg
+         fun _ msg -> task {
+            try
+               let! result = networkRequest msg
+               return Ok result
+            with
+            | :? FlurlHttpException as e ->
+               let! errMsg = e.GetResponseStringAsync()
+               return Error(Err.UnexpectedError errMsg)
+            | e -> return Error(Err.UnexpectedError e.Message)
+         }
       queueMessageToActionRequest = fun _ msg -> Task.FromResult(Some msg)
       onSuccessFlow =
          Flow.map
@@ -53,7 +50,7 @@ let actorProps
                let orgId = metadata.OrgId
 
                match queueMessage, response with
-               | CardIssuerMessage.CreateCard req,
+               | CardIssuerMessage.CreateCard _,
                  CardIssuerResponse.CreateCard res ->
                   let msg =
                      Ok res
@@ -63,7 +60,7 @@ let actorProps
                   registry.SagaActor corrId <! msg
                | CardIssuerMessage.CloseCard _,
                  CardIssuerResponse.CloseCard res ->
-                  logDebug mailbox $"Card detached {res.ProviderCardId}"
+                  logDebug mailbox $"Card detached {res.CardIssuerCardId}"
                | req, res ->
                   logError
                      mailbox
@@ -84,30 +81,20 @@ let actorProps
 let private networkRequestToCardIssuerService
    (cardIssuerApiKey: string)
    (msg: CardIssuerMessage)
-   : Task<Result<CardIssuerResponse, Err>>
+   : Task<CardIssuerResponse>
    =
    task {
       match msg with
       | CardIssuerMessage.CreateCard req ->
-         try
-            let url = EnvEmployee.config.CardIssuerURI + "/cards"
+         let url = EnvEmployee.config.CardIssuerURI + "/cards"
 
-            let! response =
-               url
-                  .WithHeader("Authorization", cardIssuerApiKey)
-                  .PostJsonAsync(req.AsDTO)
+         let! response =
+            url
+               .WithHeader("Authorization", cardIssuerApiKey)
+               .PostJsonAsync(req.AsDTO)
+               .ReceiveJson<CardCreateResponseDTO>()
 
-            if not response.ResponseMessage.IsSuccessStatusCode then
-               let errMsg =
-                  $"Error creating card with card issuer: {response.StatusCode}"
-
-               return Error(Err.UnexpectedError errMsg)
-            else
-               let! res = response.GetJsonAsync<CardCreateResponseDTO>()
-
-               return Ok(CardIssuerResponse.CreateCard res.AsEntity)
-         with e ->
-            return Error(Err.UnexpectedError e.Message)
+         return CardIssuerResponse.CreateCard response.AsEntity
       | CardIssuerMessage.CloseCard req ->
          // TODO: HTTP request to the card issuer API
          do! Task.Delay(TimeSpan.FromSeconds 3.3)
@@ -115,26 +102,26 @@ let private networkRequestToCardIssuerService
          return
             CardIssuerResponse.CloseCard {
                Customer = null
-               ProviderCardId = req.ProviderCardId
+               CardIssuerCardId = req.CardIssuerCardId
             }
-            |> Ok
    }
 
 let private mockNetworkRequestToCardIssuerService
    (msg: CardIssuerMessage)
-   : Task<Result<CardIssuerResponse, Err>>
+   : Task<CardIssuerResponse>
    =
-   taskResult {
+   task {
       match msg with
       | CardIssuerMessage.CreateCard _ ->
          do! Task.Delay(TimeSpan.FromSeconds 1.3)
 
          return
             CardIssuerResponse.CreateCard {
-               ProviderCardId = Guid.NewGuid() |> ThirdPartyProviderCardId
+               CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
                CardNumberLast4 =
                   List.init 4 (fun _ -> Random().Next(1, 9) |> string)
                   |> String.concat ""
+               CardIssuerName = CardIssuerName.Lithic
             }
       | CardIssuerMessage.CloseCard req ->
          // TODO: HTTP request to the card issuer API
@@ -143,8 +130,62 @@ let private mockNetworkRequestToCardIssuerService
          return
             CardIssuerResponse.CloseCard {
                Customer = null
-               ProviderCardId = req.ProviderCardId
+               CardIssuerCardId = req.CardIssuerCardId
             }
+   }
+
+(*
+ * Sending this request to Lithic will simulate Lithic card issuer receiving
+ * purchase requests from the card networks.  Lithic will validate the
+ * request against my configured card program rules.  Since I am also
+ * using Lithic's Auth Stream Access (ASA) feature, Lithic will forward
+ * the transaction (if it passes the rules I configure for my Lithic card
+ * program) to my server so I can provide additional custom logic to determine
+ * whether to approve the transaction.
+ *)
+let simulatePurchaseAuthorization
+   (cardIssuerApiKey: string)
+   (req: SimulatePurchaseRequest)
+   : Task<Result<SimulatePurchaseResponse, Err>>
+   =
+   task {
+      try
+         let url = EnvEmployee.config.CardIssuerURI + "/simulate/authorize"
+
+         let! response =
+            url
+               .WithHeader("Authorization", cardIssuerApiKey)
+               .PostJsonAsync(req.AsDTO)
+               .ReceiveJson<SimulatePurchaseResponseDTO>()
+
+         return Ok response.AsEntity
+      with
+      | :? FlurlHttpException as e ->
+         let! errMsg = e.GetResponseStringAsync()
+         return Error(Err.UnexpectedError errMsg)
+      | e -> return Error(Err.UnexpectedError e.Message)
+   }
+
+let getCard
+   (cardIssuerApiKey: string)
+   (cardId: CardIssuerCardId)
+   : Task<Result<CardGetResponse, Err>>
+   =
+   task {
+      try
+         let url = EnvEmployee.config.CardIssuerURI + $"/cards/{cardId}"
+
+         let! response =
+            url
+               .WithHeader("Authorization", cardIssuerApiKey)
+               .GetJsonAsync<CardGetResponseDTO>()
+
+         return Ok response.AsEntity
+      with
+      | :? FlurlHttpException as e ->
+         let! errMsg = e.GetResponseStringAsync()
+         return Error(Err.UnexpectedError errMsg)
+      | e -> return Error(Err.UnexpectedError e.Message)
    }
 
 // Will not consume messages off of RabbitMq if no CardIssuerApiKey

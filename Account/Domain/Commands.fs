@@ -169,6 +169,7 @@ module DebitCommand =
                EmployeeName = info.EmployeeName
                EmployeeCardNumberLast4 = info.CardNumberLast4
                EmployeeId = info.InitiatedBy.Id.AsEmployeeId
+               CardIssuerTransactionId = info.CardIssuerTransactionId
                CardId = info.CardId
                CardNickname = info.CardNickname
             }
@@ -210,6 +211,7 @@ module FailDebitCommand =
                EmployeeName = purchaseInfo.EmployeeName
                EmployeeId = purchaseInfo.EmployeeId
                EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
+               CardIssuerTransactionId = purchaseInfo.CardIssuerTransactionId
                CardId = purchaseInfo.CardId
                CardNickname = purchaseInfo.CardNickname
             }
@@ -254,6 +256,7 @@ module RefundDebitCommand =
                EmployeeName = purchaseInfo.EmployeeName
                EmployeeId = purchaseInfo.EmployeeId
                EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
+               CardIssuerTransactionId = purchaseInfo.CardIssuerTransactionId
                CardId = purchaseInfo.CardId
                CardNickname = purchaseInfo.CardNickname
             }
@@ -325,7 +328,7 @@ module SettleDebitCommand =
          initiator
          data
 
-   let fromPurchase (purchaseInfo: PurchaseInfo) (settlementId: SettlementId) =
+   let fromPurchase (purchaseInfo: PurchaseInfo) =
       create
          (purchaseInfo.ParentAccountId, purchaseInfo.OrgId)
          purchaseInfo.CorrelationId
@@ -336,12 +339,12 @@ module SettleDebitCommand =
                EmployeeName = purchaseInfo.EmployeeName
                EmployeeId = purchaseInfo.EmployeeId
                EmployeeCardNumberLast4 = purchaseInfo.CardNumberLast4
+               CardIssuerTransactionId = purchaseInfo.CardIssuerTransactionId
                CardId = purchaseInfo.CardId
                CardNickname = purchaseInfo.CardNickname
             }
             Merchant = purchaseInfo.Merchant
             Amount = purchaseInfo.Amount
-            SettlementId = settlementId
          }
 
    let toEvent

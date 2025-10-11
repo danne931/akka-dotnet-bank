@@ -40,6 +40,7 @@ type EmployeePurchaseReference = {
    EmployeeId: EmployeeId
    CardId: CardId
    CardNickname: string option
+   CardIssuerTransactionId: CardIssuerTransactionId
 }
 
 type DebitPending = {
@@ -53,7 +54,6 @@ type DebitPending = {
 
 type DebitSettled = {
    AccountId: AccountId
-   SettlementId: SettlementId
    Merchant: string
    Amount: decimal
    EmployeePurchaseReference: EmployeePurchaseReference

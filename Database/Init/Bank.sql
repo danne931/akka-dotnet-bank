@@ -30,6 +30,7 @@ DROP TABLE IF EXISTS saga;
 DROP TABLE IF EXISTS ancillary_transaction_info;
 DROP TABLE IF EXISTS parent_account_event;
 DROP TABLE IF EXISTS account_event;
+DROP TABLE IF EXISTS card_issuer_mapping;
 DROP TABLE IF EXISTS card;
 DROP TABLE IF EXISTS command_approval_progress;
 DROP TABLE IF EXISTS command_approval_rule_amount_daily_limit;
@@ -58,6 +59,8 @@ DROP TYPE IF EXISTS parent_account_status;
 DROP TYPE IF EXISTS auto_transfer_rule_frequency;
 DROP TYPE IF EXISTS card_status;
 DROP TYPE IF EXISTS card_type;
+DROP TYPE IF EXISTS card_issuer_closed_card_reason;
+DROP TYPE IF EXISTS card_issuer_name;
 DROP TYPE IF EXISTS payment_request_status;
 DROP TYPE IF EXISTS payment_request_type;
 DROP TYPE IF EXISTS payment_network;
@@ -247,6 +250,7 @@ CREATE TABLE account (
    account_name VARCHAR(50) NOT NULL,
    depository account_depository NOT NULL,
    balance MONEY NOT NULL,
+   pending_funds_detail JSONB NOT NULL,
    pending_additions_money MONEY NOT NULL,
    pending_additions_count INT NOT NULL,
    pending_deductions_money MONEY NOT NULL,
@@ -256,7 +260,7 @@ CREATE TABLE account (
    auto_transfer_rule JSONB,
    auto_transfer_rule_frequency auto_transfer_rule_frequency,
    org_id UUID NOT NULL REFERENCES organization,
-   parent_account_id UUID NOT NULL
+   parent_account_id UUID NOT NULL REFERENCES partner_bank_parent_account
 );
 
 SELECT add_created_at_column('account');
@@ -426,7 +430,8 @@ CREATE TABLE employee (
    invite_token UUID,
    invite_expiration TIMESTAMPTZ,
    auth_provider_user_id UUID,
-   org_id UUID NOT NULL REFERENCES organization
+   org_id UUID NOT NULL REFERENCES organization,
+   parent_account_id UUID NOT NULL REFERENCES partner_bank_parent_account
 );
 
 SELECT add_created_at_column('employee');
@@ -531,7 +536,6 @@ CREATE TABLE card (
    exp_month INT NOT NULL,
    exp_year INT NOT NULL,
    card_id UUID PRIMARY KEY,
-   third_party_provider_card_id UUID,
    employee_id UUID NOT NULL REFERENCES employee,
    account_id UUID NOT NULL REFERENCES account,
    org_id UUID NOT NULL REFERENCES organization
@@ -548,6 +552,28 @@ COMMENT ON COLUMN card.account_id IS
 'Every card must be linked to an account within an organization.
 When an employee makes a purchase with their card, funds will be
 deducted from the organization account the card is linked to.';
+
+--- CARD ISSUER MAPPING ---
+CREATE TYPE card_issuer_name AS ENUM ('Lithic'); --, 'Marqueta');
+
+CREATE TYPE card_issuer_closed_card_reason AS ENUM ('ReIssued');
+
+CREATE TABLE card_issuer_mapping (
+   id BIGSERIAL PRIMARY KEY,
+   internal_card_id UUID NOT NULL REFERENCES card(card_id),
+   issuer_card_id UUID NOT NULL,
+   issuer_name card_issuer_name NOT NULL,
+   closed_reason card_issuer_closed_card_reason,
+   closed_reason_detail JSONB,
+   employee_id UUID NOT NULL REFERENCES employee(employee_id)
+);
+
+SELECT add_created_at_column('card_issuer_mapping');
+SELECT add_updated_at_column_and_trigger('card_issuer_mapping');
+
+CREATE INDEX card_issuer_mapping_internal_card_id_idx ON card_issuer_mapping(internal_card_id);
+CREATE INDEX card_issuer_mapping_issuer_card_id_idx ON card_issuer_mapping(issuer_card_id);
+CREATE INDEX card_issuer_mapping_employee_id_idx ON card_issuer_mapping(employee_id);
 
 
 --- ACCOUNT EVENTS ---
@@ -1486,6 +1512,28 @@ VALUES (
    'd1240fcd-6080-45e6-a28d-7c840ece437b'
 );
 
+INSERT INTO partner_bank_parent_account (
+   parent_account_id,
+   org_id,
+   status,
+   partner_bank_routing_number,
+   partner_bank_account_number,
+   partner_bank_account_id,
+   partner_bank_legal_entity_id,
+   last_billing_cycle_at
+)
+VALUES (
+   -- This parent_account_id is defined in Lib.SharedClientServer/Constants.fs
+   'd1240fcd-6080-45e6-a28d-7c840ece437b',
+   (SELECT org_id FROM organization WHERE org_name = 'system'),
+   'Active',
+   123456789,
+   123456789,
+   gen_random_uuid()::varchar(255),
+   gen_random_uuid()::varchar(255),
+   null
+);
+
 /**
  * Create a "system" user to represent account events which do not originate
  * from a human user.  Used in BillingCycleCommand, MaintenanceFeeCommand, etc.
@@ -1498,7 +1546,8 @@ INSERT INTO employee (
    role,
    status,
    status_detail,
-   org_id
+   org_id,
+   parent_account_id
 )
 VALUES (
     -- This employee_id is defined in Lib.SharedClientServer/Types.fs as
@@ -1512,7 +1561,9 @@ VALUES (
    'Admin',
    'Active',
    '"Active"'::jsonb,
-   (SELECT org_id FROM organization WHERE org_name = 'system')
+   (SELECT org_id FROM organization WHERE org_name = 'system'),
+   -- This parent_account_id is defined in Lib.SharedClientServer/Constants.fs
+   'd1240fcd-6080-45e6-a28d-7c840ece437b'
 );
 
 INSERT INTO purchase_category (name)

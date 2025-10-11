@@ -210,16 +210,19 @@ let onEventPersisted
 
    let linkProviderCardId (res: CardCreateResponse) =
       let msg =
-         LinkThirdPartyProviderCardCommand.create {
-            CardId = updatedState.CardId
-            ProviderCardId = res.ProviderCardId
+         LinkCardCommand.create {
+            Link = {
+               CardIssuerName = res.CardIssuerName
+               CardIssuerCardId = res.CardIssuerCardId
+               CardId = updatedState.CardId
+            }
             CardNumberLast4 = res.CardNumberLast4
             OrgId = orgId
             EmployeeId = updatedState.EmployeeId
             CorrelationId = corrId
             InitiatedBy = updatedState.InitiatedBy
          }
-         |> EmployeeCommand.LinkThirdPartyProviderCard
+         |> EmployeeCommand.LinkCard
          |> EmployeeMessage.StateChange
 
       registry.EmployeeActor updatedState.EmployeeId <! msg

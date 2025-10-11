@@ -27,7 +27,6 @@ module CardFields =
    let expMonth = "exp_month"
    let expYear = "exp_year"
    let cardId = "card_id"
-   let thirdPartyProviderCardId = "third_party_provider_card_id"
    let employeeId = EmployeeFields.employeeId
    let accountId = AccountFields.accountId
    let orgId = OrgFields.orgId
@@ -40,13 +39,6 @@ module CardSqlReader =
    let orgId = OrgSqlReader.orgId
    let employeeId = EmployeeSqlReader.employeeId
    let accountId = AccountSqlReader.accountId
-
-   let thirdPartyProviderCardId
-      (read: RowReader)
-      : ThirdPartyProviderCardId option
-      =
-      read.uuidOrNone CardFields.thirdPartyProviderCardId
-      |> Option.map ThirdPartyProviderCardId
 
    let cardNumberLast4 (read: RowReader) =
       read.string CardFields.cardNumberLast4
@@ -91,15 +83,11 @@ module CardSqlReader =
          Month = expMonth read
          Year = expYear read
       }
-      ThirdPartyProviderCardId = thirdPartyProviderCardId read
       LastPurchaseAt = lastPurchaseAt read
    }
 
 module CardSqlWriter =
    let cardId (CardId id) = Sql.uuid id
-
-   let thirdPartyProviderCardId (providerId: ThirdPartyProviderCardId option) =
-      providerId |> Option.map _.Value |> Sql.uuidOrNone
 
    let orgId = OrgSqlWriter.orgId
    let employeeId = EmployeeSqlWriter.employeeId

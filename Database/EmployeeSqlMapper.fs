@@ -16,6 +16,7 @@ module EmployeeTypeCast =
 module EmployeeFields =
    let employeeId = "employee_id"
    let orgId = OrgFields.orgId
+   let parentAccountId = "parent_account_id"
    let role = "role"
    let email = "email"
    let firstName = "first_name"
@@ -32,6 +33,9 @@ module EmployeeSqlReader =
       EmployeeFields.employeeId |> read.uuid |> EmployeeId
 
    let orgId = OrgSqlReader.orgId
+
+   let parentAccountId (read: RowReader) =
+      read.uuid EmployeeFields.parentAccountId |> ParentAccountId
 
    let role (read: RowReader) =
       read.string EmployeeFields.role |> Role.fromStringUnsafe
@@ -62,6 +66,7 @@ module EmployeeSqlReader =
    let employee (read: RowReader) : Employee = {
       EmployeeId = employeeId read
       OrgId = orgId read
+      ParentAccountId = parentAccountId read
       Role = role read
       Email = email read
       FirstName = firstName read
@@ -78,6 +83,8 @@ module EmployeeSqlWriter =
       ids |> List.map _.Value |> Array.ofList |> Sql.uuidArray
 
    let orgId = OrgSqlWriter.orgId
+   let parentAccountId (ParentAccountId id) = Sql.uuid id
+
    let role (role: Role) = Sql.string <| string role
 
    let roles (roles: Role list) =

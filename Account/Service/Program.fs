@@ -255,7 +255,7 @@ builder.Services.AddAkka(
          .WithSingleton<ActorMarker.CardIssuerService>(
             ActorMetadata.cardIssuerService.Name,
             (fun system _ _ ->
-               CardIssuerServiceActor.initProps
+               CardIssuerService.initProps
                   (getActorRegistry provider)
                   (getQueueConnection provider)
                   EnvEmployee.config.CardIssuerServiceQueue

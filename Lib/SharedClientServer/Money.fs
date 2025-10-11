@@ -10,6 +10,17 @@ type Currency =
    | THB
    | VND
 
+   static member create(currency: string) : Result<Currency, string> =
+      if String.IsNullOrEmpty currency then
+         Error "Empty currency"
+      else
+         match currency.ToUpper() with
+         | "USD" -> Ok USD
+         | "EUR" -> Ok EUR
+         | "THB" -> Ok THB
+         | "VND" -> Ok VND
+         | _ -> Error "Unsupported currency"
+
 type PositiveAmount =
    private
    | PositiveAmount of decimal
@@ -59,19 +70,32 @@ module MoneyFlow =
          | "out" -> Some MoneyFlow.Out
          | _ -> None
 
-type PendingFunds = {
-   Count: int
-   Money: decimal
-} with
+type PendingFund = { Amount: decimal; Flow: MoneyFlow }
 
-   static member Zero = { Count = 0; Money = 0m }
+type PendingFunds = Map<Guid, PendingFund>
 
-   member x.Add(amount: decimal) = {
-      Count = x.Count + 1
-      Money = x.Money + amount
-   }
+type PendingFundsTally = { In: decimal; Out: decimal }
 
-   member x.Remove(amount: decimal) = {
-      Count = max (x.Count - 1) 0
-      Money = max (x.Money - amount) 0m
-   }
+module PendingFunds =
+   let zero: PendingFunds = Map.empty
+
+   let add (txnId: Guid) (fund: PendingFund) (funds: PendingFunds) =
+      Map.add txnId fund funds
+
+   let remove (txnId: Guid) (funds: PendingFunds) = Map.remove txnId funds
+
+   let updateTransactionAmount
+      (txnId: Guid)
+      (fund: PendingFund)
+      (funds: PendingFunds)
+      =
+      Map.change txnId (Option.map (fun _ -> fund)) funds
+
+   let amount (funds: PendingFunds) =
+      Seq.fold
+         (fun acc fund ->
+            match fund.Flow with
+            | MoneyFlow.In -> { acc with In = acc.In + fund.Amount }
+            | MoneyFlow.Out -> { acc with Out = acc.Out + fund.Amount })
+         { In = 0m; Out = 0m }
+         funds.Values

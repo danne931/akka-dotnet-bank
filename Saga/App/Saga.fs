@@ -235,24 +235,7 @@ let sagaHandler
                   notHandled ()
             | StartEvent.Purchase e ->
                if state.IsPurchase then
-                  PurchaseSaga.onStartEventPersisted
-                     registry
-                     {
-                        cardNetworkRejectPurchase =
-                           PurchaseSaga.cardNetworkRejectPurchase
-                        sendMessageToSelf =
-                           fun purchase asyncEvt ->
-                              let asyncMsg =
-                                 asyncEvt
-                                 |> Async.map (
-                                    Message.purchase
-                                       purchase.OrgId
-                                       purchase.CorrelationId
-                                 )
-
-                              mailbox.Parent() <!| asyncMsg
-                     }
-                     e
+                  PurchaseSaga.onStartEventPersisted e
                else
                   notHandled ()
       onEventPersisted =
@@ -299,32 +282,9 @@ let sagaHandler
                   CardSetupSaga.onEventPersisted registry priorState state e
                | _ -> notHandled ()
             | Event.Purchase e ->
-               let purchaseOperationEnv: PurchaseSaga.OperationEnv = {
-                  cardNetworkConfirmPurchase =
-                     PurchaseSaga.cardNetworkConfirmPurchase
-                  cardNetworkRejectPurchase =
-                     PurchaseSaga.cardNetworkRejectPurchase
-                  sendMessageToSelf =
-                     fun purchase asyncEvt ->
-                        let asyncMsg =
-                           asyncEvt
-                           |> Async.map (
-                              Message.purchase
-                                 purchase.OrgId
-                                 purchase.CorrelationId
-                           )
-
-                        mailbox.Parent() <!| asyncMsg
-               }
-
                match priorState, state with
                | Saga.Purchase priorState, Saga.Purchase state ->
-                  PurchaseSaga.onEventPersisted
-                     registry
-                     purchaseOperationEnv
-                     priorState
-                     state
-                     e
+                  PurchaseSaga.onEventPersisted registry priorState state e
                | _ -> notHandled ()
             | Event.DomesticTransfer evt ->
                let OperationEnv: DomesticTransferSaga.OperationEnv = {

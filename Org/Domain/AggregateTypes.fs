@@ -169,15 +169,17 @@ type OrgWithAccountProfiles = {
 
    member x.PendingDeductions =
       Seq.fold
-         (fun (acc: PendingFunds) account ->
-            if account.PendingDeductions.Count > 0 then
-               {
-                  Money = acc.Money + account.PendingDeductions.Money
-                  Count = acc.Count + account.PendingDeductions.Count
-               }
+         (fun acc account ->
+            if account.PendingFunds.Count > 0 then
+               let pendingTally = PendingFunds.amount account.PendingFunds
+
+               {|
+                  Money = acc.Money + pendingTally.Out
+                  Count = acc.Count + account.PendingFunds.Count
+               |}
             else
                acc)
-         PendingFunds.Zero
+         {| Money = 0m; Count = 0 |}
          x.Accounts.Values
 
    member x.Metrics: AccountMetrics =

@@ -154,6 +154,7 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? Lib.ReadModelSyncActor.State -> "ReadModelSyncState"
       | :? CommandApprovalDailyAccrual -> "CommandApprovalDailyAccrual"
       | :? CachedOrgSettings -> "CachedOrgSettings"
+      | :? PurchaseAuthorizationStatus -> "PurchaseAuthorizationStatus"
       | :? OrgSnapshot -> "OrgSnapshot"
       | :? Option<Org> -> "OrgOption"
       | :? OrgEvent -> "OrgEvent"
@@ -303,6 +304,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? PartnerBankServiceMessage
       // Card issuer third party api message serialized for RabbitMq
       | :? CardIssuerMessage
+      // Response from account actor to employee actor & employee actor to ASA webhook request
+      | :? PurchaseAuthorizationStatus
       // Cached org settings stored in Akka.DistributedData CRDTs
       | :? CachedOrgSettings
       // OrgMessage.GetOrg response serialized for message sent
@@ -340,6 +343,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "ReadModelSyncState" -> typeof<Lib.ReadModelSyncActor.State>
          | "CommandApprovalDailyAccrual" -> typeof<CommandApprovalDailyAccrual>
          | "CachedOrgSettings" -> typeof<CachedOrgSettings>
+         | "PurchaseAuthorizationStatus" -> typeof<PurchaseAuthorizationStatus>
          | "OrgSnapshot" -> typeof<OrgSnapshot>
          | "OrgOption" -> typeof<Org option>
          | "OrgEvent" -> typeof<OrgEvent>

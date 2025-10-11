@@ -16,6 +16,7 @@ open ActorUtil
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Payment.Domain
+open CardIssuer.Service.Domain
 open BillingStatement
 open AutomaticTransfer
 open SignalRBroadcast
@@ -40,7 +41,7 @@ let private canProduceAutoTransfer =
       flow.IsSome
 
 let private onValidationError
-   (registry: #ISagaActor)
+   (registry: #ISagaGuaranteedDeliveryActor & #ISagaActor)
    (broadcaster: SignalRBroadcast)
    mailbox
    (cmd: AccountCommand)
@@ -52,7 +53,6 @@ let private onValidationError
 
    let orgId = cmd.Envelope.OrgId
    let corrId = cmd.Envelope.CorrelationId
-   let sagaRef = registry.SagaActor corrId
 
    broadcaster.accountEventError orgId cmd.AccountId corrId err
 
@@ -74,10 +74,15 @@ let private onValidationError
          | _ -> None
 
       let msg =
-         PurchaseSagaEvent.PurchaseRejectedByAccount reason
+         PurchaseFailReason.Account reason
+         |> PurchaseSagaEvent.PurchaseRejected
          |> AppSaga.Message.purchase orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
 
-      sagaRef <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
+
+      mailbox.Sender()
+      <! PurchaseAuthorizationStatus.fromAccountFailReason reason
      }
    | AccountCommand.DomesticTransfer cmd when cmd.Data.OriginatedFromSchedule -> option {
       let! reason =
@@ -93,7 +98,7 @@ let private onValidationError
          DomesticTransferSagaEvent.SenderUnableToReserveFunds reason
          |> AppSaga.Message.domesticTransfer orgId corrId
 
-      sagaRef <! msg
+      registry.SagaActor corrId <! msg
      }
    | AccountCommand.InternalTransferBetweenOrgs cmd when
       cmd.Data.OriginatedFromSchedule
@@ -113,7 +118,7 @@ let private onValidationError
               PlatformTransferSagaEvent.SenderUnableToReserveFunds reason
               |> AppSaga.Message.platformTransfer orgId corrId
 
-           sagaRef <! msg
+           registry.SagaActor corrId <! msg
 
            let! paymentId = cmd.Data.OriginatedFromPaymentRequest
            let corrId = paymentId.AsCorrelationId
@@ -133,7 +138,7 @@ let private onValidationError
          |> PlatformTransferSagaEvent.RecipientUnableToDepositFunds
          |> AppSaga.Message.platformTransfer orgId corrId
 
-      sagaRef <! msg
+      registry.SagaActor corrId <! msg
 
       let! paymentId = cmd.Data.BaseInfo.FromPaymentRequest
       let corrId = paymentId.AsCorrelationId
@@ -184,20 +189,25 @@ let onPersisted
          state.PartnerBankLink
          |> PurchaseSagaEvent.AccountReservedFunds
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
+
+      mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
    | AccountEvent.DebitSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettledWithAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | AccountEvent.DebitFailed e ->
       let msg =
          PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | AccountEvent.MaintenanceFeeDebited e ->
       let msg =
          BillingSagaEvent.MaintenanceFeeProcessed
@@ -423,7 +433,6 @@ let actorProps
          let onValidationError = onValidationError registry broadcaster mailbox
 
          match msg with
-         | Deferred mailbox (:? AccountEvent as evt)
          | Persisted mailbox (:? AccountEvent as evt) ->
             let state = ParentAccount.applyEvent state evt
 
@@ -585,23 +594,9 @@ let actorProps
 
                return! loop state <@> DeleteMessages Int64.MaxValue
             *)
-            // NOTE: Perceived optimization:
-            // Persisting DebitSettled is essential but probably no need to
-            // persist the DebitPending event as long as SaveSnapshot,
-            // invoked below, is called in case the actor restarts. Without
-            // SaveSnapshot in the LifecyclePostStop hook below, the actor would
-            // restart and potentially lose the latest value for
-            // ParentAccountSnapshot.PendingDeductions since it would not be
-            // able to derive the latest value from the persisted events during
-            // event reply on actor start.
-            //
-            // With PersistentEffect.Defer, Debit command will invoke the
-            // persistence handler to record the PendingDeductions on
-            // ParentAccountSnapshot and interact with PurchaseSaga. It will
-            // do so without saving it as an event in the event journal.
             | AccountMessage.StateChange(AccountCommand.Debit _ as cmd) ->
                match ParentAccount.stateTransition state cmd with
-               | Ok(evt, _) -> return! PersistentEffect.Defer [ evt ]
+               | Ok(evt, _) -> return! Persist evt
                | Error err -> onValidationError cmd err
             // Some messages are sent through traditional AtMostOnceDelivery via
             // a reference to the cluster sharded entity ref rather than Akka.Delivery
@@ -679,8 +674,6 @@ let initProps
          function
          | :? AccountMessage as msg ->
             match msg with
-            // Debit intent will invoke persistence handler without persisting
-            // the event, via PersistentEffect.Defer.
             | AccountMessage.StateChange(AccountCommand.Debit _) -> false
             | AccountMessage.StateChange _ -> true
             | _ -> false

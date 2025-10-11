@@ -42,8 +42,6 @@ type StartEvent =
       | Purchase e ->
          match e with
          | PurchaseSagaStartEvent.PurchaseIntent _ -> "PurchaseIntent"
-         | PurchaseSagaStartEvent.PurchaseRejectedByCard _ ->
-            "PurchaseRejectedByCard"
       | DomesticTransfer e ->
          match e with
          | DomesticTransferSagaStartEvent.SenderReservedFunds _ ->
@@ -138,9 +136,8 @@ type Event =
             "CardSetupEvaluateRemainingWork"
       | Event.Purchase e ->
          match e with
-         | PurchaseSagaEvent.PurchaseRejectedCardNetworkResponse _ ->
-            "PurchaseRejectedCardNetworkResponse"
-         | PurchaseSagaEvent.CardNetworkResponse _ -> "CardNetworkResponse"
+         | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress _ ->
+            "PurchaseCardIssuerUpdatedPurchaseProgress"
          | PurchaseSagaEvent.PurchaseSettledWithAccount ->
             "PurchaseSettledWithAccount"
          | PurchaseSagaEvent.PurchaseSettledWithCard ->
@@ -151,8 +148,8 @@ type Event =
             "PurchaseFailureAcknowledgedByAccount"
          | PurchaseSagaEvent.AccountReservedFunds _ ->
             "PurchaseAccountReservedFunds"
-         | PurchaseSagaEvent.PurchaseRejectedByAccount _ ->
-            "PurchaseRejectedByAccount"
+         | PurchaseSagaEvent.CardReservedFunds -> "PurchaseCardReservedFunds"
+         | PurchaseSagaEvent.PurchaseRejected _ -> "PurchaseRejected"
          | PurchaseSagaEvent.PurchaseNotificationSent ->
             "PurchaseNotificationSent"
          | PurchaseSagaEvent.PartnerBankSyncResponse _ ->

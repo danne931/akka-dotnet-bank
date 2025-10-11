@@ -68,6 +68,7 @@ let accountEventFilterNames
          acc
          @ match e with
            | AccountEventGroupFilter.Purchase -> [
+              typeof<DebitPending>.Name
               typeof<DebitSettled>.Name
               typeof<DebitFailed>.Name
               typeof<DebitRefunded>.Name
@@ -125,6 +126,7 @@ let employeeEventFilterNames
               typeof<AccessRestored>.Name
              ]
            | EmployeeEventGroupFilter.Purchase -> [
+              typeof<CardPurchasePending>.Name
               typeof<CardPurchaseSettled>.Name
               typeof<CardPurchaseFailed>.Name
               typeof<CardPurchaseRefunded>.Name

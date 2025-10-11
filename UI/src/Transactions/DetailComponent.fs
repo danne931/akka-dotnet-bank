@@ -226,14 +226,33 @@ let private renderTransactionHistory
                   | _ -> ()
                | History.Employee employeeHistory ->
                   match employeeHistory.Event with
-                  | EmployeeEvent.PurchasePending _ ->
-                     Html.p "Purchase processing"
-                  | EmployeeEvent.PurchaseSettled _ ->
-                     Html.p "Deducted funds from card"
+                  | EmployeeEvent.PurchasePending e ->
+                     Html.p
+                        $"Reserved {Money.format e.Data.Info.Amount} from card"
+                  | EmployeeEvent.PurchaseProgress e ->
+                     for e in e.Data.Info.Events do
+                        Html.p (
+                           match e.Type with
+                           | PurchaseEventType.Auth ->
+                              $"Authorization of {Money.format e.Amount} confirmed by card network"
+                           | PurchaseEventType.AuthAdvice ->
+                              $"Auth Advice {Money.format e.Amount} received from card network"
+                           | PurchaseEventType.Clearing ->
+                              $"Clearing of {Money.format e.Amount} confirmed by card network"
+                           | PurchaseEventType.AuthExpiry ->
+                              "Auth Expiry received from card network"
+                           | PurchaseEventType.AuthReversal ->
+                              "Merchant reversed authorization"
+                           | _ -> $"Unknown - {e.Type}"
+                        )
+                  | EmployeeEvent.PurchaseSettled e ->
+                     Html.p
+                        $"Deducted {Money.format e.Data.Info.Amount} from card"
                   | EmployeeEvent.PurchaseRefunded e ->
                      Html.p $"Purchase refunded to card due to {e.Data.Reason}"
                   | EmployeeEvent.PurchaseFailed e ->
-                     Html.p $"Failed purchase due to {e.Data.Reason}"
+                     Html.p
+                        $"Funds released from card reserve due to {e.Data.Reason}"
                   | _ -> ()
                | History.Account accountHistory ->
                   match accountHistory.Event with
@@ -263,12 +282,14 @@ let private renderTransactionHistory
                      )
                   | AccountEvent.DepositedCash e ->
                      Html.p $"Deposited money via {e.Data.Origin}"
-                  | AccountEvent.DebitPending _ ->
-                     Html.p "Pending deduction of funds from account"
-                  | AccountEvent.DebitSettled _ ->
-                     Html.p "Deducted funds from account"
+                  | AccountEvent.DebitPending e ->
+                     Html.p
+                        $"Reserved {Money.format e.Data.Amount} from account"
+                  | AccountEvent.DebitSettled e ->
+                     Html.p
+                        $"Deducted {Money.format e.Data.Amount} from account"
                   | AccountEvent.DebitFailed _ ->
-                     Html.p "Failed to deduct funds from account"
+                     Html.p "Funds released from account reserve"
                   | AccountEvent.DebitRefunded e ->
                      Html.p $"Account refund applied due to {e.Data.Reason}"
                   | AccountEvent.InternalTransferWithinOrgDeducted e ->

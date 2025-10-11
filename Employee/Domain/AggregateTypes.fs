@@ -10,8 +10,9 @@ type EmployeeCommand =
    | CreateAccountOwner of CreateAccountOwnerCommand
    | CreateEmployee of CreateEmployeeCommand
    | CreateCard of CreateCardCommand
-   | LinkThirdPartyProviderCard of LinkThirdPartyProviderCardCommand
+   | LinkCard of LinkCardCommand
    | PurchaseIntent of PurchaseIntentCommand
+   | PurchaseProgress of PurchaseProgressCommand
    | SettlePurchase of SettlePurchaseWithCardCommand
    | FailPurchase of FailPurchaseCommand
    | RefundPurchase of RefundPurchaseCommand
@@ -31,8 +32,9 @@ type EmployeeCommand =
       | CreateAccountOwner cmd -> Command.envelope cmd
       | CreateEmployee cmd -> Command.envelope cmd
       | CreateCard cmd -> Command.envelope cmd
-      | LinkThirdPartyProviderCard cmd -> Command.envelope cmd
+      | LinkCard cmd -> Command.envelope cmd
       | PurchaseIntent cmd -> Command.envelope cmd
+      | PurchaseProgress cmd -> Command.envelope cmd
       | SettlePurchase cmd -> Command.envelope cmd
       | FailPurchase cmd -> Command.envelope cmd
       | RefundPurchase cmd -> Command.envelope cmd
@@ -51,8 +53,9 @@ type EmployeeEvent =
    | CreatedAccountOwner of BankEvent<CreatedAccountOwner>
    | CreatedEmployee of BankEvent<CreatedEmployee>
    | CreatedCard of BankEvent<CreatedCard>
-   | ThirdPartyProviderCardLinked of BankEvent<ThirdPartyProviderCardLinked>
+   | CardLinked of BankEvent<CardLinked>
    | PurchasePending of BankEvent<CardPurchasePending>
+   | PurchaseProgress of BankEvent<CardIssuerUpdatedPurchaseProgress>
    | PurchaseSettled of BankEvent<CardPurchaseSettled>
    | PurchaseFailed of BankEvent<CardPurchaseFailed>
    | PurchaseRefunded of BankEvent<CardPurchaseRefunded>
@@ -86,9 +89,10 @@ module EmployeeEnvelope =
       | :? BankEvent<CreatedAccountOwner> as evt -> CreatedAccountOwner evt
       | :? BankEvent<CreatedEmployee> as evt -> CreatedEmployee evt
       | :? BankEvent<CreatedCard> as evt -> CreatedCard evt
-      | :? BankEvent<ThirdPartyProviderCardLinked> as evt ->
-         ThirdPartyProviderCardLinked evt
+      | :? BankEvent<CardLinked> as evt -> CardLinked evt
       | :? BankEvent<CardPurchasePending> as evt -> PurchasePending evt
+      | :? BankEvent<CardIssuerUpdatedPurchaseProgress> as evt ->
+         PurchaseProgress evt
       | :? BankEvent<CardPurchaseSettled> as evt -> PurchaseSettled evt
       | :? BankEvent<CardPurchaseFailed> as evt -> PurchaseFailed evt
       | :? BankEvent<CardPurchaseRefunded> as evt -> PurchaseRefunded evt
@@ -111,8 +115,9 @@ module EmployeeEnvelope =
       | CreatedAccountOwner evt -> wrap evt, get evt
       | CreatedEmployee evt -> wrap evt, get evt
       | CreatedCard evt -> wrap evt, get evt
-      | ThirdPartyProviderCardLinked evt -> wrap evt, get evt
+      | CardLinked evt -> wrap evt, get evt
       | PurchasePending evt -> wrap evt, get evt
+      | PurchaseProgress evt -> wrap evt, get evt
       | PurchaseSettled evt -> wrap evt, get evt
       | PurchaseFailed evt -> wrap evt, get evt
       | PurchaseRefunded evt -> wrap evt, get evt
@@ -131,11 +136,14 @@ module EmployeeEnvelope =
 type EmployeeMessage =
    | GetEmployee
    | StateChange of EmployeeCommand
+   | AuthorizePurchase of PurchaseAuthorization
+   | PurchaseProgress of CardIssuerPurchaseProgress
    | Delete
 
 type Employee = {
    EmployeeId: EmployeeId
    OrgId: OrgId
+   ParentAccountId: ParentAccountId
    Role: Role
    Email: Email
    FirstName: string
@@ -158,11 +166,15 @@ type Employee = {
    member x.HasCard =
       x.Cards.Values
       |> Seq.exists (fun card ->
-         not (card.IsExpired()) && card.Status <> CardStatus.Closed)
+         match card.IsExpired(), card.Status with
+         | true, _ -> false
+         | false, CardStatus.Closed _ -> false
+         | _ -> true)
 
    static member Empty = {
-      EmployeeId = EmployeeId System.Guid.Empty
-      OrgId = OrgId System.Guid.Empty
+      EmployeeId = EmployeeId Guid.Empty
+      OrgId = OrgId Guid.Empty
+      ParentAccountId = ParentAccountId Guid.Empty
       Role = Role.Scholar
       Email = Email.empty
       FirstName = ""
@@ -175,13 +187,17 @@ type Employee = {
 type EmployeeSnapshot = {
    Info: Employee
    Events: EmployeeEvent list
-   PendingPurchaseDeductions: PendingFunds
+   CardIssuerLinks: Map<CardId, CardIssuerLink>
+   PendingPurchaseDeductions: Map<CardId, PendingFunds>
+   PendingPurchases: Map<CardIssuerTransactionId, Purchase>
 } with
 
    static member Empty = {
       Info = Employee.Empty
       Events = []
-      PendingPurchaseDeductions = PendingFunds.Zero
+      CardIssuerLinks = Map.empty
+      PendingPurchaseDeductions = Map.empty
+      PendingPurchases = Map.empty
    }
 
 type CardWithMetrics = {

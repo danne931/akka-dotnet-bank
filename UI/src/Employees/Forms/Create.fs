@@ -94,6 +94,8 @@ let form
             OrgRequiresEmployeeInviteApproval =
                employeeInviteRuleOpt |> Option.map _.RuleId
             CardInfo = cardInfo
+            ParentAccountId =
+               accounts |> Map.values |> Seq.head |> _.ParentAccountId
          }
          |> EmployeeCommand.CreateEmployee
          |> FormCommand.Employee

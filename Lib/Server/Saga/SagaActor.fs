@@ -141,7 +141,11 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                            evt.Timestamp
                      with
                      | Error err ->
-                        logWarning $"Will not persist saga event due to {err}"
+                        let evtType = evt.Data.GetType().FullName
+
+                        logWarning
+                           $"Will not persist saga event due to {err} {evtType}"
+
                         return ignored ()
                      | Ok _ ->
                         return!

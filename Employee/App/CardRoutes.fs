@@ -5,17 +5,21 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Builder
 open Akkling
+open Akka.Actor
 open FsToolkit.ErrorHandling
 
 open Bank.Org.Domain
 open Bank.Employee.Domain
-open Bank.Employee.Api
+open Bank.Card.Api
+open CardIssuer.Service.Domain
 open CommandApproval
 open RoutePaths
 open Lib.SharedTypes
 open Bank.UserSession.Middleware
 open Lib.NetworkQuery
 open BankActorRegistry
+
+let processCommand = Bank.Employee.Api.processCommand
 
 let start (app: WebApplication) =
    app.MapGet(
@@ -58,12 +62,249 @@ let start (app: WebApplication) =
       .RBAC(Permissions.CreateCard)
    |> ignore
 
+   (*
+    * Sending this request to Lithic will simulate Lithic card issuer receiving
+    * purchase requests from the card networks.  Lithic will validate the
+    * request against my configured card program rules.  Since I am also
+    * using Lithic's Auth Stream Access (ASA) feature, Lithic will forward
+    * the transaction (if it passes the rules I configure for my Lithic card
+    * program) to my server where I can provide additional custom logic 
+    * within the employee actor to determine whether to approve the transaction.
+    *
+    * Alternatively, if we do not care to test the Lithic integration then the
+    * purchase auth will bypass the (app -> Lithic -> app webhook) flow
+    * & be sent directly to the employee actor.
+    *)
    app
       .MapPost(
          CardPath.Purchase,
-         Func<BankActorRegistry, PurchaseIntentCommand, Task<IResult>>
-            (fun registry cmd ->
-               processCommand registry (EmployeeCommand.PurchaseIntent cmd)
+         Func<
+            ActorSystem,
+            BankActorRegistry,
+            PurchaseIntentCommand,
+            Task<IResult>
+          >
+            (fun system registry cmd ->
+               taskResult {
+                  let conf = EnvEmployee.config
+
+                  let! envelope =
+                     PurchaseIntentCommand.toEvent cmd
+                     |> Result.map EmployeeEnvelope.get
+                     |> Result.mapError Err.ValidationError
+
+                  match conf.CardIssuerMockRequests, conf.CardIssuerApiKey with
+                  // Route handler -> Lithic -> ASA Webhook route handler -> EmployeeActor
+                  | false, Some apiKey ->
+                     let! cardIssuerCardId =
+                        getIssuerCardIdFromInternalCardId cmd.Data.CardId
+
+                     let! card =
+                        CardIssuerService.getCard apiKey cardIssuerCardId
+
+                     let! _ =
+                        CardIssuerService.simulatePurchaseAuthorization apiKey {
+                           Amount = cmd.Data.Amount
+                           Descriptor = cmd.Data.Merchant
+                           CardNumber = card.Number
+                           MerchantCurrency = cmd.Data.CurrencyMerchant
+                           Metadata = {
+                              OrgId = cmd.OrgId
+                              CorrelationId = cmd.CorrelationId
+                           }
+                        }
+
+                     return envelope
+                  // Route handler -> EmployeeActor
+                  | _ ->
+                     let employeeRef =
+                        (registry :> IEmployeeActor).EmployeeActor
+                           cmd.Data.EmployeeId
+
+                     let msg =
+                        cmd
+                        |> EmployeeCommand.PurchaseIntent
+                        |> EmployeeMessage.StateChange
+
+                     let! (authResult: PurchaseAuthorizationStatus) =
+                        employeeRef.Ask(msg, Some(TimeSpan.FromSeconds 4.5))
+                        |> Async.map Ok
+                        |> AsyncResult.catch Err.NetworkError
+
+                     do! Async.Sleep 700
+
+                     // Simulate Clearing event from card issuer
+                     let progress: CardIssuerPurchaseProgress = {
+                        Events = [
+                           {
+                              Type = PurchaseEventType.Auth
+                              Amount = cmd.Data.Amount
+                              Flow = MoneyFlow.Out
+                              EnforcedRules = []
+                              EventId = Guid.NewGuid()
+                              CreatedAt = cmd.Timestamp
+                           }
+                           {
+                              Type = PurchaseEventType.Clearing
+                              Amount = cmd.Data.Amount
+                              Flow = MoneyFlow.Out
+                              EnforcedRules = []
+                              EventId = Guid.NewGuid()
+                              CreatedAt = cmd.Timestamp.AddSeconds(1)
+                           }
+                        ]
+                        Result = "APPROVED"
+                        Status = PurchaseStatus.Settled
+                        PurchaseId = cmd.Data.CardIssuerTransactionId
+                        CardIssuerCardId = cmd.Data.CardIssuerCardId
+                        Amounts = {
+                           Hold = {
+                              Amount = 0m
+                              Currency = cmd.Data.CurrencyMerchant
+                           }
+                           Cardholder = {
+                              Amount = cmd.Data.Amount
+                              Currency = cmd.Data.CurrencyCardHolder
+                              ConversionRate = 1m
+                           }
+                           Merchant = {
+                              Amount = cmd.Data.Amount
+                              Currency = cmd.Data.CurrencyMerchant
+                           }
+                           Settlement = {
+                              Amount = cmd.Data.Amount
+                              Currency = cmd.Data.CurrencyMerchant
+                           }
+                        }
+                     }
+
+                     employeeRef <! EmployeeMessage.PurchaseProgress progress
+
+                     return!
+                        match authResult with
+                        | PurchaseAuthorizationStatus.Approved -> Ok envelope
+                        | _ ->
+                           Err.UnexpectedError "Purchase authorization failed"
+                           |> Error
+               }
+               |> TaskResult.teeError (fun err ->
+                  let err = exn (string err)
+                  ActorUtil.SystemLog.error system err)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.DebitRequest)
+   |> ignore
+
+   (*
+    * Lithic card issuer will forward purchases received from the card networks
+    * to this webhook handler where I can provide additional custom logic 
+    * within my employee actor to determine whether to approve the transaction.
+    * In order to receive ASA webhook requests we must enroll a responder endpoint
+    * (https://docs.lithic.com/reference/postresponderendpoints).  The webhook
+    * URL to enroll should be equivalent to CardPath.AuthStreamAccessWebhook
+    * used below.
+    * For local dev use `ngrok http http://localhost:3000` to obtain a url
+    * that can be used for enrolling a responder endpoint in ASA.
+    * Ex: https://e1677f21bcf6.ngrok-free.app/purchase-auth-stream-access-webhook
+   *)
+   app
+      .MapPost(
+         CardPath.AuthStreamAccessWebhook,
+         Func<
+            ActorSystem,
+            BankActorRegistry,
+            AuthStreamAccessWebhookRequestDTO,
+            Task<IResult>
+          >
+            (fun system registry purchaseAuthReq ->
+               taskResult {
+                  let dtoAsEntityMaybe = purchaseAuthReq.AsEntity
+
+                  dtoAsEntityMaybe
+                  |> Result.teeError (exn >> ActorUtil.SystemLog.error system)
+                  |> ignore
+
+                  let! (purchaseAuthReq: AuthStreamAccessWebhookRequest) =
+                     dtoAsEntityMaybe |> Result.mapError Err.UnexpectedError
+
+                  let! cardId, employeeId =
+                     getInternalIdsFromIssuerCardId
+                        purchaseAuthReq.CardIssuerCardId
+
+                  let purchaseAuth: PurchaseAuthorization = {
+                     CardId = cardId
+                     CardIssuerTransactionId =
+                        purchaseAuthReq.CardIssuerTransactionId
+                     CardIssuerCardId = purchaseAuthReq.CardIssuerCardId
+                     Amount = purchaseAuthReq.Amount
+                     MerchantCategoryCode =
+                        purchaseAuthReq.MerchantCategoryCode
+                     MerchantName = purchaseAuthReq.MerchantName
+                     CreatedAt = DateTime.UtcNow
+                     CurrencyCardHolder = purchaseAuthReq.CurrencyCardHolder
+                     CurrencyMerchant = purchaseAuthReq.CurrencyMerchant
+                  }
+
+                  let employeeRef =
+                     (registry :> IEmployeeActor).EmployeeActor employeeId
+
+                  let msg = EmployeeMessage.AuthorizePurchase purchaseAuth
+
+                  let! (authResult: PurchaseAuthorizationStatus) =
+                     employeeRef.Ask(msg, Some(TimeSpan.FromSeconds 4.5))
+                     |> Async.map Ok
+                     |> AsyncResult.catch Err.NetworkError
+
+                  let response: AuthStreamAccessWebhookResponse = {
+                     TransactionId = purchaseAuthReq.CardIssuerTransactionId
+                     Result = authResult
+                  }
+
+                  return response.AsDTO
+               }
+               |> TaskResult.teeError (fun err ->
+                  let err = exn (string err)
+                  ActorUtil.SystemLog.error system err)
+               |> RouteUtil.unwrapTaskResult)
+      )
+      .RBAC(Permissions.DebitRequest)
+   |> ignore
+
+   (*
+    * Lithic card issuer will forward events to this webhook handler
+    * For local dev use `ngrok http http://localhost:3000` to obtain a url
+    * that can be used for handling purchase events.
+    * Ex: https://e1677f21bcf6.ngrok-free.app/purchase-card-transaction-updated-webhook
+   *)
+   app
+      .MapPost(
+         CardPath.CardTransactionUpdatedWebhook,
+         Func<ActorSystem, BankActorRegistry, CardTransactionDTO, Task<IResult>>
+            (fun system registry evt ->
+               taskResult {
+                  let dtoAsEntityMaybe = evt.AsEntity
+
+                  dtoAsEntityMaybe
+                  |> Result.teeError (exn >> ActorUtil.SystemLog.error system)
+                  |> ignore
+
+                  let! progress =
+                     dtoAsEntityMaybe |> Result.mapError Err.UnexpectedError
+
+                  let! _, employeeId =
+                     getInternalIdsFromIssuerCardId progress.CardIssuerCardId
+
+                  let employeeRef =
+                     (registry :> IEmployeeActor).EmployeeActor employeeId
+
+                  employeeRef <! EmployeeMessage.PurchaseProgress progress
+
+                  return ()
+
+               }
+               |> TaskResult.teeError (fun err ->
+                  let err = exn (string err)
+                  ActorUtil.SystemLog.error system err)
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.DebitRequest)

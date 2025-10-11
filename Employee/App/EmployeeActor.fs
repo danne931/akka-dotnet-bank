@@ -21,6 +21,21 @@ open EmployeeOnboardingSaga
 open CardSetupSaga
 open BankActorRegistry
 
+let private hasPurchaseFail (cmd: EmployeeCommand) (err: Err) =
+   match cmd, err with
+   | EmployeeCommand.PurchaseIntent cmd, EmployeeStateTransitionError e ->
+      match e with
+      | CardNotFound -> Some PurchaseCardFailReason.CardNotFound
+      | CardExpired -> Some PurchaseCardFailReason.CardExpired
+      | CardLocked -> Some PurchaseCardFailReason.CardLocked
+      | ExceededDailyDebit(limit, accrued) ->
+         PurchaseCardFailReason.ExceededDailyCardLimit(limit, accrued) |> Some
+      | ExceededMonthlyDebit(limit, accrued) ->
+         PurchaseCardFailReason.ExceededMonthlyCardLimit(limit, accrued) |> Some
+      | _ -> None
+      |> Option.map (fun reason -> cmd.Data, reason)
+   | _ -> None
+
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
    mailbox
@@ -39,59 +54,46 @@ let private handleValidationError
       cmd.Envelope.CorrelationId
       err
 
-   let hasPurchaseFail =
-      match cmd, err with
-      | EmployeeCommand.PurchaseIntent cmd, EmployeeStateTransitionError e ->
-         match e with
-         | CardNotFound -> Some PurchaseCardFailReason.CardNotFound
-         | CardExpired -> Some PurchaseCardFailReason.CardExpired
-         | CardLocked -> Some PurchaseCardFailReason.CardLocked
-         | ExceededDailyDebit(limit, accrued) ->
-            PurchaseCardFailReason.ExceededDailyCardLimit(limit, accrued)
-            |> Some
-         | ExceededMonthlyDebit(limit, accrued) ->
-            PurchaseCardFailReason.ExceededMonthlyCardLimit(limit, accrued)
-            |> Some
-         | _ -> None
-         |> Option.map (fun err -> cmd.Data, err)
-      | _ -> None
-
-   match hasPurchaseFail with
+   match hasPurchaseFail cmd err with
    | Some(purchaseInfo, reason) ->
+      let evt =
+         reason |> PurchaseFailReason.Card |> PurchaseSagaEvent.PurchaseRejected
+
       let msg =
-         (purchaseInfo, reason)
-         |> PurchaseSagaStartEvent.PurchaseRejectedByCard
-         |> AppSaga.Message.purchaseStart
-               purchaseInfo.OrgId
-               purchaseInfo.CorrelationId
+         AppSaga.Message.purchase
+            purchaseInfo.OrgId
+            purchaseInfo.CorrelationId
+            evt
+         |> GuaranteedDelivery.message purchaseInfo.CorrelationId.Value
 
       registry.SagaGuaranteedDeliveryActor() <! msg
+
+      mailbox.Sender() <! PurchaseAuthorizationStatus.fromCardFailReason reason
    | None -> ()
 
 let private closeEmployeeCards
    (registry: #ICardIssuerServiceActor)
-   (cards: Card seq)
-   orgId
+   (employee: EmployeeSnapshot)
    corrId
    =
-   cards
-   |> Seq.choose _.ThirdPartyProviderCardId
-   |> Seq.iter (fun providerCardId ->
+   for link in employee.CardIssuerLinks.Values do
       registry.CardIssuerServiceActor()
       <! CardIssuerMessage.CloseCard {
-         ProviderCardId = providerCardId
+         CardIssuerCardId = link.CardIssuerCardId
          Metadata = {
-            OrgId = orgId
+            OrgId = employee.Info.OrgId
             CorrelationId = corrId
          }
-      })
+      }
 
 let private onPersist
    (registry: #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (mailbox: Eventsourced<obj>)
-   (employee: Employee)
+   (state: EmployeeSnapshot)
    evt
    =
+   let employee = state.Info
+
    match evt with
    | EmployeeEvent.CreatedAccountOwner e ->
       let msg =
@@ -152,12 +154,7 @@ let private onPersist
       registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.UpdatedRole e ->
       match e.Data.Role, e.Data.CardInfo with
-      | Role.Scholar, _ ->
-         closeEmployeeCards
-            registry
-            employee.Cards.Values
-            e.OrgId
-            e.CorrelationId
+      | Role.Scholar, _ -> closeEmployeeCards registry state e.CorrelationId
       | _, Some info ->
          let msg =
             CreateCardCommand.create {
@@ -179,7 +176,7 @@ let private onPersist
 
          mailbox.Parent() <! msg
       | _ -> ()
-   | EmployeeEvent.ThirdPartyProviderCardLinked e ->
+   | EmployeeEvent.CardLinked e ->
       let msg =
          CardSetupSagaEvent.ProviderCardIdLinked
          |> AppSaga.Message.cardSetup e.OrgId e.CorrelationId
@@ -187,26 +184,41 @@ let private onPersist
       registry.SagaActor e.CorrelationId <! msg
    | EmployeeEvent.PurchasePending e ->
       let msg =
-         PurchaseSagaStartEvent.PurchaseIntent e.Data.Info
-         |> AppSaga.Message.purchaseStart e.OrgId e.CorrelationId
+         AppSaga.Message.purchase
+            e.OrgId
+            e.CorrelationId
+            PurchaseSagaEvent.CardReservedFunds
+         |> GuaranteedDelivery.message e.CorrelationId.Value
+
+      registry.SagaGuaranteedDeliveryActor() <! msg
+
+      mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
+   | EmployeeEvent.PurchaseProgress e ->
+      let evt = PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress e.Data.Info
+
+      let msg =
+         AppSaga.Message.purchase e.OrgId e.CorrelationId evt
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
       registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.PurchaseSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettledWithCard
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.PurchaseFailed e ->
       let msg =
          PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
    | _ -> ()
 
 let actorProps
-   registry
+   (registry: #IAccountActor)
    (broadcaster: SignalRBroadcast)
    (guaranteedDeliveryConsumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<EmployeeMessage>>)
@@ -225,14 +237,13 @@ let actorProps
             handleValidationError broadcaster mailbox registry employee
 
          match box msg with
-         | Deferred mailbox (:? EmployeeEvent as evt)
          | Persisted mailbox (:? EmployeeEvent as evt) ->
             let state = Employee.applyEvent state evt
             let employee = state.Info
 
             broadcaster.employeeEventPersisted evt employee
 
-            onPersist registry mailbox employee evt
+            onPersist registry mailbox state evt
 
             return! loop <| Some state
          | :? SnapshotOffer as o -> return! loop <| Some(unbox o.Snapshot)
@@ -278,24 +289,99 @@ let actorProps
                }
 
                return! loop (Some newState) <@> DeleteMessages Int64.MaxValue
-            // NOTE: Perceived optimization:
-            // Persisting PurchaseSettled is essential but probably no need to
-            // persist the PurchasePending event as long as SaveSnapshot,
-            // invoked below, is called in case the actor restarts. Without
-            // SaveSnapshot in the LifecyclePostStop hook below, the actor would
-            // restart and potentially lose the latest value for
-            // EmployeeSnapshot.PendingPurchaseDeductions since it would not be
-            // able to derive the latest value from the persisted events during
-            // event reply on actor start.
-            //
-            // With PersistentEffect.Defer, PurchaseIntent command will invoke
-            // the persistence handler to start the PurchaseSaga and record the
-            // PendingPurchaseDeductions on EmployeeSnapshot. It will do so
-            // without saving it as an event in the event journal.
-            | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent _ as cmd) ->
+            | EmployeeMessage.AuthorizePurchase auth ->
+               match state.Info.Cards.TryFind auth.CardId with
+               | None ->
+                  let err = Error PurchaseCardFailReason.CardNotFound
+                  mailbox.Sender() <! err
+                  return ignored ()
+               | Some card ->
+                  let purchaseInfo: PurchaseInfo = {
+                     Amount = auth.Amount
+                     Date = auth.CreatedAt
+                     Merchant = auth.MerchantName
+                     Reference = None
+                     OrgId = employee.OrgId
+                     EmployeeId = employee.EmployeeId
+                     ParentAccountId = employee.ParentAccountId
+                     AccountId = card.AccountId
+                     CorrelationId = Guid.NewGuid() |> CorrelationId
+                     CardId = card.CardId
+                     CardNickname = card.CardNickname
+                     CardIssuerCardId = auth.CardIssuerCardId
+                     CardIssuerTransactionId = auth.CardIssuerTransactionId
+                     CardNumberLast4 = card.CardNumberLast4
+                     CurrencyMerchant = auth.CurrencyMerchant
+                     CurrencyCardHolder = auth.CurrencyCardHolder
+                     InitiatedBy = {
+                        Id = InitiatedById employee.EmployeeId
+                        Name = employee.Name
+                     }
+                     EmployeeName = employee.Name
+                     EmployeeEmail = employee.Email
+                  }
+
+                  let cmd = PurchaseIntentCommand.create purchaseInfo
+
+                  let msg =
+                     cmd
+                     |> EmployeeCommand.PurchaseIntent
+                     |> EmployeeMessage.StateChange
+
+                  mailbox.Self <<! msg
+                  return ignored ()
+            | EmployeeMessage.PurchaseProgress progress ->
+               match state.PendingPurchases.TryFind progress.PurchaseId with
+               | None ->
+                  logError
+                     $"Received PurchaseUpdate but no purchase found {progress.PurchaseId}"
+               | Some purchase ->
+                  let msg =
+                     PurchaseProgressCommand.create
+                        purchase.Info.OrgId
+                        purchase.Info.CorrelationId
+                        purchase.Info.EmployeeId
+                        progress
+                     |> EmployeeCommand.PurchaseProgress
+                     |> EmployeeMessage.StateChange
+
+                  mailbox.Self <! msg
+
+               return ignored ()
+            | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent intent as cmd) ->
+               let purchaseInfo = intent.Data
+
+               let msg =
+                  PurchaseSagaStartEvent.PurchaseIntent purchaseInfo
+                  |> AppSaga.Message.purchaseStart
+                        intent.OrgId
+                        intent.CorrelationId
+
+               registry.SagaGuaranteedDeliveryActor() <! msg
+
                match Employee.stateTransition state cmd with
-               | Ok(evt, _) -> return! PersistentEffect.Defer [ evt ]
-               | Error err -> handleValidationError cmd err
+               | Ok(evt, _) ->
+                  let accountRef =
+                     registry.AccountActor purchaseInfo.ParentAccountId
+
+                  let msg =
+                     purchaseInfo
+                     |> DebitCommand.fromPurchase
+                     |> AccountCommand.Debit
+                     |> AccountMessage.StateChange
+
+                  let! (authStatus: PurchaseAuthorizationStatus) =
+                     accountRef <? msg
+
+                  match authStatus with
+                  | PurchaseAuthorizationStatus.Approved ->
+                     return! Persist(box evt)
+                  | _ ->
+                     mailbox.Sender() <! authStatus
+                     return ignored ()
+               | Error err ->
+                  handleValidationError cmd err
+                  return ignored ()
             // Some messages are sent through traditional AtMostOnceDelivery via
             // a reference to the cluster sharded entity ref rather than Akka.Delivery
             // AtLeastOnceDelivery producer ref so will not hit the
@@ -326,7 +412,7 @@ let actorProps
                      LifecyclePostStop =
                         fun _ ->
                            logDebug mailbox $"EMPLOYEE POSTSTOP"
-                           SaveSnapshot state
+                           ignored ()
                      DeleteMessagesSuccess =
                         fun _ ->
                            if
@@ -364,8 +450,6 @@ let initProps
          function
          | :? EmployeeMessage as msg ->
             match msg with
-            // PurchaseIntent will invoke persistence handler without persisting
-            // the event, via PersistentEffect.Defer.
             | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent _) ->
                false
             | EmployeeMessage.StateChange _ -> true

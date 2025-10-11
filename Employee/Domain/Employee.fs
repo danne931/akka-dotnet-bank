@@ -11,9 +11,16 @@ open Lib.Time
 let private purchaseAccrued
    (satisfiesDate: DateTime -> bool)
    (events: EmployeeEvent list)
+   (pendingPurchaseDeductions: Map<CardId, PendingFunds>)
    (cardId: CardId)
    : decimal
    =
+   let pendingAmt =
+      pendingPurchaseDeductions
+      |> Map.tryFind cardId
+      |> Option.map (PendingFunds.amount >> _.Out)
+      |> Option.defaultValue 0m
+
    List.fold
       (fun acc evt ->
          match evt with
@@ -39,11 +46,84 @@ let private purchaseAccrued
             else
                acc
          | _ -> acc)
-      0m
+      pendingAmt
       events
 
 let dailyPurchaseAccrued = purchaseAccrued DateTime.isToday
 let monthlyPurchaseAccrued = purchaseAccrued DateTime.isThisMonth
+
+let addPendingPurchase
+   (state: EmployeeSnapshot)
+   (info: Bank.Account.Domain.PurchaseInfo)
+   =
+   let txnId = info.CardIssuerTransactionId
+
+   let fund = {
+      Amount = info.Amount
+      Flow = MoneyFlow.Out
+   }
+
+   {
+      state with
+         PendingPurchases =
+            state.PendingPurchases
+            |> Map.add txnId {
+               Info = info
+               Events = []
+               Status = PurchaseStatus.Pending
+            }
+         PendingPurchaseDeductions =
+            state.PendingPurchaseDeductions
+            |> Map.change
+                  info.CardId
+                  (Option.map (PendingFunds.add txnId.Value fund))
+   }
+
+let removePendingPurchase
+   (state: EmployeeSnapshot)
+   (info: Bank.Account.Domain.PurchaseInfo)
+   =
+   let txnId = info.CardIssuerTransactionId
+
+   {
+      state with
+         PendingPurchases = Map.remove txnId state.PendingPurchases
+         PendingPurchaseDeductions =
+            state.PendingPurchaseDeductions
+            |> Map.change
+                  info.CardId
+                  (Option.map (PendingFunds.remove txnId.Value))
+   }
+
+let updatePendingPurchase
+   (state: EmployeeSnapshot)
+   (progress: CardIssuerPurchaseProgress)
+   =
+   let txnId = progress.PurchaseId
+
+   let updateProgress (purchase: Purchase) =
+      // Purchase amount may change when receiving AuthAdvice events
+      let amount =
+         match progress.Status with
+         | PurchaseStatus.Pending -> progress.Amounts.Hold.Amount
+         | PurchaseStatus.Settled -> progress.Amounts.Settlement.Amount
+         | PurchaseStatus.Declined
+         | PurchaseStatus.Voided
+         | PurchaseStatus.Expired -> purchase.Info.Amount
+
+      {
+         purchase with
+            Status = progress.Status
+            Events = purchase.Events @ progress.Events
+            Info.Amount = amount
+      }
+
+   {
+      state with
+         PendingPurchases =
+            state.PendingPurchases
+            |> Map.change txnId (Option.map updateProgress)
+   }
 
 let applyEvent
    (state: EmployeeSnapshot)
@@ -58,6 +138,7 @@ let applyEvent
          EmployeeId = EmployeeId.fromEntityId e.EntityId
          Role = Role.Admin
          OrgId = e.OrgId
+         ParentAccountId = e.Data.ParentAccountId
          Email = e.Data.Email
          FirstName = e.Data.FirstName
          LastName = e.Data.LastName
@@ -73,6 +154,7 @@ let applyEvent
          EmployeeId = EmployeeId.fromEntityId e.EntityId
          Role = e.Data.Role
          OrgId = e.OrgId
+         ParentAccountId = e.Data.ParentAccountId
          Email = e.Data.Email
          FirstName = e.Data.FirstName
          LastName = e.Data.LastName
@@ -98,15 +180,14 @@ let applyEvent
             em with
                Cards = em.Cards |> Map.add info.CardId info
          }
-      | ThirdPartyProviderCardLinked e -> {
+      | CardLinked e -> {
          em with
             Cards =
                Map.change
-                  e.Data.CardId
+                  e.Data.Link.CardId
                   (Option.map (fun card -> {
                      card with
                         Status = CardStatus.Active
-                        ThirdPartyProviderCardId = Some e.Data.ProviderCardId
                         CardNumberLast4 = e.Data.CardNumberLast4
                   }))
                   em.Cards
@@ -125,6 +206,7 @@ let applyEvent
 
         }
       | PurchasePending _ -> em
+      | PurchaseProgress _ -> em
       | PurchaseFailed _ -> em
       | PurchaseRefunded _ -> em
       | ConfiguredRollingPurchaseLimit e -> {
@@ -171,7 +253,8 @@ let applyEvent
                   em.Cards
                   |> Map.map (fun _ card -> {
                      card with
-                        Status = CardStatus.Closed
+                        Status =
+                           CardStatus.Closed CardClosedReason.EndUserRequest
                   })
                | _ -> em.Cards
         }
@@ -221,20 +304,32 @@ let applyEvent
                }
         }
 
-   let updatedPendingDeductions =
+   let state =
       match evt with
-      | PurchasePending e ->
-         state.PendingPurchaseDeductions.Add e.Data.Info.Amount
-      | PurchaseSettled e ->
-         state.PendingPurchaseDeductions.Remove e.Data.Info.Amount
-      | PurchaseFailed e ->
-         state.PendingPurchaseDeductions.Remove e.Data.Info.Amount
-      | _ -> state.PendingPurchaseDeductions
+      | CreatedCard e -> {
+         state with
+            PendingPurchaseDeductions =
+               state.PendingPurchaseDeductions
+               |> Map.add e.Data.Card.CardId PendingFunds.zero
+        }
+      | PurchasePending e -> addPendingPurchase state e.Data.Info
+      | PurchaseSettled e -> removePendingPurchase state e.Data.Info
+      | PurchaseFailed e -> removePendingPurchase state e.Data.Info
+      | PurchaseProgress e -> updatePendingPurchase state e.Data.Info
+      | _ -> state
+
+   let updatedCardIssuerLinks =
+      match evt with
+      | CardLinked e ->
+         state.CardIssuerLinks |> Map.add e.Data.Link.CardId e.Data.Link
+      | _ -> state.CardIssuerLinks
 
    {
       Info = updatedEmployee
       Events = evt :: state.Events
-      PendingPurchaseDeductions = updatedPendingDeductions
+      PendingPurchaseDeductions = state.PendingPurchaseDeductions
+      PendingPurchases = state.PendingPurchases
+      CardIssuerLinks = updatedCardIssuerLinks
    }
 
 module private StateTransition =
@@ -273,17 +368,11 @@ module private StateTransition =
       else
          map CreatedCard state (CreateCardCommand.toEvent cmd)
 
-   let linkThirdPartyProviderCard
-      (state: EmployeeSnapshot)
-      (cmd: LinkThirdPartyProviderCardCommand)
-      =
+   let linkCard (state: EmployeeSnapshot) (cmd: LinkCardCommand) =
       if state.Info.Status <> EmployeeStatus.Active then
          transitionErr EmployeeNotReadyToActivate
       else
-         map
-            ThirdPartyProviderCardLinked
-            state
-            (LinkThirdPartyProviderCardCommand.toEvent cmd)
+         map CardLinked state (LinkCardCommand.toEvent cmd)
 
    let configureRollingPurchaseLimit
       (state: EmployeeSnapshot)
@@ -320,12 +409,16 @@ module private StateTransition =
          | None -> transitionErr CardNotFound
          | Some card ->
             let dpa =
-               dailyPurchaseAccrued state.Events card.CardId
-               + state.PendingPurchaseDeductions.Money
+               dailyPurchaseAccrued
+                  state.Events
+                  state.PendingPurchaseDeductions
+                  card.CardId
 
             let mpa =
-               monthlyPurchaseAccrued state.Events card.CardId
-               + state.PendingPurchaseDeductions.Money
+               monthlyPurchaseAccrued
+                  state.Events
+                  state.PendingPurchaseDeductions
+                  card.CardId
 
             if card.IsPending then
                transitionErr CardPending
@@ -346,6 +439,29 @@ module private StateTransition =
                <| ExceededMonthlyDebit(card.DailyPurchaseLimit, dpa)
             else
                map PurchasePending state (PurchaseIntentCommand.toEvent cmd)
+
+   let purchaseProgress
+      (state: EmployeeSnapshot)
+      (cmd: PurchaseProgressCommand)
+      =
+      let update = cmd.Data
+
+      match state.PendingPurchases.TryFind update.PurchaseId with
+      | None -> transitionErr PurchaseProgressPurchaseNotFound
+      | Some purchase ->
+         let existingEvtIds =
+            purchase.Events |> List.map _.EventId |> Set.ofList
+
+         let evtsToAdd =
+            update.Events
+            |> List.filter (_.EventId >> existingEvtIds.Contains >> not)
+            |> List.sortBy _.CreatedAt
+
+         if evtsToAdd.Length = 0 then
+            transitionErr PurchaseProgressNoAdditionalEvents
+         else
+            let cmd = { cmd with Data.Events = evtsToAdd }
+            map PurchaseProgress state (PurchaseProgressCommand.toEvent cmd)
 
    let settlePurchase
       (state: EmployeeSnapshot)
@@ -443,10 +559,11 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
       StateTransition.createAccountOwner state cmd
    | EmployeeCommand.CreateEmployee cmd -> StateTransition.create state cmd
    | EmployeeCommand.CreateCard cmd -> StateTransition.createCard state cmd
-   | EmployeeCommand.LinkThirdPartyProviderCard cmd ->
-      StateTransition.linkThirdPartyProviderCard state cmd
+   | EmployeeCommand.LinkCard cmd -> StateTransition.linkCard state cmd
    | EmployeeCommand.PurchaseIntent cmd ->
       StateTransition.purchaseIntent state cmd
+   | EmployeeCommand.PurchaseProgress cmd ->
+      StateTransition.purchaseProgress state cmd
    | EmployeeCommand.SettlePurchase cmd ->
       StateTransition.settlePurchase state cmd
    | EmployeeCommand.FailPurchase cmd -> StateTransition.failPurchase state cmd

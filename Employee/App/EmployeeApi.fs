@@ -8,11 +8,11 @@ open System
 open Lib.Postgres
 open Lib.SharedTypes
 open Bank.Employee.Domain
-open Lib.NetworkQuery
 open BankActorRegistry
 open Email
 
 module AccountFields = AccountSqlMapper.AccountFields
+module CardFields = CardSqlMapper.CardFields
 module Fields = EmployeeSqlMapper.EmployeeFields
 module Reader = EmployeeSqlMapper.EmployeeSqlReader
 module Writer = EmployeeSqlMapper.EmployeeSqlWriter
@@ -32,19 +32,18 @@ let searchEmployees (orgId: OrgId) (searchQuery: string) = taskResultOption {
       )
       SELECT
          e.*,
-         c.{{CardSqlMapper.CardFields.cardId}},
-         c.{{CardSqlMapper.CardFields.accountId}},
-         c.{{CardSqlMapper.CardFields.cardType}},
-         c.{{CardSqlMapper.CardFields.isVirtual}},
-         c.{{CardSqlMapper.CardFields.statusDetail}},
-         c.{{CardSqlMapper.CardFields.expYear}},
-         c.{{CardSqlMapper.CardFields.expMonth}},
-         c.{{CardSqlMapper.CardFields.lastPurchaseAt}},
-         c.{{CardSqlMapper.CardFields.cardNumberLast4}},
-         c.{{CardSqlMapper.CardFields.cardNickname}},
-         c.{{CardSqlMapper.CardFields.dailyPurchaseLimit}},
-         c.{{CardSqlMapper.CardFields.monthlyPurchaseLimit}},
-         c.{{CardSqlMapper.CardFields.thirdPartyProviderCardId}}
+         c.{{CardFields.cardId}},
+         c.{{CardFields.accountId}},
+         c.{{CardFields.cardType}},
+         c.{{CardFields.isVirtual}},
+         c.{{CardFields.statusDetail}},
+         c.{{CardFields.expYear}},
+         c.{{CardFields.expMonth}},
+         c.{{CardFields.lastPurchaseAt}},
+         c.{{CardFields.cardNumberLast4}},
+         c.{{CardFields.cardNickname}},
+         c.{{CardFields.dailyPurchaseLimit}},
+         c.{{CardFields.monthlyPurchaseLimit}}
       FROM top_employees e
       LEFT JOIN {{CardSqlMapper.table}} c USING({{Fields.employeeId}})
       """
@@ -58,7 +57,7 @@ let searchEmployees (orgId: OrgId) (searchQuery: string) = taskResultOption {
          ])
          (fun read ->
             Reader.employee read,
-            read.uuidOrNone CardSqlMapper.CardFields.cardId
+            read.uuidOrNone CardFields.cardId
             |> Option.map (fun _ -> CardSqlMapper.CardSqlReader.card read))
 
    return
@@ -87,8 +86,6 @@ let processCommand
             CreateEmployeeCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
          | EmployeeCommand.CreateCard cmd ->
             CreateCardCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
-         | EmployeeCommand.PurchaseIntent cmd ->
-            PurchaseIntentCommand.toEvent cmd |> Result.map EmployeeEnvelope.get
          | EmployeeCommand.ConfigureRollingPurchaseLimit cmd ->
             ConfigureRollingPurchaseLimitCommand.toEvent cmd
             |> Result.map EmployeeEnvelope.get
@@ -238,122 +235,3 @@ let getDemoUserSessions (orgId: OrgId) =
          Email = Reader.email read
          Role = Reader.role read
       })
-
-module Fields = CardSqlMapper.CardFields
-module Reader = CardSqlMapper.CardSqlReader
-module Writer = CardSqlMapper.CardSqlWriter
-
-let getCards (orgId: OrgId) (query: CardQuery) = taskResultOption {
-   let table = CardSqlMapper.table
-   let employeeTable = EmployeeSqlMapper.table
-
-   let dpaView = AccountEventSqlMapper.Views.dailyPurchaseAccruedByCard
-
-   let mpaView = AccountEventSqlMapper.Views.monthlyPurchaseAccruedByCard
-
-   let agg = [ "orgId", Writer.orgId orgId ], $"{table}.{Fields.orgId} = @orgId"
-
-   let agg =
-      Option.fold
-         (fun (queryParams, where) ids ->
-            [ "eIds", Writer.employeeIds ids ] @ queryParams,
-            $"{where} AND {table}.{Fields.employeeId} = ANY(@eIds)")
-         agg
-         query.EmployeeIds
-
-   let agg =
-      Option.fold
-         (fun (queryParams, where) ids ->
-            [ "aIds", Writer.accountIds ids ] @ queryParams,
-            $"{where} AND {table}.{Fields.accountId} = ANY(@aIds)")
-         agg
-         query.AccountIds
-
-   let agg =
-      Option.fold
-         (fun (queryParams, where) (startDate, endDate) ->
-            [
-               "start", Writer.createdAt startDate
-               "end", Writer.createdAt endDate
-            ]
-            @ queryParams,
-            $"{where} AND {table}.{Fields.createdAt} >= @start 
-              AND {table}.{Fields.createdAt} <= @end")
-         agg
-         query.CreatedAtDateRange
-
-   let monthlyAccrued = $"{mpaView}.amount_accrued"
-
-   let agg =
-      Option.fold
-         (fun (queryParams, where) amountFilter ->
-            let where, amountParams =
-               match amountFilter with
-               | AmountFilter.LessThanOrEqualTo max ->
-                  $"{where} AND {monthlyAccrued} <= @max",
-                  [ "max", Sql.decimal max ]
-               | AmountFilter.GreaterThanOrEqualTo min ->
-                  $"{where} AND {monthlyAccrued} >= @min",
-                  [ "min", Sql.decimal min ]
-               | AmountFilter.Between(min, max) ->
-                  $"{where} AND {monthlyAccrued} >= @min AND {monthlyAccrued} <= @max",
-                  [ "min", Sql.decimal min; "max", Sql.decimal max ]
-
-            amountParams @ queryParams, where)
-         agg
-         query.Amount
-
-   let queryParams, where = agg
-
-   let query =
-      $"SELECT
-           {table}.{Fields.cardNumberLast4},
-           {table}.{Fields.cardNickname},
-           {table}.{Fields.dailyPurchaseLimit},
-           {table}.{Fields.monthlyPurchaseLimit},
-           {table}.{Fields.cardId},
-           {table}.{Fields.accountId},
-           {table}.{Fields.cardType},
-           {table}.{Fields.isVirtual},
-           {table}.{Fields.statusDetail},
-           {table}.{Fields.expYear},
-           {table}.{Fields.expMonth},
-           {table}.{Fields.lastPurchaseAt},
-           {table}.{Fields.thirdPartyProviderCardId},
-           {mpaView}.amount_accrued as mpa,
-           {dpaView}.amount_accrued as dpa,
-           {employeeTable}.*
-        FROM {table}
-        JOIN {employeeTable} using({Fields.employeeId})
-        LEFT JOIN {dpaView} using({Fields.cardId})
-        LEFT JOIN {mpaView} using({Fields.cardId})
-        WHERE {where}
-        ORDER BY {table}.{Fields.lastPurchaseAt} desc"
-
-   let! cardsWithMetrics =
-      pgQuery<CardWithMetrics> query (Some queryParams) (fun read -> {
-         Card = Reader.card read
-         DailyPurchaseAccrued =
-            read.decimalOrNone "dpa" |> Option.defaultValue 0m
-         MonthlyPurchaseAccrued =
-            read.decimalOrNone "mpa" |> Option.defaultValue 0m
-         Employee = Reader.employee read
-      })
-
-   let cardsGroupedByEmployeeId =
-      cardsWithMetrics
-      |> List.groupBy _.Employee.EmployeeId
-      |> List.map (fun (emId, cards) ->
-         emId, cards |> List.map (fun x -> x.Card.CardId, x.Card) |> Map.ofList)
-      |> Map.ofList
-
-   return
-      cardsWithMetrics
-      |> List.map (fun c -> {
-         c with
-            Employee = {
-               c.Employee with
-                  Cards = cardsGroupedByEmployeeId[c.Employee.EmployeeId]
-            }
-      })
-}

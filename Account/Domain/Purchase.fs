@@ -18,9 +18,11 @@ type PurchaseInfo = {
    Date: DateTime
    Amount: decimal
    Merchant: string
+   CurrencyMerchant: Currency
+   CurrencyCardHolder: Currency
    Reference: string option
-   // Represents ID of transaction coming from simulated card network.
-   CardNetworkTransactionId: Guid
+   CardIssuerCardId: CardIssuerCardId
+   CardIssuerTransactionId: CardIssuerTransactionId
    CardNickname: string option
 }
 
@@ -57,10 +59,16 @@ type PurchaseAccountFailReason =
          $"Account {accountName} has insufficient funds.  The current balance is ${balance}."
 
 [<RequireQualifiedAccess>]
+type CardNetworkFailReason =
+   | Declined
+   | Expired
+   | Voided
+
+[<RequireQualifiedAccess>]
 type PurchaseFailReason =
    | Card of PurchaseCardFailReason
    | Account of PurchaseAccountFailReason
-   | CardNetwork of string
+   | CardNetwork of CardNetworkFailReason
    | PartnerBankSync of string
 
    member x.Display =

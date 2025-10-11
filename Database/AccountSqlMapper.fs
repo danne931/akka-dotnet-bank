@@ -23,6 +23,7 @@ module AccountFields =
    let currency = "currency"
    let status = "status"
    let balance = "balance"
+   let pendingFundsDetail = "pending_funds_detail"
    let pendingAdditionsMoney = "pending_additions_money"
    let pendingAdditionsCount = "pending_additions_count"
    let pendingDeductionsMoney = "pending_deductions_money"
@@ -60,15 +61,9 @@ module AccountSqlReader =
 
    let balance (read: RowReader) = read.decimal AccountFields.balance
 
-   let pendingAdditions (read: RowReader) : PendingFunds = {
-      Count = read.int AccountFields.pendingAdditionsCount
-      Money = read.decimal AccountFields.pendingAdditionsMoney
-   }
-
-   let pendingDeductions (read: RowReader) : PendingFunds = {
-      Count = read.int AccountFields.pendingDeductionsCount
-      Money = read.decimal AccountFields.pendingDeductionsMoney
-   }
+   let pendingFunds (read: RowReader) : PendingFunds =
+      read.text AccountFields.pendingFundsDetail
+      |> Serialization.deserializeUnsafe<PendingFunds>
 
    let autoTransferRule (read: RowReader) : AutomaticTransferConfig option =
       read.textOrNone AccountFields.autoTransferRule
@@ -85,8 +80,7 @@ module AccountSqlReader =
       Currency = currency read
       Status = status read
       Balance = balance read
-      PendingAdditions = pendingAdditions read
-      PendingDeductions = pendingDeductions read
+      PendingFunds = pendingFunds read
       AutoTransferRule = autoTransferRule read
    }
 
@@ -105,9 +99,16 @@ module AccountSqlWriter =
    let name = Sql.string
    let balance = Sql.money
 
-   let pendingFundsMoney (funds: PendingFunds) = Sql.money funds.Money
+   let pendingFundsMoney (flow: MoneyFlow) (funds: PendingFunds) =
+      funds.Values
+      |> Seq.filter (fun o -> o.Flow = flow)
+      |> Seq.sumBy _.Amount
+      |> Sql.money
 
    let pendingFundsCount (funds: PendingFunds) = Sql.int funds.Count
+
+   let pendingFundsDetail (funds: PendingFunds) =
+      funds |> Serialization.serialize |> Sql.jsonb
 
    let currency (currency: Currency) = Sql.string <| string currency
    let status (status: AccountStatus) = status |> string |> Sql.string

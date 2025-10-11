@@ -13,6 +13,7 @@ type CreateAccountOwnerInput = {
    FirstName: string
    LastName: string
    OrgId: OrgId
+   ParentAccountId: ParentAccountId
    EmployeeId: EmployeeId
 }
 
@@ -46,6 +47,7 @@ module CreateAccountOwnerCommand =
                FirstName = firstName
                LastName = lastName
                InviteToken = InviteToken.generate ()
+               ParentAccountId = input.ParentAccountId
             }
       }
 
@@ -57,6 +59,7 @@ type CreateEmployeeInput = {
    Role: Role
    OrgRequiresEmployeeInviteApproval: CommandApprovalRuleId option
    CardInfo: EmployeeInviteSupplementaryCardInfo option
+   ParentAccountId: ParentAccountId
 }
 
 type CreateEmployeeCommand = Command<CreateEmployeeInput>
@@ -99,6 +102,7 @@ module CreateEmployeeCommand =
                   input.OrgRequiresEmployeeInviteApproval
                CardInfo = input.CardInfo
                InviteToken = InviteToken.generate ()
+               ParentAccountId = input.ParentAccountId
             }
       }
 
@@ -183,7 +187,6 @@ module CreateCardCommand =
                   CardNickname = input.CardNickname
                   CardId = cmd.Data.CardId
                   AccountId = cmd.Data.AccountId
-                  ThirdPartyProviderCardId = None
                   DailyPurchaseLimit = dailyPurchaseLimit
                   MonthlyPurchaseLimit = monthlyPurchaseLimit
                   Virtual = input.Virtual
@@ -195,9 +198,8 @@ module CreateCardCommand =
             }
       }
 
-type LinkThirdPartyProviderCardInput = {
-   CardId: CardId
-   ProviderCardId: ThirdPartyProviderCardId
+type LinkCardInput = {
+   Link: CardIssuerLink
    CardNumberLast4: string
    OrgId: OrgId
    EmployeeId: EmployeeId
@@ -205,11 +207,10 @@ type LinkThirdPartyProviderCardInput = {
    CorrelationId: CorrelationId
 }
 
-type LinkThirdPartyProviderCardCommand =
-   Command<LinkThirdPartyProviderCardInput>
+type LinkCardCommand = Command<LinkCardInput>
 
-module LinkThirdPartyProviderCardCommand =
-   let create (data: LinkThirdPartyProviderCardInput) =
+module LinkCardCommand =
+   let create (data: LinkCardInput) =
       Command.create
          data.EmployeeId.AsEntityId
          data.OrgId
@@ -218,19 +219,13 @@ module LinkThirdPartyProviderCardCommand =
          data
 
    let toEvent
-      (cmd: LinkThirdPartyProviderCardCommand)
-      : ValidationResult<BankEvent<ThirdPartyProviderCardLinked>>
+      (cmd: LinkCardCommand)
+      : ValidationResult<BankEvent<CardLinked>>
       =
-      BankEvent.create2<
-         LinkThirdPartyProviderCardInput,
-         ThirdPartyProviderCardLinked
-       >
-         cmd
-         {
-            CardId = cmd.Data.CardId
-            ProviderCardId = cmd.Data.ProviderCardId
-            CardNumberLast4 = cmd.Data.CardNumberLast4
-         }
+      BankEvent.create2<LinkCardInput, CardLinked> cmd {
+         Link = cmd.Data.Link
+         CardNumberLast4 = cmd.Data.CardNumberLast4
+      }
       |> Ok
 
 type PurchaseIntentCommand = Command<PurchaseInfo>
@@ -259,6 +254,34 @@ module PurchaseIntentCommand =
                Info = cmd.Data
             }
       }
+
+type PurchaseProgressCommand = Command<CardIssuerPurchaseProgress>
+
+module PurchaseProgressCommand =
+   let create
+      orgId
+      correlationId
+      (employeeId: EmployeeId)
+      (data: CardIssuerPurchaseProgress)
+      =
+      Command.create
+         employeeId.AsEntityId
+         orgId
+         correlationId
+         Initiator.System
+         data
+
+   let toEvent
+      (cmd: PurchaseProgressCommand)
+      : ValidationResult<BankEvent<CardIssuerUpdatedPurchaseProgress>>
+      =
+      BankEvent.create2<
+         CardIssuerPurchaseProgress,
+         CardIssuerUpdatedPurchaseProgress
+       >
+         cmd
+         { Info = cmd.Data }
+      |> Ok
 
 type SettlePurchaseWithCardCommand = Command<CardPurchaseSettled>
 

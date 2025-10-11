@@ -4,6 +4,7 @@ open System
 
 open Lib.SharedTypes
 open Bank.Account.Domain
+open Bank.Employee.Domain
 open Lib.Saga
 
 [<RequireQualifiedAccess>]
@@ -13,20 +14,16 @@ type PurchaseSagaStatus =
    | Failed of PurchaseFailReason
 
 [<RequireQualifiedAccess>]
-type PurchaseSagaStartEvent =
-   | PurchaseIntent of PurchaseInfo
-   | PurchaseRejectedByCard of PurchaseInfo * PurchaseCardFailReason
+type PurchaseSagaStartEvent = PurchaseIntent of PurchaseInfo
 
 [<RequireQualifiedAccess>]
 type PurchaseSagaEvent =
-   | PurchaseFailureAcknowledgedByCard
    | AccountReservedFunds of PartnerBankInternalAccountLink
-   | PurchaseRejectedByAccount of PurchaseAccountFailReason
+   | CardReservedFunds
+   | CardIssuerUpdatedPurchaseProgress of CardIssuerPurchaseProgress
+   | PurchaseRejected of PurchaseFailReason
+   | PurchaseFailureAcknowledgedByCard
    | PurchaseFailureAcknowledgedByAccount
-   | PurchaseRejectedCardNetworkResponse of
-      PurchaseFailReason *
-      Result<string, string>
-   | CardNetworkResponse of Result<string, string>
    | PartnerBankSyncResponse of Result<SettlementId, string>
    | PurchaseSettledWithAccount
    | PurchaseSettledWithCard
@@ -39,14 +36,13 @@ type PurchaseSagaEvent =
 type Activity =
    | ReserveEmployeeCardFunds
    | ReserveAccountFunds
-   | NotifyCardNetworkOfRejectedPurchase
-   | NotifyCardNetworkOfConfirmedPurchase
    | SyncToPartnerBank
    | SettlePurchaseWithAccount
    | SettlePurchaseWithCard
    | SendPurchaseNotification
    | AcquireCardFailureAcknowledgement
    | AcquireAccountFailureAcknowledgement
+   | WaitForCardNetworkResolution
    | WaitForSupportTeamToResolvePartnerBankSync
 
    interface IActivity with
@@ -54,18 +50,16 @@ type Activity =
          match x with
          | WaitForSupportTeamToResolvePartnerBankSync -> 0
          | ReserveEmployeeCardFunds -> 1
-         | NotifyCardNetworkOfConfirmedPurchase -> 2
          | SyncToPartnerBank -> 4
          | _ -> 3
 
       member x.InactivityTimeout =
          match x with
          | ReserveEmployeeCardFunds
-         | NotifyCardNetworkOfRejectedPurchase
+         | WaitForCardNetworkResolution
          | WaitForSupportTeamToResolvePartnerBankSync -> None
          | SendPurchaseNotification
          | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4.)
-         | NotifyCardNetworkOfConfirmedPurchase
          | ReserveAccountFunds
          | AcquireCardFailureAcknowledgement
          | AcquireAccountFailureAcknowledgement
@@ -74,6 +68,7 @@ type Activity =
 
 type PurchaseSaga = {
    PurchaseInfo: PurchaseInfo
+   CardIssuerPurchaseEvents: PurchaseEvent list
    StartEvent: PurchaseSagaStartEvent
    Events: PurchaseSagaEvent list
    Status: PurchaseSagaStatus
@@ -109,6 +104,9 @@ type PurchaseSaga = {
          | PurchaseSagaEvent.PartnerBankSyncResponse(Ok settlementId) ->
             Some settlementId
          | _ -> None)
+
+   member x.PurchaseNotificationSent =
+      x.LifeCycle.Completed |> List.exists _.Activity.IsSendPurchaseNotification
 
    member x.RequiresManualSupportFixForPartnerBankSync =
       x.LifeCycle.InProgress

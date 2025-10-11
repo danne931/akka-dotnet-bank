@@ -11,6 +11,7 @@ type CreatedAccountOwner = {
    FirstName: string
    LastName: string
    InviteToken: InviteToken
+   ParentAccountId: ParentAccountId
 }
 
 type CreatedEmployee = {
@@ -21,6 +22,7 @@ type CreatedEmployee = {
    OrgRequiresEmployeeInviteApproval: CommandApprovalRuleId option
    CardInfo: EmployeeInviteSupplementaryCardInfo option
    InviteToken: InviteToken
+   ParentAccountId: ParentAccountId
 }
 
 type InvitationConfirmed = {
@@ -36,6 +38,7 @@ type InvitationTokenRefreshed = {
 
 type InvitationCancelled = { Reason: string option }
 
+/// Initialize card in context of application
 type CreatedCard = {
    PersonName: string
    Card: Card
@@ -44,18 +47,17 @@ type CreatedCard = {
    OriginatedFromEmployeeOnboarding: CorrelationId option
 }
 
-type ThirdPartyProviderCardLinked = {
-   CardId: CardId
-   ProviderCardId: ThirdPartyProviderCardId
+/// Initialize card in context of card issuer
+type CardLinked = {
+   Link: CardIssuerLink
    CardNumberLast4: string
 }
 
 type CardPurchasePending = { Info: PurchaseInfo }
 
-type CardPurchaseSettled = {
-   Info: PurchaseInfo
-   SettlementId: SettlementId
-}
+type CardIssuerUpdatedPurchaseProgress = { Info: CardIssuerPurchaseProgress }
+
+type CardPurchaseSettled = { Info: PurchaseInfo }
 
 type CardPurchaseFailed = {
    Info: PurchaseInfo

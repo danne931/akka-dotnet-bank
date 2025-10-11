@@ -20,6 +20,7 @@ type SqlParamsDerivedFromEmployeeEvents = {
    EmployeeInviteUpdate: SqlParams
    CardCreate: SqlParams
    CardUpdate: SqlParams
+   CardIssuerMapping: SqlParams
    CardsByEmployeeUpdate: SqlParams
    EmployeeEvent: SqlParams
 }
@@ -84,6 +85,8 @@ let sqlParamReducer
          "employeeId",
          EmployeeSqlWriter.employeeId (EmployeeId.fromEntityId e.EntityId)
          "orgId", EmployeeSqlWriter.orgId e.OrgId
+         "parentAccountId",
+         EmployeeSqlWriter.parentAccountId e.Data.ParentAccountId
          "email", EmployeeSqlWriter.email e.Data.Email
          "firstName", EmployeeSqlWriter.firstName e.Data.FirstName
          "lastName", EmployeeSqlWriter.lastName e.Data.LastName
@@ -117,6 +120,8 @@ let sqlParamReducer
          "employeeId",
          EmployeeSqlWriter.employeeId (EmployeeId.fromEntityId e.EntityId)
          "orgId", EmployeeSqlWriter.orgId e.OrgId
+         "parentAccountId",
+         EmployeeSqlWriter.parentAccountId e.Data.ParentAccountId
          "email", EmployeeSqlWriter.email e.Data.Email
          "firstName", EmployeeSqlWriter.firstName e.Data.FirstName
          "lastName", EmployeeSqlWriter.lastName e.Data.LastName
@@ -137,7 +142,6 @@ let sqlParamReducer
 
       let sqlParams = [
          "cardId", CardSqlWriter.cardId card.CardId
-         "thirdPartyProviderCardId", CardSqlWriter.thirdPartyProviderCardId None
          "accountId", CardSqlWriter.accountId card.AccountId
          "orgId", CardSqlWriter.orgId e.OrgId
          "employeeId",
@@ -169,21 +173,33 @@ let sqlParamReducer
          acc with
             CardCreate = sqlParams :: acc.CardCreate
       }
-   | EmployeeEvent.ThirdPartyProviderCardLinked e ->
+   | EmployeeEvent.CardLinked e ->
       let status = CardStatus.Active
 
-      let sqlParams = [
-         "cardId", CardSqlWriter.cardId e.Data.CardId
+      let cardSqlParams = [
+         "cardId", CardSqlWriter.cardId e.Data.Link.CardId
          "status", CardSqlWriter.status status
          "statusDetail", CardSqlWriter.statusDetail status
-         "thirdPartyProviderCardId",
-         CardSqlWriter.thirdPartyProviderCardId (Some e.Data.ProviderCardId)
          "cardNumberLast4", CardSqlWriter.cardNumberLast4 e.Data.CardNumberLast4
+      ]
+
+      let issuerMappingParams = [
+         "internalCardId",
+         CardIssuerMappingSqlMapper.Writer.internalCardId e.Data.Link.CardId
+         "issuerCardId",
+         CardIssuerMappingSqlMapper.Writer.issuerCardId
+            e.Data.Link.CardIssuerCardId
+         "issuerName",
+         CardIssuerMappingSqlMapper.Writer.issuerName e.Data.Link.CardIssuerName
+         "employeeId",
+         EmployeeId.fromEntityId e.EntityId
+         |> CardIssuerMappingSqlMapper.Writer.employeeId
       ]
 
       {
          acc with
-            CardUpdate = sqlParams :: acc.CardUpdate
+            CardUpdate = cardSqlParams :: acc.CardUpdate
+            CardIssuerMapping = issuerMappingParams :: acc.CardIssuerMapping
       }
    | EmployeeEvent.PurchaseSettled e ->
       let sqlParams = [
@@ -259,7 +275,7 @@ let sqlParamReducer
 
       match e.Data.Role with
       | Role.Scholar ->
-         let status = CardStatus.Closed
+         let status = CardStatus.Closed CardClosedReason.EndUserRequest
 
          let cardParams = [
             "employeeId", CardSqlWriter.employeeId employeeId
@@ -331,6 +347,7 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
          CardCreate = []
          CardUpdate = []
          CardsByEmployeeUpdate = []
+         CardIssuerMapping = []
       }
 
    let query = [
@@ -338,6 +355,7 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
       INSERT into {EmployeeSqlMapper.table}
          ({EmployeeFields.employeeId},
           {EmployeeFields.orgId},
+          {EmployeeFields.parentAccountId},
           {EmployeeFields.role},
           {EmployeeFields.email},
           {EmployeeFields.firstName},
@@ -350,6 +368,7 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
       VALUES
          (@employeeId,
           @orgId,
+          @parentAccountId,
           @role::{EmployeeTypeCast.role},
           @email,
           @firstName,
@@ -427,7 +446,6 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
       $"""
       INSERT into {CardSqlMapper.table}
          ({CardFields.cardId},
-          {CardFields.thirdPartyProviderCardId},
           {CardFields.accountId},
           {CardFields.orgId},
           {CardFields.employeeId},
@@ -444,7 +462,6 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
           {CardFields.expYear})
       VALUES
          (@cardId,
-          @thirdPartyProviderCardId,
           @accountId,
           @orgId,
           @employeeId,
@@ -465,6 +482,20 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
       sqlParams.CardCreate
 
       $"""
+      INSERT into {CardIssuerMappingSqlMapper.table}
+         ({CardIssuerMappingSqlMapper.Fields.internalCardId},
+          {CardIssuerMappingSqlMapper.Fields.issuerCardId},
+          {CardIssuerMappingSqlMapper.Fields.employeeId},
+          {CardIssuerMappingSqlMapper.Fields.issuerName})
+      VALUES
+         (@internalCardId,
+          @issuerCardId,
+          @employeeId,
+          @issuerName::{CardIssuerMappingSqlMapper.TypeCast.issuerName});
+      """,
+      sqlParams.CardIssuerMapping
+
+      $"""
       UPDATE {CardSqlMapper.table}
       SET
          {CardFields.status} = COALESCE(@status::{CardTypeCast.status}, {CardFields.status}),
@@ -473,8 +504,7 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
          {CardFields.monthlyPurchaseLimit} = COALESCE(@monthlyPurchaseLimit::money, {CardFields.monthlyPurchaseLimit}),
          {CardFields.lastPurchaseAt} = COALESCE(@lastPurchaseAt, {CardFields.lastPurchaseAt}),
          {CardFields.cardNickname} = COALESCE(@cardNickname, {CardFields.cardNickname}),
-         {CardFields.cardNumberLast4} = COALESCE(@cardNumberLast4, {CardFields.cardNumberLast4}),
-         {CardFields.thirdPartyProviderCardId} = COALESCE(@thirdPartyProviderCardId, {CardFields.thirdPartyProviderCardId})
+         {CardFields.cardNumberLast4} = COALESCE(@cardNumberLast4, {CardFields.cardNumberLast4})
       WHERE {CardFields.cardId} = @cardId;
       """,
       sqlParams.CardUpdate
@@ -487,7 +517,6 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
             "lastPurchaseAt"
             "cardNickname"
             "cardNumberLast4"
-            "thirdPartyProviderCardId"
          ]
       )
 

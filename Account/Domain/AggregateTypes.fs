@@ -421,8 +421,7 @@ type Account = {
    Currency: Currency
    Status: AccountStatus
    Balance: decimal
-   PendingAdditions: PendingFunds
-   PendingDeductions: PendingFunds
+   PendingFunds: PendingFunds
    AccountNumber: AccountNumber
    RoutingNumber: RoutingNumber
    AutoTransferRule: AutomaticTransferConfig option
@@ -432,7 +431,9 @@ type Account = {
 
    member x.FullName = $"{x.Name} **{x.AccountNumber.Last4}"
 
-   member x.AvailableBalance = x.Balance - x.PendingDeductions.Money
+   member x.AvailableBalance =
+      let pendingTally = PendingFunds.amount x.PendingFunds
+      x.Balance - pendingTally.Out
 
    member private x.autoTransferManagement
       (computedTransferFromRule:
@@ -469,8 +470,7 @@ type Account = {
       Currency = Currency.USD
       Status = AccountStatus.InitialEmptyState
       Balance = 0m
-      PendingAdditions = PendingFunds.Zero
-      PendingDeductions = PendingFunds.Zero
+      PendingFunds = PendingFunds.zero
       AccountNumber = AccountNumber.Empty
       RoutingNumber = RoutingNumber.Empty
       AutoTransferRule = None

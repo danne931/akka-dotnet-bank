@@ -151,13 +151,24 @@ module private AccountBalanceReducer =
       | MoneyFlow.In -> "Additions"
       | MoneyFlow.Out -> "Deductions"
 
-   let reserveFunds accountId txnAmount txnType acc =
+   let reserveFunds accountId txnAmount txnType (txnId: Guid) acc =
       let direction = flowDescriptor txnType
+
+      let fund =
+         Map [
+            txnId,
+            {
+               Flow = MoneyFlow.Out
+               Amount = txnAmount
+            }
+         ]
 
       let qParams = [
          "accountId", AccountSqlWriter.accountId accountId
          $"pending{direction}MoneyDelta", Sql.money txnAmount
          $"pending{direction}CountDelta", Sql.int 1
+         "pendingFundsDetailAddition",
+         fund |> Serialization.serialize |> Sql.jsonb
       ]
 
       {
@@ -165,13 +176,14 @@ module private AccountBalanceReducer =
             AccountUpdate = qParams :: acc.AccountUpdate
       }
 
-   let releaseReservedFunds accountId txnAmount txnType acc =
+   let releaseReservedFunds accountId txnAmount txnType (txnId: Guid) acc =
       let direction = flowDescriptor txnType
 
       let qParams = [
          "accountId", AccountSqlWriter.accountId accountId
          $"pending{direction}MoneyDelta", Sql.money -txnAmount
          $"pending{direction}CountDelta", Sql.int -1
+         "pendingFundsDetailTransactionId", Sql.string (string txnId)
       ]
 
       {
@@ -179,7 +191,7 @@ module private AccountBalanceReducer =
             AccountUpdate = qParams :: acc.AccountUpdate
       }
 
-   let settleFunds accountId txnAmount txnType acc =
+   let settleFunds accountId txnAmount txnType (txnId: Guid) acc =
       let direction = flowDescriptor txnType
 
       let qParams = [
@@ -190,6 +202,8 @@ module private AccountBalanceReducer =
          match flow txnType with
          | MoneyFlow.In -> "balanceDelta", Sql.money txnAmount
          | MoneyFlow.Out -> "balanceDelta", Sql.money -txnAmount
+
+         "pendingFundsDetailTransactionId", Sql.string (string txnId)
       ]
 
       {
@@ -441,14 +455,16 @@ let sqlParamReducer
          "depository", AccountSqlWriter.depository AccountDepository.Checking
          "currency", AccountSqlWriter.currency Currency.USD
          "balance", AccountSqlWriter.balance 0m
+         "pendingFundsDetail",
+         AccountSqlWriter.pendingFundsDetail PendingFunds.zero
          "pendingAdditionsMoney",
-         AccountSqlWriter.pendingFundsMoney PendingFunds.Zero
+         AccountSqlWriter.pendingFundsMoney MoneyFlow.In PendingFunds.zero
          "pendingAdditionsCount",
-         AccountSqlWriter.pendingFundsCount PendingFunds.Zero
+         AccountSqlWriter.pendingFundsCount PendingFunds.zero
          "pendingDeductionsMoney",
-         AccountSqlWriter.pendingFundsMoney PendingFunds.Zero
+         AccountSqlWriter.pendingFundsMoney MoneyFlow.Out PendingFunds.zero
          "pendingDeductionsCount",
-         AccountSqlWriter.pendingFundsCount PendingFunds.Zero
+         AccountSqlWriter.pendingFundsCount PendingFunds.zero
          "status", AccountSqlWriter.status AccountStatus.Active
          "autoTransferRule", AccountSqlWriter.autoTransferRule None
          "autoTransferRuleFrequency",
@@ -475,14 +491,16 @@ let sqlParamReducer
          "depository", AccountSqlWriter.depository e.Data.Depository
          "currency", AccountSqlWriter.currency e.Data.Currency
          "balance", AccountSqlWriter.balance 0m
+         "pendingFundsDetail",
+         AccountSqlWriter.pendingFundsDetail PendingFunds.zero
          "pendingAdditionsMoney",
-         AccountSqlWriter.pendingFundsMoney PendingFunds.Zero
+         AccountSqlWriter.pendingFundsMoney MoneyFlow.In PendingFunds.zero
          "pendingAdditionsCount",
-         AccountSqlWriter.pendingFundsCount PendingFunds.Zero
+         AccountSqlWriter.pendingFundsCount PendingFunds.zero
          "pendingDeductionsMoney",
-         AccountSqlWriter.pendingFundsMoney PendingFunds.Zero
+         AccountSqlWriter.pendingFundsMoney MoneyFlow.Out PendingFunds.zero
          "pendingDeductionsCount",
-         AccountSqlWriter.pendingFundsCount PendingFunds.Zero
+         AccountSqlWriter.pendingFundsCount PendingFunds.zero
          "status", AccountSqlWriter.status AccountStatus.Active
          "autoTransferRule", AccountSqlWriter.autoTransferRule None
          "autoTransferRuleFrequency",
@@ -505,24 +523,26 @@ let sqlParamReducer
       }
    | AccountEvent.DepositedCash e ->
       AccountBalanceReducer.depositFunds accountId e.Data.Amount acc
-   // DebitPending is Deferred in the actor rather than Persisted so
-   // will not see this event consumed by the read journal.
-   | AccountEvent.DebitPending _ -> acc
+   | AccountEvent.DebitPending e ->
+      AccountBalanceReducer.reserveFunds
+         accountId
+         e.Data.Amount
+         AccountBalanceReducer.Transaction.Purchase
+         e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
+         acc
    | AccountEvent.DebitSettled e ->
-      let qParams = [
-         "accountId", AccountSqlWriter.accountId accountId
-         "balanceDelta", Sql.money -e.Data.Amount
-      ]
-
-      {
-         acc with
-            AccountUpdate = qParams :: acc.AccountUpdate
-      }
+      AccountBalanceReducer.settleFunds
+         accountId
+         e.Data.Amount
+         AccountBalanceReducer.Transaction.Purchase
+         e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
+         acc
    | AccountEvent.DebitFailed e ->
       AccountBalanceReducer.releaseReservedFunds
          accountId
          e.Data.Amount
          AccountBalanceReducer.Transaction.Purchase
+         e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
          acc
    | AccountEvent.DebitRefunded e ->
       AccountBalanceReducer.depositFunds accountId e.Data.Amount acc
@@ -667,6 +687,7 @@ let sqlParamReducer
          accountId
          info.Amount
          AccountBalanceReducer.Transaction.InternalTransferBetweenOrgs
+         info.TransferId.Value
          acc
    | AccountEvent.InternalTransferBetweenOrgsSettled e ->
       let info = e.Data.BaseInfo
@@ -682,6 +703,7 @@ let sqlParamReducer
             accountId
             info.Amount
             AccountBalanceReducer.Transaction.InternalTransferBetweenOrgs
+            info.TransferId.Value
             acc
 
       match info.FromPaymentRequest with
@@ -719,6 +741,7 @@ let sqlParamReducer
          accountId
          info.Amount
          AccountBalanceReducer.Transaction.InternalTransferBetweenOrgs
+         info.TransferId.Value
          acc
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       let info = e.Data.BaseInfo
@@ -786,6 +809,7 @@ let sqlParamReducer
          accountId
          info.Amount
          (AccountBalanceReducer.Transaction.DomesticTransfer info.MoneyFlow)
+         info.TransferId.Value
          acc
    | AccountEvent.DomesticTransferProgress e ->
       let status = DomesticTransferProgress.PartnerBank e.Data.InProgressInfo
@@ -821,6 +845,7 @@ let sqlParamReducer
          accountId
          info.Amount
          (AccountBalanceReducer.Transaction.DomesticTransfer info.MoneyFlow)
+         info.TransferId.Value
          acc
    | AccountEvent.DomesticTransferSettled e ->
       let info = e.Data.BaseInfo
@@ -835,6 +860,7 @@ let sqlParamReducer
          accountId
          info.Amount
          (AccountBalanceReducer.Transaction.DomesticTransfer info.MoneyFlow)
+         info.TransferId.Value
          acc
    | AccountEvent.PaymentRequested e ->
       let shared = e.Data.SharedDetails
@@ -1094,6 +1120,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {AccountFields.name},
           {AccountFields.depository},
           {AccountFields.balance},
+          {AccountFields.pendingFundsDetail},
           {AccountFields.pendingDeductionsMoney},
           {AccountFields.pendingDeductionsCount},
           {AccountFields.pendingAdditionsMoney},
@@ -1111,6 +1138,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           @name,
           @depository::{AccountTypeCast.depository},
           @balance,
+          @pendingFundsDetail,
           @pendingDeductionsMoney,
           @pendingDeductionsCount,
           @pendingAdditionsMoney,
@@ -1128,6 +1156,15 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       UPDATE {AccountSqlMapper.table}
       SET
          {AccountFields.balance} = {AccountFields.balance} + COALESCE(@balanceDelta, 0::money),
+         {AccountFields.pendingFundsDetail} =
+            CASE
+               WHEN @pendingFundsDetailTransactionId::text IS NOT NULL THEN
+                  {AccountFields.pendingFundsDetail} - @pendingFundsDetailTransactionId
+               WHEN @pendingFundsDetailAddition::jsonb IS NOT NULL THEN
+                  {AccountFields.pendingFundsDetail} || @pendingFundsDetailAddition
+               ELSE
+                  {AccountFields.pendingFundsDetail}
+            END,
          {AccountFields.pendingDeductionsMoney} =
             {AccountFields.pendingDeductionsMoney} + COALESCE(@pendingDeductionsMoneyDelta, 0::money),
          {AccountFields.pendingDeductionsCount} =
@@ -1149,6 +1186,8 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       |> List.map (
          Lib.Postgres.addCoalescableParamsForUpdate [
             "balanceDelta"
+            "pendingFundsDetailTransactionId"
+            "pendingFundsDetailAddition"
             "pendingDeductionsMoneyDelta"
             "pendingDeductionsCountDelta"
             "pendingAdditionsMoneyDelta"

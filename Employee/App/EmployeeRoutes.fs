@@ -180,7 +180,7 @@ let start (app: WebApplication) =
                   let msg =
                      $"Employee status {employee.Status} not in a state to invite."
 
-                  ActorUtil.SystemLog.error sys (exn msg) msg
+                  ActorUtil.SystemLog.error sys (exn msg)
                   //return Results.Forbid()
                   return Results.NotFound()
             })

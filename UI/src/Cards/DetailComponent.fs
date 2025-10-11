@@ -323,7 +323,7 @@ let CardDetailComponent
             let color =
                match card.Card.Status with
                | CardStatus.Frozen _
-               | CardStatus.Closed -> Style.color.alert
+               | CardStatus.Closed _ -> Style.color.alert
                | CardStatus.Pending -> Style.color.secondary
                | CardStatus.Active -> Style.color.primary
 
@@ -410,7 +410,7 @@ let CardDetailComponent
                   dispatch <| Msg.ShowCardLockConfirmation lockCardMsg)
             ]
          | CardStatus.Pending -> ()
-         | CardStatus.Closed -> ()
+         | CardStatus.Closed _ -> ()
 
          Html.div [
             attr.role "button"

@@ -119,14 +119,14 @@ let start (app: WebApplication) =
                | Ok _ -> return Results.Ok()
                | Error err ->
                   let msg = $"Error authorizing invite: {err}"
-                  ActorUtil.SystemLog.error system (exn msg) msg
+                  ActorUtil.SystemLog.error system (exn msg)
                   //return Results.Forbid()
                   return Results.NotFound()
             | _ ->
                let msg =
                   $"Could not find valid employee invite from token: {token}"
 
-               ActorUtil.SystemLog.error system (exn msg) msg
+               ActorUtil.SystemLog.error system (exn msg)
                //return Results.Forbid()
                return Results.NotFound()
          })

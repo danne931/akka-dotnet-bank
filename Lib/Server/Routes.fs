@@ -7,7 +7,7 @@ open type Microsoft.AspNetCore.Http.Results
 
 open Lib.SharedTypes
 
-let private json (res: 't) : IResult =
+let json (res: 't) : IResult =
    Results.Content <| Serialization.serialize res
 
 let private unwrapOption (opt: 't option) : IResult =

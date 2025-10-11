@@ -151,6 +151,10 @@ module CardPath =
    let UnlockCard = Base + "/unlock"
    let Purchase = Base + "/purchase"
    let UpdateNickname = Base + "/nickname"
+   let AuthStreamAccessWebhook = "/purchase-auth-stream-access-webhook"
+
+   let CardTransactionUpdatedWebhook =
+      "purchase-card-transaction-updated-webhook"
 
 module UserSessionPath =
    let Login = "/login"

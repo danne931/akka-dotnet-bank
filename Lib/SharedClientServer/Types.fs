@@ -4,6 +4,18 @@ open System
 open Validus
 open Validus.Operators
 
+type Result<'T, 'Error> with
+   /// Extension to flatten a Result's inner Option,
+   /// converting the None case to an Error.
+   static member unwrapOption
+      (error: 'Error)
+      (result: Result<Option<'T>, 'Error>)
+      =
+      match result with
+      | Ok(Some value) -> Ok value
+      | Ok None -> Error error
+      | Error e -> Error e
+
 module Guid =
    let parseOptional (id: string) =
       try
@@ -151,6 +163,20 @@ type TransferId =
    member x.Value = let (TransferId id) = x in id
 
    member x.AsCorrelationId = CorrelationId x.Value
+
+type CardIssuerCardId =
+   | CardIssuerCardId of Guid
+
+   override x.ToString() = string x.Value
+
+   member x.Value = let (CardIssuerCardId id) = x in id
+
+type CardIssuerTransactionId =
+   | CardIssuerTransactionId of Guid
+
+   override x.ToString() = string x.Value
+
+   member x.Value = let (CardIssuerTransactionId id) = x in id
 
 type Initiator = { Id: InitiatedById; Name: string }
 
@@ -300,6 +326,8 @@ type EmployeeStateTransitionError =
    | ExceededDailyDebit of limit: decimal * accrued: decimal
    | ExceededMonthlyDebit of limit: decimal * accrued: decimal
    | EmployeeStatusDisallowsAccessRestore of string
+   | PurchaseProgressPurchaseNotFound
+   | PurchaseProgressNoAdditionalEvents
 
 type Err =
    | DatabaseError of exn

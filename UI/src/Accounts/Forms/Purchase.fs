@@ -71,11 +71,18 @@ let form
             AccountId = account.AccountId
             Amount = amount
             Merchant = merchant
+            CurrencyCardHolder = Currency.USD
+            CurrencyMerchant = Currency.USD
             Reference = None
             Date = DateTime.UtcNow
             // Represents ID of transaction coming from
-            // simulated card network.
-            CardNetworkTransactionId = Guid.NewGuid()
+            // simulated card network. If card issuer api
+            // key configured then this will be replaced
+            // with the actual transaction ID from card issuer
+            // once it makes a request to our Auth Stream Access
+            // endpoint.
+            CardIssuerTransactionId = Guid.NewGuid() |> CardIssuerTransactionId
+            CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
          }
          |> EmployeeCommand.PurchaseIntent
          |> FormCommand.Employee
@@ -102,9 +109,5 @@ let PurchaseFormComponent
          | _ -> ()
       Session = session
       ComponentName = "PurchaseForm"
-      UseEventSubscription =
-         Some [
-            SignalREventProvider.EventType.Employee
-            SignalREventProvider.EventType.Account
-         ]
+      UseEventSubscription = None
    |}

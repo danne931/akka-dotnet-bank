@@ -5,12 +5,23 @@ open Validus
 
 open Lib.SharedTypes
 
-type ThirdPartyProviderCardId =
-   | ThirdPartyProviderCardId of Guid
+[<RequireQualifiedAccess>]
+type CardIssuerName =
+   | Lithic
+   //| Marqueta
+   static member fromString(status: string) : CardIssuerName option =
+      if String.IsNullOrEmpty status then
+         None
+      else
+         match status.ToLower() with
+         | "lithic" -> Some Lithic
+         //| "marqueta" -> Some Marqueta
+         | _ -> None
 
-   override x.ToString() = string x.Value
-
-   member x.Value = let (ThirdPartyProviderCardId id) = x in id
+   static member fromStringUnsafe(cardIssuerName: string) : CardIssuerName =
+      match CardIssuerName.fromString cardIssuerName with
+      | None -> failwith "Error attempting to cast string to CardIssuerName"
+      | Some status -> status
 
 [<RequireQualifiedAccess>]
 type CardType =
@@ -34,21 +45,44 @@ type CardType =
 [<RequireQualifiedAccess>]
 type CardFrozenReason =
    | UserRequested
+   /// The card is temporarily paused pending further review.
+   | CardIssuerReview
+   /// The card has one or more suspicious transactions or activities that require review.
+   /// This can involve prompting the cardholder to confirm legitimate use or report confirmed fraud.
    | SuspectedFraud
+
+[<RequireQualifiedAccess>]
+type CardClosedReason =
+   /// The physical card is no longer in the cardholder's possession due to
+   /// being lost or never received by the cardholder.
+   | Lost
+   /// Card information has been exposed, potentially leading to unauthorized access.
+   /// This may involve physical card theft, cloning, or online data breaches.
+   | Compromised
+   /// The physical card is not functioning properly, such as having chip failures
+   /// or a demagnetized magnetic stripe.
+   | Damaged
+   /// The cardholder requested the closure of the card for reasons unrelated to
+   /// fraud or damage, such as switching to a different product or closing the account.
+   | EndUserRequest
+   /// The issuer closed the card for reasons unrelated to fraud or damage, such
+   /// as account inactivity, product or policy changes, or technology upgrades.
+   | IssuerRequested
+   | Other of string
 
 [<RequireQualifiedAccess>]
 type CardStatus =
    | Pending
    | Active
    | Frozen of CardFrozenReason
-   | Closed
+   | Closed of CardClosedReason
 
    override x.ToString() =
       match x with
       | Pending -> "Pending"
       | Active -> "Active"
       | Frozen _ -> "Frozen"
-      | Closed -> "Closed"
+      | Closed _ -> "Closed"
 
 type CardExpiration = {
    Month: int
@@ -71,7 +105,6 @@ type Card = {
    Expiration: CardExpiration
    CardId: CardId
    AccountId: AccountId
-   ThirdPartyProviderCardId: ThirdPartyProviderCardId option
 } with
 
    member x.IsExpired() =
@@ -98,3 +131,121 @@ type Card = {
 
    static member monthlyPurchaseLimitValidator =
       Check.Decimal.between 0m Constants.MONTHLY_PURCHASE_LIMIT_DEFAULT
+
+type CardIssuerLink = {
+   CardId: CardId
+   CardIssuerCardId: CardIssuerCardId
+   CardIssuerName: CardIssuerName
+}
+
+type PurchaseAuthorization = {
+   CardId: CardId
+   CardIssuerCardId: CardIssuerCardId
+   CardIssuerTransactionId: CardIssuerTransactionId
+   Amount: decimal
+   MerchantCategoryCode: int
+   MerchantName: string
+   CurrencyCardHolder: Currency
+   CurrencyMerchant: Currency
+   CreatedAt: DateTime
+}
+
+type PurchaseRuleEnforced = {
+   Id: Guid
+   Result: string
+   Name: string
+   Explanation: string
+}
+// There are four possible message types that can occur after the initial authorization (shown in the events.type field): CLEARING, AUTHORIZATION_REVERSAL, AUTHORIZATION_EXPIRY and AUTHORIZATION_ADVICE.
+[<RequireQualifiedAccess>]
+type PurchaseEventType =
+   | Auth
+   | AuthAdvice
+   | AuthExpiry
+   | AuthReversal
+   | BalanceInquiry
+   | Clearing
+   | CorrectionCredit
+   | CorrectionDebit
+   | CreditAuth
+   | CreditAuthAdvice
+   | FinancialAuth
+   | FinancialCreditAuth
+   | Return
+   | ReturnReversal
+
+type PurchaseEvent = {
+   Type: PurchaseEventType
+   Amount: decimal
+   //amounts: TransactionAmountsDTO
+   Flow: MoneyFlow
+   EnforcedRules: PurchaseRuleEnforced list
+   EventId: Guid
+   CreatedAt: DateTime
+}
+
+[<RequireQualifiedAccess>]
+type PurchaseStatus =
+   | Declined
+   | Expired
+   | Pending
+   | Settled
+   | Voided
+
+type PurchaseAmount = { Amount: decimal; Currency: Currency }
+
+type PurchaseCardHolderAmount = {
+   ConversionRate: decimal
+   Amount: decimal
+   Currency: Currency
+}
+
+type PurchaseAmounts = {
+   Hold: PurchaseAmount
+   Cardholder: PurchaseCardHolderAmount
+   Merchant: PurchaseAmount
+   Settlement: PurchaseAmount
+}
+
+type CardIssuerPurchaseProgress = {
+   Amounts: PurchaseAmounts
+   Events: PurchaseEvent list
+   //network: string
+   //network_risk_score: string
+   (*
+    * ACCOUNT_PAUSED
+    * ACCOUNT_STATE_TRANSACTION_FAIL
+    * APPROVED
+    * BANK_CONNECTION_ERROR
+    * BANK_NOT_VERIFIED
+    * CARD_CLOSED
+    * CARD_PAUSED
+    * DECLINED
+    * FRAUD_ADVICE
+    * IGNORED_TTL_EXPIRY
+    * INACTIVE_ACCOUNT
+    * INCORRECT_PIN
+    * INVALID_CARD_DETAILS
+    * INSUFFICIENT_FUNDS
+    * INSUFFICIENT_FUNDS_PRELOAD
+    * INVALID_TRANSACTION
+    * MERCHANT_BLACKLIST
+    * ORIGINAL_NOT_FOUND
+    * PREVIOUSLY_COMPLETED
+    * SINGLE_USE_RECHARGED
+    * SWITCH_INOPERATIVE_ADVICE
+    * UNAUTHORIZED_MERCHANT
+    * UNKNOWN_HOST_TIMEOUT
+    * USER_TRANSACTION_LIMIT
+   *)
+   Result: string
+   Status: PurchaseStatus
+   PurchaseId: CardIssuerTransactionId
+   CardIssuerCardId: CardIssuerCardId
+}
+
+type Purchase = {
+   Info: Bank.Account.Domain.PurchaseInfo
+   Events: PurchaseEvent list
+   Status: PurchaseStatus
+}

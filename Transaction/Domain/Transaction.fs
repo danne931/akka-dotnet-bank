@@ -141,6 +141,18 @@ let transactionInfoFromHistory
             TransactionStatus.InProgress,
             e.Data.Info.Amount
          )
+      | EmployeeEvent.PurchaseProgress e ->
+         let info = e.Data.Info
+
+         let amount =
+            match info.Status with
+            | PurchaseStatus.Pending -> info.Amounts.Hold.Amount
+            | PurchaseStatus.Settled -> info.Amounts.Settlement.Amount
+            | PurchaseStatus.Declined
+            | PurchaseStatus.Expired
+            | PurchaseStatus.Voided -> 0m
+
+         Some(TransactionType.Purchase, TransactionStatus.InProgress, amount)
       | EmployeeEvent.PurchaseSettled e ->
          Some(
             TransactionType.Purchase,
@@ -309,6 +321,7 @@ let applyHistory
             (Option.map (fun txn -> {
                txn with
                   Status = status
+                  Amount = amount
                   History = history :: txn.History
             }))
             txns
@@ -328,7 +341,12 @@ let applyHistory
 
 let fromHistory (history: History list) : Transaction list =
    history
+   |> List.sortBy _.Envelope.Timestamp
    |> List.fold applyHistory Map.empty
+   |> Map.map (fun _ txn -> {
+      txn with
+         History = txn.History |> List.sortByDescending _.Envelope.Timestamp
+   })
    |> _.Values
    |> Seq.toList
    |> List.sortByDescending (fun txn -> txn.Timestamp, txn.Id)

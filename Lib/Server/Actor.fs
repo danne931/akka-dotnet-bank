@@ -24,8 +24,8 @@ module SystemLog =
    let warning (sys: ActorSystem) (msg: string) =
       sys.Log.Log(Akka.Event.LogLevel.WarningLevel, null, msg)
 
-   let error (sys: ActorSystem) (err: exn) (msg: string) =
-      sys.Log.Log(Akka.Event.LogLevel.ErrorLevel, err, msg)
+   let error (sys: ActorSystem) (err: exn) =
+      sys.Log.Log(Akka.Event.LogLevel.ErrorLevel, err, err.Message)
 
 module PubSub =
    let get (system: ActorSystem) : DistributedPubSub =

@@ -119,6 +119,10 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
                $"Purchase processing at {info.Merchant} with card {info.CardNickname} **{info.CardNumberLast4}"
             Amount = Some <| Money.format info.Amount
       }
+   | EmployeeEvent.PurchaseProgress e -> {
+      props with
+         Name = "Purchase Progress"
+     }
    | EmployeeEvent.PurchaseSettled e ->
       let info = e.Data.Info
 
@@ -170,11 +174,11 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
          Info =
             $"Created card **{e.Data.Card.CardNumberLast4} for {txn.EmployeeName}"
      }
-   | EmployeeEvent.ThirdPartyProviderCardLinked e -> {
+   | EmployeeEvent.CardLinked e -> {
       props with
-         Name = "Provider Card Linked"
+         Name = "Card Linked"
          Info =
-            $"Provider card linked to **{e.Data.CardNumberLast4} for {txn.EmployeeName}"
+            $"Card linked to **{e.Data.CardNumberLast4} for {txn.EmployeeName}"
      }
    | EmployeeEvent.CreatedAccountOwner _ -> {
       props with

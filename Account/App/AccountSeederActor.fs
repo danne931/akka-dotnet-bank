@@ -29,6 +29,7 @@ open RecurringPaymentSchedule
 open BankActorRegistry
 open Email
 open PartnerBank.Service.Domain
+open CardIssuer.Service.Domain
 
 module aeFields = AccountEventSqlMapper.Fields
 
@@ -485,6 +486,7 @@ let mockAccountOwnerCmd =
          LastName = myOrg.AccountOwnerName.Last
          OrgId = myOrg.OrgId
          EmployeeId = myOrg.AccountOwnerId
+         ParentAccountId = myOrg.ParentAccountId
       } with
          Timestamp = startOfMonth.AddMonths -3
    }
@@ -681,7 +683,18 @@ let mockEmployees =
          FirstName = "Pop"
          LastName = "Pongkool"
          OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
          Role = Role.Admin
+         OrgRequiresEmployeeInviteApproval = None
+         CardInfo = None
+      }
+      CreateEmployeeCommand.create mockAccountOwner {
+         Email = "thongchai@gmail.com"
+         FirstName = "Bird"
+         LastName = "Thongchai"
+         OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
+         Role = Role.CardOnly
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
       }
@@ -690,6 +703,7 @@ let mockEmployees =
          FirstName = "Devon"
          LastName = "Eisenbarger"
          OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
          Role = Role.CardOnly
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
@@ -699,6 +713,7 @@ let mockEmployees =
          FirstName = "Ink"
          LastName = "Waruntorn"
          OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
          Role = Role.CardOnly
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
@@ -708,6 +723,7 @@ let mockEmployees =
          FirstName = "Hanz"
          LastName = "Zimmer"
          OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
          Role = Role.CardOnly
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
@@ -717,6 +733,7 @@ let mockEmployees =
          FirstName = "Den"
          LastName = "Vau"
          OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
          Role = Role.Admin
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
@@ -726,6 +743,7 @@ let mockEmployees =
          FirstName = "Sade"
          LastName = "Adu"
          OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
          Role = Role.CardOnly
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
@@ -767,6 +785,7 @@ let mockEmployeesPendingInviteConfirmation =
          FirstName = "Zikomo"
          LastName = "Fwasa"
          OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
          Role = Role.Admin
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
@@ -776,6 +795,7 @@ let mockEmployeesPendingInviteConfirmation =
          FirstName = "Meg"
          LastName = "Meyers"
          OrgId = myOrg.OrgId
+         ParentAccountId = myOrg.ParentAccountId
          Role = Role.Scholar
          OrgRequiresEmployeeInviteApproval = None
          CardInfo = None
@@ -1457,8 +1477,9 @@ let seedAccountOwnerActions
 let seedEmployeeActions
    (card: Card)
    (employee: Employee)
-   (registry: #IEmployeeGuaranteedDeliveryActor)
+   (registry: #IEmployeeActor)
    (timestamp: DateTime)
+   (mailbox: Actor<AccountSeederMessage>)
    =
    let purchaseMerchants = [
       [ "Cozy Hotel"; "Trader Joe's"; "In N Out"; "Lyft" ]
@@ -1542,7 +1563,11 @@ let seedEmployeeActions
                Merchant =
                   purchaseMerchants[rnd.Next(0, purchaseMerchants.Length)]
                Reference = None
-               CardNetworkTransactionId = Guid.NewGuid()
+               CurrencyCardHolder = Currency.USD
+               CurrencyMerchant = Currency.USD
+               CardIssuerTransactionId =
+                  Guid.NewGuid() |> CardIssuerTransactionId
+               CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
                CardNickname = card.CardNickname
             } with
                Timestamp = purchaseDate
@@ -1552,9 +1577,66 @@ let seedEmployeeActions
             purchaseCmd
             |> EmployeeCommand.PurchaseIntent
             |> EmployeeMessage.StateChange
-            |> GuaranteedDelivery.message purchaseCmd.EntityId.Value
 
-         registry.EmployeeGuaranteedDeliveryActor() <! msg
+         let employeeRef = registry.EmployeeActor purchaseCmd.Data.EmployeeId
+
+         let authTask: PurchaseAuthorizationStatus Task =
+            employeeRef.Ask(msg, Some(TimeSpan.FromSeconds 4.5))
+            |> Async.StartAsTask
+
+         authTask.ContinueWith(fun (t: Task) ->
+            if t.IsFaulted then
+               logError
+                  mailbox
+                  $"Purchase auth seed failed {t.Exception.Message}"
+            else
+               // Simulate Clearing event from card issuer
+               let progress: CardIssuerPurchaseProgress = {
+                  Events = [
+                     {
+                        Type = PurchaseEventType.Auth
+                        Amount = purchaseCmd.Data.Amount
+                        Flow = MoneyFlow.Out
+                        EnforcedRules = []
+                        EventId = Guid.NewGuid()
+                        CreatedAt = purchaseCmd.Timestamp
+                     }
+                     {
+                        Type = PurchaseEventType.Clearing
+                        Amount = purchaseCmd.Data.Amount
+                        Flow = MoneyFlow.Out
+                        EnforcedRules = []
+                        EventId = Guid.NewGuid()
+                        CreatedAt = purchaseCmd.Timestamp.AddSeconds(1)
+                     }
+                  ]
+                  Result = "APPROVED"
+                  Status = PurchaseStatus.Settled
+                  PurchaseId = purchaseCmd.Data.CardIssuerTransactionId
+                  CardIssuerCardId = purchaseCmd.Data.CardIssuerCardId
+                  Amounts =
+                     let currency = Currency.USD
+
+                     {
+                        Hold = { Amount = 0m; Currency = currency }
+                        Cardholder = {
+                           Amount = purchaseCmd.Data.Amount
+                           Currency = currency
+                           ConversionRate = 1m
+                        }
+                        Merchant = {
+                           Amount = purchaseCmd.Data.Amount
+                           Currency = currency
+                        }
+                        Settlement = {
+                           Amount = purchaseCmd.Data.Amount
+                           Currency = currency
+                        }
+                     }
+               }
+
+               employeeRef <! EmployeeMessage.PurchaseProgress progress)
+         |> ignore
 
 let createAccountOwners (registry: #IEmployeeGuaranteedDeliveryActor) =
    let createAccountOwnerCmd (business: OrgSetup) =
@@ -1569,6 +1651,7 @@ let createAccountOwners (registry: #IEmployeeGuaranteedDeliveryActor) =
             LastName = business.AccountOwnerName.Last
             OrgId = business.OrgId
             EmployeeId = business.AccountOwnerId
+            ParentAccountId = business.ParentAccountId
          } with
             Timestamp = ts
       }
@@ -1778,7 +1861,7 @@ let seedAccountTransactions
                   mailbox
                   $"Can not proceed with purchases - eId: {employeeId} cId: {cardId}"
             | Some(employee, card) ->
-               seedEmployeeActions card employee registry timestamp
+               seedEmployeeActions card employee registry timestamp mailbox
 
          do! seedPayments registry
    }

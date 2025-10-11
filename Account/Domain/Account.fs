@@ -21,8 +21,7 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       Depository = AccountDepository.Checking
       Currency = Currency.USD
       Balance = 0m
-      PendingAdditions = PendingFunds.Zero
-      PendingDeductions = PendingFunds.Zero
+      PendingFunds = PendingFunds.zero
       Status = AccountStatus.Active
       AutoTransferRule = None
      }
@@ -36,8 +35,7 @@ let applyEvent (account: Account) (evt: AccountEvent) =
       Depository = e.Data.Depository
       Currency = e.Data.Currency
       Balance = 0m
-      PendingAdditions = PendingFunds.Zero
-      PendingDeductions = PendingFunds.Zero
+      PendingFunds = PendingFunds.zero
       Status = AccountStatus.Active
       AutoTransferRule = None
      }
@@ -51,16 +49,27 @@ let applyEvent (account: Account) (evt: AccountEvent) =
      }
    | DebitPending e -> {
       account with
-         PendingDeductions = account.PendingDeductions.Add e.Data.Amount
+         PendingFunds =
+            account.PendingFunds
+            |> Map.add
+               e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
+               {
+                  Flow = MoneyFlow.Out
+                  Amount = e.Data.Amount
+               }
      }
    | DebitSettled e -> {
       account with
          Balance = account.Balance - e.Data.Amount
-         PendingDeductions = account.PendingDeductions.Remove e.Data.Amount
+         PendingFunds =
+            account.PendingFunds.Remove
+               e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
      }
    | DebitFailed e -> {
       account with
-         PendingDeductions = account.PendingDeductions.Remove e.Data.Amount
+         PendingFunds =
+            account.PendingFunds.Remove
+               e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
      }
    | DebitRefunded e -> {
       account with
@@ -74,42 +83,52 @@ let applyEvent (account: Account) (evt: AccountEvent) =
    | DomesticTransferScheduled _ -> account
    | DomesticTransferPending e ->
       let amt = e.Data.BaseInfo.Amount
+      let txnId = e.Data.BaseInfo.TransferId.Value
 
       match e.Data.BaseInfo.MoneyFlow with
       | MoneyFlow.Out -> {
          account with
-            PendingDeductions = account.PendingDeductions.Add amt
+            PendingFunds =
+               PendingFunds.add
+                  txnId
+                  { Flow = MoneyFlow.Out; Amount = amt }
+                  account.PendingFunds
         }
       | MoneyFlow.In -> {
          account with
-            PendingAdditions = account.PendingAdditions.Add amt
+            PendingFunds =
+               PendingFunds.add
+                  txnId
+                  { Flow = MoneyFlow.In; Amount = amt }
+                  account.PendingFunds
         }
    | DomesticTransferProgress _ -> account
    | DomesticTransferSettled e ->
       let amt = e.Data.BaseInfo.Amount
+      let txnId = e.Data.BaseInfo.TransferId.Value
 
       match e.Data.BaseInfo.MoneyFlow with
       | MoneyFlow.Out -> {
          account with
             Balance = account.Balance - amt
-            PendingDeductions = account.PendingDeductions.Remove amt
+            PendingFunds = PendingFunds.remove txnId account.PendingFunds
         }
       | MoneyFlow.In -> {
          account with
             Balance = account.Balance + amt
-            PendingAdditions = account.PendingAdditions.Remove amt
+            PendingFunds = PendingFunds.remove txnId account.PendingFunds
         }
    | DomesticTransferFailed e ->
-      let amt = e.Data.BaseInfo.Amount
+      let txnId = e.Data.BaseInfo.TransferId.Value
 
       match e.Data.BaseInfo.MoneyFlow with
       | MoneyFlow.Out -> {
          account with
-            PendingDeductions = account.PendingDeductions.Remove amt
+            PendingFunds = PendingFunds.remove txnId account.PendingFunds
         }
       | MoneyFlow.In -> {
          account with
-            PendingAdditions = account.PendingAdditions.Remove amt
+            PendingFunds = PendingFunds.remove txnId account.PendingFunds
         }
    | InternalTransferWithinOrgDeducted e -> {
       account with
@@ -120,26 +139,38 @@ let applyEvent (account: Account) (evt: AccountEvent) =
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
    | InternalTransferBetweenOrgsScheduled _ -> account
-   | InternalTransferBetweenOrgsPending e -> {
-      account with
-         PendingDeductions =
-            account.PendingDeductions.Add e.Data.BaseInfo.Amount
-     }
-   | InternalTransferBetweenOrgsFailed e -> {
-      account with
-         PendingDeductions =
-            account.PendingDeductions.Remove e.Data.BaseInfo.Amount
-     }
+   | InternalTransferBetweenOrgsPending e ->
+      let txnId = e.Data.BaseInfo.TransferId.Value
+      let amt = e.Data.BaseInfo.Amount
+
+      {
+         account with
+            PendingFunds =
+               PendingFunds.add
+                  txnId
+                  { Flow = MoneyFlow.Out; Amount = amt }
+                  account.PendingFunds
+      }
+   | InternalTransferBetweenOrgsFailed e ->
+      let txnId = e.Data.BaseInfo.TransferId.Value
+
+      {
+         account with
+            PendingFunds = PendingFunds.remove txnId account.PendingFunds
+      }
    | InternalTransferBetweenOrgsDeposited e -> {
       account with
          Balance = account.Balance + e.Data.BaseInfo.Amount
      }
-   | InternalTransferBetweenOrgsSettled e -> {
-      account with
-         Balance = account.Balance - e.Data.BaseInfo.Amount
-         PendingDeductions =
-            account.PendingDeductions.Remove e.Data.BaseInfo.Amount
-     }
+   | InternalTransferBetweenOrgsSettled e ->
+      let amt = e.Data.BaseInfo.Amount
+      let txnId = e.Data.BaseInfo.TransferId.Value
+
+      {
+         account with
+            Balance = account.Balance - amt
+            PendingFunds = PendingFunds.remove txnId account.PendingFunds
+      }
    | PaymentRequested _ -> account
    | PaymentRequestCancelled _ -> account
    | PaymentRequestDeclined _ -> account
