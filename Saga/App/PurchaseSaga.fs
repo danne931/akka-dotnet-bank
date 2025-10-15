@@ -118,6 +118,10 @@ let applyEvent
                saga.LifeCycle
                |> finishActivity Activity.WaitForCardNetworkResolution
                |> addActivity Activity.SettlePurchaseWithAccount
+               |> if saga.PurchaseNotificationSent then
+                     id
+                  else
+                     addActivity Activity.SendPurchaseNotification
         }
       | PurchaseStatus.Expired -> failSaga CardNetworkFailReason.Expired
       | PurchaseStatus.Voided -> failSaga CardNetworkFailReason.Voided
@@ -404,30 +408,28 @@ let onEventPersisted
       sendPurchaseFailedEmail reason
    | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress ->
       match progress.Status with
-      | PurchaseStatus.Settled -> settlePurchaseWithAccount ()
-      | status ->
-         let failReason =
-            match status with
-            | PurchaseStatus.Declined -> Some CardNetworkFailReason.Declined
-            | PurchaseStatus.Expired -> Some CardNetworkFailReason.Expired
-            | PurchaseStatus.Voided -> Some CardNetworkFailReason.Voided
-            | _ -> None
-            |> Option.map PurchaseFailReason.CardNetwork
+      | PurchaseStatus.Settled
+      | PurchaseStatus.Pending ->
+         if not updatedState.PurchaseNotificationSent then
+            sendPurchaseEmail ()
+      | _ -> ()
 
-         match failReason with
-         | Some reason ->
-            acquireCardFailureAcknowledgement reason
-            acquireAccountFailureAcknowledgement reason
-            sendPurchaseFailedEmail reason
-         | None -> ()
+      match progress.Status with
+      | PurchaseStatus.Declined -> Some CardNetworkFailReason.Declined
+      | PurchaseStatus.Expired -> Some CardNetworkFailReason.Expired
+      | PurchaseStatus.Voided -> Some CardNetworkFailReason.Voided
+      | _ -> None
+      |> Option.map PurchaseFailReason.CardNetwork
+      |> Option.iter (fun reason ->
+         acquireCardFailureAcknowledgement reason
+         acquireAccountFailureAcknowledgement reason
+         sendPurchaseFailedEmail reason)
    | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync ->
       // Support team resolved dispute with partner bank so
       // reattempt syncing transaction to partner bank.
       syncToPartnerBank ()
    | PurchaseSagaEvent.PurchaseSettledWithAccount -> settlePurchaseWithCard ()
-   | PurchaseSagaEvent.PurchaseSettledWithCard ->
-      sendPurchaseEmail ()
-      syncToPartnerBank ()
+   | PurchaseSagaEvent.PurchaseSettledWithCard -> syncToPartnerBank ()
    | PurchaseSagaEvent.PurchaseNotificationSent
    | PurchaseSagaEvent.ResetInProgressActivityAttempts
    | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount
