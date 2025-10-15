@@ -57,29 +57,6 @@ let getBroadcaster (provider: System.IServiceProvider) =
 let getActorRegistry (provider: System.IServiceProvider) =
    provider.GetRequiredService<BankActorRegistry>()
 
-let journalOpts = AkkaInfra.getJournalOpts ()
-
-journalOpts.Adapters
-   .AddEventAdapter<OrganizationEventPersistenceAdapter>(
-      "org-v1",
-      [ typeof<OrgEvent> ]
-   )
-   .AddEventAdapter<AccountEventPersistenceAdapter>(
-      "account-v1",
-      [ typeof<AccountEvent> ]
-   )
-   .AddEventAdapter<EmployeeEventPersistenceAdapter>(
-      "employee-v1",
-      [ typeof<EmployeeEvent> ]
-   )
-   .AddEventAdapter<SagaEventPersistenceAdapter>(
-      "saga-v1",
-      [ typeof<Lib.Saga.IPersistableSagaEvent> ]
-   )
-|> ignore
-
-let snapshotOpts = AkkaInfra.getSnapshotOpts ()
-
 builder.Services.AddAkka(
    Env.config.AkkaSystemName,
    (fun builder provider ->
@@ -118,7 +95,29 @@ builder.Services.AddAkka(
             Env.config.AkkaPersistence.DbProvider,
             PersistenceMode.Both
          )
-         .WithJournalAndSnapshot(journalOpts, snapshotOpts)
+         .WithSnapshot(AkkaInfra.getSnapshotOpts ())
+         .WithJournal(
+            AkkaInfra.getJournalOpts (),
+            fun journalBuilder ->
+               journalBuilder
+                  .AddEventAdapter<OrganizationEventPersistenceAdapter>(
+                     "org-v1",
+                     [ typeof<OrgEvent> ]
+                  )
+                  .AddEventAdapter<AccountEventPersistenceAdapter>(
+                     "account-v1",
+                     [ typeof<AccountEvent> ]
+                  )
+                  .AddEventAdapter<EmployeeEventPersistenceAdapter>(
+                     "employee-v1",
+                     [ typeof<EmployeeEvent> ]
+                  )
+                  .AddEventAdapter<SagaEventPersistenceAdapter>(
+                     "saga-v1",
+                     [ typeof<Lib.Saga.IPersistableSagaEvent> ]
+                  )
+               |> ignore
+         )
          .WithCustomSerializer(
             BankSerializer.Name,
             [ typedefof<obj> ],
