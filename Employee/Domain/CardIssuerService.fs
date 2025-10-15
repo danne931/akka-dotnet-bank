@@ -121,7 +121,7 @@ type AuthorizationStreamAction =
    //| CreditAuth
    | FinancialAuth
    //| FinancialCreditAuth
-   | BalanceInquiry
+   //| BalanceInquiry
 
    static member fromString(action) =
       match action with
@@ -129,7 +129,7 @@ type AuthorizationStreamAction =
       //| "CREDIT_AUTHORIZATION" -> Ok CreditAuth
       | "FINANCIAL_AUTHORIZATION" -> Ok FinancialAuth
       //| "FINANCIAL_CREDIT_AUTHORIZATION" -> Ok FinancialCreditAuth
-      | "BALANCE_INQUIRY" -> Ok BalanceInquiry
+      //| "BALANCE_INQUIRY" -> Ok BalanceInquiry
       | _ -> Error "Invalid ASA action"
 
 type AuthStreamAccessWebhookRequest = {
@@ -368,16 +368,16 @@ type CardTransactionEventDTO = {
          | "AUTHORIZATION_ADVICE" -> Ok PurchaseEventType.AuthAdvice
          | "AUTHORIZATION_EXPIRY" -> Ok PurchaseEventType.AuthExpiry
          | "AUTHORIZATION_REVERSAL" -> Ok PurchaseEventType.AuthReversal
-         | "BALANCE_INQUIRY" -> Ok PurchaseEventType.BalanceInquiry
+         //| "BALANCE_INQUIRY" -> Ok PurchaseEventType.BalanceInquiry
          | "CLEARING" -> Ok PurchaseEventType.Clearing
-         | "CORRECTION_CREDIT" -> Ok PurchaseEventType.CorrectionCredit
-         | "CORRECTION_DEBIT" -> Ok PurchaseEventType.CorrectionDebit
-         | "CREDIT_AUTHORIZATION" -> Ok PurchaseEventType.CreditAuth
-         | "CREDIT_AUTHORIZATION_ADVICE" ->
-            Ok PurchaseEventType.CreditAuthAdvice
+         //| "CORRECTION_CREDIT" -> Ok PurchaseEventType.CorrectionCredit
+         //| "CORRECTION_DEBIT" -> Ok PurchaseEventType.CorrectionDebit
+         //| "CREDIT_AUTHORIZATION" -> Ok PurchaseEventType.CreditAuth
+         //| "CREDIT_AUTHORIZATION_ADVICE" ->
+         //   Ok PurchaseEventType.CreditAuthAdvice
          | "FINANCIAL_AUTHORIZATION" -> Ok PurchaseEventType.FinancialAuth
-         | "FINANCIAL_CREDIT_AUTHORIZATION" ->
-            Ok PurchaseEventType.FinancialCreditAuth
+         //| "FINANCIAL_CREDIT_AUTHORIZATION" ->
+         //   Ok PurchaseEventType.FinancialCreditAuth
          | "RETURN" -> Ok PurchaseEventType.Return
          | "RETURN_REVERSAL" -> Ok PurchaseEventType.ReturnReversal
          | _ -> Error "Unknown Purchase Event Type"
