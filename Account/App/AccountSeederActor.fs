@@ -24,6 +24,7 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Payment.Domain
 open Bank.Employee.Domain
+open Bank.Purchase.Domain
 open AutomaticTransfer
 open RecurringPaymentSchedule
 open BankActorRegistry

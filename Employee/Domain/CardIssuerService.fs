@@ -5,7 +5,7 @@ open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
-open Bank.Account.Domain
+open Bank.Purchase.Domain
 
 [<RequireQualifiedAccess>]
 type CardIssuerMetadata = {

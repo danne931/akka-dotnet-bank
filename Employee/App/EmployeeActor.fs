@@ -14,6 +14,7 @@ open Lib.Types
 open ActorUtil
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Purchase.Domain
 open CardIssuer.Service.Domain
 open SignalRBroadcast
 open PurchaseSaga

@@ -4,7 +4,7 @@ open System
 
 open Lib.SharedTypes
 open Bank.Account.Domain
-open Bank.Employee.Domain
+open Bank.Purchase.Domain
 open Lib.Saga
 
 [<RequireQualifiedAccess>]

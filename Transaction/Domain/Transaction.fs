@@ -6,6 +6,7 @@ open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
+open Bank.Purchase.Domain
 open Lib.SharedTypes
 open CommandApproval
 

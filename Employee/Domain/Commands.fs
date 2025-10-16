@@ -5,7 +5,7 @@ open System
 
 open Lib.SharedTypes
 open Lib.Validators
-open Bank.Account.Domain
+open Bank.Purchase.Domain
 open Email
 
 type CreateAccountOwnerInput = {

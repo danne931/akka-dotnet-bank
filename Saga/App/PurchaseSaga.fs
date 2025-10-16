@@ -5,6 +5,7 @@ open Akkling
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Purchase.Domain
 open EmailMessage
 open Lib.Saga
 open PartnerBank.Service.Domain

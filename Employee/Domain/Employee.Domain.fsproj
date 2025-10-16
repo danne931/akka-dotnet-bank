@@ -18,6 +18,6 @@
   <ItemGroup>
     <ProjectReference Include="../../Lib/SharedClientServer/Lib.SharedClientServer.fsproj" />
     <ProjectReference Include="../../Transfer/Domain/Transfer.Domain.fsproj" />
-    <ProjectReference Include="../../Account/Domain/Account.Domain.fsproj" />
+    <ProjectReference Include="../../Purchase/Domain/Purchase.Domain.fsproj" />
   </ItemGroup>
 </Project>

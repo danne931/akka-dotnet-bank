@@ -5,6 +5,7 @@ open Validus
 open System
 
 open Bank.Employee.Domain
+open Bank.Purchase.Domain
 open Lib.SharedTypes
 open Lib.Time
 
@@ -54,7 +55,7 @@ let monthlyPurchaseAccrued = purchaseAccrued DateTime.isThisMonth
 
 let addPendingPurchase
    (state: EmployeeSnapshot)
-   (info: Bank.Account.Domain.PurchaseInfo)
+   (info: PurchaseInfo)
    =
    let txnId = info.CardIssuerTransactionId
 
@@ -81,7 +82,7 @@ let addPendingPurchase
 
 let removePendingPurchase
    (state: EmployeeSnapshot)
-   (info: Bank.Account.Domain.PurchaseInfo)
+   (info: PurchaseInfo)
    =
    let txnId = info.CardIssuerTransactionId
 

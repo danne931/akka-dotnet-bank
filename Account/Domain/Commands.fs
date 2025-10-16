@@ -5,6 +5,7 @@ open System
 
 open Lib.SharedTypes
 open Lib.Validators
+open Bank.Purchase.Domain
 
 type InitializePrimaryCheckingAccountInput = {
    OrgId: OrgId

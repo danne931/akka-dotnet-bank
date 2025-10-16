@@ -4,6 +4,7 @@ open System
 
 open Lib.SharedTypes
 open MaintenanceFee
+open Bank.Purchase.Domain
 
 type PrimaryCheckingAccountInfo = {
    AccountId: AccountId

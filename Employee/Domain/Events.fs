@@ -3,7 +3,7 @@ namespace Bank.Employee.Domain
 open System
 
 open Lib.SharedTypes
-open Bank.Account.Domain
+open Bank.Purchase.Domain
 open Email
 
 type CreatedAccountOwner = {

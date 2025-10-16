@@ -10,6 +10,7 @@ open Bank.Account.Domain
 open Bank.Employee.Domain
 open UIDomain.Account
 open Bank.Transfer.Domain
+open Bank.Purchase.Domain
 open Lib.SharedTypes
 open Dropdown
 open Transaction

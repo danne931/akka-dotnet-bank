@@ -4,6 +4,7 @@ open System
 
 open Lib.SharedTypes
 open Email
+open Bank.Purchase.Domain
 
 [<RequireQualifiedAccess>]
 type EmployeeCommand =

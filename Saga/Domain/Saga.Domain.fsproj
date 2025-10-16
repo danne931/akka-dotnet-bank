@@ -18,6 +18,7 @@
     <ProjectReference Include="../../Payment/Domain/Payment.Domain.fsproj" /> 
     <ProjectReference Include="../../Notifications/Domain/Notifications.Domain.fsproj" />
     <ProjectReference Include="../../Employee/Domain/Employee.Domain.fsproj" />
+    <ProjectReference Include="../../Purchase/Domain/Purchase.Domain.fsproj" />
     <ProjectReference Include="../../Billing/Domain/Billing.Domain.fsproj" /> 
     <ProjectReference Include="../../Org/Domain/Org.Domain.fsproj" /> 
     <ProjectReference Include="../../Account/Domain/Account.Domain.fsproj" />

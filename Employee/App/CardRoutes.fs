@@ -10,6 +10,7 @@ open FsToolkit.ErrorHandling
 
 open Bank.Org.Domain
 open Bank.Employee.Domain
+open Bank.Purchase.Domain
 open Bank.Card.Api
 open CardIssuer.Service.Domain
 open CommandApproval
