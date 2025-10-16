@@ -1570,6 +1570,7 @@ let seedEmployeeActions
                   Guid.NewGuid() |> CardIssuerTransactionId
                CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
                CardNickname = card.CardNickname
+               AuthorizationType = PurchaseAuthType.Debit
             } with
                Timestamp = purchaseDate
          }

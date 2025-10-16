@@ -244,6 +244,12 @@ let start (app: WebApplication) =
                      CreatedAt = DateTime.UtcNow
                      CurrencyCardHolder = purchaseAuthReq.CurrencyCardHolder
                      CurrencyMerchant = purchaseAuthReq.CurrencyMerchant
+                     Type =
+                        match purchaseAuthReq.Action with
+                        | AuthorizationStreamAction.Auth ->
+                           PurchaseAuthType.Debit
+                        | AuthorizationStreamAction.FinancialAuth ->
+                           PurchaseAuthType.DebitSMS
                   }
 
                   let employeeRef =

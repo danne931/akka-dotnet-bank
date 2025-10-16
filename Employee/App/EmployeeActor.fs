@@ -320,6 +320,7 @@ let actorProps
                      }
                      EmployeeName = employee.Name
                      EmployeeEmail = employee.Email
+                     AuthorizationType = auth.Type
                   }
 
                   let cmd = PurchaseIntentCommand.create purchaseInfo

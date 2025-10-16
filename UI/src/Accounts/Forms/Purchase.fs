@@ -8,6 +8,7 @@ open Fable.Form.Simple.Pico
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Purchase.Domain
 open UIDomain.Employee
 open Lib.Validators
 open Lib.SharedTypes
@@ -83,6 +84,7 @@ let form
             // endpoint.
             CardIssuerTransactionId = Guid.NewGuid() |> CardIssuerTransactionId
             CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
+            AuthorizationType = PurchaseAuthType.Debit
          }
          |> EmployeeCommand.PurchaseIntent
          |> FormCommand.Employee

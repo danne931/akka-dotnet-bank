@@ -298,4 +298,15 @@ type CardIssuerPurchaseProgress = {
    Status: PurchaseStatus
    PurchaseId: CardIssuerTransactionId
    CardIssuerCardId: CardIssuerCardId
-}
+} with
+
+   member x.InitiatedViaSMSAuth =
+      x.Events
+      |> List.exists (fun e ->
+         match e.Type with
+         | PurchaseEventType.FinancialAuth -> true
+         | _ -> false)
+
+   member x.IsSMSApproval = x.InitiatedViaSMSAuth && x.Result = "APPROVED"
+
+   member x.IsSMSDecline = x.InitiatedViaSMSAuth && x.Result = "DECLINED"

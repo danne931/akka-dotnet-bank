@@ -231,11 +231,20 @@ let private renderTransactionHistory
                      Html.p
                         $"Reserved {Money.format e.Data.Info.Amount} from card"
                   | EmployeeEvent.PurchaseProgress e ->
+                     let status = e.Data.Info.Status
+
                      for e in e.Data.Info.Events do
                         Html.p (
                            match e.Type with
                            | PurchaseEventType.Auth ->
                               $"Authorization of {Money.format e.Amount} confirmed by card network"
+                           | PurchaseEventType.FinancialAuth ->
+                              let status =
+                                 match status with
+                                 | PurchaseStatus.Declined -> "declined"
+                                 | _ -> "approved"
+
+                              $"{Money.format e.Amount} {status} by card network"
                            | PurchaseEventType.AuthAdvice ->
                               $"Auth Advice {Money.format e.Amount} received from card network"
                            | PurchaseEventType.Clearing ->

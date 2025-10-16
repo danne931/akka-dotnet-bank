@@ -24,6 +24,7 @@ type PurchaseInfo = {
    CardIssuerCardId: CardIssuerCardId
    CardIssuerTransactionId: CardIssuerTransactionId
    CardNickname: string option
+   AuthorizationType: PurchaseAuthType
 }
 
 type Purchase = {

@@ -53,10 +53,7 @@ let private purchaseAccrued
 let dailyPurchaseAccrued = purchaseAccrued DateTime.isToday
 let monthlyPurchaseAccrued = purchaseAccrued DateTime.isThisMonth
 
-let addPendingPurchase
-   (state: EmployeeSnapshot)
-   (info: PurchaseInfo)
-   =
+let addPendingPurchase (state: EmployeeSnapshot) (info: PurchaseInfo) =
    let txnId = info.CardIssuerTransactionId
 
    let fund = {
@@ -80,10 +77,7 @@ let addPendingPurchase
                   (Option.map (PendingFunds.add txnId.Value fund))
    }
 
-let removePendingPurchase
-   (state: EmployeeSnapshot)
-   (info: PurchaseInfo)
-   =
+let removePendingPurchase (state: EmployeeSnapshot) (info: PurchaseInfo) =
    let txnId = info.CardIssuerTransactionId
 
    {
