@@ -2,6 +2,7 @@
 module Style
 
 let color = {|
+   success = "var(--ins-color)"
    moneyIn = "var(--ins-color)"
    moneyOut = "var(--del-color)"
    alert = "var(--del-color)"

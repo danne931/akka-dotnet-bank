@@ -447,6 +447,10 @@ type Err =
             $"Employee not in a state ({state}) to cancel invite."
          | EmployeeStateTransitionError.EmployeeStatusDisallowsAccessRestore status ->
             $"Employee not in a state ({status}) to restore access."
+         | EmployeeStateTransitionError.PurchaseProgressPurchaseNotFound ->
+            "Purchase progress not found"
+         | EmployeeStateTransitionError.PurchaseProgressNoAdditionalEvents ->
+            "Purchase progress no additional events"
 
 let validationErrorsHumanFriendly
    (result: ValidationResult<'t>)

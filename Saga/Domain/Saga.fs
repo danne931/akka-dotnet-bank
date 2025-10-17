@@ -2,7 +2,6 @@ module AppSaga
 
 open Lib.SharedTypes
 open Lib.Saga
-open Bank.Account.Domain
 open Bank.Transfer.Domain
 open PurchaseSaga
 open DomesticTransferSaga
@@ -444,3 +443,72 @@ module Message =
 
    let billing orgId corrId (evt: BillingSagaEvent) =
       message orgId corrId (Event.Billing evt)
+
+module SagaDTO =
+   open SagaDTO
+
+   let fromSaga (saga: Saga) : SagaDTO =
+      let activityToDTO status (a: ActivityLifeCycle<'Activity>) = {
+         Start = a.Start
+         End = a.End
+         Name = string a.Activity |> _.Split(" ") |> _.Head()
+         Attempts = a.Attempts
+         MaxAttempts = a.MaxAttempts
+         Status = status
+      }
+
+      let sagaActivitiesToDTO (life: SagaLifeCycle<'Activity>) =
+         let inProgress =
+            life.InProgress
+            |> List.map (activityToDTO SagaActivityDTOStatus.InProgress)
+
+         let completed =
+            life.Completed
+            |> List.map (activityToDTO SagaActivityDTOStatus.Completed)
+
+         let failed =
+            life.Failed |> List.map (activityToDTO SagaActivityDTOStatus.Failed)
+
+         let aborted =
+            life.Aborted
+            |> List.map (activityToDTO SagaActivityDTOStatus.Aborted)
+
+         inProgress @ failed @ aborted @ completed
+         |> List.sortBy (fun a ->
+            match a.Status with
+            | SagaActivityDTOStatus.Completed -> a.End
+            | _ -> Some a.Start)
+
+      match saga with
+      | Saga.Purchase saga -> {
+         Name = "Purchase"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.DomesticTransfer saga -> {
+         Name = "Domestic Transfer"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.PlatformTransfer saga -> {
+         Name = "Platform Transfer"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.PaymentRequest saga -> {
+         Name = "Payment Request"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.Billing saga -> {
+         Name = "Billing"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.CardSetup saga -> {
+         Name = "Card Setup"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.EmployeeOnboarding saga -> {
+         Name = "Employee Onboarding"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.OrgOnboarding saga -> {
+         Name = "Organization Onboarding"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }

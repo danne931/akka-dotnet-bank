@@ -11,6 +11,7 @@
     <Compile Include="Saga.fs" />
     <Compile Include="AlarmClockActor.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
+    <Compile Include="Api.fs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,6 +4,7 @@ open Fable.SimpleHttp
 open Lib.SharedTypes
 open Lib.CircuitBreaker
 open RoutePaths
+open SagaDTO
 
 [<RequireQualifiedAccess>]
 type ServiceHealth =
@@ -15,7 +16,6 @@ let health circuitBreakerState =
    | CircuitBreakerStatus.Closed -> ServiceHealth.Good
    | _ -> ServiceHealth.Bad
 
-[<RequireQualifiedAccess>]
 type ServiceDiagnostics = {
    Email: ServiceHealth
    KnowYourCustomer: ServiceHealth
@@ -54,3 +54,12 @@ let listenForCircuitBreakerEvent
             Log.error $"Error deserializing circuit breaker msg {err}"
          | Ok msg -> onCircuitBreakerEvent msg
    )
+
+let getSagaHistory () : Async<Result<SagaDTO list, Err>> = async {
+   let! (code, responseText) = Http.get DiagnosticPath.Sagas
+
+   if code <> 200 then
+      return Error(Err.InvalidStatusCodeError("Diagnostic Service", code))
+   else
+      return responseText |> Serialization.deserialize<SagaDTO list>
+}

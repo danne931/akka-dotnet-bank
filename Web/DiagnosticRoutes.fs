@@ -98,3 +98,12 @@ let start (app: WebApplication) =
       )
       .RBAC(Permissions.Diagnostic)
    |> ignore
+
+   app
+      .MapGet(
+         DiagnosticPath.Sagas,
+         Func<Task<IResult>>(fun () ->
+            SagaApi.getAllSagas () |> RouteUtil.unwrapTaskResultOption)
+      )
+      .RBAC(Permissions.Diagnostic)
+   |> ignore

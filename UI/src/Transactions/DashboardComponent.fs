@@ -696,8 +696,6 @@ let TransactionDashboardComponent
    }
 
    classyNode Html.div [ "transaction-dashboard" ] [
-      ServiceHealth.ServiceHealthComponent()
-
       classyNode Html.main [ "container-fluid" ] [
          classyNode Html.div [ "grid" ] [
             Html.section [

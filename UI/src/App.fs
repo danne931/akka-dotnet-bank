@@ -117,6 +117,12 @@ let App () =
       appShell
          (Some contextProviders)
          (PaymentDashboard.PaymentDashboardComponent url)
+   | Routes.IndexUrl.Diagnostic url ->
+      let contextProviders = SignalRConnectionProvider << SignalREventProvider
+
+      appShell
+         (Some contextProviders)
+         (DiagnosticDashboard.DiagnosticDashboardComponent url)
    | Routes.IndexUrl.NotFound -> Html.h1 "Not Found"
 
 let root = ReactDOM.createRoot <| document.getElementById "bank-react-root"

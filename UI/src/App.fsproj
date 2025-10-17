@@ -68,6 +68,8 @@
     <Compile Include="Orgs/MetricsComponent.fs" />
     <Compile Include="Diagnostic/Service.fs" />
     <Compile Include="Diagnostic/ServiceHealthComponent.fs" />
+    <Compile Include="Diagnostic/SagaHistory.fs" />
+    <Compile Include="Diagnostic/DashboardComponent.fs" />
     <Compile Include="Transfers/SocialTransferDiscoveryComponent.fs" />
     <Compile Include="Transfers/Forms/Transfer.fs" />
     <Compile Include="Transfers/Forms/RegisterCounterparty.fs" />

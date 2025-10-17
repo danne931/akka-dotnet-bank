@@ -219,6 +219,21 @@ module PaymentUrl =
          PaymentUrl.ViewPayment(PaymentRequestId paymentId)
       | _ -> PaymentUrl.NotFound
 
+
+[<RequireQualifiedAccess>]
+type DiagnosticUrl =
+   | Diagnostic
+   | NotFound
+
+module DiagnosticUrl =
+   [<Literal>]
+   let BasePath = "diagnostic"
+
+   let parse =
+      function
+      | [] -> DiagnosticUrl.Diagnostic
+      | _ -> DiagnosticUrl.NotFound
+
 [<RequireQualifiedAccess>]
 type IndexUrl =
    | Analytics of AnalyticsUrl
@@ -229,6 +244,7 @@ type IndexUrl =
    | Employees of EmployeeUrl
    | Cards of CardUrl
    | Payments of PaymentUrl
+   | Diagnostic of DiagnosticUrl
    | NotFound
 
 module IndexUrl =
@@ -259,6 +275,8 @@ module IndexUrl =
       | CardUrl.BasePath :: segments -> IndexUrl.Cards(CardUrl.parse segments)
       | PaymentUrl.BasePath :: segments ->
          IndexUrl.Payments(PaymentUrl.parse segments)
+      | DiagnosticUrl.BasePath :: segments ->
+         IndexUrl.Diagnostic(DiagnosticUrl.parse segments)
       | _ -> IndexUrl.NotFound
 
    let current () = Router.currentUrl () |> parse

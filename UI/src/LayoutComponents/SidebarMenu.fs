@@ -19,6 +19,7 @@ type private MenuUrl =
    | Employee
    | Card
    | Payment
+   | Diagnostic
 
 type private MenuItem = {
    Url: MenuUrl
@@ -40,6 +41,7 @@ let private renderListItem (item: MenuItem) =
       | Employee, Routes.IndexUrl.Employees _ -> attr.classes [ "selected" ]
       | Card, Routes.IndexUrl.Cards _ -> attr.classes [ "selected" ]
       | Payment, Routes.IndexUrl.Payments _ -> attr.classes [ "selected" ]
+      | Diagnostic, Routes.IndexUrl.Diagnostic _ -> attr.classes [ "selected" ]
       | _ -> ()
 
       attr.children [
@@ -176,6 +178,14 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                SelectedUrl = currentUrl
                Name = "Cards"
                Href = Routes.CardUrl.BasePath
+               CallToActionIndicator = None
+            }
+
+            renderListItem {
+               Url = Diagnostic
+               SelectedUrl = currentUrl
+               Name = "Diagnostic"
+               Href = Routes.DiagnosticUrl.BasePath
                CallToActionIndicator = None
             }
          ]

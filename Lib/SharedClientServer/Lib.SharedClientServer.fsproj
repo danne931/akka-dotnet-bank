@@ -12,6 +12,7 @@
     <Compile Include="CircuitBreaker.fs" />
     <Compile Include="Serialization.fs" />
     <Compile Include="NetworkQuery.fs" />
+    <Compile Include="SagaDTO.fs" />
   </ItemGroup>
 
   <ItemGroup>
