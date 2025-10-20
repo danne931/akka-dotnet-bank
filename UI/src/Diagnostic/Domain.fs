@@ -45,6 +45,8 @@ module SagaBrowserQuery =
       }
 
    let toNetworkQuery (browserQuery: SagaBrowserQuery) : SagaQuery = {
+      PageLimit = 50
+      Cursor = None
       DateRange =
          browserQuery.Date |> Option.map UIDomain.DateFilter.toDateRange
       Status = browserQuery.Status

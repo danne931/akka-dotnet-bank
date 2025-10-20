@@ -3,6 +3,7 @@ module SagaDTO
 open System
 
 open Lib.NetworkQuery
+open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
 type SagaDTOStatus =
@@ -81,9 +82,18 @@ type SagaActivityDTO = {
 type SagaDTO = {
    Name: string
    LifeCycle: SagaActivityDTO list
+   CreatedAt: DateTime
+   Id: CorrelationId
+}
+
+type SagaCursor = {
+   CreatedAt: DateTime
+   SagaId: CorrelationId
 }
 
 type SagaQuery = {
+   PageLimit: int
+   Cursor: SagaCursor option
    DateRange: (DateTime * DateTime) option
-   Status: (SagaDTOStatus list) option
+   Status: SagaDTOStatus list option
 }

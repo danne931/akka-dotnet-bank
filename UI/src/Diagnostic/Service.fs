@@ -61,11 +61,19 @@ let listenForCircuitBreakerEvent
 let getSagaHistory
    (orgId: OrgId)
    (query: SagaQuery)
-   : Async<Result<SagaDTO list, Err>>
+   : Async<Result<SagaDTO list option, Err>>
    =
    async {
       let queryParams =
          [
+            "pageLimit", string query.PageLimit
+
+            match query.Cursor with
+            | Some cursor ->
+               "cursorSagaId", string cursor.SagaId
+               "cursorCreatedAt", DateTime.toISOString cursor.CreatedAt
+            | None -> ()
+
             match query.Status with
             | None -> ()
             | Some filters -> "status", listToQueryString filters
@@ -81,9 +89,11 @@ let getSagaHistory
       let! (code, responseText) = Http.get path
 
       if code = 404 then
-         return Ok []
+         return Ok None
       elif code <> 200 then
          return Error(Err.InvalidStatusCodeError("Diagnostic Service", code))
       else
-         return Serialization.deserialize<SagaDTO list> responseText
+         return
+            Serialization.deserialize<SagaDTO list> responseText
+            |> Result.map Some
    }

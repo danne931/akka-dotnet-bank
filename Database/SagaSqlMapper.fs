@@ -90,38 +90,53 @@ module Reader =
             | SagaActivityDTOStatus.Completed -> a.End
             | _ -> Some a.Start)
 
+      let dto = {
+         Name = ""
+         LifeCycle = []
+         CreatedAt = createdAt read
+         Id = id read
+      }
+
       match saga with
       | Saga.Purchase saga -> {
-         Name = "Purchase"
-         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+         dto with
+            Name = "Purchase"
+            LifeCycle = sagaActivitiesToDTO saga.LifeCycle
         }
       | Saga.DomesticTransfer saga -> {
-         Name = "Domestic Transfer"
-         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+         dto with
+            Name = "Domestic Transfer"
+            LifeCycle = sagaActivitiesToDTO saga.LifeCycle
         }
       | Saga.PlatformTransfer saga -> {
-         Name = "Platform Transfer"
-         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+         dto with
+            Name = "Platform Transfer"
+            LifeCycle = sagaActivitiesToDTO saga.LifeCycle
         }
       | Saga.PaymentRequest saga -> {
-         Name = "Payment Request"
-         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+         dto with
+            Name = "Payment Request"
+            LifeCycle = sagaActivitiesToDTO saga.LifeCycle
         }
       | Saga.Billing saga -> {
-         Name = "Billing"
-         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+         dto with
+            Name = "Billing"
+            LifeCycle = sagaActivitiesToDTO saga.LifeCycle
         }
       | Saga.CardSetup saga -> {
-         Name = "Card Setup"
-         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+         dto with
+            Name = "Card Setup"
+            LifeCycle = sagaActivitiesToDTO saga.LifeCycle
         }
       | Saga.EmployeeOnboarding saga -> {
-         Name = "Employee Onboarding"
-         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+         dto with
+            Name = "Employee Onboarding"
+            LifeCycle = sagaActivitiesToDTO saga.LifeCycle
         }
       | Saga.OrgOnboarding saga -> {
-         Name = "Organization Onboarding"
-         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+         dto with
+            Name = "Organization Onboarding"
+            LifeCycle = sagaActivitiesToDTO saga.LifeCycle
         }
 
 module Writer =

@@ -18,6 +18,7 @@ open Lib.CircuitBreaker
 open BankActorRegistry
 open SagaDTO
 open Lib.NetworkQuery
+open Lib.Time
 
 let start (app: WebApplication) =
    app
@@ -104,11 +105,38 @@ let start (app: WebApplication) =
    app
       .MapGet(
          DiagnosticPath.Sagas,
-         Func<Guid, string, string, Task<IResult>>
-            (fun orgId ([<FromQuery>] date) ([<FromQuery>] status) ->
+         Func<
+            Guid,
+            string,
+            string,
+            Nullable<int>,
+            Nullable<Guid>,
+            string,
+            Task<IResult>
+          >
+            (fun
+                 orgId
+                 ([<FromQuery>] date)
+                 ([<FromQuery>] status)
+                 ([<FromQuery>] pageLimit)
+                 ([<FromQuery>] cursorSagaId)
+                 ([<FromQuery>] cursorCreatedAt) ->
                let query = {
                   DateRange = dateRangeFromQueryString date
                   Status = SagaDTOStatus.fromQueryString status
+                  PageLimit =
+                     if pageLimit.HasValue then pageLimit.Value else 50
+                  Cursor =
+                     match
+                        cursorSagaId.HasValue,
+                        DateTime.parseOptional cursorCreatedAt
+                     with
+                     | true, Some ts ->
+                        Some {
+                           CreatedAt = ts
+                           SagaId = CorrelationId cursorSagaId.Value
+                        }
+                     | _ -> None
                }
 
                SagaApi.getAllSagas (OrgId orgId) query

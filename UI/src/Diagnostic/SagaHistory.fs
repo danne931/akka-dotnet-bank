@@ -4,14 +4,15 @@ open Feliz
 open Feliz.UseElmish
 open Feliz.Router
 open Elmish
+open System
 
 open Lib.SharedTypes
-open DiagnosticsService
 open SagaDTO
 open Bank.Employee.Domain
 open UIDomain
 open UIDomain.Diagnostic
 open TableControlPanel
+open Pagination
 
 [<RequireQualifiedAccess>]
 type SagaFilterView =
@@ -24,48 +25,53 @@ type SagaFilter =
    | Status of SagaDTOStatus list option
 
 type Msg =
-   | Load of AsyncOperationStatus<Result<SagaDTO list, Err>>
    | UpdateFilter of SagaFilter
+   | PaginationMsg of Pagination.Msg<SagaDTO>
 
 type State = {
    Query: SagaQuery
-   Sagas: Deferred<Result<SagaDTO list, Err>>
+   Pagination: Pagination.State<SagaCursor, SagaDTO>
 }
 
 let init (browserQuery: SagaBrowserQuery) () =
+   let paginationState, cmd = Pagination.init<SagaCursor, SagaDTO> ()
+
    {
-      Sagas = Deferred.Idle
       Query = SagaBrowserQuery.toNetworkQuery browserQuery
+      Pagination = paginationState
    },
-   Cmd.ofMsg <| Load Started
+   Cmd.map PaginationMsg cmd
+
+let handlePaginationMsg orgId (state: State) (msg: Pagination.Msg<SagaDTO>) =
+   let config = {
+      PageLimit = state.Query.PageLimit
+      loadPage =
+         fun cursor -> async {
+            let query = { state.Query with Cursor = cursor }
+            return! DiagnosticsService.getSagaHistory orgId query
+         }
+      getCursor =
+         fun saga -> {
+            CreatedAt = saga.CreatedAt
+            SagaId = saga.Id
+         }
+      onLoadError =
+         fun page err ->
+            Log.error $"Error loading history for page {page}: {err}"
+   }
+
+   let paginationState, paginationCmd =
+      Pagination.update config msg state.Pagination
+
+   {
+      state with
+         Pagination = paginationState
+   },
+   Cmd.map PaginationMsg paginationCmd
 
 let update (session: UserSession) msg (state: State) =
    match msg with
-   | Load Started ->
-      let loadInitStatus = async {
-         let! res = getSagaHistory session.OrgId state.Query
-         return Load(Finished res)
-      }
-
-      {
-         state with
-            Sagas = Deferred.InProgress
-      },
-      Cmd.fromAsync loadInitStatus
-   | Load(Finished(Ok sagas)) ->
-      {
-         state with
-            Sagas = Deferred.Resolved(Ok sagas)
-      },
-      Cmd.none
-   | Load(Finished(Error err)) ->
-      Log.error $"Error loading saga history {err}"
-
-      {
-         state with
-            Sagas = Deferred.Resolved(Error err)
-      },
-      Alerts.toastCommand err
+   | PaginationMsg msg -> handlePaginationMsg session.OrgId state msg
    | UpdateFilter filter ->
       let browserQuery = Routes.IndexUrl.diagnosticBrowserQuery ()
 
@@ -108,6 +114,9 @@ let renderSaga (saga: SagaDTO) =
             ]
       ]
    ]
+
+let renderPagination state dispatch =
+   Pagination.render state.Pagination (PaginationMsg >> dispatch)
 
 let renderTableControlPanel
    (state: State)
@@ -162,7 +171,7 @@ let renderTableControlPanel
                      SagaDTOStatus.listToDisplay selected)
          }
       ]
-      SubsequentChildren = None
+      SubsequentChildren = Some [ renderPagination state dispatch ]
    |}
 
 [<ReactComponent>]
@@ -192,6 +201,8 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
    )
    *)
 
+   let sagas = Map.tryFind state.Pagination.Page state.Pagination.Items
+
    Html.div [
       Html.h6 [
          attr.text "Saga History"
@@ -199,23 +210,26 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
       ]
 
       Html.progress [
-         match state.Sagas with
-         | Deferred.Resolved _ -> attr.value 100
+         match sagas with
+         | Some(Deferred.Resolved _) -> attr.value 100
          | _ -> ()
       ]
 
       renderTableControlPanel state dispatch session browserQuery
 
       classyNode Html.div [ "saga-history-container" ] [
-         match state.Sagas with
-         | Deferred.Resolved(Ok sagas) ->
-            classyNode Html.div [ "grid"; "saga-history" ] [
-               if sagas.IsEmpty then
-                  Html.small "No saga history."
-               else
+         match sagas with
+         | Some(Deferred.Resolved(Ok sagaHistoryOpt)) ->
+            match sagaHistoryOpt with
+            | None
+            | Some [] -> Html.small "No saga history."
+            | Some sagas ->
+               classyNode Html.div [ "grid"; "saga-history" ] [
                   for saga in sagas do
                      renderSaga saga
-            ]
+               ]
+
+               renderPagination state dispatch
          | _ -> ()
       ]
    ]
