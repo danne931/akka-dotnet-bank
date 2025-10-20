@@ -1,8 +1,11 @@
 module DiagnosticsService
 
 open Fable.SimpleHttp
+open Feliz.Router
+
 open Lib.SharedTypes
 open Lib.CircuitBreaker
+open Lib.NetworkQuery
 open RoutePaths
 open SagaDTO
 
@@ -55,11 +58,32 @@ let listenForCircuitBreakerEvent
          | Ok msg -> onCircuitBreakerEvent msg
    )
 
-let getSagaHistory () : Async<Result<SagaDTO list, Err>> = async {
-   let! (code, responseText) = Http.get DiagnosticPath.Sagas
+let getSagaHistory
+   (orgId: OrgId)
+   (query: SagaQuery)
+   : Async<Result<SagaDTO list, Err>>
+   =
+   async {
+      let queryParams =
+         [
+            match query.Status with
+            | None -> ()
+            | Some filters -> "status", listToQueryString filters
 
-   if code <> 200 then
-      return Error(Err.InvalidStatusCodeError("Diagnostic Service", code))
-   else
-      return responseText |> Serialization.deserialize<SagaDTO list>
-}
+            match query.DateRange with
+            | None -> ()
+            | Some(startDate, endDate) ->
+               "date", DateTime.rangeAsQueryString startDate endDate
+         ]
+         |> Router.encodeQueryString
+
+      let path = DiagnosticPath.sagas orgId + queryParams
+      let! (code, responseText) = Http.get path
+
+      if code = 404 then
+         return Ok []
+      elif code <> 200 then
+         return Error(Err.InvalidStatusCodeError("Diagnostic Service", code))
+      else
+         return Serialization.deserialize<SagaDTO list> responseText
+   }

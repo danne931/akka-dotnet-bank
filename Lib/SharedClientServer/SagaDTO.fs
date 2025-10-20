@@ -2,6 +2,66 @@ module SagaDTO
 
 open System
 
+open Lib.NetworkQuery
+
+[<RequireQualifiedAccess>]
+type SagaDTOStatus =
+   | Scheduled
+   | InProgress
+   | Completed
+   | Compensating
+   | Failed
+   | Aborted
+   | Exhausted
+   | CompensationExhausted
+
+   member x.Display =
+      match x with
+      | Scheduled -> "Scheduled"
+      | InProgress -> "In Progress"
+      | Completed -> "Completed"
+      | Compensating -> "Compensating"
+      | Failed -> "Failed"
+      | Aborted -> "Aborted"
+      | Exhausted -> "Exhausted"
+      | CompensationExhausted -> "Compensation Exhausted"
+
+   static member All = [
+      Scheduled
+      InProgress
+      Completed
+      Compensating
+      Failed
+      Aborted
+      Exhausted
+      CompensationExhausted
+   ]
+
+   static member fromString =
+      function
+      | "Scheduled" -> Some Scheduled
+      | "InProgress" -> Some InProgress
+      | "Completed" -> Some Completed
+      | "Compensating" -> Some Compensating
+      | "Failed" -> Some Failed
+      | "Aborted" -> Some Aborted
+      | "Exhausted" -> Some Exhausted
+      | "CompensationExhausted" -> Some CompensationExhausted
+      | _ -> None
+
+   static member fromQueryString: string -> SagaDTOStatus list option =
+      listFromQueryString SagaDTOStatus.fromString
+
+   static member listToDisplay(items: SagaDTOStatus list) =
+      List.fold
+         (fun acc (filter: SagaDTOStatus) ->
+            if acc = "" then
+               filter.Display
+            else
+               $"{acc}, {filter.Display}")
+         ""
+         items
+
 [<RequireQualifiedAccess>]
 type SagaActivityDTOStatus =
    | InProgress
@@ -21,4 +81,9 @@ type SagaActivityDTO = {
 type SagaDTO = {
    Name: string
    LifeCycle: SagaActivityDTO list
+}
+
+type SagaQuery = {
+   DateRange: (DateTime * DateTime) option
+   Status: (SagaDTOStatus list) option
 }

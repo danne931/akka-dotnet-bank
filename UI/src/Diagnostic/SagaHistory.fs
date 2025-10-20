@@ -2,27 +2,48 @@ module SagaHistory
 
 open Feliz
 open Feliz.UseElmish
+open Feliz.Router
 open Elmish
 
 open Lib.SharedTypes
 open DiagnosticsService
 open SagaDTO
 open Bank.Employee.Domain
+open UIDomain
+open UIDomain.Diagnostic
+open TableControlPanel
 
-type Msg = Load of AsyncOperationStatus<Result<SagaDTO list, Err>>
+[<RequireQualifiedAccess>]
+type SagaFilterView =
+   | Date
+   | Status
+
+[<RequireQualifiedAccess>]
+type SagaFilter =
+   | Date of DateFilter option
+   | Status of SagaDTOStatus list option
+
+type Msg =
+   | Load of AsyncOperationStatus<Result<SagaDTO list, Err>>
+   | UpdateFilter of SagaFilter
 
 type State = {
+   Query: SagaQuery
    Sagas: Deferred<Result<SagaDTO list, Err>>
 }
 
-let init () =
-   { Sagas = Deferred.Idle }, Cmd.ofMsg <| Load Started
+let init (browserQuery: SagaBrowserQuery) () =
+   {
+      Sagas = Deferred.Idle
+      Query = SagaBrowserQuery.toNetworkQuery browserQuery
+   },
+   Cmd.ofMsg <| Load Started
 
-let update msg (state: State) =
+let update (session: UserSession) msg (state: State) =
    match msg with
    | Load Started ->
       let loadInitStatus = async {
-         let! res = getSagaHistory ()
+         let! res = getSagaHistory session.OrgId state.Query
          return Load(Finished res)
       }
 
@@ -45,6 +66,20 @@ let update msg (state: State) =
             Sagas = Deferred.Resolved(Error err)
       },
       Alerts.toastCommand err
+   | UpdateFilter filter ->
+      let browserQuery = Routes.IndexUrl.diagnosticBrowserQuery ()
+
+      let browserQuery =
+         match filter with
+         | SagaFilter.Date filter -> { browserQuery with Date = filter }
+         | SagaFilter.Status filter -> { browserQuery with Status = filter }
+
+      let browserQueryParams =
+         browserQuery
+         |> SagaBrowserQuery.toQueryParams
+         |> Router.encodeQueryString
+
+      state, Cmd.navigate (Routes.DiagnosticUrl.BasePath, browserQueryParams)
 
 let renderSaga (saga: SagaDTO) =
    classyNode Html.div [ "saga-history-item" ] [
@@ -74,9 +109,72 @@ let renderSaga (saga: SagaDTO) =
       ]
    ]
 
+let renderTableControlPanel
+   (state: State)
+   dispatch
+   (session: UserSession)
+   (browserQuery: SagaBrowserQuery)
+   =
+   TableControlPanelComponent {|
+      FilterViewOptions = [
+         SagaFilterView.Date, "Created At"
+         SagaFilterView.Status, "Status"
+      ]
+      RenderFilterViewOnSelect =
+         fun view ->
+            match view with
+            | SagaFilterView.Date ->
+               DateFilter.DateFilterComponent
+                  browserQuery.Date
+                  (SagaFilter.Date >> Msg.UpdateFilter >> dispatch)
+            | SagaFilterView.Status ->
+               let selectableFilters = SagaDTOStatus.All
+
+               CheckboxFieldset.render {|
+                  Options =
+                     selectableFilters
+                     |> List.map (fun o -> { Id = o; Display = o.Display })
+                  SelectedItems = browserQuery.Status
+                  OnChange =
+                     fun filters ->
+                        SagaFilter.Status filters
+                        |> Msg.UpdateFilter
+                        |> dispatch
+               |}
+      FilterPills = [
+         {
+            View = SagaFilterView.Date
+            OnDelete =
+               fun () -> SagaFilter.Date None |> Msg.UpdateFilter |> dispatch
+            Content =
+               state.Query.DateRange |> Option.map DateFilter.dateRangeDisplay
+         }
+         {
+            View = SagaFilterView.Status
+            OnDelete =
+               fun () -> SagaFilter.Status None |> Msg.UpdateFilter |> dispatch
+            Content =
+               state.Query.Status
+               |> Option.map (fun selected ->
+                  if selected.Length > 3 then
+                     $"{selected.Length} Statuses Selected"
+                  else
+                     SagaDTOStatus.listToDisplay selected)
+         }
+      ]
+      SubsequentChildren = None
+   |}
+
 [<ReactComponent>]
 let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
-   let state, dispatch = React.useElmish (init, update, [||])
+   let browserQuery = Routes.IndexUrl.diagnosticBrowserQuery ()
+
+   let state, dispatch =
+      React.useElmish (
+         init browserQuery,
+         update session,
+         [| box browserQuery |]
+      )
 
    let signalRConnection = React.useContext SignalRConnectionProvider.context
 
@@ -100,15 +198,24 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
          attr.style [ style.marginBottom (10) ]
       ]
 
+      Html.progress [
+         match state.Sagas with
+         | Deferred.Resolved _ -> attr.value 100
+         | _ -> ()
+      ]
+
+      renderTableControlPanel state dispatch session browserQuery
+
       classyNode Html.div [ "saga-history-container" ] [
          match state.Sagas with
          | Deferred.Resolved(Ok sagas) ->
-            Html.progress [ attr.value 100 ]
-
             classyNode Html.div [ "grid"; "saga-history" ] [
-               for saga in sagas do
-                  renderSaga saga
+               if sagas.IsEmpty then
+                  Html.small "No saga history."
+               else
+                  for saga in sagas do
+                     renderSaga saga
             ]
-         | _ -> Html.progress []
+         | _ -> ()
       ]
    ]

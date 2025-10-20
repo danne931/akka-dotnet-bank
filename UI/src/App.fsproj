@@ -10,6 +10,7 @@
     <Compile Include="Lib/FelizExtensions.fs" />
     <Compile Include="Lib/Util.fs" />
     <Compile Include="Lib/Domain.fs" />
+    <Compile Include="Diagnostic/Domain.fs" />
     <Compile Include="Employees/Domain.fs" />
     <Compile Include="Accounts/Domain.fs" />
     <Compile Include="Orgs/Domain.fs" />

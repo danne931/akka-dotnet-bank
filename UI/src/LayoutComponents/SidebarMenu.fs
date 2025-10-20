@@ -9,6 +9,8 @@ open Bank.Employee.Domain
 open Lib.SharedTypes
 open UIDomain.History
 open UIDomain.Account
+open UIDomain.Diagnostic
+open SagaDTO
 
 type private MenuUrl =
    | Analytics
@@ -185,7 +187,21 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                Url = Diagnostic
                SelectedUrl = currentUrl
                Name = "Diagnostic"
-               Href = Routes.DiagnosticUrl.BasePath
+               Href =
+                  let query =
+                     {
+                        Status =
+                           SagaDTOStatus.All
+                           |> List.filter (function
+                              | SagaDTOStatus.Completed -> false
+                              | _ -> true)
+                           |> Some
+                        Date = Some UIDomain.DateFilter.Last7Days
+                     }
+                     |> SagaBrowserQuery.toQueryParams
+                     |> Router.encodeQueryString
+
+                  Router.formatPath [| Routes.DiagnosticUrl.BasePath; query |]
                CallToActionIndicator = None
             }
          ]

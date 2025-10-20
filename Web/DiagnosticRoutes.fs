@@ -16,6 +16,8 @@ open RoutePaths
 open Bank.UserSession.Middleware
 open Lib.CircuitBreaker
 open BankActorRegistry
+open SagaDTO
+open Lib.NetworkQuery
 
 let start (app: WebApplication) =
    app
@@ -102,8 +104,15 @@ let start (app: WebApplication) =
    app
       .MapGet(
          DiagnosticPath.Sagas,
-         Func<Task<IResult>>(fun () ->
-            SagaApi.getAllSagas () |> RouteUtil.unwrapTaskResultOption)
+         Func<Guid, string, string, Task<IResult>>
+            (fun orgId ([<FromQuery>] date) ([<FromQuery>] status) ->
+               let query = {
+                  DateRange = dateRangeFromQueryString date
+                  Status = SagaDTOStatus.fromQueryString status
+               }
+
+               SagaApi.getAllSagas (OrgId orgId) query
+               |> RouteUtil.unwrapTaskResultOption)
       )
       .RBAC(Permissions.Diagnostic)
    |> ignore

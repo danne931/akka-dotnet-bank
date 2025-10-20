@@ -61,7 +61,8 @@ module DiagnosticPath =
    let LoadTestProgress = LoadTest + "/progress"
    let LoadTestTeardown = LoadTest + "/teardown"
    let CircuitBreaker = Base + "/circuit-breaker"
-   let Sagas = Base + "/saga"
+   let Sagas = Base + "/saga/{orgId}"
+   let sagas (orgId: OrgId) = $"{Base}/saga/{orgId}"
 
 module TransferPath =
    let Base = $"{API}/transfers"

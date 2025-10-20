@@ -8,6 +8,7 @@ open UIDomain.History
 open UIDomain.Account
 open UIDomain.Employee
 open UIDomain.Card
+open UIDomain.Diagnostic
 open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
@@ -223,6 +224,7 @@ module PaymentUrl =
 [<RequireQualifiedAccess>]
 type DiagnosticUrl =
    | Diagnostic
+   | WithSearchQuery of SagaBrowserQuery
    | NotFound
 
 module DiagnosticUrl =
@@ -232,6 +234,9 @@ module DiagnosticUrl =
    let parse =
       function
       | [] -> DiagnosticUrl.Diagnostic
+      | [ Route.Query queryParams ] ->
+         let query = SagaBrowserQuery.fromQueryParams queryParams
+         DiagnosticUrl.WithSearchQuery query
       | _ -> DiagnosticUrl.NotFound
 
 [<RequireQualifiedAccess>]
@@ -312,3 +317,11 @@ module IndexUrl =
          | CardUrl.CardsWithSearchQuery query -> query
          | _ -> CardBrowserQuery.empty
       | _ -> CardBrowserQuery.empty
+
+   let diagnosticBrowserQuery () =
+      match current () with
+      | IndexUrl.Diagnostic url ->
+         match url with
+         | DiagnosticUrl.WithSearchQuery query -> query
+         | _ -> SagaBrowserQuery.empty
+      | _ -> SagaBrowserQuery.empty

@@ -1,5 +1,7 @@
 module AppSagaSqlMapper
 
+open System
+
 open Lib.SharedTypes
 open Lib.Saga
 open PurchaseSaga
@@ -11,6 +13,8 @@ open EmployeeOnboardingSaga
 open CardSetupSaga
 open BillingSaga
 open Bank.Transfer.Domain
+open AppSaga
+open SagaDTO
 
 let table = "saga"
 
@@ -35,11 +39,6 @@ module Reader =
 
    let orgId (read: RowReader) = Fields.orgId |> read.uuid |> OrgId
 
-   let sagaState (read: RowReader) =
-      Fields.sagaState
-      |> read.text
-      |> Serialization.deserializeUnsafe<AppSaga.Saga>
-
    let activityInProgressCount (read: RowReader) =
       read.int Fields.activityInProgressCount
 
@@ -51,6 +50,79 @@ module Reader =
 
    let createdAt (read: RowReader) = read.dateTime Fields.createdAt
    let updatedAt (read: RowReader) = read.dateTime Fields.updatedAt
+
+   let sagaState (read: RowReader) =
+      Fields.sagaState
+      |> read.text
+      |> Serialization.deserializeUnsafe<AppSaga.Saga>
+
+   let sagaDTO (read: RowReader) : SagaDTO =
+      let saga = sagaState read
+
+      let activityToDTO status (a: ActivityLifeCycle<'Activity>) = {
+         Start = a.Start
+         End = a.End
+         Name = string a.Activity |> _.Split(" ") |> _.Head()
+         Attempts = a.Attempts
+         MaxAttempts = a.MaxAttempts
+         Status = status
+      }
+
+      let sagaActivitiesToDTO (life: SagaLifeCycle<'Activity>) =
+         let inProgress =
+            life.InProgress
+            |> List.map (activityToDTO SagaActivityDTOStatus.InProgress)
+
+         let completed =
+            life.Completed
+            |> List.map (activityToDTO SagaActivityDTOStatus.Completed)
+
+         let failed =
+            life.Failed |> List.map (activityToDTO SagaActivityDTOStatus.Failed)
+
+         let aborted =
+            life.Aborted
+            |> List.map (activityToDTO SagaActivityDTOStatus.Aborted)
+
+         inProgress @ failed @ aborted @ completed
+         |> List.sortBy (fun a ->
+            match a.Status with
+            | SagaActivityDTOStatus.Completed -> a.End
+            | _ -> Some a.Start)
+
+      match saga with
+      | Saga.Purchase saga -> {
+         Name = "Purchase"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.DomesticTransfer saga -> {
+         Name = "Domestic Transfer"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.PlatformTransfer saga -> {
+         Name = "Platform Transfer"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.PaymentRequest saga -> {
+         Name = "Payment Request"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.Billing saga -> {
+         Name = "Billing"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.CardSetup saga -> {
+         Name = "Card Setup"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.EmployeeOnboarding saga -> {
+         Name = "Employee Onboarding"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
+      | Saga.OrgOnboarding saga -> {
+         Name = "Organization Onboarding"
+         LifeCycle = sagaActivitiesToDTO saga.LifeCycle
+        }
 
 module Writer =
    let id (CorrelationId id) = Sql.uuid id
@@ -69,6 +141,17 @@ module Writer =
          | AppSaga.Saga.Billing _ -> "BillingStatement"
 
       Sql.string name
+
+   let fromSagaDTOStatus (sagaDTOStatus: SagaDTOStatus) =
+      match sagaDTOStatus with
+      | SagaDTOStatus.Scheduled -> "Scheduled"
+      | SagaDTOStatus.InProgress -> "InProgress"
+      | SagaDTOStatus.Completed -> "Completed"
+      | SagaDTOStatus.Compensating -> "Compensating"
+      | SagaDTOStatus.Failed -> "Failed"
+      | SagaDTOStatus.Aborted -> "Aborted"
+      | SagaDTOStatus.Exhausted -> "Exhausted"
+      | SagaDTOStatus.CompensationExhausted -> "CompensationExhausted"
 
    let status (saga: AppSaga.Saga) =
       let inProgressOrExhausted =
@@ -149,3 +232,5 @@ module Writer =
 
    let sagaState (saga: AppSaga.Saga) =
       saga |> Serialization.serialize |> Sql.jsonb
+
+   let timestamp (date: DateTime) = Sql.timestamptz date
