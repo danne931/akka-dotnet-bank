@@ -51,6 +51,9 @@ module Reader =
    let createdAt (read: RowReader) = read.dateTime Fields.createdAt
    let updatedAt (read: RowReader) = read.dateTime Fields.updatedAt
 
+   let status (read: RowReader) =
+      read.string Fields.status |> SagaDTOStatus.fromString |> _.Value
+
    let sagaState (read: RowReader) =
       Fields.sagaState
       |> read.text
@@ -95,6 +98,7 @@ module Reader =
          LifeCycle = []
          CreatedAt = createdAt read
          Id = id read
+         Status = status read
       }
 
       match saga with

@@ -84,6 +84,7 @@ type SagaDTO = {
    LifeCycle: SagaActivityDTO list
    CreatedAt: DateTime
    Id: CorrelationId
+   Status: SagaDTOStatus
 }
 
 type SagaCursor = {

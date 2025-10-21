@@ -42,6 +42,10 @@ module DateTime =
       let dayAndMonth = date.ToLongDateString().Split(string date.Year)[0]
       $"{dayAndMonth} {date.ToShortTimeString()}"
 
+   let dateUIFriendlyShort (date: DateTime) =
+      let date = date.ToLocalTime()
+      $"{dateMonthAbbreviated date} {date.Day} {date.ToShortTimeString()}"
+
    let dateUIFriendlyTimeOnly (date: DateTime) =
       let time = date.ToString("h:mm:ss.fff")
       let isMorning = if date.Hour < 12 then "AM" else "PM"

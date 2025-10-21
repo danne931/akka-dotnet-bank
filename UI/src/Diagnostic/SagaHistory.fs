@@ -4,9 +4,7 @@ open Feliz
 open Feliz.UseElmish
 open Feliz.Router
 open Elmish
-open System
 
-open Lib.SharedTypes
 open SagaDTO
 open Bank.Employee.Domain
 open UIDomain
@@ -89,29 +87,40 @@ let update (session: UserSession) msg (state: State) =
 
 let renderSaga (saga: SagaDTO) =
    classyNode Html.div [ "saga-history-item" ] [
-      Html.small saga.Name
+      Html.div [
+         Html.p [ attr.style [ style.marginBottom 0 ]; attr.text saga.Name ]
 
-      classyNode Html.div [ "saga-activities"; "grid" ] [
-         for activity in saga.LifeCycle do
-            let date =
-               match activity.End with
-               | Some finishedAt -> finishedAt
-               | None -> activity.Start
-               |> DateTime.dateUIFriendlyWithSecondsShort
+         Html.div [ Html.small saga.Status.Display ]
 
-            Html.div [
-               attr.style [
-                  style.backgroundColor (
-                     match activity.Status with
-                     | SagaActivityDTOStatus.InProgress -> Style.color.primary
-                     | SagaActivityDTOStatus.Completed -> Style.color.moneyIn
-                     | SagaActivityDTOStatus.Failed -> Style.color.alert
-                     | SagaActivityDTOStatus.Aborted -> Style.color.secondary
-                  )
+         Html.hr []
+
+         classyNode Html.div [ "saga-activities"; "grid" ] [
+            for activity in saga.LifeCycle do
+               let date =
+                  match activity.End with
+                  | Some finishedAt -> finishedAt
+                  | None -> activity.Start
+                  |> DateTime.dateUIFriendlyWithSecondsShort
+
+               Html.div [
+                  attr.style [
+                     style.backgroundColor (
+                        match activity.Status with
+                        | SagaActivityDTOStatus.InProgress ->
+                           Style.color.primary
+                        | SagaActivityDTOStatus.Completed -> Style.color.moneyIn
+                        | SagaActivityDTOStatus.Failed -> Style.color.alert
+                        | SagaActivityDTOStatus.Aborted -> Style.color.secondary
+                     )
+                  ]
+                  attr.custom ("data-tooltip", $"{activity.Name} {date}")
+                  attr.custom ("data-placement", "right")
                ]
-               attr.custom ("data-tooltip", $"{activity.Name} {date}")
-               attr.custom ("data-placement", "right")
-            ]
+         ]
+      ]
+
+      Html.div [
+         Html.small $"Created {DateTime.dateUIFriendlyShort saga.CreatedAt}"
       ]
    ]
 
