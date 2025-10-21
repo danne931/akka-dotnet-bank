@@ -249,12 +249,6 @@ let CardDashboardComponent (url: Routes.CardUrl) (session: UserSession) =
             Html.section [
                Html.h4 "Cards"
 
-               Html.progress [
-                  attr.custom ("data-transactions-loader", "")
-                  if Deferred.resolved state.Cards then
-                     attr.value 100
-               ]
-
                TableControlPanelComponent {|
                   FilterViewOptions = [
                      CardFilterView.Employees, "Employees"
@@ -374,6 +368,12 @@ let CardDashboardComponent (url: Routes.CardUrl) (session: UserSession) =
                      ]
                   SubsequentChildren = None
                |}
+
+               Html.progress [
+                  attr.custom ("data-transactions-loader", "")
+                  if Deferred.resolved state.Cards then
+                     attr.value 100
+               ]
 
                match state.Cards, orgCtx with
                | Resolved(Error _), _ ->

@@ -209,17 +209,13 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
          attr.style [ style.marginBottom (10) ]
       ]
 
-      Html.progress [
-         match sagas with
-         | Some(Deferred.Resolved _) -> attr.value 100
-         | _ -> ()
-      ]
-
-      renderTableControlPanel state dispatch session browserQuery
-
       classyNode Html.div [ "saga-history-container" ] [
+         renderTableControlPanel state dispatch session browserQuery
+
          match sagas with
          | Some(Deferred.Resolved(Ok sagaHistoryOpt)) ->
+            Html.progress [ attr.value 100 ]
+
             match sagaHistoryOpt with
             | None
             | Some [] -> Html.small "No saga history."
@@ -230,6 +226,6 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
                ]
 
                renderPagination state dispatch
-         | _ -> ()
+         | _ -> Html.progress []
       ]
    ]

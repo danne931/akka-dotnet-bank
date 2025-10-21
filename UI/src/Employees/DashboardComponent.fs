@@ -274,12 +274,6 @@ let EmployeeDashboardComponent
             Html.section [
                Html.h4 [ attr.text "Employees" ]
 
-               Html.progress [
-                  attr.custom ("data-transactions-loader", "")
-                  if Deferred.resolved employees then
-                     attr.value 100
-               ]
-
                TableControlPanelComponent {|
                   FilterViewOptions = [
                      EmployeeFilterView.Employees, "Employees"
@@ -361,6 +355,12 @@ let EmployeeDashboardComponent
                         ]
                      ]
                |}
+
+               Html.progress [
+                  attr.custom ("data-transactions-loader", "")
+                  if Deferred.resolved employees then
+                     attr.value 100
+               ]
 
                match orgCtx, employees with
                | _, Resolved(Error _) ->

@@ -508,13 +508,13 @@ let HistoryDashboardComponent (url: Routes.HistoryUrl) (session: UserSession) =
          Html.section [
             Html.h4 "History"
 
+            renderTableControlPanel state dispatch session browserQuery
+
             Html.progress [
                match history with
                | Some(Deferred.Resolved _) -> attr.value 100
                | _ -> ()
             ]
-
-            renderTableControlPanel state dispatch session browserQuery
 
             Html.div [
                classyNode Html.div [ "history-table" ] [

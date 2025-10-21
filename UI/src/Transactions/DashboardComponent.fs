@@ -701,13 +701,13 @@ let TransactionDashboardComponent
             Html.section [
                Html.h4 "Transactions"
 
+               renderControlPanel state dispatch orgCtx categories session
+
                Html.progress [
                   match txns with
                   | Some(Deferred.Resolved _) -> attr.value 100
                   | _ -> ()
                ]
-
-               renderControlPanel state dispatch orgCtx categories session
 
                match orgCtx with
                | Deferred.Resolved(Ok(Some org)) ->
