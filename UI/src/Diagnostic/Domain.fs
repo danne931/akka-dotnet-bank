@@ -2,11 +2,18 @@ module UIDomain.Diagnostic
 
 open SagaDTO
 open Lib.NetworkQuery
+open Lib.SharedTypes
 
 type SagaBrowserQuery = {
    Date: UIDomain.DateFilter option
    Status: (SagaDTOStatus list) option
-}
+   SagaId: CorrelationId option
+} with
+
+   /// Avoid triggering rehydration of saga data when saga expanded view opens
+   /// by omitting SagaId from change detection.
+   member x.ChangeDetection =
+      Serialization.serialize {| Date = x.Date; Status = x.Status |}
 
 module SagaBrowserQuery =
    let toQueryParams (query: SagaBrowserQuery) : (string * string) list =
@@ -27,6 +34,11 @@ module SagaBrowserQuery =
             ("date", DateTime.rangeAsQueryString startDate endDate) :: agg
          | Some filter -> ("date", string filter) :: agg
 
+      let agg =
+         match query.SagaId with
+         | None -> agg
+         | Some sagaId -> ("sagaId", string sagaId) :: agg
+
       agg
 
    let fromQueryParams
@@ -42,6 +54,10 @@ module SagaBrowserQuery =
          Status =
             Map.tryFind "status" queryParams
             |> Option.bind SagaDTOStatus.fromQueryString
+         SagaId =
+            Map.tryFind "sagaId" queryParams
+            |> Option.bind Guid.parseOptional
+            |> Option.map CorrelationId
       }
 
    let toNetworkQuery (browserQuery: SagaBrowserQuery) : SagaQuery = {
@@ -52,4 +68,8 @@ module SagaBrowserQuery =
       Status = browserQuery.Status
    }
 
-   let empty: SagaBrowserQuery = { Date = None; Status = None }
+   let empty: SagaBrowserQuery = {
+      Date = None
+      Status = None
+      SagaId = None
+   }

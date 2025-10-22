@@ -53,6 +53,11 @@ let manageVisibility (url: Routes.IndexUrl) =
          | Routes.PaymentUrl.RequestPayment -> Some OverlaySize.Wide
          | Routes.PaymentUrl.ViewPayment _ -> Some OverlaySize.Standard
          | _ -> None
+      | Routes.IndexUrl.Diagnostic url ->
+         match url with
+         | Routes.DiagnosticUrl.WithSearchQuery query ->
+            query.SagaId |> Option.map (fun _ -> OverlaySize.Wide)
+         | _ -> None
       | _ -> None
 
    let overlayEl = getEl().closest ".screen-overlay"

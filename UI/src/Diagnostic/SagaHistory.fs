@@ -85,6 +85,94 @@ let update (session: UserSession) msg (state: State) =
 
       state, Cmd.navigate (Routes.DiagnosticUrl.BasePath, browserQueryParams)
 
+let renderLabeledInfo (label: string) (text: string) =
+   Html.div [
+      Html.small $"{label}:"
+      Html.p [
+         attr.style [
+            style.display.inlineBlock
+            style.marginLeft 10
+            style.marginBottom 5
+         ]
+         attr.text text
+      ]
+   ]
+
+let renderSagaActivities saga =
+   classyNode Html.div [ "saga-activities"; "grid" ] [
+      for activity in saga.LifeCycle do
+         let date =
+            match activity.End with
+            | Some finishedAt -> finishedAt
+            | None -> activity.Start
+            |> DateTime.dateUIFriendlyWithSecondsShort
+
+         Html.div [
+            attr.style [
+               style.backgroundColor (
+                  match activity.Status with
+                  | SagaActivityDTOStatus.InProgress -> Style.color.primary
+                  | SagaActivityDTOStatus.Completed -> Style.color.moneyIn
+                  | SagaActivityDTOStatus.Failed -> Style.color.alert
+                  | SagaActivityDTOStatus.Aborted -> Style.color.secondary
+               )
+            ]
+            attr.custom ("data-tooltip", $"{activity.Name} {date}")
+            attr.custom ("data-placement", "right")
+         ]
+   ]
+
+let renderSagaExpandedView (saga: SagaDTO) =
+   let activityToJson (activity: SagaActivityDTO) = {|
+      Status = string activity.Status
+      Name = activity.Name
+      Attempts = activity.Attempts
+      MaxAttempts = activity.MaxAttempts
+      StartedAt = activity.Start
+      EndedAt = activity.End
+   |}
+
+   let statusMatch (status: SagaActivityDTOStatus) (activity: SagaActivityDTO) =
+      status = activity.Status
+
+   let activities (status: SagaActivityDTOStatus) =
+      saga.LifeCycle
+      |> List.filter (statusMatch status)
+      |> List.map activityToJson
+
+   let json = {|
+      Failed = activities SagaActivityDTOStatus.Failed
+      Aborted = activities SagaActivityDTOStatus.Aborted
+      InProgress = activities SagaActivityDTOStatus.InProgress
+      Completed = activities SagaActivityDTOStatus.Completed
+   |}
+
+   classyNode Html.article [ "saga-expanded-view" ] [
+      CloseButton.render (fun _ ->
+         {
+            Routes.IndexUrl.diagnosticBrowserQuery () with
+               SagaId = None
+         }
+         |> Routes.DiagnosticUrl.queryPath
+         |> Router.navigate)
+
+      Html.section [
+         Html.h6 saga.Name
+
+         renderLabeledInfo "ID" (string saga.Id)
+
+         renderLabeledInfo "Status" saga.Status.Display
+
+         renderLabeledInfo
+            "Created On"
+            (DateTime.dateUIFriendlyShort saga.CreatedAt)
+
+         renderSagaActivities saga
+
+         JsonTree.renderJsonTree json
+      ]
+   ]
+
 let renderSaga (saga: SagaDTO) =
    classyNode Html.div [ "saga-history-item" ] [
       Html.div [
@@ -92,35 +180,26 @@ let renderSaga (saga: SagaDTO) =
 
          Html.div [ Html.small saga.Status.Display ]
 
+         Html.small $"Created {DateTime.dateUIFriendlyShort saga.CreatedAt}"
+
          Html.hr []
 
-         classyNode Html.div [ "saga-activities"; "grid" ] [
-            for activity in saga.LifeCycle do
-               let date =
-                  match activity.End with
-                  | Some finishedAt -> finishedAt
-                  | None -> activity.Start
-                  |> DateTime.dateUIFriendlyWithSecondsShort
-
-               Html.div [
-                  attr.style [
-                     style.backgroundColor (
-                        match activity.Status with
-                        | SagaActivityDTOStatus.InProgress ->
-                           Style.color.primary
-                        | SagaActivityDTOStatus.Completed -> Style.color.moneyIn
-                        | SagaActivityDTOStatus.Failed -> Style.color.alert
-                        | SagaActivityDTOStatus.Aborted -> Style.color.secondary
-                     )
-                  ]
-                  attr.custom ("data-tooltip", $"{activity.Name} {date}")
-                  attr.custom ("data-placement", "right")
-               ]
-         ]
+         renderSagaActivities saga
       ]
 
       Html.div [
-         Html.small $"Created {DateTime.dateUIFriendlyShort saga.CreatedAt}"
+         Html.button [
+            attr.text "View Detail"
+            attr.classes [ "outline" ]
+
+            attr.onClick (fun _ ->
+               {
+                  Routes.IndexUrl.diagnosticBrowserQuery () with
+                     SagaId = Some saga.Id
+               }
+               |> Routes.DiagnosticUrl.queryPath
+               |> Router.navigate)
+         ]
       ]
    ]
 
@@ -191,7 +270,7 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
       React.useElmish (
          init browserQuery,
          update session,
-         [| box browserQuery |]
+         [| box browserQuery.ChangeDetection |]
       )
 
    let signalRConnection = React.useContext SignalRConnectionProvider.context
@@ -213,6 +292,16 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
    let sagas = Map.tryFind state.Pagination.Page state.Pagination.Items
 
    Html.div [
+      match sagas, Routes.DiagnosticUrl.sagaSelectedMaybe url with
+      | Some(Deferred.Resolved(Ok(Some sagaHistory))), Some sagaId ->
+         let sagaOpt =
+            sagaHistory |> List.tryFind (fun saga -> saga.Id = sagaId)
+
+         match sagaOpt with
+         | None -> Html.p "Not found"
+         | Some saga -> ScreenOverlay.Portal(renderSagaExpandedView saga)
+      | _ -> ()
+
       Html.h6 [
          attr.text "Saga History"
          attr.style [ style.marginBottom (10) ]

@@ -7,9 +7,10 @@
   "dependencies": {
     "@microsoft/signalr": "^8.0.0",
     "@picocss/pico": "^1.5.13",
-    "nanoid": "^5.1.5",
+    "nanoid": "^5.1.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-json-tree": "^0.20.0",
     "recharts": "^2.12.7",
     "sweetalert2": "^8.19.1",
     "use-sync-external-store": "^1.2.0"

@@ -1,23 +1,30 @@
 .saga-history-container
    width: 90%
+.saga-activities
+  grid-template-columns: auto auto auto
+  > *
+     width: 2rem
+     height: 2rem
+     margin: .5rem 0
+     border-radius: var(--border-radius)
+     box-shadow: var(--card-box-shadow)
 .saga-history
    grid-template-columns: auto auto auto auto auto auto
    .saga-history-item
-     border-radius: var(--border-radius)
-     box-shadow: var(--card-box-shadow)
-     background: var(--card-background-color)
-     padding: .5rem
-     margin: .5rem 0
-     display: flex
-     flex-direction: column
-     grid-row-gap: 1rem
-     > *:last-child
-       margin-top: auto
+      border-radius: var(--border-radius)
+      box-shadow: var(--card-box-shadow)
+      background: var(--card-background-color)
+      padding: .5rem
+      margin: .5rem 0
+      display: flex
+      flex-direction: column
+      grid-row-gap: 1rem
+      > *:last-child
+         margin-top: auto
+         button
+            padding: .3rem
+            margin-bottom: 0
+.saga-expanded-view
    .saga-activities
-      grid-template-columns: auto auto auto
-      > *
-         width: 2rem
-         height: 2rem
-         margin: .5rem 0
-         border-radius: var(--border-radius)
-         box-shadow: var(--card-box-shadow)
+      grid-template-columns: auto auto auto auto auto auto
+      width: 50%

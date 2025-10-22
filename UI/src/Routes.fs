@@ -239,6 +239,16 @@ module DiagnosticUrl =
          DiagnosticUrl.WithSearchQuery query
       | _ -> DiagnosticUrl.NotFound
 
+   let queryPath (query: SagaBrowserQuery) = [|
+      BasePath
+      query |> SagaBrowserQuery.toQueryParams |> Router.encodeQueryString
+   |]
+
+   let sagaSelectedMaybe =
+      function
+      | DiagnosticUrl.WithSearchQuery query -> query.SagaId
+      | _ -> None
+
 [<RequireQualifiedAccess>]
 type IndexUrl =
    | Analytics of AnalyticsUrl

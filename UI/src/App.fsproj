@@ -33,6 +33,7 @@
     <Compile Include="ComponentLib/Forms/Util.fs" />
     <Compile Include="ComponentLib/Forms/API.fs" />
     <Compile Include="ComponentLib/Forms/StateContainer.fs" />
+    <Compile Include="ComponentLib/JsonTree.fs" />
     <Compile Include="Transactions/CategoryContext.fs" />
     <Compile Include="Orgs/OrgAndAccountProfileContext.fs" />
     <Compile Include="ComponentLib/CheckboxFieldset.fs" />
