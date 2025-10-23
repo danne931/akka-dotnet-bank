@@ -83,7 +83,7 @@ let getAllSagas
 
    let query =
       $"""
-      SELECT {Fields.sagaState}
+      SELECT {Fields.sagaState}, {Fields.createdAt}
       FROM {table}
       WHERE {whereClause}
       ORDER BY {Fields.createdAt} DESC, {Fields.id} DESC

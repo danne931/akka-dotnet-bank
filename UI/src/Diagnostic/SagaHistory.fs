@@ -4,7 +4,6 @@ open Feliz
 open Feliz.UseElmish
 open Feliz.Router
 open Elmish
-open System
 
 open SagaDTO
 open Bank.Employee.Domain

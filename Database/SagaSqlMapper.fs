@@ -49,7 +49,15 @@ module Reader =
       |> read.text
       |> Serialization.deserializeUnsafe<AppSaga.Saga>
 
-   let sagaDTO (read: RowReader) = (sagaState read).AsDTO
+   let sagaDTO (read: RowReader) =
+      let dto = (sagaState read).AsDTO
+      // Overwrite sagaDTO.StartedAt property (time when saga started in memory)
+      // with postgres value of time when read model was created.
+      // Pagination relies on using created_at postgres field as a cursor.
+      // TODO: Consider storing sagaDTO.StartedAt in the postgres read model
+      //       as its own field or in place of the automatically assigned
+      //       created_at field & using that as the pagination cursor instead.
+      { dto with StartedAt = createdAt read }
 
 module Writer =
    let id (CorrelationId id) = Sql.uuid id
