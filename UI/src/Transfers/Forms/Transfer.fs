@@ -166,7 +166,7 @@ let formInternalBetweenOrgs
    let fieldOrgSelect =
       Form.selectField {
          Parser = Ok
-         Value = fun values -> values.RecipientId
+         Value = _.RecipientId
          Update = fun newValue values -> { values with RecipientId = newValue }
          Error = fun _ -> None
          Attributes = {
@@ -232,9 +232,9 @@ let formInternalBetweenOrgs
       Msg.Submit(FormEntity.Account sender, FormCommand.Account cmd, Started)
 
    Form.succeed (fun (recipientId: string) props ->
-      let senderId, amount, memo, scheduledAt = props
+      let sender, amount, memo, scheduledAt = props
       let recipientId = recipientId |> Guid.Parse |> AccountId
-      onSubmit recipientId senderId amount memo scheduledAt)
+      onSubmit recipientId sender amount memo scheduledAt)
    |> Form.append fieldOrgSelect
    |> Form.append (
       fieldSenderSelect senderAccounts
@@ -474,9 +474,9 @@ let TransferInternalBetweenOrgsComponent
    let initValues =
       destinationCandidates
       |> List.tryHead
-      |> Option.map (fun accountId -> {
+      |> Option.map (fun candidate -> {
          initValues with
-            RecipientId = string accountId
+            RecipientId = string candidate.PrimaryReceivingAccountId
       })
       |> Option.defaultValue initValues
 
