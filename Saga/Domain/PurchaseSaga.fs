@@ -70,6 +70,7 @@ type PurchaseSaga = {
    PurchaseInfo: PurchaseInfo
    CardIssuerPurchaseEvents: PurchaseEvent list
    StartEvent: PurchaseSagaStartEvent
+   StartedAt: DateTime
    Events: PurchaseSagaEvent list
    Status: PurchaseSagaStatus
    LifeCycle: SagaLifeCycle<Activity>

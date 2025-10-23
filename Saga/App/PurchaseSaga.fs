@@ -22,6 +22,7 @@ let applyStartEvent
       PurchaseInfo = info
       CardIssuerPurchaseEvents = []
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       Status = PurchaseSagaStatus.InProgress
       LifeCycle = {
@@ -297,12 +298,15 @@ let onStartEventPersisted (evt: PurchaseSagaStartEvent) =
    | PurchaseSagaStartEvent.PurchaseIntent _ -> ()
 
 let onEventPersisted
+   (broadcaster: SignalRBroadcast.SignalRBroadcast)
    (registry:
       #IEmployeeActor & #IAccountActor & #IEmailActor & #IPartnerBankServiceActor)
    (previousState: PurchaseSaga)
    (updatedState: PurchaseSaga)
    (evt: PurchaseSagaEvent)
    =
+   broadcaster.sagaUpdated (AppSaga.Saga.Purchase updatedState).AsDTO
+
    let purchaseInfo = updatedState.PurchaseInfo
 
    let acquireCardFailureAcknowledgement reason =

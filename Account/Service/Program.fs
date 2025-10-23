@@ -199,12 +199,16 @@ builder.Services.AddAkka(
                let orgSettingsCache =
                   provider.GetRequiredService<OrgSettingsCache>()
 
+               let broadcaster =
+                  provider.GetRequiredService<SignalRBroadcast>()
+
                GuaranteedDelivery.consumer<AppSaga.AppSagaMessage>
                   system
                   (fun controllerRef ->
                      AppSaga.initProps
                         registry
                         orgSettingsCache
+                        broadcaster
                         Env.config.AccountActorSupervisor
                         Env.config.SagaPassivateIdleEntityAfter
                         persistenceId

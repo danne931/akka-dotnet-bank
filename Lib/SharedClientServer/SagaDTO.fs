@@ -82,7 +82,7 @@ type SagaActivityDTO = {
 type SagaDTO = {
    Name: string
    LifeCycle: SagaActivityDTO list
-   CreatedAt: DateTime
+   StartedAt: DateTime
    Id: CorrelationId
    Status: SagaDTOStatus
 }

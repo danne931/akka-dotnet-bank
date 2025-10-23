@@ -10,6 +10,7 @@ type IBankClient =
    abstract member OrgEventPersistenceConfirmation: string -> Task
    abstract member EventProcessingError: string -> Task
    abstract member CircuitBreakerMessage: string -> Task
+   abstract member SagaUpdated: string -> Task
 
 type BankHub() =
    inherit Hub<IBankClient>()

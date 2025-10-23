@@ -113,4 +113,14 @@ let init
             <! CircuitBreakerMessage.CircuitBreaker msg
 
             sendToSignalR (SignalRActor.Msg.CircuitBreaker msg)
+
+      sagaUpdated =
+         fun saga ->
+            let msg =
+               SignalRActor.Msg.SagaUpdated {
+                  Date = DateTime.UtcNow
+                  Saga = saga
+               }
+
+            sendToSignalR msg
    }

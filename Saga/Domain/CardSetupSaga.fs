@@ -68,6 +68,7 @@ type CardSetupSaga = {
    EmployeeEmail: Email
    CardType: CardType
    StartEvent: CardSetupSagaStartEvent
+   StartedAt: DateTime
    Events: CardSetupSagaEvent list
    Status: CardSetupSagaStatus
    LifeCycle: SagaLifeCycle<Activity>

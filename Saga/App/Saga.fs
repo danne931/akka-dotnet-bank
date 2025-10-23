@@ -27,6 +27,7 @@ let sagaHandler
    (registry:
       #IOrgActor & #IEmployeeActor & #IAccountActor & #IEmailActor & #ISchedulerActor & #IKYCServiceActor & #IPartnerBankServiceActor & #ICardIssuerServiceActor & #ISagaActor)
    (orgSettingsCache: OrgSettingsCache)
+   (broadcaster: SignalRBroadcast.SignalRBroadcast)
    : SagaActor.SagaHandler<Saga, StartEvent, Event>
    =
    let sendMessageToPaymentSaga orgId (paymentId: PaymentRequestId) evt =
@@ -284,7 +285,12 @@ let sagaHandler
             | Event.Purchase e ->
                match priorState, state with
                | Saga.Purchase priorState, Saga.Purchase state ->
-                  PurchaseSaga.onEventPersisted registry priorState state e
+                  PurchaseSaga.onEventPersisted
+                     broadcaster
+                     registry
+                     priorState
+                     state
+                     e
                | _ -> notHandled ()
             | Event.DomesticTransfer evt ->
                let OperationEnv: DomesticTransferSaga.OperationEnv = {
@@ -303,6 +309,7 @@ let sagaHandler
                match priorState, state with
                | Saga.DomesticTransfer priorState, Saga.DomesticTransfer state ->
                   DomesticTransferSaga.onEventPersisted
+                     broadcaster
                      registry
                      OperationEnv
                      priorState
@@ -325,6 +332,7 @@ let sagaHandler
                match priorState, state with
                | Saga.PlatformTransfer priorState, Saga.PlatformTransfer state ->
                   PlatformTransferSaga.onEventPersisted
+                     broadcaster
                      registry
                      OperationEnv
                      priorState
@@ -339,6 +347,7 @@ let sagaHandler
                match priorState, state with
                | Saga.PaymentRequest priorState, Saga.PaymentRequest state ->
                   PaymentRequestSaga.onEventPersisted
+                     broadcaster
                      registry
                      OperationEnv
                      priorState
@@ -365,6 +374,7 @@ let getEntityRef
 let initProps
    registry
    (orgSettingsCache: OrgSettingsCache)
+   (broadcaster: SignalRBroadcast.SignalRBroadcast)
    (persistenceSupervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
@@ -376,4 +386,4 @@ let initProps
       sagaPassivateIdleEntityAfter
       persistenceId
       guaranteedDeliveryConsumerControllerRef
-      (sagaHandler registry orgSettingsCache)
+      (sagaHandler registry orgSettingsCache broadcaster)

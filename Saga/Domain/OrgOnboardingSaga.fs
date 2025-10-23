@@ -84,6 +84,7 @@ type OrgOnboardingSaga = {
    CorrelationId: CorrelationId
    Application: OrgOnboardingApplicationSubmitted
    StartEvent: OrgOnboardingSagaStartEvent
+   StartedAt: DateTime
    Events: OrgOnboardingSagaEvent list
    Status: OrgOnboardingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>

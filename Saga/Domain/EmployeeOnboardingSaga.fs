@@ -79,6 +79,7 @@ type EmployeeOnboardingSaga = {
    CardInfo: EmployeeInviteSupplementaryCardInfo option
    InviteToken: InviteToken
    StartEvent: EmployeeOnboardingSagaStartEvent
+   StartedAt: DateTime
    Events: EmployeeOnboardingSagaEvent list
    Status: EmployeeOnboardingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>

@@ -82,6 +82,7 @@ type Activity =
 
 type DomesticTransferSaga = {
    StartEvent: DomesticTransferSagaStartEvent
+   StartedAt: DateTime
    Events: DomesticTransferSagaEvent list
    Status: DomesticTransferProgress
    TransferInfo: BaseDomesticTransferInfo

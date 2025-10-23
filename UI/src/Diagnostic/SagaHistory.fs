@@ -4,6 +4,7 @@ open Feliz
 open Feliz.UseElmish
 open Feliz.Router
 open Elmish
+open System
 
 open SagaDTO
 open Bank.Employee.Domain
@@ -50,7 +51,7 @@ let handlePaginationMsg orgId (state: State) (msg: Pagination.Msg<SagaDTO>) =
          }
       getCursor =
          fun saga -> {
-            CreatedAt = saga.CreatedAt
+            CreatedAt = saga.StartedAt
             SagaId = saga.Id
          }
       onLoadError =
@@ -159,13 +160,13 @@ let renderSagaExpandedView (saga: SagaDTO) =
       Html.section [
          Html.h6 saga.Name
 
-         renderLabeledInfo "ID" (string saga.Id)
+         renderLabeledInfo "Saga ID" (string saga.Id)
 
          renderLabeledInfo "Status" saga.Status.Display
 
          renderLabeledInfo
-            "Created On"
-            (DateTime.dateUIFriendlyShort saga.CreatedAt)
+            "Started On"
+            (DateTime.dateUIFriendlyShort saga.StartedAt)
 
          renderSagaActivities saga
 
@@ -180,7 +181,7 @@ let renderSaga (saga: SagaDTO) =
 
          Html.div [ Html.small saga.Status.Display ]
 
-         Html.small $"Created {DateTime.dateUIFriendlyShort saga.CreatedAt}"
+         Html.small $"Started {DateTime.dateUIFriendlyShort saga.StartedAt}"
 
          Html.hr []
 
@@ -262,6 +263,63 @@ let renderTableControlPanel
       SubsequentChildren = Some [ renderPagination state dispatch ]
    |}
 
+let realtimeSagaUpdateConformsToSelectedFilter
+   (query: SagaBrowserQuery)
+   (update: SignalRBroadcast.SagaUpdated)
+   =
+   let qualifiedDate =
+      match query.Date with
+      | None -> true
+      | Some dateFilter ->
+         DateFilter.qualifiedDate dateFilter update.Saga.StartedAt
+
+   let allowedByFilters =
+      match query.Status with
+      | Some filters ->
+         // Include completed sagas even if the filter does not
+         // include the completed status.
+         update.Saga.Status = SagaDTOStatus.Completed
+         || filters |> List.contains update.Saga.Status
+      | None -> true
+
+   qualifiedDate && allowedByFilters
+
+// Conditionally apply SignalR saga update to pagination results.
+let includeSignalREventMaybe
+   (paginatedSagas: Pagination.State<SagaCursor, SagaDTO>)
+   dispatch
+   (browserQuery: SagaBrowserQuery)
+   (update: SignalRBroadcast.SagaUpdated)
+   =
+   paginatedSagas.Items
+   |> Map.toSeq
+   // Apply SignalR saga update if there is a corresponding
+   // saga in the pagination results.
+   |> Seq.tryPick (function
+      | page, Deferred.Resolved(Ok(Some history)) ->
+         if history |> List.exists (fun k -> k.Id = update.Saga.Id) then
+            let updated =
+               history
+               |> List.map (fun k ->
+                  if k.Id = update.Saga.Id then update.Saga else k)
+
+            Some(page, Some updated)
+         else
+            None
+      | _ -> None)
+   // Apply SignalR saga update to first page if it does not exist in
+   // existing pagination results & the browser query filter criteria are met.
+   |> Option.orElse (
+      match paginatedSagas.Items |> Map.tryFind 1 with
+      | Some(Deferred.Resolved(Ok(Some sagas))) ->
+         if realtimeSagaUpdateConformsToSelectedFilter browserQuery update then
+            Some(1, Some(update.Saga :: sagas))
+         else
+            None
+      | _ -> None
+   )
+   |> Option.iter (SetPageItems >> PaginationMsg >> dispatch)
+
 [<ReactComponent>]
 let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
    let browserQuery = Routes.IndexUrl.diagnosticBrowserQuery ()
@@ -273,23 +331,22 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
          [| box browserQuery.ChangeDetection |]
       )
 
+   let sagas = Map.tryFind state.Pagination.Page state.Pagination.Items
+
    let signalRConnection = React.useContext SignalRConnectionProvider.context
 
-   (*
    React.useEffect (
       fun () ->
          match signalRConnection with
          | Some conn ->
-            DiagnosticsService.listenForSagaHistory
-               (SagaHistoryReceived >> dispatch)
+            DiagnosticsService.listenForSagaUpdate
+               (includeSignalREventMaybe state.Pagination dispatch browserQuery)
                conn
          | _ -> ()
-         ()
-      , [| box signalRConnection |]
-   )
-   *)
 
-   let sagas = Map.tryFind state.Pagination.Page state.Pagination.Items
+         ()
+      , [| box signalRConnection; state.Pagination |]
+   )
 
    Html.div [
       match sagas, Routes.DiagnosticUrl.sagaSelectedMaybe url with

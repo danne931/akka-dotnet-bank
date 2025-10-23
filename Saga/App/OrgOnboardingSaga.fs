@@ -24,6 +24,7 @@ let applyStartEvent
       CorrelationId = evt.CorrelationId
       Status = OrgOnboardingSagaStatus.InProgress
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       Application = evt.Data
       ApplicationRequiresRevision = None

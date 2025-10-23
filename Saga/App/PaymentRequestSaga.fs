@@ -95,6 +95,7 @@ let applyStartEvent (e: PaymentRequestSagaStartEvent) (timestamp: DateTime) =
    match e with
    | StartEvent.PaymentRequested evt -> {
       StartEvent = e
+      StartedAt = timestamp
       Events = []
       Status =
          PaymentRequestSagaStatus.InProgress PaymentRequestStatus.Requested
@@ -359,12 +360,15 @@ type OperationEnv = {
 }
 
 let onEventPersisted
+   (broadcaster: SignalRBroadcast.SignalRBroadcast)
    (registry: #IEmailActor & #IAccountActor)
    (operationEnv: OperationEnv)
    (previousState: PaymentRequestSaga)
    (state: PaymentRequestSaga)
    (evt: Event)
    =
+   broadcaster.sagaUpdated (AppSaga.Saga.PaymentRequest state).AsDTO
+
    let payment = state.PaymentInfo
    let emailRef = registry.EmailActor()
 

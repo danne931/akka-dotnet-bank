@@ -23,6 +23,7 @@ let applyStartEvent
    {
       Status = CardSetupSagaStatus.InProgress
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       OrgId = evt.OrgId
       CardId = card.CardId

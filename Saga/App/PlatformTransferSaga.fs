@@ -23,6 +23,7 @@ let applyStartEvent
    | StartEvent.SenderReservedFunds(e, partnerBankSenderAccountLink) -> {
       Status = PlatformTransferSagaStatus.InProgress
       StartEvent = evt
+      StartedAt = timestamp
       Events = []
       TransferInfo = e.Data.BaseInfo
       PartnerBankSenderAccountLink = Some partnerBankSenderAccountLink
@@ -49,6 +50,7 @@ let applyStartEvent
    | StartEvent.ScheduleTransferRequest e -> {
       Status = PlatformTransferSagaStatus.Scheduled
       StartEvent = evt
+      StartedAt = timestamp
       Events = []
       TransferInfo = e.Data.BaseInfo
       PartnerBankSenderAccountLink = None
@@ -289,12 +291,15 @@ type OperationEnv = {
 }
 
 let onEventPersisted
+   (broadcaster: SignalRBroadcast.SignalRBroadcast)
    (registry: #IAccountActor & #IEmailActor & #IPartnerBankServiceActor)
    (operationEnv: OperationEnv)
    (previousState: PlatformTransferSaga)
    (currentState: PlatformTransferSaga)
    (evt: TransferEvent)
    =
+   broadcaster.sagaUpdated (AppSaga.Saga.PlatformTransfer currentState).AsDTO
+
    let transfer = currentState.TransferInfo
    let correlationId = transfer.TransferId.AsCorrelationId
 

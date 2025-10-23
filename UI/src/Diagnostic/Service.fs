@@ -58,6 +58,21 @@ let listenForCircuitBreakerEvent
          | Ok msg -> onCircuitBreakerEvent msg
    )
 
+let listenForSagaUpdate
+   (onSagaUpdated: SignalRBroadcast.SagaUpdated -> unit)
+   (conn: SignalR.Connection)
+   =
+   conn.on (
+      "SagaUpdated",
+      fun (msg: string) ->
+         let deserialized =
+            Serialization.deserialize<SignalRBroadcast.SagaUpdated> msg
+
+         match deserialized with
+         | Error err -> Log.error $"Error deserializing saga update msg {err}"
+         | Ok msg -> onSagaUpdated msg
+   )
+
 let getSagaHistory
    (orgId: OrgId)
    (query: SagaQuery)

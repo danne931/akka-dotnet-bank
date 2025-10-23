@@ -102,6 +102,11 @@ module DateFilter =
          DateTime(DateTime.Today.AddYears(-1).Year, 1, 1),
          DateTime(DateTime.Today.Year, 1, 1).AddMilliseconds(-1)
 
+   let qualifiedDate (filter: DateFilter) (date: DateTime) =
+      let timestamp = date.ToLocalTime()
+      let start, finish = toDateRange filter
+      timestamp >= start && timestamp <= finish
+
    let toQueryString (filter: DateFilter) =
       filter
       |> toDateRange

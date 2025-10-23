@@ -141,6 +141,7 @@ let finishPaymentReminderActivity
 
 type PaymentRequestSaga = {
    StartEvent: PaymentRequestSagaStartEvent
+   StartedAt: DateTime
    Events: PaymentRequestSagaEvent list
    Status: PaymentRequestSagaStatus
    PaymentInfo: PaymentRequested

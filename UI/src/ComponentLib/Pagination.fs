@@ -30,6 +30,7 @@ type State<'Cursor, 'T> = {
 
 type Msg<'T> =
    | LoadPage of Page * AsyncOperationStatus<Result<'T list option, Err>>
+   | SetPageItems of Page * 'T list option
    | Reset
 
 let init<'Cursor, 'T> () : State<'Cursor, 'T> * Cmd<Msg<'T>> =
@@ -109,6 +110,12 @@ let update<'Cursor, 'T> (config: Config<'Cursor, 'T>) msg state =
          Items = Map [ page, Deferred.Idle ]
       },
       cmd
+   | SetPageItems(page, items) ->
+      {
+         state with
+            Items = state.Items |> Map.add page (Deferred.Resolved(Ok items))
+      },
+      Cmd.none
 
 let render (state: State<'Cursor, 'T>) (dispatch: Msg<'T> -> unit) =
    let page = state.Page

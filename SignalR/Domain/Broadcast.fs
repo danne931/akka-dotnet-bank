@@ -70,6 +70,11 @@ type EventProcessingError =
       | Employee(_, _, _, err, _) -> err
       | Org(_, _, err, _) -> err
 
+type SagaUpdated = {
+   Date: DateTime
+   Saga: SagaDTO.SagaDTO
+}
+
 type SignalRBroadcast = {
    circuitBreaker: CircuitBreakerEvent -> unit
    parentAccountEventPersisted: ParentAccountEvent -> unit
@@ -79,4 +84,5 @@ type SignalRBroadcast = {
    employeeEventError: OrgId -> EmployeeId -> CorrelationId -> Err -> unit
    orgEventPersisted: OrgEvent -> Org -> unit
    orgEventError: OrgId -> CorrelationId -> Err -> unit
+   sagaUpdated: SagaDTO.SagaDTO -> unit
 }

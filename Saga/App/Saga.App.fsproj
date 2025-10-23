@@ -27,5 +27,6 @@
     <ProjectReference Include="../Domain/Saga.Domain.fsproj" />
     <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
     <ProjectReference Include="../../Database/Database.fsproj" />
+    <ProjectReference Include="../../SignalR/Domain/SignalR.Domain.fsproj" />
   </ItemGroup>
 </Project>

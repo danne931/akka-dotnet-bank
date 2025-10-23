@@ -22,6 +22,7 @@ type Msg =
    | OrgEventPersisted of OrgEventPersistedConfirmation
    | Error of EventProcessingError
    | CircuitBreaker of CircuitBreakerEvent
+   | SagaUpdated of SagaUpdated
 
 let actorProps (hub: IHubContext<BankHub, IBankClient>) =
    let handler (ctx: Actor<_>) =
@@ -67,6 +68,8 @@ let actorProps (hub: IHubContext<BankHub, IBankClient>) =
          | Msg.CircuitBreaker msg ->
             hub.Clients.All.CircuitBreakerMessage(Serialization.serialize msg)
             |> ignore
+         | Msg.SagaUpdated msg ->
+            hub.Clients.All.SagaUpdated(Serialization.serialize msg) |> ignore
       }
 
    props handler

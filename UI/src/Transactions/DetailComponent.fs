@@ -257,7 +257,7 @@ let private renderTransactionHistory
                         )
                   | EmployeeEvent.PurchaseSettled e ->
                      Html.p
-                        $"Deducted {Money.format e.Data.Info.Amount} from card"
+                        $"Settled deduction of {Money.format e.Data.Info.Amount} from card"
                   | EmployeeEvent.PurchaseRefunded e ->
                      Html.p $"Purchase refunded to card due to {e.Data.Reason}"
                   | EmployeeEvent.PurchaseFailed e ->
@@ -297,7 +297,7 @@ let private renderTransactionHistory
                         $"Reserved {Money.format e.Data.Amount} from account"
                   | AccountEvent.DebitSettled e ->
                      Html.p
-                        $"Deducted {Money.format e.Data.Amount} from account"
+                        $"Settled deduction of {Money.format e.Data.Amount} from account"
                   | AccountEvent.DebitFailed _ ->
                      Html.p "Funds released from account reserve"
                   | AccountEvent.DebitRefunded e ->

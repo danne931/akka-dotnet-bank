@@ -11,6 +11,7 @@ open OrgOnboardingSaga
 open EmployeeOnboardingSaga
 open CardSetupSaga
 open BillingSaga
+open SagaDTO
 
 [<RequireQualifiedAccess>]
 type StartEvent =
@@ -348,6 +349,169 @@ type Saga =
          | Saga.PlatformTransfer s -> s.LifeCycle.InactivityTimeout
          | Saga.PaymentRequest s -> s.LifeCycle.InactivityTimeout
          | Saga.Billing s -> s.LifeCycle.InactivityTimeout
+
+   member x.StartedAt =
+      match x with
+      | Saga.OrgOnboarding s -> s.StartedAt
+      | Saga.EmployeeOnboarding s -> s.StartedAt
+      | Saga.CardSetup s -> s.StartedAt
+      | Saga.Purchase s -> s.StartedAt
+      | Saga.DomesticTransfer s -> s.StartedAt
+      | Saga.PlatformTransfer s -> s.StartedAt
+      | Saga.PaymentRequest s -> s.StartedAt
+      | Saga.Billing s -> s.StartedAt
+
+   member x.Status =
+      let saga = x
+
+      let inProgressOrExhausted =
+         if (saga :> ISaga).ExhaustedAllAttempts then
+            SagaDTOStatus.Exhausted
+         else
+            SagaDTOStatus.InProgress
+
+      let compensatingOrFailed =
+         let s = saga :> ISaga
+
+         if s.ActivityInProgressCount > 0 then
+            if s.ExhaustedAllAttempts then
+               SagaDTOStatus.CompensationExhausted
+            else
+               SagaDTOStatus.Compensating
+         else
+            SagaDTOStatus.Failed
+
+      match saga with
+      | Saga.OrgOnboarding s ->
+         match s.Status with
+         | OrgOnboardingSagaStatus.InProgress -> inProgressOrExhausted
+         | OrgOnboardingSagaStatus.Completed -> SagaDTOStatus.Completed
+         | OrgOnboardingSagaStatus.Failed _ -> compensatingOrFailed
+      | Saga.EmployeeOnboarding s ->
+         match s.Status with
+         | EmployeeOnboardingSagaStatus.InProgress -> inProgressOrExhausted
+         | EmployeeOnboardingSagaStatus.Failed -> compensatingOrFailed
+         | EmployeeOnboardingSagaStatus.Completed -> SagaDTOStatus.Completed
+         | EmployeeOnboardingSagaStatus.Aborted _ -> SagaDTOStatus.Aborted
+      | Saga.CardSetup s ->
+         match s.Status with
+         | CardSetupSagaStatus.InProgress -> inProgressOrExhausted
+         | CardSetupSagaStatus.Completed -> SagaDTOStatus.Completed
+         | CardSetupSagaStatus.Failed _ -> compensatingOrFailed
+      | Saga.Purchase s ->
+         match s.Status with
+         | PurchaseSagaStatus.InProgress -> inProgressOrExhausted
+         | PurchaseSagaStatus.Completed -> SagaDTOStatus.Completed
+         | PurchaseSagaStatus.Failed _ -> compensatingOrFailed
+      | Saga.DomesticTransfer s ->
+         match s.Status with
+         | DomesticTransferProgress.Scheduled -> SagaDTOStatus.Scheduled
+         | DomesticTransferProgress.ProcessingAccountDeduction
+         | DomesticTransferProgress.WaitingForTransferServiceAck
+         | DomesticTransferProgress.PartnerBank _ -> inProgressOrExhausted
+         | DomesticTransferProgress.Settled -> SagaDTOStatus.Completed
+         | DomesticTransferProgress.Failed _ -> compensatingOrFailed
+      | Saga.PlatformTransfer s ->
+         match s.Status with
+         | PlatformTransferSagaStatus.Scheduled -> SagaDTOStatus.Scheduled
+         | PlatformTransferSagaStatus.InProgress -> inProgressOrExhausted
+         | PlatformTransferSagaStatus.Completed -> SagaDTOStatus.Completed
+         | PlatformTransferSagaStatus.Failed _ -> compensatingOrFailed
+      | Saga.PaymentRequest s ->
+         match s.Status with
+         | PaymentRequestSagaStatus.InProgress _ -> inProgressOrExhausted
+         | PaymentRequestSagaStatus.Completed -> SagaDTOStatus.Completed
+         | PaymentRequestSagaStatus.Failed _ -> compensatingOrFailed
+      | Saga.Billing s ->
+         match s.Status with
+         | BillingSagaStatus.InProgress -> inProgressOrExhausted
+         | BillingSagaStatus.Completed -> SagaDTOStatus.Completed
+         | BillingSagaStatus.Failed -> compensatingOrFailed
+
+   member x.AsDTO: SagaDTO =
+      let dto = {
+         Id = (x :> ISaga).SagaId
+         StartedAt = x.StartedAt
+         Status = x.Status
+         Name = ""
+         LifeCycle = []
+      }
+
+      let activitiesToDTO
+         (life: SagaLifeCycle<'Activity>)
+         : SagaActivityDTO list
+         =
+         let activityToDTO status (a: ActivityLifeCycle<'Activity>) = {
+            Start = a.Start
+            End = a.End
+            Name = string a.Activity |> _.Split(" ") |> _.Head()
+            Attempts = a.Attempts
+            MaxAttempts = a.MaxAttempts
+            Status = status
+         }
+
+         let inProgress =
+            life.InProgress
+            |> List.map (activityToDTO SagaActivityDTOStatus.InProgress)
+
+         let completed =
+            life.Completed
+            |> List.map (activityToDTO SagaActivityDTOStatus.Completed)
+
+         let failed =
+            life.Failed |> List.map (activityToDTO SagaActivityDTOStatus.Failed)
+
+         let aborted =
+            life.Aborted
+            |> List.map (activityToDTO SagaActivityDTOStatus.Aborted)
+
+         inProgress @ failed @ aborted @ completed
+         |> List.sortBy (fun a ->
+            match a.Status with
+            | SagaActivityDTOStatus.Completed -> a.End
+            | _ -> Some a.Start)
+
+      match x with
+      | Saga.Purchase saga -> {
+         dto with
+            Name = "Purchase"
+            LifeCycle = activitiesToDTO saga.LifeCycle
+        }
+      | Saga.DomesticTransfer saga -> {
+         dto with
+            Name = "Domestic Transfer"
+            LifeCycle = activitiesToDTO saga.LifeCycle
+        }
+      | Saga.PlatformTransfer saga -> {
+         dto with
+            Name = "Platform Transfer"
+            LifeCycle = activitiesToDTO saga.LifeCycle
+        }
+      | Saga.PaymentRequest saga -> {
+         dto with
+            Name = "Payment Request"
+            LifeCycle = activitiesToDTO saga.LifeCycle
+        }
+      | Saga.Billing saga -> {
+         dto with
+            Name = "Billing"
+            LifeCycle = activitiesToDTO saga.LifeCycle
+        }
+      | Saga.CardSetup saga -> {
+         dto with
+            Name = "Card Setup"
+            LifeCycle = activitiesToDTO saga.LifeCycle
+        }
+      | Saga.EmployeeOnboarding saga -> {
+         dto with
+            Name = "Employee Onboarding"
+            LifeCycle = activitiesToDTO saga.LifeCycle
+        }
+      | Saga.OrgOnboarding saga -> {
+         dto with
+            Name = "Organization Onboarding"
+            LifeCycle = activitiesToDTO saga.LifeCycle
+        }
 
 type AppSagaPersistableEvent = SagaPersistableEvent<StartEvent, Event>
 type AppSagaMessage = SagaMessage<StartEvent, Event>

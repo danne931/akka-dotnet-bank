@@ -66,6 +66,7 @@ type BillingSaga = {
    BillingCycleDate: DateTime
    ProcessingBillingStatement: ProcessingBillingStatement option
    StartEvent: BillingSagaStartEvent
+   StartedAt: DateTime
    Events: BillingSagaEvent list
    Status: BillingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>

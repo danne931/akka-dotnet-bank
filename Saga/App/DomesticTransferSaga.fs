@@ -21,6 +21,7 @@ let applyStartEvent
    | DomesticTransferSagaStartEvent.SenderReservedFunds(evt, link) -> {
       Status = DomesticTransferProgress.WaitingForTransferServiceAck
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       TransferInfo = evt.Data.BaseInfo
       PartnerBankAccountLink = link
@@ -49,6 +50,7 @@ let applyStartEvent
    | DomesticTransferSagaStartEvent.ScheduleTransferRequest(evt, link) -> {
       Status = DomesticTransferProgress.Scheduled
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       TransferInfo = evt.Data.BaseInfo
       PartnerBankAccountLink = link
@@ -304,6 +306,7 @@ type OperationEnv = {
 }
 
 let onEventPersisted
+   (broadcaster: SignalRBroadcast.SignalRBroadcast)
    (registry:
       #IPartnerBankServiceActor & #IAccountActor & #IEmailActor & #ISchedulerActor)
    (operationEnv: OperationEnv)
@@ -311,6 +314,8 @@ let onEventPersisted
    (currentState: DomesticTransferSaga)
    (evt: DomesticTransferSagaEvent)
    =
+   broadcaster.sagaUpdated (AppSaga.Saga.DomesticTransfer currentState).AsDTO
+
    let info = currentState.TransferInfo
    let correlationId = info.TransferId.AsCorrelationId
 

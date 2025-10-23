@@ -88,6 +88,7 @@ type Activity =
 
 type PlatformTransferSaga = {
    StartEvent: PlatformTransferSagaStartEvent
+   StartedAt: DateTime
    Events: PlatformTransferSagaEvent list
    Status: PlatformTransferSagaStatus
    TransferInfo: BaseInternalTransferBetweenOrgsInfo

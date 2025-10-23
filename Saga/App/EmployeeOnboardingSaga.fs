@@ -21,6 +21,7 @@ let applyStartEvent
    | EmployeeOnboardingSagaStartEvent.EmployeeCreated evt -> {
       Status = EmployeeOnboardingSagaStatus.InProgress
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       OrgId = evt.OrgId
       CorrelationId = evt.CorrelationId
@@ -61,6 +62,7 @@ let applyStartEvent
    | EmployeeOnboardingSagaStartEvent.AccountOwnerCreated evt -> {
       Status = EmployeeOnboardingSagaStatus.InProgress
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       OrgId = evt.OrgId
       CorrelationId = evt.CorrelationId
@@ -96,6 +98,7 @@ let applyStartEvent
    | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored o -> {
       Status = EmployeeOnboardingSagaStatus.InProgress
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       OrgId = o.Event.OrgId
       CorrelationId = o.Event.CorrelationId

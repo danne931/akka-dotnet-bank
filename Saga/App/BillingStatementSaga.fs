@@ -17,6 +17,7 @@ let applyStartEvent
    {
       Status = BillingSagaStatus.InProgress
       StartEvent = start
+      StartedAt = timestamp
       Events = []
       ProcessingBillingStatement = None
       CorrelationId = start.CorrelationId
