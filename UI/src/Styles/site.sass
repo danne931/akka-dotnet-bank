@@ -24,6 +24,14 @@
 @import "./Components/screen-overlay.sass"
 @import "./Components/diagnostic.sass"
 
+// Define z-index relations here
+.control-panel-container
+  z-index: 15
+.action-menu
+  z-index: 16
+.screen-overlay
+  z-index: 17
+
 .transaction-dashboard, .employee-dashboard, .history-dashboard, .card-dashboard, .analytics-dashboard
   h1, h2, h3, h4, h5, h6
     margin-bottom: .7rem
@@ -31,7 +39,7 @@
 .transaction-dashboard, .history-dashboard
   // Compensate for footer potentially blocking post-content placed pagination
   main
-     margin-bottom: 1.5rem
+    margin-bottom: 1.5rem
 
 main
   padding: var(--block-spacing-vertical) 0
