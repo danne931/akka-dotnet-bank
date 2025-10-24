@@ -173,7 +173,7 @@ app
    .UseMiddleware<RoleMiddleware>()
 |> ignore
 
-// Available at endpoint: /swagger/index.html
+// Available at: http://localhost:3000/swagger/index.html
 if app.Environment.IsDevelopment() then
    app.UseSwagger().UseSwaggerUI() |> ignore
 
@@ -207,5 +207,6 @@ Bank.Routes.Transaction.start app
 Bank.Routes.Employee.start app
 Bank.Routes.Card.start app
 Bank.Routes.Analytics.start app
+Bank.Routes.Billing.start app
 
 app.Run()

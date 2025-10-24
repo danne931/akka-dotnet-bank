@@ -1,4 +1,4 @@
-module Bank.Routes.Account
+module Bank.Routes.Billing
 
 open System
 open System.Threading.Tasks
