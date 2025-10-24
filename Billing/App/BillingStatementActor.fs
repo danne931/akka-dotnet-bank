@@ -215,6 +215,8 @@ let private saveBillingStatements (items: BillingPersistable list) =
           @snapshot,
           @serializerId,
           @manifest)
+      ON CONFLICT (persistence_id, sequence_number)
+      DO NOTHING;
       """,
       sqlParams.SnapshotStore
    ]

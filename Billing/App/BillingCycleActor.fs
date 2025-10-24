@@ -23,19 +23,27 @@ let getBillingCycleReadyAccounts () =
       else
          "'1 minutes'::interval"
 
-   pgQuery<ParentAccountId * OrgId>
+   let query =
       $"""
       SELECT {Fields.parentAccountId}, {Fields.orgId}
       FROM {PartnerBankSqlMapper.table}
       WHERE
-         {Fields.status} = '{string ParentAccountStatus.Active}'
+         {Fields.status} = @status::{TypeCast.status}
+         AND {Fields.parentAccountId} <> @systemParentAccountId
          AND (
             {prevCycle} IS NULL
             OR {prevCycle} < current_timestamp - {lookback}
          )
       """
-      None
-   <| fun read -> SqlReader.parentAccountId read, SqlReader.orgId read
+
+   let qParams = [
+      "status", SqlWriter.status ParentAccountStatus.Active
+      "systemParentAccountId",
+      SqlWriter.parentAccountId Constants.SYSTEM_PARENT_ACCOUNT_ID
+   ]
+
+   pgQuery<ParentAccountId * OrgId> query (Some qParams) (fun read ->
+      SqlReader.parentAccountId read, SqlReader.orgId read)
 
 let private fanOutBillingCycleMessage
    (registry: #ISagaGuaranteedDeliveryActor)
@@ -61,7 +69,7 @@ let private fanOutBillingCycleMessage
                None
             | Ok opt ->
                if opt.IsNone then
-                  logError ctx "No active accounts."
+                  logError ctx "No accounts ready for billing cycle."
 
                opt)
          |> Source.collect id

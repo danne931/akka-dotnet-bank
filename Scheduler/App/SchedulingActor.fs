@@ -20,7 +20,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
 
       match msg with
       | AccountClosureCronJobSchedule ->
-         logInfo $"Scheduling nightly account closure checker"
+         logInfo $"Scheduling account closure checker"
 
          let trigger = AccountClosureTriggers.scheduleNightlyCheck logInfo
          let path = ActorMetadata.accountClosure.ProxyPath
@@ -38,7 +38,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
          quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
          return ignored ()
       | BillingCycleCronJobSchedule ->
-         logInfo $"Scheduling monthly billing cycle"
+         logInfo $"Scheduling billing cycle"
 
          let trigger = BillingCycleTriggers.scheduleMonthly logInfo
          let path = ActorMetadata.billingCycle.ProxyPath
@@ -150,7 +150,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
          return ignored ()
       | ScheduledTransfersLowBalanceCheck ->
          logInfo
-            "Scheduling daily check for accounts with insufficient balance for scheduled transfers"
+            "Scheduling check for accounts with insufficient balance for scheduled transfers"
 
          let name = "ScheduledTransfersLowBalance"
          let group = "Bank"
@@ -171,12 +171,14 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
 
                builder.WithCronSchedule("0 0 10 * * ?").Build()
             else
+               let minutes = 10
+
                logInfo
-                  "Scheduling scheduled transfers low balance check every 10 minutes"
+                  $"Scheduling scheduled transfers low balance check every {minutes} minutes"
 
                builder
                   .WithSimpleSchedule(fun s ->
-                     s.WithIntervalInMinutes(10).RepeatForever() |> ignore)
+                     s.WithIntervalInMinutes(minutes).RepeatForever() |> ignore)
                   .Build()
 
          let path = ActorMetadata.scheduledTransfersLowBalanceWarning.ProxyPath
@@ -194,7 +196,7 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
          quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
          return ignored ()
       | BalanceHistoryCronJobSchedule ->
-         logInfo "Scheduling daily balance history update."
+         logInfo "Scheduling balance history update."
          let trigger = BalanceHistoryTriggers.scheduleNightly logInfo
          let path = ctx.Self.Path
 

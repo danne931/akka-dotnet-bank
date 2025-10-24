@@ -13,7 +13,7 @@ let scheduleMonthly (logInfo: string -> unit) =
          .ForJob($"{name}Job", group)
          .WithIdentity($"{name}Trigger", group)
          .WithDescription(
-            "Accounts transactions are consolidated at the end of a billing cycle."
+            "Account transactions are consolidated at the end of a billing cycle."
          )
 
    if Env.isProd then
@@ -22,9 +22,10 @@ let scheduleMonthly (logInfo: string -> unit) =
 
       builder.WithCronSchedule("0 0 13 L * ? *").Build()
    else
-      logInfo "Scheduling billing cycle for every 20 minutes."
+      let minutes = 15
+      logInfo $"Scheduling billing cycle for every {minutes} minutes."
 
       builder
          .WithSimpleSchedule(fun s ->
-            s.WithIntervalInMinutes(20).RepeatForever() |> ignore)
+            s.WithIntervalInMinutes(minutes).RepeatForever() |> ignore)
          .Build()
