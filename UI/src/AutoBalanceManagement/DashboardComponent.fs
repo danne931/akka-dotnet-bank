@@ -109,6 +109,9 @@ let AutomaticBalanceManagementDashboardComponent
    let session = props.Session
    let accounts = props.Accounts
 
+   // Nest LeaderLine arrow SVGs in parent element
+   let arrowsContainerRef = React.useElementRef ()
+
    let onRuleSave =
       fun (receipt: AccountCommandReceipt) ->
          OrgProvider.Msg.AccountUpdated {
@@ -137,14 +140,19 @@ let AutomaticBalanceManagementDashboardComponent
    let arrowIter (fn: ILeaderLine -> unit) (ruleId: Guid) =
       arrowRefs.current |> Map.tryFind ruleId |> (Option.iter << List.iter) fn
 
-   let createArrows () =
+   let createArrows (arrowsContainerElement: Element) =
       for ruleId, arrows in Map.toSeq arrowLayout.ArrowsPerRule do
          let arrows =
             arrows
             |> List.choose (fun arrow ->
                Option.map2
                   (fun start finish ->
-                     LeaderLine.create start finish arrow.Direction)
+                     LeaderLine.create {
+                        Parent = arrowsContainerElement
+                        Start = start
+                        End = finish
+                        Direction = arrow.Direction
+                     })
                   (Map.tryFind arrow.StartId nodeRefs.current)
                   (Map.tryFind arrow.EndId nodeRefs.current))
 
@@ -161,31 +169,19 @@ let AutomaticBalanceManagementDashboardComponent
    // so there will be unnecessary removal and creation of arrows on
    // each render.  Though unnecessary, it appears there is no visual
    // or performance impact so will leave alone for now.
-   //
-   // Ideally we want the effect to only run when the arrow configuration
-   // changes.  If we update the dependencies to do so then we see this
-   // error from LeaderLine library code:
-   // if (e.compareDocumentPosition(i) & Node.DOCUMENT_POSITION_DISCONNECTED)
-   //    return console.error("A disconnected element was passed."),
-   //
-   // Reproduce:
-   // 1. Use this as dependency array [| box (string arrowLayout.ArrowsPerRule) |]
-   // 2. Click to edit an existing rule (opens the sidebar and updates the route)
-   // 3. Close the edit
-   // 4. Hover over a rule.  We would expect to see the corresponding arrow
-   //    become animated but instead LeaderLine throws the above error.
-   //
    // TODO:
-   // It appears LeaderLine may lose it references to the arrow SVGs
-   // (which exist outside of the React app DOM) when the route changes.
-   // A potential fix may be to swap LeaderLine for LinkerLine
-   // https://www.npmjs.com/package/linkerline which is built on top of
-   // LeaderLine.  LinkerLine allows the SVG arrows to be attached to any
-   // parent element so perhaps attaching them to a node in the React app,
-   // such as this component may be the fix.
+   // Investigate why including a simple value such as "hello"
+   // in the dependency array does not prevent the effect from
+   // running again.  May have to do with the route changing
+   // due to the sidebar opening causing the component to remount
+   // and run all effects again.
    React.useLayoutEffect (fun () ->
-      removeArrows ()
-      createArrows ()
+      match arrowsContainerRef.current with
+      | Some parentEl ->
+         removeArrows ()
+         createArrows parentEl
+      | None -> ()
+
       React.createDisposable removeArrows)
 
    classyNode Html.div [ "automatic-balance-management" ] [
@@ -285,21 +281,30 @@ let AutomaticBalanceManagementDashboardComponent
             Html.p "No automatic balance management rules configured."
          else
             classyNode Html.div [ "grid"; "balance-management-container" ] [
-               classyNode Html.div [ "grid"; "balance-management-nodes" ] [
-                  for account in arrowLayout.Nodes.Values do
-                     Html.div [
-                        Html.article [
-                           attr.classes [ "account-node" ]
-                           attr.ref (fun el ->
-                              nodeRefs.current <-
-                                 Map.add account.AccountId el nodeRefs.current)
+               Html.div [
+                  attr.classes [ "grid"; "balance-management-nodes" ]
+                  attr.ref arrowsContainerRef
+                  attr.children [
+                     for account in arrowLayout.Nodes.Values do
+                        Html.div [
+                           Html.article [
+                              attr.classes [ "account-node" ]
+                              attr.ref (fun el ->
+                                 nodeRefs.current <-
+                                    Map.add
+                                       account.AccountId
+                                       el
+                                       nodeRefs.current)
 
-                           attr.children [
-                              Html.b account.FullName
-                              Html.small (Money.format account.AvailableBalance)
+                              attr.children [
+                                 Html.b account.FullName
+                                 Html.small (
+                                    Money.format account.AvailableBalance
+                                 )
+                              ]
                            ]
                         ]
-                     ]
+                  ]
                ]
 
                classyNode Html.div [ "balance-management-rules" ] [

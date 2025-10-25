@@ -7,7 +7,7 @@ type ILeaderLine =
    abstract remove: unit -> unit
    abstract setOptions: obj -> unit
 
-let private leaderLine: obj = importDefault "LeaderLine"
+let private leaderLine: obj = importDefault "linkerline"
 
 [<RequireQualifiedAccess>]
 type ArrowDirection =
@@ -26,15 +26,17 @@ let private activeLineOpts = {|
    color = "#388e3c"
 |}
 
-let create
-   (startEl: Element)
-   (endEl: Element)
-   (direction: ArrowDirection)
-   : ILeaderLine
-   =
+type CreateLeaderLineArgs = {
+   Parent: Element
+   Start: Element
+   End: Element
+   Direction: ArrowDirection
+}
+
+let create (args: CreateLeaderLineArgs) : ILeaderLine =
    let opts = {|
       startPlug =
-         match direction with
+         match args.Direction with
          | ArrowDirection.Bidirectional -> plug
          | ArrowDirection.StartToEnd -> null
       endPlug = plug
@@ -45,7 +47,16 @@ let create
       color = lineOpts.color
    |}
 
-   createNew leaderLine (startEl, endEl, opts) :?> ILeaderLine
+   let elements =
+      createObj [
+         "parent" ==> args.Parent
+         "start" ==> args.Start
+         "end" ==> args.End
+      ]
+
+   let line = createNew leaderLine elements :?> ILeaderLine
+   line.setOptions opts
+   line
 
 let animate (line: ILeaderLine) : ILeaderLine =
    line.setOptions activeLineOpts

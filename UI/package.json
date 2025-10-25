@@ -7,6 +7,7 @@
   "dependencies": {
     "@microsoft/signalr": "^8.0.0",
     "@picocss/pico": "^1.5.13",
+    "linkerline": "^1.6.1",
     "nanoid": "^5.1.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

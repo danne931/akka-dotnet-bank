@@ -42,11 +42,6 @@ module.exports = (env, argv) => {
       })
     ],
 
-    externalsType: 'script',
-    externals: {
-      LeaderLine: ['https://cdnjs.cloudflare.com/ajax/libs/leader-line/1.0.7/leader-line.min.js', 'LeaderLine']
-    },
-
     module: {
       rules: [
         {
