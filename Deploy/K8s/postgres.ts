@@ -16,18 +16,15 @@ export const config = {
 export default function initPostgres (
   provider: k8s.Provider,
   namespace: k8s.core.v1.Namespace
-): k8s.helm.v3.Chart {
+): k8s.helm.v4.Chart {
   const schemaConfigMap = initSchemaConfigMap(provider)
 
-  return new k8s.helm.v3.Chart(
+  return new k8s.helm.v4.Chart(
     config.k8ResourceName,
     {
-      fetchOpts: {
-        repo: 'https://charts.bitnami.com/bitnami'
-      },
-
-      chart: 'postgresql',
-      version: '16.0.0',
+      // https://hub.docker.com/r/bitnamicharts/postgresql
+      chart: 'oci://registry-1.docker.io/bitnamicharts/postgresql',
+      version: '18.1.1',
 
       namespace: namespace.metadata.name,
 

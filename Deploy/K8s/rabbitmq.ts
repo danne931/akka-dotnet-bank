@@ -13,27 +13,26 @@ export const config = {
 export default function initRabbitMq(
   provider: k8s.Provider,
   namespace: k8s.core.v1.Namespace
-): k8s.helm.v3.Chart {
-  return new k8s.helm.v3.Chart(
+): k8s.helm.v4.Chart {
+  return new k8s.helm.v4.Chart(
     config.k8ResourceName,
     {
-      fetchOpts: {
-        repo: 'https://charts.bitnami.com/bitnami'
-      },
-
-      chart: 'rabbitmq',
-      version: '14.7.0',
+      chart: 'oci://registry-1.docker.io/cloudpirates/rabbitmq',
+      version: '0.5.5',
 
       namespace: namespace.metadata.name,
 
       values: {
         auth: {
           username: config.user,
-          password: config.password
+          password: config.password,
+          erlangCookie: "secretz"
         },
 
         // Management Web UI
-        plugins: 'rabbitmq_management',
+        managementPlugin: {
+          enabled: true
+        },
 
         persistence: {
           enabled: true
@@ -41,10 +40,8 @@ export default function initRabbitMq(
 
         service: {
           type: 'ClusterIP',
-          ports: {
-            amqp: 5672,
-            management: 15672
-          }
+          amqpPort: 5672,
+          managementPort: 15672
         }
       }
     },
