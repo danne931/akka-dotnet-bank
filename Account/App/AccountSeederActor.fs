@@ -1214,6 +1214,7 @@ let createCounterparty
       let domesticCounterpartyCmd =
          RegisterCounterpartyCommand.create mockAccountOwner {
             CounterpartyId = Guid.NewGuid() |> CounterpartyId
+            Kind = CounterpartyType.TradingPartner
             PartnerBankCounterpartyId =
                PartnerBankCounterpartyId("ctpy-" + Guid.NewGuid().ToString "N")
             Sender = {|

@@ -485,12 +485,6 @@ type ParentAccountSnapshot = {
    LastBillingCycleDate: DateTime option
    MaintenanceFeeCriteria: MaintenanceFeeCriteria
    Status: ParentAccountStatus
-   // TODO:
-   // Need to differentiate between:
-   //    1. External accounts we can pull money from or transfer money to.
-   //       Ex: We link our Chase bank account
-   //    2. Recipients we can only send money to (external accounts we don't
-   //        control)
    Counterparties: Map<CounterpartyId, Counterparty>
    Events: AccountEvent list
 } with
@@ -523,6 +517,22 @@ type ParentAccountSnapshot = {
 
    member x.PrimaryVirtualAccountCompositeId =
       x.PrimaryVirtualAccountId, x.ParentAccountId, x.OrgId
+
+   /// External funding source we can pull money from or transfer money to.
+   /// (We own these entities so can directly link our bank data via Plaid)
+   /// Ex: We link our Chase bank account
+   member x.ExternalFundingSources =
+      x.Counterparties
+      |> Map.filter (fun _ counterparty ->
+         counterparty.Kind = CounterpartyType.FundingSource)
+
+   /// External trading partners we can send money to or request money from.
+   /// (These accounts belong to entities outside our control so we need to
+   /// email invite these entities to contribute their bank data via Plaid)
+   member x.ExternalTradingPartners =
+      x.Counterparties
+      |> Map.filter (fun _ counterparty ->
+         counterparty.Kind = CounterpartyType.TradingPartner)
 
 type AccountMetrics = {
    DailyInternalTransferWithinOrg: decimal

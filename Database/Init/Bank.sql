@@ -77,6 +77,7 @@ DROP TYPE IF EXISTS recurrence_pattern_type;
 DROP TYPE IF EXISTS recurrence_termination_type;
 DROP TYPE IF EXISTS saga_type;
 DROP TYPE IF EXISTS saga_status;
+DROP TYPE IF EXISTS counterparty_type;
 
 -- Drop Akka event sourcing tables.
 -- These tables are initiated in Infrastructure/Akka.fs.
@@ -784,15 +785,28 @@ COMMENT ON TABLE transfer_internal_between_orgs IS
 CREATE TYPE counterparty_account_depository
 AS ENUM ('Checking', 'Savings'); 
 
+CREATE TYPE counterparty_type
+AS ENUM ('FundingSource', 'TradingPartner'); 
+
 CREATE TYPE payment_network AS ENUM ('ACH');
 
 -- TODO:
 -- Need to differentiate between:
---    1. External accounts we can pull money from or transfer money to.
+--    1. External funding source we can pull money from or transfer money to.
+--       (We own these entities so can directly link our bank data via Plaid)
 --       Ex: We link our Chase bank account
---    2. Recipients we can only send money to (external accounts we don't control)
+--    2. External trading partners we can send money to or request money from.
+--       (These accounts belong to entities outside our control so we need to
+--        email invite these entities to contribute their bank data via Plaid)
+--
+--       Will likely create a "contact" table which contains names and email of the
+--       contact which we would like to invite to add their bank account to the platform
+--       via Plaid (either for fulfilling a requested payment or for receiving money from us).
+--       This counterparty record will be created if the "contact" clicks on the email link
+--       and connects their account via Plaid.
 CREATE TABLE counterparty(
    counterparty_id UUID PRIMARY KEY,
+   kind counterparty_type NOT NULL,
    first_name VARCHAR(50) NOT NULL,
    last_name VARCHAR(50) NOT NULL,
    nickname VARCHAR(100),

@@ -10,9 +10,11 @@ let table = "counterparty"
 module CounterpartyTypeCast =
    let paymentNetwork = "payment_network"
    let accountDepository = "counterparty_account_depository"
+   let counterpartyKind = "counterparty_type"
 
 module CounterpartyFields =
    let counterpartyId = "counterparty_id"
+   let counterpartyKind = "kind"
    let partnerBankCounterpartyId = "partner_bank_counterparty_id"
    let orgId = "org_id"
    let firstName = "first_name"
@@ -62,7 +64,13 @@ module CounterpartyReader =
       read.text CounterpartyFields.address
       |> Serialization.deserializeUnsafe<Address>
 
+   let counterPartyKind (read: RowReader) =
+      CounterpartyFields.counterpartyKind
+      |> read.string
+      |> CounterpartyType.fromStringUnsafe
+
    let counterparty (read: RowReader) : Counterparty = {
+      Kind = counterPartyKind read
       FirstName = firstName read
       LastName = lastName read
       Nickname = nickname read
@@ -94,3 +102,5 @@ module CounterpartyWriter =
       Sql.string (string status)
 
    let paymentNetwork (network: PaymentNetwork) = Sql.string (string network)
+
+   let counterpartyKind (kind: CounterpartyType) = Sql.string (string kind)

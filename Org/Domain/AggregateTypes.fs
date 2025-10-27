@@ -209,6 +209,16 @@ type OrgWithAccountProfiles = {
          AccountMetrics.empty
          x.AccountProfiles.Values
 
+   member x.ExternalFundingSources =
+      x.Counterparties
+      |> Map.filter (fun _ counterparty ->
+         counterparty.Kind = CounterpartyType.FundingSource)
+
+   member x.ExternalTradingPartners =
+      x.Counterparties
+      |> Map.filter (fun _ counterparty ->
+         counterparty.Kind = CounterpartyType.TradingPartner)
+
 [<RequireQualifiedAccess>]
 type OrgMessage =
    | GetOrg

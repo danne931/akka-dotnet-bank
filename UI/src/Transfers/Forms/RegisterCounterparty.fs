@@ -157,6 +157,7 @@ let counterpartyForm
                RoutingNumber = routingNum
                Depository = depository
                PaymentNetwork = paymentNetwork
+               Kind = CounterpartyType.TradingPartner
                Sender = {|
                   OrgId = org.OrgId
                   ParentAccountId = org.ParentAccountId

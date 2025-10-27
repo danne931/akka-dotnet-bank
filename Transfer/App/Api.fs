@@ -41,6 +41,7 @@ module Query =
          cp.{CounterpartyFields.paymentNetwork},
          cp.{CounterpartyFields.address},
          cp.{CounterpartyFields.partnerBankCounterpartyId},
+         cp.{CounterpartyFields.counterpartyKind},
          created_at,
          a.{AccountFields.name},
          a.{AccountFields.accountNumber} as sender_account_number,
@@ -64,6 +65,7 @@ module Query =
       $"""
       SELECT
          cp.{CounterpartyFields.counterpartyId},
+         cp.{CounterpartyFields.counterpartyKind},
          cp.{CounterpartyFields.partnerBankCounterpartyId},
          cp.{CounterpartyFields.orgId},
          cp.{CounterpartyFields.firstName},

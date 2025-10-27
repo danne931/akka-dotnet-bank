@@ -23,6 +23,24 @@ module CounterpartyAccountDepository =
          failwith
             "Error attempting to cast string to CounterpartyAccountDepository"
 
+
+[<RequireQualifiedAccess>]
+type CounterpartyType =
+   | FundingSource
+   | TradingPartner
+
+module CounterpartyType =
+   let fromString (str: string) : CounterpartyType option =
+      match str.ToLower() with
+      | "fundingsource" -> Some CounterpartyType.FundingSource
+      | "tradingpartner" -> Some CounterpartyType.TradingPartner
+      | _ -> None
+
+   let fromStringUnsafe str : CounterpartyType =
+      match fromString str with
+      | Some s -> s
+      | None -> failwith "Error attempting to cast string to CounterpartyType"
+
 [<RequireQualifiedAccess>]
 type PaymentNetwork = | ACH
 //| FedNow
@@ -40,11 +58,20 @@ module PaymentNetwork =
 
 // TODO:
 // Need to differentiate between:
-//    1. External accounts we can pull money from or transfer money to.
+//    1. External funding source we can pull money from or transfer money to.
+//       (We own these entities so can directly link our bank data via Plaid)
 //       Ex: We link our Chase bank account
-//    2. Recipients we can only send money to (external accounts we don't
-//        control)
+//    2. External recipients we can only send money to.
+//       (These accounts belong to entities outside our control so we need to
+//        email invite these entities to contribute their bank data via Plaid)
+//
+//       Will likely create a "contact" table which contains names and email of the
+//       contact which we would like to invite to add their bank account to the platform
+//       via Plaid (either for fulfilling a requested payment or for receiving money from us).
+//       This counterparty record will be created if the "contact" clicks on the email link
+//       and connects their account via Plaid.
 type Counterparty = {
+   Kind: CounterpartyType
    LastName: string
    FirstName: string
    Nickname: string option

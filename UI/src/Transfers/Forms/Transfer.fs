@@ -253,11 +253,12 @@ type private DomesticAccountInterchange =
    | External of Counterparty
 
 let formDomestic
-   (counterparties: Map<CounterpartyId, Counterparty>)
-   (internalAccounts: Map<AccountId, Account>)
+   (org: OrgWithAccountProfiles)
    (initiatedBy: Initiator)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
+   let internalAccounts = org.CheckingAccounts
+
    let internalAccountOptions =
       internalAccounts
       |> Map.toList
@@ -265,15 +266,18 @@ let formDomestic
          string accountId,
          $"{account.Name} ({Money.format account.AvailableBalance})")
 
-   let externalAccountOptions =
-      counterparties
-      |> Map.toList
+   let counterpartyOptions (cps: Map<CounterpartyId, Counterparty>) =
+      Map.toList cps
       |> List.map (fun (recipientId, recipient) ->
          let name = recipient.Nickname |> Option.defaultValue recipient.Name
 
          string recipientId, $"{name} **{recipient.AccountNumber.Last4}")
 
-   let options = internalAccountOptions @ externalAccountOptions
+   let externalFundingSourceOptions =
+      counterpartyOptions org.ExternalFundingSources
+
+   let externalRecipientOptions =
+      counterpartyOptions org.ExternalTradingPartners
 
    let fieldSenderSelect values =
       Form.selectField {
@@ -288,7 +292,7 @@ let formDomestic
                   |> List.length
 
                let externalCount =
-                  externalAccountOptions
+                  externalFundingSourceOptions
                   |> List.filter (fun (id, _) ->
                      id = values.RecipientId || id = newValue)
                   |> List.length
@@ -314,7 +318,9 @@ let formDomestic
          Attributes = {
             Label = "Sender:"
             Placeholder = "No account selected"
-            Options = options |> List.sortBy snd
+            Options =
+               internalAccountOptions @ externalFundingSourceOptions
+               |> List.sortBy snd
          }
       }
 
@@ -326,9 +332,14 @@ let formDomestic
             Guid.parseOptional values.SenderId
             |> Option.exists (AccountId >> internalAccounts.ContainsKey)
 
-         if String.IsNullOrWhiteSpace values.SenderId then options
-         elif senderIsInternal then externalAccountOptions
-         else internalAccountOptions
+         if String.IsNullOrWhiteSpace values.SenderId then
+            internalAccountOptions
+            @ externalRecipientOptions
+            @ externalFundingSourceOptions
+         elif senderIsInternal then
+            externalFundingSourceOptions @ externalRecipientOptions
+         else
+            internalAccountOptions
 
       Form.selectField {
          Parser = Ok
@@ -397,7 +408,7 @@ let formDomestic
       internalAccounts.TryFind(AccountId id)
       |> Option.map DomesticAccountInterchange.Internal
       |> Option.orElseWith (fun () ->
-         counterparties.TryFind(CounterpartyId id)
+         org.Counterparties.TryFind(CounterpartyId id)
          |> Option.map DomesticAccountInterchange.External)
 
    Form.meta (fun values ->
@@ -530,9 +541,7 @@ let TransferInternalBetweenOrgsComponent
 [<ReactComponent>]
 let TransferDomesticFormComponent
    (session: UserSession)
-   (recipients: Map<CounterpartyId, Counterparty>)
-   (senderAccounts: Map<AccountId, Account>)
-   (commandApprovalRules: Map<CommandApprovalRuleId, CommandApprovalRule>)
+   (org: OrgWithAccountProfiles)
    (employeeAccrual: CommandApprovalDailyAccrual)
    (selectedRecipient: (RecipientAccountEnvironment * CounterpartyId) option)
    (onSubmit: AccountCommandReceipt -> unit)
@@ -553,7 +562,7 @@ let TransferDomesticFormComponent
          Memo = ""
          ScheduledAt = "TODAY"
       }
-      Form = formDomestic recipients senderAccounts session.AsInitiator
+      Form = formDomestic org session.AsInitiator
       Action = None
       OnSubmit =
          function
@@ -568,7 +577,7 @@ let TransferDomesticFormComponent
                   CommandApprovalRule.commandRequiresApproval
                      cmd
                      employeeAccrual
-                     commandApprovalRules
+                     org.Org.CommandApprovalRules
 
                match requiresApproval with
                | None -> onSubmit receipt
@@ -694,9 +703,7 @@ let TransferFormComponent
             | Deferred.Resolved(Ok accrual) ->
                TransferDomesticFormComponent
                   session
-                  org.Counterparties
-                  org.CheckingAccounts
-                  org.Org.CommandApprovalRules
+                  org
                   accrual
                   selectedRecipient
                   onSubmit

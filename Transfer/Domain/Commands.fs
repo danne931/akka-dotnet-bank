@@ -270,6 +270,7 @@ module SettleInternalTransferBetweenOrgsCommand =
 type CounterpartyInput = {
    CounterpartyId: CounterpartyId
    PartnerBankCounterpartyId: PartnerBankCounterpartyId
+   Kind: CounterpartyType
    LastName: string
    FirstName: string
    AccountNumber: string
@@ -309,6 +310,7 @@ module RegisterCounterpartyCommand =
          and! lastName = lastNameValidator cmd.Data.LastName
 
          let counterparty = {
+            Kind = cmd.Data.Kind
             FirstName = firstName
             LastName = lastName
             Nickname = None

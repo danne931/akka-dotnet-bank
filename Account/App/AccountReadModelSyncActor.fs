@@ -283,6 +283,7 @@ let private counterpartyReducer
       CounterpartyWriter.paymentNetwork counterparty.PaymentNetwork
       "nickname", CounterpartyWriter.nickname counterparty.Nickname
       "address", CounterpartyWriter.address counterparty.Address
+      "counterpartyKind", CounterpartyWriter.counterpartyKind counterparty.Kind
    ]
 
    {
@@ -1433,6 +1434,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       $"""
       INSERT into {CounterpartySqlMapper.table}
          ({CounterpartyFields.counterpartyId},
+          {CounterpartyFields.counterpartyKind},
           {CounterpartyFields.partnerBankCounterpartyId},
           {CounterpartyFields.orgId},
           {CounterpartyFields.firstName},
@@ -1445,6 +1447,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {CounterpartyFields.address})
       VALUES
          (@counterpartyId,
+          @counterpartyKind::{CounterpartyTypeCast.counterpartyKind},
           @partnerBankCounterpartyId,
           @orgId,
           @firstName,
