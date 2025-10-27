@@ -60,8 +60,47 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                SagaMessage<'SagaStartEvent, 'SagaEvent>.CheckForRemainingWork
             |> Some
 
-      let rec loop (state: 'Saga option) = actor {
+      // Passivate after a delay.
+      // The ReadModelSync actor relies on GetSaga messages returning
+      // the latest saga state for persisting as a read model.
+      // This syncing occurs a few seconds after immediate passivation
+      // so is unnecessarily putting the actor to sleep and waking it back up.
+      // In bursty workloads, with thousands of saga actors waking up
+      // simultaneously & replaying events to attain the current state,
+      // sql connection overloaded errors may be observed.
+      //
+      // Introducing this passivation delay solves that by allowing the GetSaga
+      // message from the ReadModelSync actor to be received before passivating.
+      //
+      // It may be nice if the ReadModelSync actor did not have to rely on
+      // GetSaga Ask messages for the latest state.
+      // Other persistent actor's ReadModelSync actors accomplish this by using
+      // fine-grained updates to the read model.  However, fine-grained read model
+      // updates will be tedious to code for these sagas so I send these
+      // GetSaga message Asks to the actor to get the latest state.
+      //
+      // It may make sense to include the state with each event persisted
+      // allowing the ReadModelSync actor to write the latest saga state
+      // to the read model without having to perform GetSaga ask messages.
+      // I will want to consider this if too many simultaneous Ask messages 
+      // becomes a performance concern but no perceived issue for now.
+      let sleep (reason: string) =
+         logDebug $"Passivate after delay: {reason}"
+
+         ctx.Schedule
+            (TimeSpan.FromSeconds 10.)
+            ctx.Self
+            (SagaMessage<'SagaStartEvent, 'SagaEvent>.Sleep reason)
+         |> ignore
+
+      let rec loop (prepForSleep: bool) (state: 'Saga option) = actor {
          let! msg = ctx.Receive()
+
+         let sleep reason =
+            sleep reason
+            loop true state
+
+         let loop = loop false
 
          match msg with
          | Persisted ctx (:? SagaPersistableEvent<'SagaStartEvent, 'SagaEvent> as e) ->
@@ -96,6 +135,9 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             // Send message to parent actor (Persistence Supervisor)
             // for message command to confirmed event persistence.
             ctx.Parent() <! msg.Message
+         | :? ConfirmableMessageEnvelope as _ when prepForSleep ->
+            logWarning $"Received saga message while prepping for sleep {msg}"
+            ignored ()
          | :? ConfirmableMessageEnvelope as envelope ->
             let unhandledMsg msg =
                logError
@@ -157,6 +199,9 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             | other -> unhandledMsg other
          | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
             match msg with
+            | SagaMessage.Sleep reason ->
+               logDebug $"Passivating: {reason}"
+               return passivate ()
             | SagaMessage.GetSaga ->
                ctx.Sender() <! state
                return ignored ()
@@ -184,16 +229,12 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                      logWarning "Checking for remaining work when state is None"
                      ignored ()
                   | Some saga when saga.ActivityInProgressCount = 0 ->
-                     logDebug "Saga complete - passivate"
-                     passivate ()
+                     sleep "Saga complete"
                   | Some saga when saga.ExhaustedAllAttempts ->
-                     logWarning "Exhausted saga attempts"
-                     passivate ()
+                     sleep "Exhausted saga attempts"
                   | Some saga ->
                      match saga.InactivityTimeout with
-                     | None ->
-                        logDebug "Wait for external saga stimulus"
-                        passivate ()
+                     | None -> sleep "Wait for external saga stimulus"
                      | Some timeout when
                         saga.ActivityRetryableAfterInactivityCount > 0
                         ->
@@ -214,13 +255,11 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                         setWorkCheckTimer timeout
                         ignored ()
                      | Some _ ->
-                        logDebug
-                           "No remaining saga work at this time. Time for a nap."
                         // If timeout is greater than the automatic saga actor
                         // passivation then just passivate immediately and
                         // wait for the SagaAlarmClockActor to wake the
                         // actor back up to check for remaining work.
-                        passivate ()
+                        sleep "No remaining saga work at this time."
             // Some messages are sent through traditional AtMostOnceDelivery via
             // a reference to the cluster sharded entity ref rather than Akka.Delivery
             // AtLeastOnceDelivery producer ref so will not hit the
@@ -282,7 +321,7 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                msg
       }
 
-      loop None
+      loop false None
 
    propsPersist handler
 

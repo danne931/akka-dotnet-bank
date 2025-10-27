@@ -124,13 +124,13 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
                   "Wake up sleeping txn sagas which have remaining activities."
                )
 
-         let minutes = 1
-         logInfo $"Scheduling txn saga alarm clock every {minutes} minutes."
+         let seconds = 10
+         logInfo $"Scheduling txn saga alarm clock every {seconds} seconds."
 
          let trigger =
             builder
                .WithSimpleSchedule(fun s ->
-                  s.WithIntervalInMinutes(minutes).RepeatForever() |> ignore)
+                  s.WithIntervalInMinutes(seconds).RepeatForever() |> ignore)
                .Build()
 
          let path = ActorMetadata.sagaAlarmClock.ProxyPath

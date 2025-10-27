@@ -188,8 +188,8 @@ type private BankConfigInput = {
    BillingStatementPersistenceBackoffRestart: StreamBackoffRestartSettingsInput
    CircuitBreakerActorSupervisor: BackoffSupervisorInput
    QueueConsumerStreamBackoffRestart: StreamBackoffRestartSettingsInput
-   SleepingSagaThrottle: StreamThrottleInput
    SagaPassivateIdleEntityAfter: TimeSpan option
+   SagaWakeFromSleepBurstLimit: int option
 }
 
 type BankConfig = {
@@ -214,8 +214,8 @@ type BankConfig = {
    BillingStatementRetryPersistenceAfter: TimeSpan
    CircuitBreakerActorSupervisor: BackoffSupervisorEnvConfig
    QueueConsumerStreamBackoffRestart: Akka.Streams.RestartSettings
-   SleepingSagaThrottle: StreamThrottleEnvConfig
    SagaPassivateIdleEntityAfter: TimeSpan
+   SagaWakeFromSleepBurstLimit: int
 }
 
 let config =
@@ -315,17 +315,11 @@ let config =
          QueueConsumerStreamBackoffRestart =
             streamBackoffRestartSettingsFromInput
                input.QueueConsumerStreamBackoffRestart
-         SleepingSagaThrottle = {
-            Count = input.SleepingSagaThrottle.Count |> Option.defaultValue 1500
-            Burst = input.SleepingSagaThrottle.Burst |> Option.defaultValue 1500
-            Duration =
-               input.SleepingSagaThrottle.Seconds
-               |> Option.defaultValue 10.
-               |> TimeSpan.FromSeconds
-         }
          SagaPassivateIdleEntityAfter =
             input.SagaPassivateIdleEntityAfter
             |> Option.defaultValue (TimeSpan.FromMinutes 2.)
+         SagaWakeFromSleepBurstLimit =
+            input.SagaWakeFromSleepBurstLimit |> Option.defaultValue 50
       }
    | Error err ->
       match err with

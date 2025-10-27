@@ -2,14 +2,12 @@
 module SagaAlarmClockActor
 
 open Akka.Actor
-open Akka.Streams
 open Akkling.Streams
 open Akkling
 open Akkling.Cluster.Sharding
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
-open Lib.Types
 open Lib.Postgres
 open Lib.Saga
 open AppSagaSqlMapper
@@ -18,7 +16,6 @@ let actorProps
    (system: ActorSystem)
    (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    (getTimedOutSagas: unit -> Async<Result<Option<CorrelationId list>, Err>>)
-   (throttle: StreamThrottleEnvConfig)
    =
    let mat = system.Materializer()
 
@@ -48,11 +45,6 @@ let actorProps
 
                opt)
          |> Source.collect id
-         |> Source.throttle
-               ThrottleMode.Shaping
-               throttle.Burst
-               throttle.Count
-               throttle.Duration
          |> Source.runForEach mat (fun sagaId ->
             getSagaActor sagaId <! SagaMessage.CheckForRemainingWork)
 
@@ -65,9 +57,8 @@ let actorProps
 Indicates that a saga actor will not attempt to retry any unfinished work
 and is asleep (passivated & no longer in memory).
 Get all sagas which need to be woken up to process unfinished business.
-NOTE:
 *)
-let getSleepingSagas () = asyncResultOption {
+let getSleepingSagas (limit: int) = asyncResultOption {
    let query =
       $"""
       SELECT {Fields.id} FROM {table}
@@ -78,9 +69,12 @@ let getSleepingSagas () = asyncResultOption {
          -- elapsed since a saga action was invoked.  Time to wake the saga
          -- and evaluate remaining work.
          AND ({Fields.updatedAt} + {Fields.inactivityTimeout}) < current_timestamp
+      LIMIT @limit
       """
 
-   let! sagaIds = pgQuery<CorrelationId> query None Reader.id
+   let qParams = [ "limit", Sql.int limit ]
+
+   let! sagaIds = pgQuery<CorrelationId> query (Some qParams) Reader.id
    return sagaIds
 }
 
@@ -88,8 +82,5 @@ let initProps
    (system: ActorSystem)
    (getSagaActor: CorrelationId -> IEntityRef<AppSaga.AppSagaMessage>)
    =
-   actorProps
-      system
-      getSagaActor
-      getSleepingSagas
-      Env.config.SleepingSagaThrottle
+   actorProps system getSagaActor (fun () ->
+      getSleepingSagas Env.config.SagaWakeFromSleepBurstLimit)

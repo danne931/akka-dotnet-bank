@@ -448,10 +448,6 @@ let actorProps
                            )
 
                            ignored ()
-                     LifecyclePostStop =
-                        fun _ ->
-                           logDebug mailbox $"ORG POSTSTOP {org.Name}"
-                           SaveSnapshot state
                }
                mailbox
                msg

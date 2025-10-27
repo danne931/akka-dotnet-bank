@@ -262,6 +262,7 @@ type SagaMessage<'SagaStartEvent, 'SagaEvent> =
    | CheckForRemainingWork
    | ResetInProgressActivities
    | GetSaga
+   | Sleep of reason: string
 
 [<RequireQualifiedAccess>]
 type SagaStateTransitionError =
