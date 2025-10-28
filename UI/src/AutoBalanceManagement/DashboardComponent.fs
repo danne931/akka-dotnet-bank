@@ -96,7 +96,9 @@ let computeArrowLayout (accounts: Map<AccountId, Account>) =
       ArrowsPerRule = arrowsPerRule
    }
 
-[<ReactComponent>]
+// 'exportDefault = true' is necessary for dynamic import resolution.
+// The component lazily loaded so charting library fetched only when necessary.
+[<ReactComponent(exportDefault = true)>]
 let AutomaticBalanceManagementDashboardComponent
    (props:
       {|
@@ -170,11 +172,9 @@ let AutomaticBalanceManagementDashboardComponent
    // each render.  Though unnecessary, it appears there is no visual
    // or performance impact so will leave alone for now.
    // TODO:
-   // Investigate why including a simple value such as "hello"
-   // in the dependency array does not prevent the effect from
-   // running again.  May have to do with the route changing
-   // due to the sidebar opening causing the component to remount
-   // and run all effects again.
+   // Investigate why the sidebar opening causes the arrows to disappear
+   // despite 'removeArrows' not being called (the component is not
+   // unmounted when the sidebar opens).
    React.useLayoutEffect (fun () ->
       match arrowsContainerRef.current with
       | Some parentEl ->
@@ -392,6 +392,3 @@ let AutomaticBalanceManagementDashboardComponent
          ]
       ]
    ]
-
-// exportDefault necessary for dynamic import resolution.
-Fable.Core.JsInterop.exportDefault AutomaticBalanceManagementDashboardComponent

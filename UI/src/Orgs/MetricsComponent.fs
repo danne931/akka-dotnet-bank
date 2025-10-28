@@ -30,7 +30,9 @@ let private rotatingMetrics = [
 let private renderMoneyOut amount =
    Html.p [ attr.classes [ "debit" ]; attr.text (Money.formatShort amount) ]
 
-[<ReactComponent>]
+// 'exportDefault = true' is necessary for dynamic import resolution.
+// The component lazily loaded so charting library fetched only when necessary.
+[<ReactComponent(exportDefault = true)>]
 let OrgMetricsComponent (org: OrgWithAccountProfiles) =
    let isFading, setFading = React.useState false
    let flow, setFlow = React.useState MoneyFlow.Out
@@ -205,7 +207,3 @@ let OrgMetricsComponent (org: OrgWithAccountProfiles) =
          | _ -> ()
       ]
    ]
-
-// Necessary for dynamic import resolution. (Component lazily loaded so
-// charting library fetched only when necessary.)
-Fable.Core.JsInterop.exportDefault OrgMetricsComponent

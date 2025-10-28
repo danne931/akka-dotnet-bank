@@ -10,6 +10,10 @@ open Bank.Employee.Domain
 open UIDomain.Account
 open Bank.Account.Forms.AccountCreateForm
 
+let AutoBalanceManagementComponent: ReactElement =
+   Interop.reactApi.lazy' (fun () ->
+      importDynamic "../AutoBalanceManagement/DashboardComponent")
+
 [<ReactComponent>]
 let AccountNumberComponent (account: Account) =
    let display, toggleDisplay = React.useState false
@@ -200,11 +204,9 @@ let AccountDashboardComponent (url: Routes.AccountUrl) (session: UserSession) =
                // only by AutomaticBalanceDashboardComponent.
                React.suspense (
                   [
-                     React.lazy' (
-                        fun () ->
-                           importDynamic
-                              "../AutoBalanceManagement/DashboardComponent"
-                        , {|
+                     Interop.reactApi.createElement (
+                        AutoBalanceManagementComponent,
+                        {|
                            Session = session
                            Accounts = org.Accounts
                            Url = url

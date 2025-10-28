@@ -175,7 +175,9 @@ let update orgId msg state =
       },
       Cmd.none
 
-[<ReactComponent>]
+// 'exportDefault = true' is necessary for dynamic import resolution.
+// The component lazily loaded so charting library fetched only when necessary.
+[<ReactComponent(exportDefault = true)>]
 let AnalyticsDashboardComponent
    (props:
       {|
@@ -303,7 +305,3 @@ let AnalyticsDashboardComponent
          | _ -> Html.progress []
       ]
    ]
-
-// Necessary for dynamic import resolution. (Component lazily loaded so
-// charting library fetched only when necessary.)
-Fable.Core.JsInterop.exportDefault AnalyticsDashboardComponent

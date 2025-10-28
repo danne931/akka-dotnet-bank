@@ -25,6 +25,10 @@ open Transaction
 open Pagination
 open TableControlPanel
 
+let OrgMetricsComponent: ReactElement =
+   Interop.reactApi.lazy' (fun () ->
+      importDynamic "../Orgs/MetricsComponent.fs")
+
 [<RequireQualifiedAccess>]
 type TransactionFilterView =
    | Date
@@ -771,12 +775,7 @@ let TransactionDashboardComponent
       match orgCtx with
       | Deferred.Resolved(Ok(Some org)) ->
          React.suspense (
-            [
-               React.lazy' (
-                  (fun () -> importDynamic "../Orgs/MetricsComponent"),
-                  org
-               )
-            ],
+            [ Interop.reactApi.createElement (OrgMetricsComponent, org) ],
             Html.progress []
          )
       | _ -> ()
