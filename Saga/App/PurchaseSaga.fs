@@ -88,6 +88,10 @@ let applyEvent
             CardIssuerPurchaseEvents =
                saga.CardIssuerPurchaseEvents @ progress.Events
                |> List.sortBy _.CreatedAt
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.WaitForCardNetworkResolution
+
       }
 
       let failSaga reason = {
@@ -101,7 +105,6 @@ let applyEvent
             }
             LifeCycle =
                saga.LifeCycle
-               |> finishActivity Activity.WaitForCardNetworkResolution
                |> addActivity Activity.AcquireAccountFailureAcknowledgement
                |> addActivity Activity.AcquireCardFailureAcknowledgement
                |> abortActivity Activity.SendPurchaseNotification
@@ -126,7 +129,7 @@ let applyEvent
          //
          // NOTE:
          // It is not certain from the docs whether a PARTIAL AuthExpiry or
-         // AuthReversal occurring before the first clearing can occur.
+         // AuthReversal can occur before the first clearing.
          // If it does, the behavior of this program is to record the fact in
          // sagaState.CardIssuerPurchaseEvents without interacting with
          // account & employee actors.  As such, no funds reserved from the
@@ -144,7 +147,11 @@ let applyEvent
             |> List.sumBy (fun o ->
                match o.Type with
                | PurchaseEventType.Clearing
-               | PurchaseEventType.Return ->
+               | PurchaseEventType.Return
+               // Financial Auths are SMS requests, wherein auth
+               // & clearing are combined into a single message.
+               // See Purchase/Domain/PurchaseLifecycleEvent.fs case 13.
+               | PurchaseEventType.FinancialAuth ->
                   match o.Flow with
                   | MoneyFlow.Out -> -o.Amount
                   | MoneyFlow.In -> o.Amount
@@ -177,7 +184,6 @@ let applyEvent
                saga with
                   LifeCycle =
                      saga.LifeCycle
-                     |> finishActivity Activity.WaitForCardNetworkResolution
                      |> addActivity (
                         Activity.SettlePurchaseWithAccount clearedAmount
                      )

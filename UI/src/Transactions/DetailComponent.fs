@@ -241,19 +241,27 @@ let private renderTransactionHistory
                            | PurchaseEventType.FinancialAuth ->
                               let status =
                                  match status with
-                                 | PurchaseStatus.Declined -> "declined"
-                                 | _ -> "approved"
+                                 | PurchaseStatus.Declined -> "Declined"
+                                 | _ -> "Approved"
 
-                              $"{Money.format e.Amount} {status} by card network"
+                              $"{status} by card network"
                            | PurchaseEventType.AuthAdvice ->
                               $"Auth Advice {Money.format e.Amount} received from card network"
                            | PurchaseEventType.Clearing ->
-                              $"Clearing of {Money.format e.Amount} confirmed by card network"
+                              let descriptor =
+                                 match e.Flow with
+                                 | MoneyFlow.Out -> "Clearing"
+                                 | MoneyFlow.In -> "Decline"
+
+                              $"{descriptor} of {Money.format e.Amount} confirmed by card network"
+                           | PurchaseEventType.Return ->
+                              $"Return of {Money.format e.Amount} confirmed by card network"
+                           | PurchaseEventType.ReturnReversal ->
+                              $"Return reversal of {Money.format e.Amount} confirmed by card network"
                            | PurchaseEventType.AuthExpiry ->
                               $"{Money.format e.Amount} Auth Expiry received from card network"
                            | PurchaseEventType.AuthReversal ->
                               $"{Money.format e.Amount} Auth Reversal received from card network"
-                           | _ -> $"Unknown - {e.Type}"
                         )
                   | EmployeeEvent.PurchaseSettled e ->
                      let cleared = e.Data.Clearing.ClearedAmount

@@ -42,14 +42,15 @@ type Activity =
    interface IActivity with
       member x.MaxAttempts =
          match x with
+         | WaitForCardNetworkResolution
          | ReserveEmployeeCardFunds -> 1
          | _ -> 3
 
       member x.InactivityTimeout =
          match x with
-         | ReserveEmployeeCardFunds
          | WaitForCardNetworkResolution -> None
          | SendPurchaseNotification -> Some(TimeSpan.FromMinutes 4.)
+         | ReserveEmployeeCardFunds
          | ReserveAccountFunds
          | AcquireCardFailureAcknowledgement
          | AcquireAccountFailureAcknowledgement

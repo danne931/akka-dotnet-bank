@@ -138,7 +138,7 @@ open Lib.SharedTypes
  * -------- Message Types Originating with a Transaction Webhook --------
  *
  * 16. Authorization
- *   - If ther user receives an Auth message at the txn webhook endpoint without
+ *   - If the user receives an Auth message at the txn webhook endpoint without
  *     a prior ASA request, this signifies that there was a decline due to a
  *     check performed by Lithic before the ASA request was sent.
  *     Ex: Txn attempted on paused card, spend limit exceeded, auth rule triggered
