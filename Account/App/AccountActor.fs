@@ -187,9 +187,10 @@ let onPersisted
       ()
    | AccountEvent.DebitPending e ->
       let msg =
-         state.PartnerBankLink
-         |> PurchaseSagaEvent.AccountReservedFunds
-         |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+         AppSaga.Message.purchase
+            e.OrgId
+            e.CorrelationId
+            PurchaseSagaEvent.AccountReservedFunds
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
       registry.SagaGuaranteedDeliveryActor() <! msg
@@ -197,7 +198,7 @@ let onPersisted
       mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
    | AccountEvent.DebitSettled e ->
       let msg =
-         PurchaseSagaEvent.PurchaseSettledWithAccount
+         PurchaseSagaEvent.PurchaseSettledWithAccount e.Data.Clearing
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 

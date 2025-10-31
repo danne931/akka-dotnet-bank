@@ -229,7 +229,8 @@ module AccountEvent =
       | AccountEvent.DebitFailed evt ->
          Some evt.Data.Amount, None, Some evt.Data.Merchant
       | AccountEvent.DebitSettled evt ->
-         Some evt.Data.Amount, Some MoneyFlow.Out, Some evt.Data.Merchant
+         let clearing = evt.Data.Clearing.ClearedAmount
+         Some clearing.Amount, Some clearing.Flow, Some evt.Data.Merchant
       | AccountEvent.DebitRefunded evt ->
          Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Merchant
       | AccountEvent.InternalTransferWithinOrgDeducted evt ->

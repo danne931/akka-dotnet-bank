@@ -24,10 +24,6 @@ module AccountFields =
    let status = "status"
    let balance = "balance"
    let pendingFundsDetail = "pending_funds_detail"
-   let pendingAdditionsMoney = "pending_additions_money"
-   let pendingAdditionsCount = "pending_additions_count"
-   let pendingDeductionsMoney = "pending_deductions_money"
-   let pendingDeductionsCount = "pending_deductions_count"
    let autoTransferRule = "auto_transfer_rule"
    let autoTransferRuleFrequency = "auto_transfer_rule_frequency"
 
@@ -98,14 +94,6 @@ module AccountSqlWriter =
    let depository (dep: AccountDepository) = dep |> string |> Sql.string
    let name = Sql.string
    let balance = Sql.money
-
-   let pendingFundsMoney (flow: MoneyFlow) (funds: PendingFunds) =
-      funds.Values
-      |> Seq.filter (fun o -> o.Flow = flow)
-      |> Seq.sumBy _.Amount
-      |> Sql.money
-
-   let pendingFundsCount (funds: PendingFunds) = Sql.int funds.Count
 
    let pendingFundsDetail (funds: PendingFunds) =
       funds |> Serialization.serialize |> Sql.jsonb

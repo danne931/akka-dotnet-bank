@@ -2,8 +2,6 @@ module PurchaseSaga
 
 open System
 
-open Lib.SharedTypes
-open Bank.Account.Domain
 open Bank.Purchase.Domain
 open Lib.Saga
 
@@ -18,64 +16,70 @@ type PurchaseSagaStartEvent = PurchaseIntent of PurchaseInfo
 
 [<RequireQualifiedAccess>]
 type PurchaseSagaEvent =
-   | AccountReservedFunds of PartnerBankInternalAccountLink
+   | AccountReservedFunds
    | CardReservedFunds
    | CardIssuerUpdatedPurchaseProgress of CardIssuerPurchaseProgress
    | PurchaseRejected of PurchaseFailReason
    | PurchaseFailureAcknowledgedByCard
    | PurchaseFailureAcknowledgedByAccount
-   | PartnerBankSyncResponse of Result<SettlementId, string>
-   | PurchaseSettledWithAccount
-   | PurchaseSettledWithCard
+   | PurchaseSettledWithAccount of PurchaseClearing
+   | PurchaseSettledWithCard of PurchaseClearing
    | PurchaseNotificationSent
-   | SupportTeamResolvedPartnerBankSync
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
-[<RequireQualifiedAccess>]
+[<RequireQualifiedAccess; CustomEquality; NoComparison>]
 type Activity =
    | ReserveEmployeeCardFunds
    | ReserveAccountFunds
-   | SyncToPartnerBank
-   | SettlePurchaseWithAccount
-   | SettlePurchaseWithCard
+   | SettlePurchaseWithAccount of PurchaseClearing
+   | SettlePurchaseWithCard of PurchaseClearing
    | SendPurchaseNotification
    | AcquireCardFailureAcknowledgement
    | AcquireAccountFailureAcknowledgement
    | WaitForCardNetworkResolution
-   | WaitForSupportTeamToResolvePartnerBankSync
 
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | WaitForSupportTeamToResolvePartnerBankSync -> 0
          | ReserveEmployeeCardFunds -> 1
-         | SyncToPartnerBank -> 4
          | _ -> 3
 
       member x.InactivityTimeout =
          match x with
          | ReserveEmployeeCardFunds
-         | WaitForCardNetworkResolution
-         | WaitForSupportTeamToResolvePartnerBankSync -> None
-         | SendPurchaseNotification
-         | SyncToPartnerBank -> Some(TimeSpan.FromMinutes 4.)
+         | WaitForCardNetworkResolution -> None
+         | SendPurchaseNotification -> Some(TimeSpan.FromMinutes 4.)
          | ReserveAccountFunds
          | AcquireCardFailureAcknowledgement
          | AcquireAccountFailureAcknowledgement
-         | SettlePurchaseWithAccount
-         | SettlePurchaseWithCard -> Some(TimeSpan.FromSeconds 4.)
+         | SettlePurchaseWithAccount _
+         | SettlePurchaseWithCard _ -> Some(TimeSpan.FromSeconds 4.)
+
+   override x.Equals compareTo =
+      match compareTo with
+      | :? Activity as compareTo -> x.GetHashCode() = compareTo.GetHashCode()
+      | _ -> false
+
+   override x.GetHashCode() =
+      match x with
+      | SettlePurchaseWithCard clearing ->
+         hash $"SettlePurchaseWithCard-{clearing.PurchaseClearedId}"
+      | SettlePurchaseWithAccount clearing ->
+         hash $"SettlePurchaseWithAccount-{clearing.PurchaseClearedId}"
+      | _ -> hash (string x)
 
 type PurchaseSaga = {
    PurchaseInfo: PurchaseInfo
+   InitialPurchaseIntentAmount: decimal
    CardIssuerPurchaseEvents: PurchaseEvent list
+   CardIssuerProgressAmounts: PurchaseAmounts
    StartEvent: PurchaseSagaStartEvent
    StartedAt: DateTime
    Events: PurchaseSagaEvent list
    Status: PurchaseSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
    FailReason: PurchaseFailReason option
-   PartnerBankAccountLink: PartnerBankInternalAccountLink option
 } with
 
    member x.ReservedEmployeeCardFunds =
@@ -83,6 +87,13 @@ type PurchaseSaga = {
 
    member x.ReservedAccountFunds =
       x.LifeCycle.Completed |> List.exists _.Activity.IsReserveAccountFunds
+
+   member x.OutgoingSettlementWithAccount =
+      x.LifeCycle.InProgress
+      |> List.tryPick (fun o ->
+         match o.Activity with
+         | Activity.SettlePurchaseWithAccount clearing -> Some clearing
+         | _ -> None)
 
    member x.SettledWithAccount =
       x.LifeCycle.Completed
@@ -99,16 +110,5 @@ type PurchaseSaga = {
       x.LifeCycle.InProgress
       |> List.exists _.Activity.IsAcquireAccountFailureAcknowledgement
 
-   member x.SyncedToPartnerBank =
-      x.Events
-      |> List.tryPick (function
-         | PurchaseSagaEvent.PartnerBankSyncResponse(Ok settlementId) ->
-            Some settlementId
-         | _ -> None)
-
    member x.PurchaseNotificationSent =
       x.LifeCycle.Completed |> List.exists _.Activity.IsSendPurchaseNotification
-
-   member x.RequiresManualSupportFixForPartnerBankSync =
-      x.LifeCycle.InProgress
-      |> List.exists _.Activity.IsWaitForSupportTeamToResolvePartnerBankSync

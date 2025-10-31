@@ -70,6 +70,11 @@ module MoneyFlow =
          | "out" -> Some MoneyFlow.Out
          | _ -> None
 
+// TODO:
+// - Use instead of decimal in several places throughout the app
+// - Add fromCents and toCents functions
+type Money = { Amount: decimal; Flow: MoneyFlow }
+
 type PendingFund = { Amount: decimal; Flow: MoneyFlow }
 
 type PendingFunds = Map<Guid, PendingFund>

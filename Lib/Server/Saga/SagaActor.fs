@@ -82,7 +82,7 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
       // It may make sense to include the state with each event persisted
       // allowing the ReadModelSync actor to write the latest saga state
       // to the read model without having to perform GetSaga ask messages.
-      // I will want to consider this if too many simultaneous Ask messages 
+      // I will want to consider this if too many simultaneous Ask messages
       // becomes a performance concern but no perceived issue for now.
       let sleep (reason: string) =
          logDebug $"Passivate after delay: {reason}"
@@ -101,6 +101,10 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             loop true state
 
          let loop = loop false
+
+         let handleMessageWhenPrepForSleep () =
+            logWarning $"Received saga message while prepping for sleep {msg}"
+            unhandled ()
 
          match msg with
          | Persisted ctx (:? SagaPersistableEvent<'SagaStartEvent, 'SagaEvent> as e) ->
@@ -136,8 +140,7 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             // for message command to confirmed event persistence.
             ctx.Parent() <! msg.Message
          | :? ConfirmableMessageEnvelope as _ when prepForSleep ->
-            logWarning $"Received saga message while prepping for sleep {msg}"
-            ignored ()
+            handleMessageWhenPrepForSleep ()
          | :? ConfirmableMessageEnvelope as envelope ->
             let unhandledMsg msg =
                logError
@@ -197,11 +200,22 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                               (persistableEvent evt)
                | other -> unhandledMsg other
             | other -> unhandledMsg other
-         | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
+         | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg when prepForSleep ->
             match msg with
             | SagaMessage.Sleep reason ->
                logDebug $"Passivating: {reason}"
                return passivate ()
+            | SagaMessage.GetSaga ->
+               ctx.Sender() <! state
+               return ignored ()
+            | _ -> handleMessageWhenPrepForSleep ()
+         | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
+            match msg with
+            | SagaMessage.Sleep _ ->
+               logWarning
+                  "Should not receive Sleep message if prepForSleep = false"
+
+               return unhandled ()
             | SagaMessage.GetSaga ->
                ctx.Sender() <! state
                return ignored ()

@@ -1,6 +1,5 @@
 namespace PartnerBank.Service.Domain
 
-open System
 open FsToolkit.ErrorHandling
 
 open Lib.SharedTypes
@@ -50,12 +49,3 @@ type InternalAccountCreateResponseDTO = {
          PartnerBankAccountId = PartnerBankAccountId x.account_id
       }
    }
-
-// TODO: Remove - will be handled by Lithic
-type SyncPurchase = {
-   Amount: decimal
-   Account: PartnerBankInternalAccountLink
-   SagaMetadata: PartnerBankSagaMetadata
-}
-
-type SyncPurchaseResponse = { ConfirmationId: Guid }

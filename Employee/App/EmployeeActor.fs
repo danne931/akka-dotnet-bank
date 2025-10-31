@@ -204,7 +204,7 @@ let private onPersist
       registry.SagaGuaranteedDeliveryActor() <! msg
    | EmployeeEvent.PurchaseSettled e ->
       let msg =
-         PurchaseSagaEvent.PurchaseSettledWithCard
+         PurchaseSagaEvent.PurchaseSettledWithCard e.Data.Clearing
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 

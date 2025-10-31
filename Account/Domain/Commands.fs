@@ -316,22 +316,10 @@ module SkipMaintenanceFeeCommand =
 type SettleDebitCommand = Command<DebitSettled>
 
 module SettleDebitCommand =
-   let create
-      (parentAccountId: ParentAccountId, orgId: OrgId)
-      (correlationId: CorrelationId)
-      (initiator: Initiator)
-      (data: DebitSettled)
-      =
+   let create (purchaseInfo: PurchaseInfo) (clearing: PurchaseClearing) =
       Command.create
-         parentAccountId.AsEntityId
-         orgId
-         correlationId
-         initiator
-         data
-
-   let fromPurchase (purchaseInfo: PurchaseInfo) =
-      create
-         (purchaseInfo.ParentAccountId, purchaseInfo.OrgId)
+         purchaseInfo.ParentAccountId.AsEntityId
+         purchaseInfo.OrgId
          purchaseInfo.CorrelationId
          purchaseInfo.InitiatedBy
          {
@@ -345,7 +333,9 @@ module SettleDebitCommand =
                CardNickname = purchaseInfo.CardNickname
             }
             Merchant = purchaseInfo.Merchant
+            // TODO: see about removing "amount" or changing to "total amount"
             Amount = purchaseInfo.Amount
+            Clearing = clearing
          }
 
    let toEvent

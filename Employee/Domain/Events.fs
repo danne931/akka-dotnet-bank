@@ -57,7 +57,10 @@ type CardPurchasePending = { Info: PurchaseInfo }
 
 type CardIssuerUpdatedPurchaseProgress = { Info: CardIssuerPurchaseProgress }
 
-type CardPurchaseSettled = { Info: PurchaseInfo }
+type CardPurchaseSettled = {
+   Info: PurchaseInfo
+   Clearing: PurchaseClearing
+}
 
 type CardPurchaseFailed = {
    Info: PurchaseInfo

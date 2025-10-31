@@ -261,7 +261,21 @@ type PurchaseAmounts = {
    Cardholder: PurchaseCardHolderAmount
    Merchant: PurchaseAmount
    Settlement: PurchaseAmount
-}
+} with
+
+   static member Empty =
+      let o = { Amount = 0m; Currency = Currency.USD }
+
+      {
+         Hold = o
+         Merchant = o
+         Settlement = o
+         Cardholder = {
+            Amount = o.Amount
+            Currency = o.Currency
+            ConversionRate = 1m
+         }
+      }
 
 type CardIssuerPurchaseProgress = {
    Amounts: PurchaseAmounts

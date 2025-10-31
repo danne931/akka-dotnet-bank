@@ -14,6 +14,7 @@ open PaymentSqlMapper
 open TransferSqlMapper
 open CounterpartySqlMapper
 open Lib.ReadModelSyncActor
+open Bank.Purchase.Domain
 
 module aeSqlMapper = AccountEventSqlMapper
 module aeSqlWriter = AccountEventSqlMapper.SqlWriter
@@ -146,27 +147,18 @@ module private AccountBalanceReducer =
       | InternalTransferBetweenOrgs -> MoneyFlow.Out
       | DomesticTransfer flow -> flow
 
-   let private flowDescriptor (txnType: Transaction) =
-      match flow txnType with
-      | MoneyFlow.In -> "Additions"
-      | MoneyFlow.Out -> "Deductions"
-
    let reserveFunds accountId txnAmount txnType (txnId: Guid) acc =
-      let direction = flowDescriptor txnType
-
       let fund =
          Map [
             txnId,
             {
-               Flow = MoneyFlow.Out
+               Flow = flow txnType
                Amount = txnAmount
             }
          ]
 
       let qParams = [
          "accountId", AccountSqlWriter.accountId accountId
-         $"pending{direction}MoneyDelta", Sql.money txnAmount
-         $"pending{direction}CountDelta", Sql.int 1
          "pendingFundsDetailAddition",
          fund |> Serialization.serialize |> Sql.jsonb
       ]
@@ -176,13 +168,9 @@ module private AccountBalanceReducer =
             AccountUpdate = qParams :: acc.AccountUpdate
       }
 
-   let releaseReservedFunds accountId txnAmount txnType (txnId: Guid) acc =
-      let direction = flowDescriptor txnType
-
+   let releaseReservedFunds accountId (txnId: Guid) acc =
       let qParams = [
          "accountId", AccountSqlWriter.accountId accountId
-         $"pending{direction}MoneyDelta", Sql.money -txnAmount
-         $"pending{direction}CountDelta", Sql.int -1
          "pendingFundsDetailTransactionId", Sql.string (string txnId)
       ]
 
@@ -192,16 +180,37 @@ module private AccountBalanceReducer =
       }
 
    let settleFunds accountId txnAmount txnType (txnId: Guid) acc =
-      let direction = flowDescriptor txnType
-
       let qParams = [
          "accountId", AccountSqlWriter.accountId accountId
-         $"pending{direction}MoneyDelta", Sql.money -txnAmount
-         $"pending{direction}CountDelta", Sql.int -1
 
          match flow txnType with
          | MoneyFlow.In -> "balanceDelta", Sql.money txnAmount
          | MoneyFlow.Out -> "balanceDelta", Sql.money -txnAmount
+
+         "pendingFundsDetailTransactionId", Sql.string (string txnId)
+      ]
+
+      {
+         acc with
+            AccountUpdate = qParams :: acc.AccountUpdate
+      }
+
+   let settlePurchaseFunds
+      accountId
+      (clearing: PurchaseClearing)
+      (txnId: Guid)
+      acc
+      =
+      let direction = clearing.ClearedAmount.Flow
+
+      let qParams = [
+         "accountId", AccountSqlWriter.accountId accountId
+
+         match direction with
+         | MoneyFlow.In ->
+            "balanceDelta", Sql.money clearing.ClearedAmount.Amount
+         | MoneyFlow.Out ->
+            "balanceDelta", Sql.money -clearing.ClearedAmount.Amount
 
          "pendingFundsDetailTransactionId", Sql.string (string txnId)
       ]
@@ -458,14 +467,6 @@ let sqlParamReducer
          "balance", AccountSqlWriter.balance 0m
          "pendingFundsDetail",
          AccountSqlWriter.pendingFundsDetail PendingFunds.zero
-         "pendingAdditionsMoney",
-         AccountSqlWriter.pendingFundsMoney MoneyFlow.In PendingFunds.zero
-         "pendingAdditionsCount",
-         AccountSqlWriter.pendingFundsCount PendingFunds.zero
-         "pendingDeductionsMoney",
-         AccountSqlWriter.pendingFundsMoney MoneyFlow.Out PendingFunds.zero
-         "pendingDeductionsCount",
-         AccountSqlWriter.pendingFundsCount PendingFunds.zero
          "status", AccountSqlWriter.status AccountStatus.Active
          "autoTransferRule", AccountSqlWriter.autoTransferRule None
          "autoTransferRuleFrequency",
@@ -494,14 +495,6 @@ let sqlParamReducer
          "balance", AccountSqlWriter.balance 0m
          "pendingFundsDetail",
          AccountSqlWriter.pendingFundsDetail PendingFunds.zero
-         "pendingAdditionsMoney",
-         AccountSqlWriter.pendingFundsMoney MoneyFlow.In PendingFunds.zero
-         "pendingAdditionsCount",
-         AccountSqlWriter.pendingFundsCount PendingFunds.zero
-         "pendingDeductionsMoney",
-         AccountSqlWriter.pendingFundsMoney MoneyFlow.Out PendingFunds.zero
-         "pendingDeductionsCount",
-         AccountSqlWriter.pendingFundsCount PendingFunds.zero
          "status", AccountSqlWriter.status AccountStatus.Active
          "autoTransferRule", AccountSqlWriter.autoTransferRule None
          "autoTransferRuleFrequency",
@@ -532,17 +525,14 @@ let sqlParamReducer
          e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
          acc
    | AccountEvent.DebitSettled e ->
-      AccountBalanceReducer.settleFunds
+      AccountBalanceReducer.settlePurchaseFunds
          accountId
-         e.Data.Amount
-         AccountBalanceReducer.Transaction.Purchase
+         e.Data.Clearing
          e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
          acc
    | AccountEvent.DebitFailed e ->
       AccountBalanceReducer.releaseReservedFunds
          accountId
-         e.Data.Amount
-         AccountBalanceReducer.Transaction.Purchase
          e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
          acc
    | AccountEvent.DebitRefunded e ->
@@ -740,8 +730,6 @@ let sqlParamReducer
 
       AccountBalanceReducer.releaseReservedFunds
          accountId
-         info.Amount
-         AccountBalanceReducer.Transaction.InternalTransferBetweenOrgs
          info.TransferId.Value
          acc
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
@@ -844,8 +832,6 @@ let sqlParamReducer
 
       AccountBalanceReducer.releaseReservedFunds
          accountId
-         info.Amount
-         (AccountBalanceReducer.Transaction.DomesticTransfer info.MoneyFlow)
          info.TransferId.Value
          acc
    | AccountEvent.DomesticTransferSettled e ->
@@ -1122,10 +1108,6 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {AccountFields.depository},
           {AccountFields.balance},
           {AccountFields.pendingFundsDetail},
-          {AccountFields.pendingDeductionsMoney},
-          {AccountFields.pendingDeductionsCount},
-          {AccountFields.pendingAdditionsMoney},
-          {AccountFields.pendingAdditionsCount},
           {AccountFields.currency},
           {AccountFields.status},
           {AccountFields.autoTransferRule},
@@ -1140,10 +1122,6 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           @depository::{AccountTypeCast.depository},
           @balance,
           @pendingFundsDetail,
-          @pendingDeductionsMoney,
-          @pendingDeductionsCount,
-          @pendingAdditionsMoney,
-          @pendingAdditionsCount,
           @currency,
           @status::{AccountTypeCast.status},
           @autoTransferRule,
@@ -1166,14 +1144,6 @@ let upsertReadModels (accountEvents: AccountEvent list) =
                ELSE
                   {AccountFields.pendingFundsDetail}
             END,
-         {AccountFields.pendingDeductionsMoney} =
-            {AccountFields.pendingDeductionsMoney} + COALESCE(@pendingDeductionsMoneyDelta, 0::money),
-         {AccountFields.pendingDeductionsCount} =
-            {AccountFields.pendingDeductionsCount} + COALESCE(@pendingDeductionsCountDelta, 0::int),
-         {AccountFields.pendingAdditionsMoney} =
-            {AccountFields.pendingAdditionsMoney} + COALESCE(@pendingAdditionsMoneyDelta, 0::money),
-         {AccountFields.pendingAdditionsCount} =
-            {AccountFields.pendingAdditionsCount} + COALESCE(@pendingAdditionsCountDelta, 0::int),
          {AccountFields.status} = COALESCE(@status::{AccountTypeCast.status}, {AccountFields.status}),
          {AccountFields.autoTransferRule} = COALESCE(@autoTransferRule, {AccountFields.autoTransferRule}),
          {AccountFields.autoTransferRuleFrequency} =
@@ -1189,10 +1159,6 @@ let upsertReadModels (accountEvents: AccountEvent list) =
             "balanceDelta"
             "pendingFundsDetailTransactionId"
             "pendingFundsDetailAddition"
-            "pendingDeductionsMoneyDelta"
-            "pendingDeductionsCountDelta"
-            "pendingAdditionsMoneyDelta"
-            "pendingAdditionsCountDelta"
             "status"
             "autoTransferRule"
             "autoTransferRuleFrequency"

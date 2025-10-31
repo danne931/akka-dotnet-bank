@@ -125,13 +125,19 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
      }
    | EmployeeEvent.PurchaseSettled e ->
       let info = e.Data.Info
+      let cleared = e.Data.Clearing.ClearedAmount
+
+      let descriptor =
+         match cleared.Flow with
+         | MoneyFlow.In -> "reversal"
+         | MoneyFlow.Out -> "deduction"
 
       {
          props with
             Name = "Purchase Settled"
             Info =
-               $"Purchase by {txn.EmployeeName} at {info.Merchant} deducted from card {info.CardNickname} **{info.CardNumberLast4}"
-            Amount = Some <| Money.format info.Amount
+               $"Purchase by {txn.EmployeeName} at {info.Merchant} settled a {descriptor} from card {info.CardNickname} **{info.CardNumberLast4}"
+            Amount = Some <| Money.format cleared.Amount
       }
    | EmployeeEvent.PurchaseFailed e ->
       let info = e.Data.Info
@@ -311,13 +317,20 @@ let accountHistoryUIFriendly
    | DebitSettled evt ->
       let em = evt.Data.EmployeePurchaseReference
 
+      let cleared = evt.Data.Clearing.ClearedAmount
+
+      let descriptor =
+         match cleared.Flow with
+         | MoneyFlow.In -> "reversal"
+         | MoneyFlow.Out -> "deduction"
+
       {
          props with
             Name = "Purchase Settled"
             Info =
-               $"Purchase by {em.EmployeeName} at {evt.Data.Merchant} deducted from account {accountName} "
-            Amount = Some <| Money.format evt.Data.Amount
-            MoneyFlow = Some MoneyFlow.Out
+               $"Purchase by {em.EmployeeName} at {evt.Data.Merchant} settled a {descriptor} from account {accountName} "
+            Amount = Some <| Money.format cleared.Amount
+            MoneyFlow = Some cleared.Flow
       }
    | DebitFailed e -> {
       props with

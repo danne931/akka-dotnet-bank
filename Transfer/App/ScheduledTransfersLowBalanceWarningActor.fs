@@ -75,7 +75,18 @@ let actorProps
 // transfers is greater than the available balance in an associated account.
 let getAccountsWithInsufficientBalanceToCoverScheduledTransfers () = asyncResultOption {
    let availableBalance =
-      $"a.{AccountFields.balance} - a.{AccountFields.pendingDeductionsMoney}"
+      $"""
+      a.{AccountFields.balance}
+      -
+      COALESCE(
+         (
+            SELECT SUM((value->>'Amount')::money)
+            FROM jsonb_each(a.{AccountFields.pendingFundsDetail})
+            WHERE value->>'Flow' = 'Out'
+         )
+         , 0::money
+      )
+      """
 
    let transferAmount = $"t.{TransferFields.amount}"
    let scheduledAt = $"t.{TransferFields.scheduledAt}"

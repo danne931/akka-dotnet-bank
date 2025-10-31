@@ -351,6 +351,8 @@ type RuleResultDTO = {
    explanation: string
 }
 
+let private formattedTxnAmount num = abs num / 100m
+
 type CardTransactionEventDTO = {
    ``type``: string
    amount: decimal
@@ -390,7 +392,7 @@ type CardTransactionEventDTO = {
 
       return {
          Type = evtType
-         Amount = x.amount / 100m
+         Amount = formattedTxnAmount x.amount
          Flow = flow
          EnforcedRules = []
          EventId = x.token
@@ -455,8 +457,6 @@ type CardTransactionDTO = {
 
       let! events = x.events |> List.traverseResultM _.AsEntity
 
-      let formattedAmount = abs >> fun num -> num / 100m
-
       return {
          Result = x.result
          Status = status
@@ -465,20 +465,20 @@ type CardTransactionDTO = {
          CardIssuerCardId = CardIssuerCardId x.card_token
          Amounts = {
             Hold = {
-               Amount = formattedAmount x.amounts.hold.amount
+               Amount = formattedTxnAmount x.amounts.hold.amount
                Currency = currencyHold
             }
             Cardholder = {
-               Amount = formattedAmount x.amounts.cardholder.amount
+               Amount = formattedTxnAmount x.amounts.cardholder.amount
                Currency = currencyCardholder
                ConversionRate = x.amounts.cardholder.conversion_rate
             }
             Merchant = {
-               Amount = formattedAmount x.amounts.merchant.amount
+               Amount = formattedTxnAmount x.amounts.merchant.amount
                Currency = currencyMerchant
             }
             Settlement = {
-               Amount = formattedAmount x.amounts.settlement.amount
+               Amount = formattedTxnAmount x.amounts.settlement.amount
                Currency = currencySettlement
             }
          }

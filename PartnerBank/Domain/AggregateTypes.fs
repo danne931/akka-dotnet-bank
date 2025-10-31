@@ -6,7 +6,6 @@ type PartnerBankServiceMessage =
    | CreateInternalAccount of InternalAccountCreateRequest
    | TransferDomestic of PartnerBankDomesticTransferRequest
    | TransferBetweenOrganizations of PartnerBankSyncTransferBetweenOrgs
-   | Purchase of SyncPurchase
 
    member x.SagaMetadata =
       match x with
@@ -14,7 +13,6 @@ type PartnerBankServiceMessage =
       | CreateInternalAccount req -> req.SagaMetadata
       | TransferBetweenOrganizations req -> req.SagaMetadata
       | TransferDomestic req -> req.SagaMetadata
-      | Purchase req -> req.SagaMetadata
 
 [<RequireQualifiedAccess>]
 type PartnerBankResponse =
@@ -22,4 +20,3 @@ type PartnerBankResponse =
    | CreateInternalAccount of InternalAccountCreateResponse
    | TransferBetweenOrganizations of PartnerBankSyncTransferBetweenOrgsResponse
    | TransferDomestic of PartnerBankDomesticTransferResponse
-   | Purchase of SyncPurchaseResponse

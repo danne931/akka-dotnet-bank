@@ -15,7 +15,6 @@ open Lib.CircuitBreaker
 open SignalRBroadcast
 open Lib.Types
 open OrgOnboardingSaga
-open PurchaseSaga
 open PlatformTransferSaga
 open DomesticTransferSaga
 open PartnerBank.Service.Domain
@@ -101,14 +100,6 @@ let actorProps
                      }
                      |> OrgOnboardingSagaEvent.CreateInternalAccountWithPartnerBankResponse
                      |> AppSaga.Message.orgOnboard orgId corrId
-
-                  registry.SagaActor corrId <! msg
-               | PartnerBankServiceMessage.Purchase req,
-                 PartnerBankResponse.Purchase res ->
-                  let msg =
-                     Ok(SettlementId res.ConfirmationId)
-                     |> PurchaseSagaEvent.PartnerBankSyncResponse
-                     |> AppSaga.Message.purchase orgId corrId
 
                   registry.SagaActor corrId <! msg
                | PartnerBankServiceMessage.TransferBetweenOrganizations req,
@@ -208,8 +199,6 @@ let private networkRequest
          let! entity = res.AsEntity
 
          return PartnerBankResponse.TransferBetweenOrganizations entity
-      | PartnerBankServiceMessage.Purchase info ->
-         return PartnerBankResponse.Purchase { ConfirmationId = Guid.NewGuid() }
    }
 
 let createCounterParty (req: PartnerBankCounterpartyRequest) = taskResult {

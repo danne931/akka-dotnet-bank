@@ -8,7 +8,6 @@ open Bank.Employee.Domain
 open Bank.Purchase.Domain
 open EmailMessage
 open Lib.Saga
-open PartnerBank.Service.Domain
 open PurchaseSaga
 open BankActorRegistry
 
@@ -20,7 +19,9 @@ let applyStartEvent
    match start with
    | PurchaseSagaStartEvent.PurchaseIntent info -> {
       PurchaseInfo = info
+      InitialPurchaseIntentAmount = info.Amount
       CardIssuerPurchaseEvents = []
+      CardIssuerProgressAmounts = PurchaseAmounts.Empty
       StartEvent = start
       StartedAt = timestamp
       Events = []
@@ -35,7 +36,6 @@ let applyStartEvent
             ]
       }
       FailReason = None
-      PartnerBankAccountLink = None
      }
 
 let applyEvent
@@ -47,7 +47,6 @@ let applyEvent
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
-   let retryActivity = SagaLifeCycle.retryActivity timestamp
    let abortActivity = SagaLifeCycle.abortActivity timestamp
 
    let saga = {
@@ -56,11 +55,10 @@ let applyEvent
    }
 
    match evt with
-   | PurchaseSagaEvent.AccountReservedFunds link -> {
+   | PurchaseSagaEvent.AccountReservedFunds -> {
       saga with
          LifeCycle =
             saga.LifeCycle |> finishActivity Activity.ReserveAccountFunds
-         PartnerBankAccountLink = Some link
      }
    | PurchaseSagaEvent.CardReservedFunds -> {
       saga with
@@ -78,12 +76,15 @@ let applyEvent
          | PurchaseStatus.Voided
          | PurchaseStatus.Expired -> saga.PurchaseInfo.Amount
 
+      let priorState = saga
+
       let saga = {
          saga with
             PurchaseInfo = {
                saga.PurchaseInfo with
                   Amount = amount
             }
+            CardIssuerProgressAmounts = progress.Amounts
             CardIssuerPurchaseEvents =
                saga.CardIssuerPurchaseEvents @ progress.Events
                |> List.sortBy _.CreatedAt
@@ -94,6 +95,10 @@ let applyEvent
             Status =
                PurchaseFailReason.CardNetwork reason
                |> PurchaseSagaStatus.Failed
+            PurchaseInfo = {
+               saga.PurchaseInfo with
+                  Amount = saga.InitialPurchaseIntentAmount
+            }
             LifeCycle =
                saga.LifeCycle
                |> finishActivity Activity.WaitForCardNetworkResolution
@@ -114,75 +119,129 @@ let applyEvent
                      saga.LifeCycle
                      |> addActivity Activity.SendPurchaseNotification
             }
-      | PurchaseStatus.Settled -> {
-         saga with
-            LifeCycle =
-               saga.LifeCycle
-               |> finishActivity Activity.WaitForCardNetworkResolution
-               |> addActivity Activity.SettlePurchaseWithAccount
-               |> if saga.PurchaseNotificationSent then
-                     id
-                  else
-                     addActivity Activity.SendPurchaseNotification
-        }
+      | PurchaseStatus.Settled ->
+         // NOTE:
+         // PurchaseEventType.AuthExpiry & AuthReversal occurring after
+         // a clearing will not alter the settled amount.
+         //
+         // NOTE:
+         // It is not certain from the docs whether a PARTIAL AuthExpiry or
+         // AuthReversal occurring before the first clearing can occur.
+         // If it does, the behavior of this program is to record the fact in
+         // sagaState.CardIssuerPurchaseEvents without interacting with
+         // account & employee actors.  As such, no funds reserved from the
+         // initial purchase intent will be released from the card or account entities
+         // until the first clearing or COMPLETE expiry/reversal of funds.
+         //
+         // TODO:
+         // If this situation can occur and we observe a large enough gap in time
+         // between the AuthExpiry/AuthRelease and the Clearing then we may want
+         // to interact with the account/employee actors to release those funds
+         // instead of waiting for the first clearing or complete
+         // expiry/reversal.
+         let amount =
+            progress.Events
+            |> List.sumBy (fun o ->
+               match o.Type with
+               | PurchaseEventType.Clearing
+               | PurchaseEventType.Return ->
+                  match o.Flow with
+                  | MoneyFlow.Out -> -o.Amount
+                  | MoneyFlow.In -> o.Amount
+               | _ -> 0m)
+
+         if amount = 0m then
+            saga
+         elif
+            priorState.Status = PurchaseSagaStatus.Completed
+            && priorState.PurchaseInfo.Amount = progress.Amounts.Settlement.Amount
+         then
+            saga
+         else
+            let clearedAmount = {
+               ClearedAmount = {
+                  Flow = if amount < 0m then MoneyFlow.Out else MoneyFlow.In
+                  Amount = abs amount
+               }
+               // Deterministically set the ClearedId by consuming the Lithic
+               // EventId of the oldest event in a CardIssuerPurchaseProgress.
+               PurchaseClearedId =
+                  progress.Events
+                  |> List.sortBy _.CreatedAt
+                  |> List.head
+                  |> _.EventId
+                  |> PurchaseClearedId
+            }
+
+            {
+               saga with
+                  LifeCycle =
+                     saga.LifeCycle
+                     |> finishActivity Activity.WaitForCardNetworkResolution
+                     |> addActivity (
+                        Activity.SettlePurchaseWithAccount clearedAmount
+                     )
+                     |> if saga.PurchaseNotificationSent then
+                           id
+                        else
+                           addActivity Activity.SendPurchaseNotification
+                  Status =
+                     // If a clearing event was previously received from Lithic
+                     // and the workflow completed we would have marked the saga
+                     // with Completed status.  It is still possible to receive
+                     // follow up clearing events indicating the need to
+                     // apply additional settled funds to the account.
+                     // See Purchase/Domain/PurchaseLifecycleEvent.fs
+                     // Multiple Completion section, specifically cases
+                     // 9-12.
+                     //
+                     // NOTE:
+                     // A purchase may continue receiving updates from Lithic
+                     // for 7 days, but sometimes 30 days for some txns such as
+                     // auto rentals and hotel reservations.
+                     //
+                     // TODO:
+                     // Determine whether resetting the saga status to
+                     // InProgress, as we do here, is ideal or if it may be
+                     // preferable to keep the saga status as InProgress after
+                     // the initial clearing and only set it to Completed after
+                     // the 7 or 30 day window (no news is good news).
+                     if saga.Status = PurchaseSagaStatus.Completed then
+                        PurchaseSagaStatus.InProgress
+                     else
+                        saga.Status
+            }
       | PurchaseStatus.Expired -> failSaga CardNetworkFailReason.Expired
       | PurchaseStatus.Voided -> failSaga CardNetworkFailReason.Voided
       | PurchaseStatus.Declined -> failSaga CardNetworkFailReason.Declined
-   | PurchaseSagaEvent.PurchaseSettledWithAccount -> {
+   | PurchaseSagaEvent.PurchaseSettledWithAccount clearing -> {
       saga with
          LifeCycle =
             saga.LifeCycle
-            |> finishActivity Activity.SettlePurchaseWithAccount
-            |> addActivity Activity.SettlePurchaseWithCard
+            |> finishActivity (Activity.SettlePurchaseWithAccount clearing)
+            |> addActivity (Activity.SettlePurchaseWithCard clearing)
      }
-   | PurchaseSagaEvent.PurchaseSettledWithCard -> {
+   | PurchaseSagaEvent.PurchaseSettledWithCard clearing -> {
       saga with
+         Status =
+            if saga.PurchaseNotificationSent then
+               PurchaseSagaStatus.Completed
+            else
+               saga.Status
          LifeCycle =
             saga.LifeCycle
-            |> finishActivity Activity.SettlePurchaseWithCard
-            |> addActivity Activity.SyncToPartnerBank
+            |> finishActivity (Activity.SettlePurchaseWithCard clearing)
      }
    | PurchaseSagaEvent.PurchaseNotificationSent -> {
       saga with
          Status =
-            if saga.SyncedToPartnerBank.IsSome then
+            if saga.SettledWithCard && saga.SettledWithAccount then
                PurchaseSagaStatus.Completed
             else
                saga.Status
          LifeCycle =
             finishActivity Activity.SendPurchaseNotification saga.LifeCycle
      }
-   | PurchaseSagaEvent.PartnerBankSyncResponse res ->
-      let activity = Activity.SyncToPartnerBank
-
-      match res with
-      | Error err ->
-         if saga.LifeCycle.ActivityHasRemainingAttempts activity then
-            {
-               saga with
-                  LifeCycle = retryActivity activity saga.LifeCycle
-            }
-         else
-            {
-               saga with
-                  Status =
-                     PurchaseFailReason.PartnerBankSync err
-                     |> PurchaseSagaStatus.Failed
-                  LifeCycle =
-                     saga.LifeCycle
-                     |> failActivity activity
-                     |> addActivity
-                           Activity.WaitForSupportTeamToResolvePartnerBankSync
-            }
-      | Ok _ -> {
-         saga with
-            Status =
-               if saga.PurchaseNotificationSent then
-                  PurchaseSagaStatus.Completed
-               else
-                  saga.Status
-            LifeCycle = saga.LifeCycle |> finishActivity activity
-        }
    | PurchaseSagaEvent.PurchaseRejected reason ->
       let life = saga.LifeCycle
 
@@ -223,15 +282,6 @@ let applyEvent
                Activity.AcquireAccountFailureAcknowledgement
                saga.LifeCycle
      }
-   | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync -> {
-      saga with
-         Status = PurchaseSagaStatus.InProgress
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity
-                  Activity.WaitForSupportTeamToResolvePartnerBankSync
-            |> addActivity Activity.SyncToPartnerBank
-     }
    | PurchaseSagaEvent.EvaluateRemainingWork -> {
       saga with
          LifeCycle =
@@ -264,30 +314,25 @@ let stateTransition
       | PurchaseSagaEvent.PurchaseRejected _
       | PurchaseSagaEvent.EvaluateRemainingWork
       | PurchaseSagaEvent.ResetInProgressActivityAttempts -> false
-      | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress _ ->
-         activityIsDone Activity.WaitForCardNetworkResolution
-      | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync ->
-         activityIsDone Activity.WaitForSupportTeamToResolvePartnerBankSync
+      // Continue to consume purchase progress from Lithic
+      // even after the initial clearing of funds.
+      | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress _ -> false
       | PurchaseSagaEvent.PurchaseNotificationSent ->
          activityIsDone Activity.SendPurchaseNotification
       | PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard ->
          activityIsDone Activity.AcquireCardFailureAcknowledgement
       | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount ->
          activityIsDone Activity.AcquireAccountFailureAcknowledgement
-      | PurchaseSagaEvent.AccountReservedFunds _ ->
+      | PurchaseSagaEvent.AccountReservedFunds ->
          activityIsDone Activity.ReserveAccountFunds
       | PurchaseSagaEvent.CardReservedFunds ->
          activityIsDone Activity.ReserveEmployeeCardFunds
-      | PurchaseSagaEvent.PartnerBankSyncResponse _ ->
-         activityIsDone Activity.SyncToPartnerBank
-      | PurchaseSagaEvent.PurchaseSettledWithAccount ->
-         activityIsDone Activity.SettlePurchaseWithAccount
-      | PurchaseSagaEvent.PurchaseSettledWithCard ->
-         activityIsDone Activity.SettlePurchaseWithCard
+      | PurchaseSagaEvent.PurchaseSettledWithAccount clearing ->
+         activityIsDone (Activity.SettlePurchaseWithAccount clearing)
+      | PurchaseSagaEvent.PurchaseSettledWithCard clearing ->
+         activityIsDone (Activity.SettlePurchaseWithCard clearing)
 
-   if saga.Status = PurchaseSagaStatus.Completed then
-      Error SagaStateTransitionError.HasAlreadyCompleted
-   elif invalidStepProgression then
+   if invalidStepProgression then
       Error SagaStateTransitionError.InvalidStepProgression
    else
       Ok(applyEvent saga evt timestamp)
@@ -353,56 +398,28 @@ let onEventPersisted
 
       registry.EmailActor() <! emailMsg
 
-   let syncToPartnerBank () =
-      updatedState.PartnerBankAccountLink
-      |> Option.iter (fun link ->
-         let msg =
-            PartnerBankServiceMessage.Purchase {
-               Amount = purchaseInfo.Amount
-               Account = link
-               SagaMetadata = {
-                  OrgId = purchaseInfo.OrgId
-                  CorrelationId = purchaseInfo.CorrelationId
-               }
-            }
-
-         registry.PartnerBankServiceActor() <! msg)
-
-   let settlePurchaseWithAccount () =
+   let settlePurchaseWithAccount clearing =
       let msg =
-         SettleDebitCommand.fromPurchase purchaseInfo
+         SettleDebitCommand.create purchaseInfo clearing
          |> AccountCommand.SettleDebit
          |> AccountMessage.StateChange
 
       registry.AccountActor purchaseInfo.ParentAccountId <! msg
 
-   let settlePurchaseWithCard () =
+   let settlePurchaseWithCard clearing =
       let msg =
-         SettlePurchaseWithCardCommand.create { Info = purchaseInfo }
+         SettlePurchaseWithCardCommand.create {
+            Info = purchaseInfo
+            Clearing = clearing
+         }
          |> EmployeeCommand.SettlePurchase
          |> EmployeeMessage.StateChange
 
       registry.EmployeeActor purchaseInfo.EmployeeId <! msg
 
    match evt with
-   | PurchaseSagaEvent.CardReservedFunds -> ()
-   | PurchaseSagaEvent.AccountReservedFunds _ -> ()
-   | PurchaseSagaEvent.PartnerBankSyncResponse res ->
-      match res with
-      | Ok _ -> ()
-      | Error reason ->
-         if
-            previousState.LifeCycle.ActivityHasRemainingAttempts
-               Activity.SyncToPartnerBank
-         then
-            syncToPartnerBank ()
-         else
-            registry.EmailActor()
-            <! {
-                  OrgId = purchaseInfo.OrgId
-                  CorrelationId = purchaseInfo.CorrelationId
-                  Info = EmailInfo.ApplicationErrorRequiresSupport reason
-               }
+   | PurchaseSagaEvent.CardReservedFunds
+   | PurchaseSagaEvent.AccountReservedFunds -> ()
    | PurchaseSagaEvent.PurchaseRejected reason ->
       if updatedState.ReservedEmployeeCardFunds then
          acquireCardFailureAcknowledgement reason
@@ -412,29 +429,30 @@ let onEventPersisted
 
       sendPurchaseFailedEmail reason
    | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress ->
-      match progress.Status with
-      | PurchaseStatus.Settled
-      | PurchaseStatus.Pending ->
-         if not updatedState.PurchaseNotificationSent then
-            sendPurchaseEmail ()
-      | _ -> ()
-
-      match progress.Status with
-      | PurchaseStatus.Declined -> Some CardNetworkFailReason.Declined
-      | PurchaseStatus.Expired -> Some CardNetworkFailReason.Expired
-      | PurchaseStatus.Voided -> Some CardNetworkFailReason.Voided
-      | _ -> None
-      |> Option.map PurchaseFailReason.CardNetwork
-      |> Option.iter (fun reason ->
+      let fail reason =
+         let reason = PurchaseFailReason.CardNetwork reason
          acquireCardFailureAcknowledgement reason
          acquireAccountFailureAcknowledgement reason
-         sendPurchaseFailedEmail reason)
-   | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync ->
-      // Support team resolved dispute with partner bank so
-      // reattempt syncing transaction to partner bank.
-      syncToPartnerBank ()
-   | PurchaseSagaEvent.PurchaseSettledWithAccount -> settlePurchaseWithCard ()
-   | PurchaseSagaEvent.PurchaseSettledWithCard -> syncToPartnerBank ()
+         sendPurchaseFailedEmail reason
+
+      let sendPurchaseEmailMaybe () =
+         if not updatedState.PurchaseNotificationSent then
+            sendPurchaseEmail ()
+
+      match progress.Status with
+      | PurchaseStatus.Pending -> sendPurchaseEmailMaybe ()
+      | PurchaseStatus.Settled ->
+         sendPurchaseEmailMaybe ()
+
+         match updatedState.OutgoingSettlementWithAccount with
+         | Some clearing -> settlePurchaseWithAccount clearing
+         | None -> ()
+      | PurchaseStatus.Declined -> fail CardNetworkFailReason.Declined
+      | PurchaseStatus.Expired -> fail CardNetworkFailReason.Expired
+      | PurchaseStatus.Voided -> fail CardNetworkFailReason.Voided
+   | PurchaseSagaEvent.PurchaseSettledWithAccount clearing ->
+      settlePurchaseWithCard clearing
+   | PurchaseSagaEvent.PurchaseSettledWithCard _
    | PurchaseSagaEvent.PurchaseNotificationSent
    | PurchaseSagaEvent.ResetInProgressActivityAttempts
    | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount
@@ -444,11 +462,11 @@ let onEventPersisted
          match activity.Activity with
          | Activity.WaitForCardNetworkResolution
          | Activity.ReserveEmployeeCardFunds
-         | Activity.ReserveAccountFunds
-         | Activity.WaitForSupportTeamToResolvePartnerBankSync -> ()
-         | Activity.SettlePurchaseWithCard -> settlePurchaseWithCard ()
-         | Activity.SyncToPartnerBank -> syncToPartnerBank ()
-         | Activity.SettlePurchaseWithAccount -> settlePurchaseWithAccount ()
+         | Activity.ReserveAccountFunds -> ()
+         | Activity.SettlePurchaseWithCard clearing ->
+            settlePurchaseWithCard clearing
+         | Activity.SettlePurchaseWithAccount clearing ->
+            settlePurchaseWithAccount clearing
          | Activity.SendPurchaseNotification -> sendPurchaseEmail ()
          | Activity.AcquireCardFailureAcknowledgement ->
             updatedState.FailReason

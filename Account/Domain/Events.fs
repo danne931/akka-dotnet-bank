@@ -57,6 +57,7 @@ type DebitSettled = {
    AccountId: AccountId
    Merchant: string
    Amount: decimal
+   Clearing: PurchaseClearing
    EmployeePurchaseReference: EmployeePurchaseReference
 }
 

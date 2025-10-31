@@ -250,14 +250,21 @@ let private renderTransactionHistory
                            | PurchaseEventType.Clearing ->
                               $"Clearing of {Money.format e.Amount} confirmed by card network"
                            | PurchaseEventType.AuthExpiry ->
-                              "Auth Expiry received from card network"
+                              $"{Money.format e.Amount} Auth Expiry received from card network"
                            | PurchaseEventType.AuthReversal ->
-                              "Merchant reversed authorization"
+                              $"{Money.format e.Amount} Auth Reversal received from card network"
                            | _ -> $"Unknown - {e.Type}"
                         )
                   | EmployeeEvent.PurchaseSettled e ->
+                     let cleared = e.Data.Clearing.ClearedAmount
+
+                     let descriptor =
+                        match cleared.Flow with
+                        | MoneyFlow.In -> "reversal"
+                        | MoneyFlow.Out -> "deduction"
+
                      Html.p
-                        $"Settled deduction of {Money.format e.Data.Info.Amount} from card"
+                        $"Settled {descriptor} of {Money.format cleared.Amount} from card"
                   | EmployeeEvent.PurchaseRefunded e ->
                      Html.p $"Purchase refunded to card due to {e.Data.Reason}"
                   | EmployeeEvent.PurchaseFailed e ->
@@ -296,8 +303,15 @@ let private renderTransactionHistory
                      Html.p
                         $"Reserved {Money.format e.Data.Amount} from account"
                   | AccountEvent.DebitSettled e ->
+                     let cleared = e.Data.Clearing.ClearedAmount
+
+                     let descriptor =
+                        match cleared.Flow with
+                        | MoneyFlow.In -> "reversal"
+                        | MoneyFlow.Out -> "deduction"
+
                      Html.p
-                        $"Settled deduction of {Money.format e.Data.Amount} from account"
+                        $"Settled {descriptor} of {Money.format cleared.Amount} from account"
                   | AccountEvent.DebitFailed _ ->
                      Html.p "Funds released from account reserve"
                   | AccountEvent.DebitRefunded e ->

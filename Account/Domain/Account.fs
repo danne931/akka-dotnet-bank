@@ -58,13 +58,19 @@ let applyEvent (account: Account) (evt: AccountEvent) =
                   Amount = e.Data.Amount
                }
      }
-   | DebitSettled e -> {
-      account with
-         Balance = account.Balance - e.Data.Amount
-         PendingFunds =
-            account.PendingFunds.Remove
-               e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
-     }
+   | DebitSettled e ->
+      let amount = e.Data.Clearing.ClearedAmount
+
+      {
+         account with
+            Balance =
+               match amount.Flow with
+               | MoneyFlow.Out -> account.Balance - amount.Amount
+               | MoneyFlow.In -> account.Balance + amount.Amount
+            PendingFunds =
+               account.PendingFunds.Remove
+                  e.Data.EmployeePurchaseReference.CardIssuerTransactionId.Value
+      }
    | DebitFailed e -> {
       account with
          PendingFunds =

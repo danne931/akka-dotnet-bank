@@ -26,10 +26,13 @@ let private purchaseAccrued
       (fun acc evt ->
          match evt with
          | PurchaseSettled e ->
+            let amount = e.Data.Clearing.ClearedAmount
             let e = e.Data.Info
 
             if e.CardId = cardId && satisfiesDate e.Date then
-               acc + e.Amount
+               match amount.Flow with
+               | MoneyFlow.In -> acc - e.Amount
+               | MoneyFlow.Out -> acc + e.Amount
             else
                acc
          | PurchaseFailed e ->
@@ -308,7 +311,22 @@ let applyEvent
                |> Map.add e.Data.Card.CardId PendingFunds.zero
         }
       | PurchasePending e -> addPendingPurchase state e.Data.Info
-      | PurchaseSettled e -> removePendingPurchase state e.Data.Info
+      | PurchaseSettled e ->
+         // Leave the PendingPurchase record in memory to handle
+         // potential for multiple clearings.
+         //
+         // Remove PendingPurchase 30 (?) days after no activity. No news is good news.
+         let info = e.Data.Info
+         let txnId = info.CardIssuerTransactionId
+
+         {
+            state with
+               PendingPurchaseDeductions =
+                  state.PendingPurchaseDeductions
+                  |> Map.change
+                        info.CardId
+                        (Option.map (PendingFunds.remove txnId.Value))
+         }
       | PurchaseFailed e -> removePendingPurchase state e.Data.Info
       | PurchaseProgress e -> updatePendingPurchase state e.Data.Info
       | _ -> state

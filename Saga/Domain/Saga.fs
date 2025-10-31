@@ -138,24 +138,20 @@ type Event =
          match e with
          | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress _ ->
             "PurchaseCardIssuerUpdatedPurchaseProgress"
-         | PurchaseSagaEvent.PurchaseSettledWithAccount ->
+         | PurchaseSagaEvent.PurchaseSettledWithAccount _ ->
             "PurchaseSettledWithAccount"
-         | PurchaseSagaEvent.PurchaseSettledWithCard ->
+         | PurchaseSagaEvent.PurchaseSettledWithCard _ ->
             "PurchaseSettledWithCard"
          | PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard ->
             "PurchaseFailureAcknowledgedByCard"
          | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount ->
             "PurchaseFailureAcknowledgedByAccount"
-         | PurchaseSagaEvent.AccountReservedFunds _ ->
+         | PurchaseSagaEvent.AccountReservedFunds ->
             "PurchaseAccountReservedFunds"
          | PurchaseSagaEvent.CardReservedFunds -> "PurchaseCardReservedFunds"
          | PurchaseSagaEvent.PurchaseRejected _ -> "PurchaseRejected"
          | PurchaseSagaEvent.PurchaseNotificationSent ->
             "PurchaseNotificationSent"
-         | PurchaseSagaEvent.PartnerBankSyncResponse _ ->
-            "PurchasePartnerBankSyncResponse"
-         | PurchaseSagaEvent.SupportTeamResolvedPartnerBankSync ->
-            "PurchaseSupportTeamResolvedPartnerBankSync"
          | PurchaseSagaEvent.EvaluateRemainingWork ->
             "PurchaseEvaluateRemainingWork"
          | PurchaseSagaEvent.ResetInProgressActivityAttempts ->

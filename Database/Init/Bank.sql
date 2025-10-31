@@ -252,10 +252,6 @@ CREATE TABLE account (
    depository account_depository NOT NULL,
    balance MONEY NOT NULL,
    pending_funds_detail JSONB NOT NULL,
-   pending_additions_money MONEY NOT NULL,
-   pending_additions_count INT NOT NULL,
-   pending_deductions_money MONEY NOT NULL,
-   pending_deductions_count INT NOT NULL,
    currency VARCHAR(3) NOT NULL,
    status account_status NOT NULL,
    auto_transfer_rule JSONB,
@@ -1062,9 +1058,9 @@ CREATE TABLE saga(
    name saga_type NOT NULL,
    status saga_status NOT NULL,
    saga_state JSONB NOT NULL,
+   inactivity_timeout interval,
    activity_in_progress_count int NOT NULL,
-   activity_attempts_exhausted_count int NOT NULL,
-   inactivity_timeout interval
+   activity_attempts_exhausted_count int NOT NULL
 );
 
 SELECT add_created_at_column('saga');
