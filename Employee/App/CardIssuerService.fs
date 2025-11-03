@@ -91,8 +91,8 @@ let private networkRequestToCardIssuerService
          let! response =
             url
                .WithHeader("Authorization", cardIssuerApiKey)
-               .PostJsonAsync(req.AsDTO)
-               .ReceiveJson<CardCreateResponseDTO>()
+               .PostJsonAsync(LithicCardCreateRequestDTO.fromEntity req)
+               .ReceiveJson<LithicCardCreateResponseDTO>()
 
          return CardIssuerResponse.CreateCard response.AsEntity
       | CardIssuerMessage.CloseCard req ->
@@ -155,8 +155,8 @@ let simulatePurchaseAuthorization
          let! response =
             url
                .WithHeader("Authorization", cardIssuerApiKey)
-               .PostJsonAsync(req.AsDTO)
-               .ReceiveJson<SimulatePurchaseResponseDTO>()
+               .PostJsonAsync(LithicSimulatePurchaseRequestDTO.fromEntity req)
+               .ReceiveJson<LithicSimulatePurchaseResponseDTO>()
 
          return Ok response.AsEntity
       with
@@ -178,7 +178,7 @@ let getCard
          let! response =
             url
                .WithHeader("Authorization", cardIssuerApiKey)
-               .GetJsonAsync<CardGetResponseDTO>()
+               .GetJsonAsync<LithicCardGetResponseDTO>()
 
          return Ok response.AsEntity
       with

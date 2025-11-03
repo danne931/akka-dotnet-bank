@@ -34,3 +34,54 @@ type PurchaseAuthorization = {
    CurrencyMerchant: Currency
    CreatedAt: DateTime
 }
+
+[<RequireQualifiedAccess>]
+type AuthorizationStreamAction =
+   | Auth
+   //| CreditAuth
+   | FinancialAuth
+//| FinancialCreditAuth
+//| BalanceInquiry
+
+type AuthStreamAccessWebhookRequest = {
+   Action: AuthorizationStreamAction
+   CardIssuerTransactionId: CardIssuerTransactionId
+   CardIssuerCardId: CardIssuerCardId
+   Amount: decimal
+   MerchantCategoryCode: int
+   MerchantName: string
+   CurrencyCardHolder: Currency
+   CurrencyMerchant: Currency
+}
+
+[<RequireQualifiedAccess>]
+type PurchaseAuthorizationStatus =
+   | Approved
+   | AccountInactive
+   | AVSInvalid
+   | CardPaused
+   | InsufficientFunds
+   | UnauthorizedMerchant
+   | VelocityExceeded
+   | DriverNumberInvalid
+   | VehicleNumberInvalid
+   | Challenge
+
+   static member fromAccountFailReason =
+      function
+      | PurchaseAccountFailReason.AccountNotActive _ -> AccountInactive
+      | PurchaseAccountFailReason.InsufficientAccountFunds _ ->
+         InsufficientFunds
+
+   static member fromCardFailReason =
+      function
+      | PurchaseCardFailReason.CardNotFound -> CardPaused
+      | PurchaseCardFailReason.CardExpired -> CardPaused
+      | PurchaseCardFailReason.CardLocked -> CardPaused
+      | PurchaseCardFailReason.ExceededDailyCardLimit _ -> VelocityExceeded
+      | PurchaseCardFailReason.ExceededMonthlyCardLimit _ -> VelocityExceeded
+
+type AuthStreamAccessWebhookResponse = {
+   TransactionId: CardIssuerTransactionId
+   Result: PurchaseAuthorizationStatus
+}

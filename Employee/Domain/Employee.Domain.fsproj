@@ -5,7 +5,8 @@
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />
     <Compile Include="AggregateTypes.fs" />
-    <Compile Include="CardIssuerService.fs" />
+    <Compile Include="CardIssuer/Management.fs" />
+    <Compile Include="CardIssuer/LithicDTO.fs" />
     <Compile Include="Employee.fs" />
     <Compile Include="Query.fs" />
   </ItemGroup>

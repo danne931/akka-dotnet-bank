@@ -13,6 +13,7 @@ open Bank.Org.Domain
 open CachedOrgSettings
 open Bank.Employee.Domain
 open Bank.Account.Domain
+open Bank.Purchase.Domain
 open PartnerBank.Service.Domain
 open CardIssuer.Service.Domain
 open BillingStatement
@@ -355,7 +356,7 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "PartnerBank.Service.Domain.PartnerBankServiceMessage, PartnerBank.Domain" ->
             typeof<PartnerBankServiceMessage>
          | "CardIssuerServiceMessage"
-         | "CardIssuer.Service.Domain+CardIssuerMessage, Employee.Domain" ->
+         | "CardIssuer.Service.Domain.CardIssuerMessage, Employee.Domain" ->
             typeof<CardIssuerMessage>
          | "EmployeeSnapshot" -> typeof<EmployeeSnapshot>
          | "EmployeeOption" -> typeof<Employee option>

@@ -226,7 +226,7 @@ let start (app: WebApplication) =
          Func<
             ActorSystem,
             BankActorRegistry,
-            AuthStreamAccessWebhookRequestDTO,
+            LithicAuthStreamAccessWebhookRequestDTO,
             Task<IResult>
           >
             (fun system registry purchaseAuthReq ->
@@ -279,7 +279,9 @@ let start (app: WebApplication) =
                      Result = authResult
                   }
 
-                  return response.AsDTO
+                  return
+                     LithicAuthStreamAccessWebhookResponseDTO.fromEntity
+                        response
                }
                |> TaskResult.teeError (fun err ->
                   let err = exn (string err)
@@ -298,7 +300,12 @@ let start (app: WebApplication) =
    app
       .MapPost(
          CardPath.CardTransactionUpdatedWebhook,
-         Func<ActorSystem, BankActorRegistry, CardTransactionDTO, Task<IResult>>
+         Func<
+            ActorSystem,
+            BankActorRegistry,
+            LithicCardTransactionDTO,
+            Task<IResult>
+          >
             (fun system registry evt ->
                taskResult {
                   let dtoAsEntityMaybe = evt.AsEntity
