@@ -381,7 +381,7 @@ let seedBalanceHistory () = taskResultOption {
       $"""
       SELECT {EmployeeEventFields.timestamp}, {EmployeeEventFields.correlationId}
       FROM {EmployeeEventSqlMapper.table}
-      WHERE {EmployeeEventFields.name} = 'PurchaseApplied'
+      WHERE {EmployeeEventFields.name} = 'CardPurchasePending'
 
       UNION ALL
 
@@ -406,46 +406,49 @@ let seedBalanceHistory () = taskResultOption {
       initialRequestsToModify
       |> List.map (fun o -> [
          "correlationId", EmployeeEventSqlWriter.correlationId o.CorrelationId
-         "timestamp",
-         EmployeeEventSqlWriter.timestamp (o.Timestamp.AddSeconds 3)
+         "timestamp", EmployeeEventSqlWriter.timestamp o.Timestamp
       ])
+
+   let updatedTimestamp = "@timestamp + '3 seconds'::interval"
+
+   let updatedAccountEventTimestamp =
+      $"""
+      CASE
+         WHEN {aeFields.name} = 'DebitPending'
+         THEN @timestamp + '15 milliseconds'::interval
+
+         WHEN {aeFields.name} IN ('DebitSettled', 'InternalTransferBetweenOrgsSettled', 'PlatformPaymentSettled')
+         THEN {updatedTimestamp} + '20 milliseconds'::interval
+
+         ELSE @timestamp
+      END
+      """
 
    let query = [
       $"""
       UPDATE {EmployeeEventSqlMapper.table}
       SET
-         {EmployeeEventFields.timestamp} = @timestamp,
+         {EmployeeEventFields.timestamp} = {updatedTimestamp},
          {EmployeeEventFields.event} = jsonb_set(
             {EmployeeEventFields.event},
             '{{1,Timestamp}}',
-            to_jsonb(@timestamp),
+            to_jsonb({updatedTimestamp}),
             false
          )
       WHERE
          {EmployeeEventFields.correlationId} = @correlationId
-         AND {EmployeeEventFields.name} <> 'PurchaseApplied';
+         AND {EmployeeEventFields.name} <> 'CardPurchasePending';
       """,
       sqlParams
 
       $"""
       UPDATE {AccountEventSqlMapper.table}
       SET
-         {aeFields.timestamp} =
-            CASE
-               WHEN {aeFields.name} IN ('PurchaseSettled', 'InternalTransferBetweenOrgsSettled', 'PlatformPaymentSettled')
-               THEN @timestamp + '3 seconds'::interval
-               ELSE @timestamp
-            END,
+         {aeFields.timestamp} = {updatedAccountEventTimestamp},
          {aeFields.event} = jsonb_set(
             {aeFields.event},
             '{{1,Timestamp}}',
-            to_jsonb(
-               CASE
-                  WHEN {aeFields.name} IN ('PurchaseSettled', 'InternalTransferBetweenOrgsSettled', 'PlatformPaymentSettled')
-                  THEN @timestamp + '3 seconds'::interval
-                  ELSE @timestamp
-               END
-            ),
+            to_jsonb({updatedAccountEventTimestamp}),
             false
          )
       WHERE
@@ -457,11 +460,11 @@ let seedBalanceHistory () = taskResultOption {
       $"""
       UPDATE {OrganizationEventSqlMapper.table}
       SET
-         {OrgEventFields.timestamp} = @timestamp,
+         {OrgEventFields.timestamp} = {updatedTimestamp},
          {OrgEventFields.event} = jsonb_set(
             {OrgEventFields.event},
             '{{1,Timestamp}}',
-            to_jsonb(@timestamp),
+            to_jsonb({updatedTimestamp}),
             false
          )
       WHERE
@@ -2030,7 +2033,7 @@ let actorProps
 
                logInfo "Enabled social transfer discovery"
 
-               do! Task.Delay 50_000
+               do! Task.Delay 60_000
 
                let! res = seedBalanceHistory ()
                do! enableUpdatePreventionTriggers ()

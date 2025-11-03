@@ -47,11 +47,15 @@ let private filtersToOriginatingEventNames
               typeof<DomesticTransferScheduled>.Name
               typeof<DomesticTransferPending>.Name
              ]
-           // NOTE:
-           // Payment request / cancelled / decline used only in history dashboard.
-           // Transfers originating from payment requests are selected via
-           // AccountEventGroupFilter.InternalTransferBetweenOrgs &
-           // AccountEventGroupFilter.DomesticTransfer
+           (*
+            * NOTE:
+            * Payment transactions are viewable from the dedicated payments
+            * dashboard rather than transactions dashboard.
+            *
+            * Transfers originating from payment requests are selected via
+            * AccountEventGroupFilter.InternalTransferBetweenOrgs &
+            * AccountEventGroupFilter.DomesticTransfer
+            *)
            | AccountEventGroupFilter.PaymentRequest -> [])
       []
    |> List.toArray
