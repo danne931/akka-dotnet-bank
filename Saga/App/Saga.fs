@@ -235,10 +235,10 @@ let sagaHandler
                else
                   notHandled ()
             | StartEvent.Purchase e ->
-               if state.IsPurchase then
-                  PurchaseSaga.onStartEventPersisted e
-               else
-                  notHandled ()
+               match state with
+               | Saga.Purchase saga ->
+                  PurchaseSaga.onStartEventPersisted registry saga e
+               | _ -> notHandled ()
       onEventPersisted =
          fun mailbox evt priorState state ->
             let notHandled () =
@@ -287,6 +287,14 @@ let sagaHandler
                | Saga.Purchase priorState, Saga.Purchase state ->
                   PurchaseSaga.onEventPersisted
                      broadcaster
+                     (fun evt ->
+                        let msg =
+                           Message.purchase
+                              state.PurchaseInfo.OrgId
+                              state.PurchaseInfo.CorrelationId
+                              evt
+
+                        mailbox.Parent() <! msg)
                      registry
                      priorState
                      state

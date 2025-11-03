@@ -22,6 +22,73 @@ open EmployeeOnboardingSaga
 open CardSetupSaga
 open BankActorRegistry
 
+module private PurchaseInfo =
+   let fromAuth
+      (auth: PurchaseAuthorization)
+      (employee: Employee)
+      (card: Card)
+      : PurchaseInfo
+      =
+      {
+         Amount = auth.Amount
+         Date = auth.CreatedAt
+         Merchant = auth.MerchantName
+         Reference = None
+         OrgId = employee.OrgId
+         EmployeeId = employee.EmployeeId
+         ParentAccountId = employee.ParentAccountId
+         AccountId = card.AccountId
+         CorrelationId = Guid.NewGuid() |> CorrelationId
+         CardId = card.CardId
+         CardNickname = card.CardNickname
+         CardIssuerCardId = auth.CardIssuerCardId
+         CardIssuerTransactionId = auth.CardIssuerTransactionId
+         CardNumberLast4 = card.CardNumberLast4
+         CurrencyMerchant = auth.CurrencyMerchant
+         CurrencyCardHolder = auth.CurrencyCardHolder
+         InitiatedBy = {
+            Id = InitiatedById employee.EmployeeId
+            Name = employee.Name
+         }
+         EmployeeName = employee.Name
+         EmployeeEmail = employee.Email
+         AuthorizationType = auth.Type
+      }
+
+   let fromProgressWithAuthBypass
+      (progress: CardIssuerPurchaseProgress)
+      (employee: Employee)
+      (card: Card)
+      : PurchaseInfo
+      =
+      let first = progress.OriginatingEvent
+
+      {
+         Amount = first.Money.Amount
+         Date = first.CreatedAt
+         Merchant = progress.MerchantName
+         Reference = None
+         OrgId = employee.OrgId
+         EmployeeId = employee.EmployeeId
+         ParentAccountId = employee.ParentAccountId
+         AccountId = card.AccountId
+         CorrelationId = Guid.NewGuid() |> CorrelationId
+         CardId = card.CardId
+         CardNickname = card.CardNickname
+         CardIssuerCardId = progress.CardIssuerCardId
+         CardIssuerTransactionId = progress.PurchaseId
+         CardNumberLast4 = card.CardNumberLast4
+         CurrencyMerchant = progress.Amounts.Merchant.Currency
+         CurrencyCardHolder = progress.Amounts.Cardholder.Currency
+         InitiatedBy = {
+            Id = InitiatedById employee.EmployeeId
+            Name = employee.Name
+         }
+         EmployeeName = employee.Name
+         EmployeeEmail = employee.Email
+         AuthorizationType = PurchaseAuthType.BypassAuth
+      }
+
 let private hasPurchaseFail (cmd: EmployeeCommand) (err: Err) =
    match cmd, err with
    | EmployeeCommand.PurchaseIntent cmd, EmployeeStateTransitionError e ->
@@ -193,7 +260,8 @@ let private onPersist
 
       registry.SagaGuaranteedDeliveryActor() <! msg
 
-      mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
+      if not e.Data.Info.AuthorizationType.IsBypassAuth then
+         mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
    | EmployeeEvent.PurchaseProgress e ->
       let evt = PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress e.Data.Info
 
@@ -297,47 +365,40 @@ let actorProps
                   mailbox.Sender() <! err
                   return ignored ()
                | Some card ->
-                  let purchaseInfo: PurchaseInfo = {
-                     Amount = auth.Amount
-                     Date = auth.CreatedAt
-                     Merchant = auth.MerchantName
-                     Reference = None
-                     OrgId = employee.OrgId
-                     EmployeeId = employee.EmployeeId
-                     ParentAccountId = employee.ParentAccountId
-                     AccountId = card.AccountId
-                     CorrelationId = Guid.NewGuid() |> CorrelationId
-                     CardId = card.CardId
-                     CardNickname = card.CardNickname
-                     CardIssuerCardId = auth.CardIssuerCardId
-                     CardIssuerTransactionId = auth.CardIssuerTransactionId
-                     CardNumberLast4 = card.CardNumberLast4
-                     CurrencyMerchant = auth.CurrencyMerchant
-                     CurrencyCardHolder = auth.CurrencyCardHolder
-                     InitiatedBy = {
-                        Id = InitiatedById employee.EmployeeId
-                        Name = employee.Name
-                     }
-                     EmployeeName = employee.Name
-                     EmployeeEmail = employee.Email
-                     AuthorizationType = auth.Type
-                  }
-
-                  let cmd = PurchaseIntentCommand.create purchaseInfo
-
                   let msg =
-                     cmd
+                     PurchaseInfo.fromAuth auth employee card
+                     |> PurchaseIntentCommand.create
                      |> EmployeeCommand.PurchaseIntent
                      |> EmployeeMessage.StateChange
 
                   mailbox.Self <<! msg
                   return ignored ()
-            | EmployeeMessage.PurchaseProgress progress ->
-               match state.PendingPurchases.TryFind progress.PurchaseId with
-               | None ->
+            | EmployeeMessage.PurchaseProgress(progress, cardId) ->
+               match
+                  state.PendingPurchases.TryFind progress.PurchaseId,
+                  state.Info.Cards.TryFind cardId
+               with
+               | _, None ->
                   logError
-                     $"Received PurchaseUpdate but no purchase found {progress.PurchaseId}"
-               | Some purchase ->
+                     $"Received PurchaseUpdate but no card found {progress.PurchaseId}"
+               | None, Some card ->
+                  let purchase =
+                     PurchaseInfo.fromProgressWithAuthBypass
+                        progress
+                        employee
+                        card
+
+                  let evt =
+                     PurchaseSagaStartEvent.PurchaseProgress(purchase, progress)
+
+                  let msg =
+                     AppSaga.Message.purchaseStart
+                        employee.OrgId
+                        purchase.CorrelationId
+                        evt
+
+                  registry.SagaGuaranteedDeliveryActor() <! msg
+               | Some purchase, _ ->
                   let msg =
                      PurchaseProgressCommand.create
                         purchase.Info.OrgId
@@ -350,24 +411,26 @@ let actorProps
                   mailbox.Self <! msg
 
                return ignored ()
-            | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent intent as cmd) ->
-               let purchaseInfo = intent.Data
+            | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent intent as cmd) when
+               not intent.Data.AuthorizationType.IsBypassAuth
+               ->
+               let purchase = intent.Data
 
                let msg =
-                  PurchaseSagaStartEvent.PurchaseIntent purchaseInfo
-                  |> AppSaga.Message.purchaseStart
-                        intent.OrgId
-                        intent.CorrelationId
+                  AppSaga.Message.purchaseStart
+                     intent.OrgId
+                     intent.CorrelationId
+                     (PurchaseSagaStartEvent.PurchaseIntent purchase)
 
                registry.SagaGuaranteedDeliveryActor() <! msg
 
                match Employee.stateTransition state cmd with
                | Ok(evt, _) ->
                   let accountRef =
-                     registry.AccountActor purchaseInfo.ParentAccountId
+                     registry.AccountActor purchase.ParentAccountId
 
                   let msg =
-                     purchaseInfo
+                     purchase
                      |> DebitCommand.fromPurchase
                      |> AccountCommand.Debit
                      |> AccountMessage.StateChange
@@ -452,8 +515,8 @@ let initProps
          function
          | :? EmployeeMessage as msg ->
             match msg with
-            | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent _) ->
-               false
+            | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent intent) ->
+               intent.Data.AuthorizationType.IsBypassAuth
             | EmployeeMessage.StateChange _ -> true
             | _ -> false
          | _ -> false

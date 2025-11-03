@@ -392,8 +392,10 @@ type CardTransactionEventDTO = {
 
       return {
          Type = evtType
-         Amount = formattedTxnAmount x.amount
-         Flow = flow
+         Money = {
+            Amount = formattedTxnAmount x.amount
+            Flow = flow
+         }
          EnforcedRules = []
          EventId = x.token
          CreatedAt = x.created
@@ -455,7 +457,10 @@ type CardTransactionDTO = {
          | "VOIDED" -> Ok PurchaseStatus.Voided
          | _ -> Error "Invalid Purchase Status"
 
-      let! events = x.events |> List.traverseResultM _.AsEntity
+      let! events =
+         x.events
+         |> List.traverseResultM _.AsEntity
+         |> Result.bind NonEmptyList.fromList
 
       return {
          Result = x.result
@@ -482,6 +487,7 @@ type CardTransactionDTO = {
                Currency = currencySettlement
             }
          }
+         MerchantName = x.merchant.descriptor
       }
    }
 

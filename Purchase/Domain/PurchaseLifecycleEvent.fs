@@ -232,9 +232,8 @@ type PurchaseRuleEnforced = {
 
 type PurchaseEvent = {
    Type: PurchaseEventType
-   Amount: decimal
+   Money: Money
    //amounts: TransactionAmountsDTO
-   Flow: MoneyFlow
    EnforcedRules: PurchaseRuleEnforced list
    EventId: Guid
    CreatedAt: DateTime
@@ -279,7 +278,7 @@ type PurchaseAmounts = {
 
 type CardIssuerPurchaseProgress = {
    Amounts: PurchaseAmounts
-   Events: PurchaseEvent list
+   Events: PurchaseEvent NonEmptyList
    //network: string
    //network_risk_score: string
    (*
@@ -312,10 +311,12 @@ type CardIssuerPurchaseProgress = {
    Status: PurchaseStatus
    PurchaseId: CardIssuerTransactionId
    CardIssuerCardId: CardIssuerCardId
+   MerchantName: string
 } with
 
    member x.InitiatedViaSMSAuth =
       x.Events
+      |> NonEmptyList.toList
       |> List.exists (fun e ->
          match e.Type with
          | PurchaseEventType.FinancialAuth -> true
@@ -324,3 +325,7 @@ type CardIssuerPurchaseProgress = {
    member x.IsSMSApproval = x.InitiatedViaSMSAuth && x.Result = "APPROVED"
 
    member x.IsSMSDecline = x.InitiatedViaSMSAuth && x.Result = "DECLINED"
+
+   member x.EventsTimeOrdered = x.Events |> NonEmptyList.sortBy _.CreatedAt
+
+   member x.OriginatingEvent = NonEmptyList.head x.EventsTimeOrdered

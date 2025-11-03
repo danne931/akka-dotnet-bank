@@ -80,19 +80,6 @@ let addPendingPurchase (state: EmployeeSnapshot) (info: PurchaseInfo) =
                   (Option.map (PendingFunds.add txnId.Value fund))
    }
 
-let removePendingPurchase (state: EmployeeSnapshot) (info: PurchaseInfo) =
-   let txnId = info.CardIssuerTransactionId
-
-   {
-      state with
-         PendingPurchases = Map.remove txnId state.PendingPurchases
-         PendingPurchaseDeductions =
-            state.PendingPurchaseDeductions
-            |> Map.change
-                  info.CardId
-                  (Option.map (PendingFunds.remove txnId.Value))
-   }
-
 let updatePendingPurchase
    (state: EmployeeSnapshot)
    (progress: CardIssuerPurchaseProgress)
@@ -112,7 +99,7 @@ let updatePendingPurchase
       {
          purchase with
             Status = progress.Status
-            Events = purchase.Events @ progress.Events
+            Events = purchase.Events @ (NonEmptyList.toList progress.Events)
             Info.Amount = amount
       }
 
@@ -313,9 +300,9 @@ let applyEvent
       | PurchasePending e -> addPendingPurchase state e.Data.Info
       | PurchaseSettled e ->
          // Leave the PendingPurchase record in memory to handle
-         // potential for multiple clearings.
+         // potential for subsequent updates.
          //
-         // Remove PendingPurchase 30 (?) days after no activity. No news is good news.
+         // TODO: Remove PendingPurchase 30 (?) days after no activity. No news is good news.
          let info = e.Data.Info
          let txnId = info.CardIssuerTransactionId
 
@@ -327,7 +314,22 @@ let applyEvent
                         info.CardId
                         (Option.map (PendingFunds.remove txnId.Value))
          }
-      | PurchaseFailed e -> removePendingPurchase state e.Data.Info
+      | PurchaseFailed e ->
+         // Leave the PendingPurchase record in memory to handle
+         // potential for subsequent updates.
+         //
+         // TODO: Remove PendingPurchase 30 (?) days after no activity. No news is good news.
+         let info = e.Data.Info
+         let txnId = info.CardIssuerTransactionId
+
+         {
+            state with
+               PendingPurchaseDeductions =
+                  state.PendingPurchaseDeductions
+                  |> Map.change
+                        info.CardId
+                        (Option.map (PendingFunds.remove txnId.Value))
+         }
       | PurchaseProgress e -> updatePendingPurchase state e.Data.Info
       | _ -> state
 
@@ -453,6 +455,22 @@ module private StateTransition =
             else
                map PurchasePending state (PurchaseIntentCommand.toEvent cmd)
 
+   // NOTE:
+   // It is sometimes possible to receive a purchase progress update from Lithic without
+   // first receiving the purchase intent at the authorization stream access
+   // webhook.  This poses some risk in that they may allow a purchase to settle
+   // for an amount above the cardholder's balance, without affording the user
+   // the opportunity to decline.  Such situations may be subject to chargeback.
+   // See Purchase/Domain/PurchaseLifecycleEvent.fs cases 16-20.
+   let purchaseIntentWithAuthBypass
+      (state: EmployeeSnapshot)
+      (cmd: PurchaseIntentCommand)
+      =
+      map
+         PurchasePending
+         state
+         (PurchaseIntentCommand.toEventWithAuthBypass cmd)
+
    let purchaseProgress
       (state: EmployeeSnapshot)
       (cmd: PurchaseProgressCommand)
@@ -467,13 +485,14 @@ module private StateTransition =
 
          let evtsToAdd =
             update.Events
+            |> NonEmptyList.toList
             |> List.filter (_.EventId >> existingEvtIds.Contains >> not)
             |> List.sortBy _.CreatedAt
 
-         if evtsToAdd.Length = 0 then
-            transitionErr PurchaseProgressNoAdditionalEvents
-         else
-            let cmd = { cmd with Data.Events = evtsToAdd }
+         match NonEmptyList.fromList evtsToAdd with
+         | Error _ -> transitionErr PurchaseProgressNoAdditionalEvents
+         | Ok nel ->
+            let cmd = { cmd with Data.Events = nel }
             map PurchaseProgress state (PurchaseProgressCommand.toEvent cmd)
 
    let settlePurchase
@@ -574,7 +593,10 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
    | EmployeeCommand.CreateCard cmd -> StateTransition.createCard state cmd
    | EmployeeCommand.LinkCard cmd -> StateTransition.linkCard state cmd
    | EmployeeCommand.PurchaseIntent cmd ->
-      StateTransition.purchaseIntent state cmd
+      match cmd.Data.AuthorizationType with
+      | PurchaseAuthType.BypassAuth ->
+         StateTransition.purchaseIntentWithAuthBypass state cmd
+      | _ -> StateTransition.purchaseIntent state cmd
    | EmployeeCommand.PurchaseProgress cmd ->
       StateTransition.purchaseProgress state cmd
    | EmployeeCommand.SettlePurchase cmd ->

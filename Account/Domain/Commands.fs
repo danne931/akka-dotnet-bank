@@ -173,6 +173,7 @@ module DebitCommand =
                CardIssuerTransactionId = info.CardIssuerTransactionId
                CardId = info.CardId
                CardNickname = info.CardNickname
+               PurchaseAuthType = info.AuthorizationType
             }
          }
 
@@ -184,6 +185,12 @@ module DebitCommand =
 
       return BankEvent.create<DebitPending> cmd
    }
+
+   let toEventWithAuthBypass
+      (cmd: DebitCommand)
+      : ValidationResult<BankEvent<DebitPending>>
+      =
+      BankEvent.create<DebitPending> cmd |> Ok
 
 type FailDebitCommand = Command<DebitFailed>
 
@@ -215,6 +222,7 @@ module FailDebitCommand =
                CardIssuerTransactionId = purchaseInfo.CardIssuerTransactionId
                CardId = purchaseInfo.CardId
                CardNickname = purchaseInfo.CardNickname
+               PurchaseAuthType = purchaseInfo.AuthorizationType
             }
             Merchant = purchaseInfo.Merchant
             Amount = purchaseInfo.Amount
@@ -260,6 +268,7 @@ module RefundDebitCommand =
                CardIssuerTransactionId = purchaseInfo.CardIssuerTransactionId
                CardId = purchaseInfo.CardId
                CardNickname = purchaseInfo.CardNickname
+               PurchaseAuthType = purchaseInfo.AuthorizationType
             }
             Merchant = purchaseInfo.Merchant
             Amount = purchaseInfo.Amount
@@ -331,6 +340,7 @@ module SettleDebitCommand =
                CardIssuerTransactionId = purchaseInfo.CardIssuerTransactionId
                CardId = purchaseInfo.CardId
                CardNickname = purchaseInfo.CardNickname
+               PurchaseAuthType = purchaseInfo.AuthorizationType
             }
             Merchant = purchaseInfo.Merchant
             // TODO: see about removing "amount" or changing to "total amount"

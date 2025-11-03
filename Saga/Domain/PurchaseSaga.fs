@@ -12,7 +12,17 @@ type PurchaseSagaStatus =
    | Failed of PurchaseFailReason
 
 [<RequireQualifiedAccess>]
-type PurchaseSagaStartEvent = PurchaseIntent of PurchaseInfo
+type PurchaseSagaStartEvent =
+   /// Initiate progress workflow from purchase authorization received by
+   /// card issuer purchase auth webhook.
+   | PurchaseIntent of PurchaseInfo
+   /// It is sometimes possible to receive a purchase progress update from Lithic without
+   /// first receiving the purchase intent at the authorization stream access
+   /// webhook.  This poses some risk in that they may allow a purchase to settle
+   /// for an amount above the cardholder's balance, without affording the user
+   /// the opportunity to decline.  Such situations may be subject to chargeback.
+   /// See Purchase/Domain/PurchaseLifecycleEvent.fs cases 16-20.
+   | PurchaseProgress of PurchaseInfo * CardIssuerPurchaseProgress
 
 [<RequireQualifiedAccess>]
 type PurchaseSagaEvent =
@@ -32,6 +42,9 @@ type PurchaseSagaEvent =
 type Activity =
    | ReserveEmployeeCardFunds
    | ReserveAccountFunds
+   | ReserveEmployeeCardFundsBypassingAuth
+   | ReserveAccountFundsBypassingAuth
+   | BufferCardIssuerPurchaseProgress of CardIssuerPurchaseProgress
    | SettlePurchaseWithAccount of PurchaseClearing
    | SettlePurchaseWithCard of PurchaseClearing
    | SendPurchaseNotification
@@ -43,12 +56,16 @@ type Activity =
       member x.MaxAttempts =
          match x with
          | WaitForCardNetworkResolution
-         | ReserveEmployeeCardFunds -> 1
+         | ReserveEmployeeCardFunds
+         | ReserveAccountFunds -> 1
          | _ -> 3
 
       member x.InactivityTimeout =
          match x with
          | WaitForCardNetworkResolution -> None
+         | ReserveEmployeeCardFundsBypassingAuth
+         | ReserveAccountFundsBypassingAuth
+         | BufferCardIssuerPurchaseProgress _ -> Some(TimeSpan.FromMinutes 1.)
          | SendPurchaseNotification -> Some(TimeSpan.FromMinutes 4.)
          | ReserveEmployeeCardFunds
          | ReserveAccountFunds
@@ -68,6 +85,8 @@ type Activity =
          hash $"SettlePurchaseWithCard-{clearing.PurchaseClearedId}"
       | SettlePurchaseWithAccount clearing ->
          hash $"SettlePurchaseWithAccount-{clearing.PurchaseClearedId}"
+      | BufferCardIssuerPurchaseProgress _ ->
+         hash "BufferCardIssuerPurchaseProgress"
       | _ -> hash (string x)
 
 type PurchaseSaga = {
@@ -85,15 +104,50 @@ type PurchaseSaga = {
 
    member x.ReservedEmployeeCardFunds =
       x.LifeCycle.Completed |> List.exists _.Activity.IsReserveEmployeeCardFunds
+      || x.LifeCycle.Completed
+         |> List.exists _.Activity.IsReserveEmployeeCardFundsBypassingAuth
 
    member x.ReservedAccountFunds =
       x.LifeCycle.Completed |> List.exists _.Activity.IsReserveAccountFunds
+      || x.LifeCycle.Completed
+         |> List.exists _.Activity.IsReserveAccountFundsBypassingAuth
+
+   /// Should immediately designate funds as settled after fund reservation
+   member x.OriginatedFromForcePost =
+      match x.StartEvent with
+      | PurchaseSagaStartEvent.PurchaseProgress(_, progress) ->
+         let origin = progress.OriginatingEvent
+
+         if origin.Type = PurchaseEventType.Clearing then
+            let clearing = {
+               ClearedAmount = origin.Money
+               PurchaseClearedId = PurchaseClearedId origin.EventId
+            }
+
+            Some clearing
+         else
+            None
+      | _ -> None
+
+   member x.OriginatedFromPendingAuthAdvice =
+      match x.StartEvent with
+      | PurchaseSagaStartEvent.PurchaseProgress(_, progress) ->
+         let origin = progress.OriginatingEvent
+         origin.Type.IsAuthAdvice && progress.Status.IsPending
+      | _ -> false
 
    member x.OutgoingSettlementWithAccount =
       x.LifeCycle.InProgress
       |> List.tryPick (fun o ->
          match o.Activity with
          | Activity.SettlePurchaseWithAccount clearing -> Some clearing
+         | _ -> None)
+
+   member x.BufferedCardIssuerPurchaseProgress =
+      x.LifeCycle.InProgress
+      |> List.tryPick (fun o ->
+         match o.Activity with
+         | Activity.BufferCardIssuerPurchaseProgress progress -> Some progress
          | _ -> None)
 
    member x.SettledWithAccount =

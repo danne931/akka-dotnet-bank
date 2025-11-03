@@ -73,7 +73,24 @@ module MoneyFlow =
 // TODO:
 // - Use instead of decimal in several places throughout the app
 // - Add fromCents and toCents functions
-type Money = { Amount: decimal; Flow: MoneyFlow }
+type Money = {
+   Amount: decimal
+   Flow: MoneyFlow
+} with
+
+   static member create(amt: decimal) = {
+      Flow = if amt < 0m then MoneyFlow.Out else MoneyFlow.In
+      Amount = abs amt
+   }
+
+   static member amountSigned(m: Money) =
+      match m.Flow with
+      | MoneyFlow.Out -> -m.Amount
+      | MoneyFlow.In -> m.Amount
+
+   static member (+)(m: Money, m2: Money) =
+      let sum = (Money.amountSigned m) + (Money.amountSigned m2)
+      Money.create sum
 
 type PendingFund = { Amount: decimal; Flow: MoneyFlow }
 

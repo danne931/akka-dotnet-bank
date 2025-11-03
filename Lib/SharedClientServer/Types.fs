@@ -1,6 +1,8 @@
 module Lib.SharedTypes
 
 open System
+open System.Collections
+open System.Collections.Generic
 open Validus
 open Validus.Operators
 
@@ -15,6 +17,73 @@ type Result<'T, 'Error> with
       | Ok(Some value) -> Ok value
       | Ok None -> Error error
       | Error e -> Error e
+
+type NonEmptyList<'T> = private {
+   Head: 'T
+   Tail: 'T list
+} with
+
+   member x.Length = 1 + List.length x.Tail
+
+   interface IEnumerable<'T> with
+      member x.GetEnumerator() : IEnumerator<'T> =
+         seq {
+            yield x.Head
+            yield! x.Tail
+         }
+         |> _.GetEnumerator()
+
+      member this.GetEnumerator() : IEnumerator =
+         seq {
+            yield this.Head
+            yield! this.Tail
+         }
+         |> _.GetEnumerator()
+
+[<RequireQualifiedAccess>]
+module NonEmptyList =
+   let create head tail = { Head = head; Tail = tail }
+
+   let singleton head = { Head = head; Tail = [] }
+
+   let head { Head = head } = head
+
+   let tail { Tail = tail } = tail
+
+   let cons x { Head = head; Tail = tail } = { Head = x; Tail = head :: tail }
+
+   let append { Head = head; Tail = tail } { Head = head2; Tail = tail2 } =
+      (head :: tail) @ (head2 :: tail2)
+
+   let toList { Head = head; Tail = tail } = head :: tail
+
+   let fromList =
+      function
+      | [] -> Error "EmptyList"
+      | [ head: 'T ] -> Ok(singleton head)
+      | head :: tail -> Ok(create head tail)
+
+   let map transform { Head = head; Tail = tail } = {
+      Head = transform head
+      Tail = List.map transform tail
+   }
+
+   let fold transform state { Head = head; Tail = tail } =
+      List.fold transform (transform state head) tail
+
+   let sortBy fn { Head = head; Tail = tail } =
+      match tail with
+      | [] -> singleton head
+      | items ->
+         head :: items
+         |> List.sortBy fn
+         |> fromList
+         |> Result.toOption
+         |> _.Value
+
+// TODO:
+// Create NonEmptyString type and use in several places including
+// Address type below.
 
 module Guid =
    let parseOptional (id: string) =

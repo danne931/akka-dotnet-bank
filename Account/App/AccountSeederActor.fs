@@ -1546,11 +1546,9 @@ let seedEmployeeActions
             Name = employee.Name
          }
 
-         let correlationId = CorrelationId(Guid.NewGuid())
-
          let purchaseCmd = {
             PurchaseIntentCommand.create {
-               CorrelationId = correlationId
+               CorrelationId = CorrelationId(Guid.NewGuid())
                OrgId = employee.OrgId
                EmployeeId = employee.EmployeeId
                InitiatedBy = initiator
@@ -1576,6 +1574,57 @@ let seedEmployeeActions
                Timestamp = purchaseDate
          }
 
+         let progress: CardIssuerPurchaseProgress = {
+            MerchantName = purchaseCmd.Data.Merchant
+            Events =
+               NonEmptyList.create
+                  {
+                     Type = PurchaseEventType.Auth
+                     Money = {
+                        Amount = purchaseCmd.Data.Amount
+                        Flow = MoneyFlow.Out
+                     }
+                     EnforcedRules = []
+                     EventId = Guid.NewGuid()
+                     CreatedAt = purchaseCmd.Timestamp
+                  }
+                  [
+                     {
+                        Type = PurchaseEventType.Clearing
+                        Money = {
+                           Amount = purchaseCmd.Data.Amount
+                           Flow = MoneyFlow.Out
+                        }
+                        EnforcedRules = []
+                        EventId = Guid.NewGuid()
+                        CreatedAt = purchaseCmd.Timestamp.AddSeconds(1)
+                     }
+                  ]
+            Result = "APPROVED"
+            Status = PurchaseStatus.Settled
+            PurchaseId = purchaseCmd.Data.CardIssuerTransactionId
+            CardIssuerCardId = purchaseCmd.Data.CardIssuerCardId
+            Amounts =
+               let currency = Currency.USD
+
+               {
+                  Hold = { Amount = 0m; Currency = currency }
+                  Cardholder = {
+                     Amount = purchaseCmd.Data.Amount
+                     Currency = currency
+                     ConversionRate = 1m
+                  }
+                  Merchant = {
+                     Amount = purchaseCmd.Data.Amount
+                     Currency = currency
+                  }
+                  Settlement = {
+                     Amount = purchaseCmd.Data.Amount
+                     Currency = currency
+                  }
+               }
+         }
+
          let msg =
             purchaseCmd
             |> EmployeeCommand.PurchaseIntent
@@ -1593,52 +1642,16 @@ let seedEmployeeActions
                   mailbox
                   $"Purchase auth seed failed {t.Exception.Message}"
             else
-               // Simulate Clearing event from card issuer
-               let progress: CardIssuerPurchaseProgress = {
-                  Events = [
-                     {
-                        Type = PurchaseEventType.Auth
-                        Amount = purchaseCmd.Data.Amount
-                        Flow = MoneyFlow.Out
-                        EnforcedRules = []
-                        EventId = Guid.NewGuid()
-                        CreatedAt = purchaseCmd.Timestamp
-                     }
-                     {
-                        Type = PurchaseEventType.Clearing
-                        Amount = purchaseCmd.Data.Amount
-                        Flow = MoneyFlow.Out
-                        EnforcedRules = []
-                        EventId = Guid.NewGuid()
-                        CreatedAt = purchaseCmd.Timestamp.AddSeconds(1)
-                     }
-                  ]
-                  Result = "APPROVED"
-                  Status = PurchaseStatus.Settled
-                  PurchaseId = purchaseCmd.Data.CardIssuerTransactionId
-                  CardIssuerCardId = purchaseCmd.Data.CardIssuerCardId
-                  Amounts =
-                     let currency = Currency.USD
-
-                     {
-                        Hold = { Amount = 0m; Currency = currency }
-                        Cardholder = {
-                           Amount = purchaseCmd.Data.Amount
-                           Currency = currency
-                           ConversionRate = 1m
-                        }
-                        Merchant = {
-                           Amount = purchaseCmd.Data.Amount
-                           Currency = currency
-                        }
-                        Settlement = {
-                           Amount = purchaseCmd.Data.Amount
-                           Currency = currency
-                        }
-                     }
-               }
-
-               employeeRef <! EmployeeMessage.PurchaseProgress progress)
+               match authTask.Result with
+               | PurchaseAuthorizationStatus.Approved ->
+                  // Simulate Clearing event from card issuer
+                  employeeRef
+                  <! EmployeeMessage.PurchaseProgress(
+                     progress,
+                     purchaseCmd.Data.CardId
+                  )
+               | err ->
+                  logWarning mailbox $"Purchase auth denied request: {err}")
          |> ignore
 
 let createAccountOwners (registry: #IEmployeeGuaranteedDeliveryActor) =

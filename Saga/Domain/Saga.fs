@@ -42,6 +42,8 @@ type StartEvent =
       | Purchase e ->
          match e with
          | PurchaseSagaStartEvent.PurchaseIntent _ -> "PurchaseIntent"
+         | PurchaseSagaStartEvent.PurchaseProgress _ ->
+            "PurchaseIntentFromProgressUpdate"
       | DomesticTransfer e ->
          match e with
          | DomesticTransferSagaStartEvent.SenderReservedFunds _ ->

@@ -42,6 +42,7 @@ type EmployeePurchaseReference = {
    CardId: CardId
    CardNickname: string option
    CardIssuerTransactionId: CardIssuerTransactionId
+   PurchaseAuthType: PurchaseAuthType
 }
 
 type DebitPending = {

@@ -138,7 +138,7 @@ type EmployeeMessage =
    | GetEmployee
    | StateChange of EmployeeCommand
    | AuthorizePurchase of PurchaseAuthorization
-   | PurchaseProgress of CardIssuerPurchaseProgress
+   | PurchaseProgress of CardIssuerPurchaseProgress * CardId
    | Delete
 
 type Employee = {

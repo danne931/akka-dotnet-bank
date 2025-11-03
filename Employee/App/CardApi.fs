@@ -14,7 +14,6 @@ module Writer = CardSqlMapper.CardSqlWriter
 
 let getCards (orgId: OrgId) (query: CardQuery) = taskResultOption {
    let employeeTable = EmployeeSqlMapper.table
-   let cardIssuerMappingTable = CardIssuerMappingSqlMapper.table
 
    let dpaView = AccountEventSqlMapper.Views.dailyPurchaseAccruedByCard
 

@@ -195,7 +195,8 @@ let onPersisted
 
       registry.SagaGuaranteedDeliveryActor() <! msg
 
-      mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
+      if not e.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth then
+         mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
    | AccountEvent.DebitSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettledWithAccount e.Data.Clearing

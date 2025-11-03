@@ -7,6 +7,7 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Payment.Domain
 open Lib.SharedTypes
+open Bank.Purchase.Domain
 
 let applyEvent (account: Account) (evt: AccountEvent) =
    match evt with
@@ -250,6 +251,16 @@ module private StateTransition =
          <| InsufficientBalance(account.AvailableBalance, account.FullName)
       else
          map DebitPending account (DebitCommand.toEvent cmd)
+
+   // NOTE:
+   // It is sometimes possible to receive a purchase progress update from Lithic without
+   // first receiving the purchase intent at the authorization stream access
+   // webhook.  This poses some risk in that they may allow a purchase to settle
+   // for an amount above the cardholder's balance, without affording the user
+   // the opportunity to decline.  Such situations may be subject to chargeback.
+   // See Purchase/Domain/PurchaseLifecycleEvent.fs cases 16-20.
+   let debitWithAuthBypass (account: Account) (cmd: DebitCommand) =
+      map DebitPending account (DebitCommand.toEventWithAuthBypass cmd)
 
    let settleDebit (account: Account) (cmd: SettleDebitCommand) =
       map DebitSettled account (SettleDebitCommand.toEvent cmd)
@@ -525,7 +536,11 @@ let stateTransition (account: Account) (command: AccountCommand) =
    | AccountCommand.CreateVirtualAccount cmd ->
       StateTransition.create account cmd
    | AccountCommand.DepositCash cmd -> StateTransition.deposit account cmd
-   | AccountCommand.Debit cmd -> StateTransition.debit account cmd
+   | AccountCommand.Debit cmd ->
+      match cmd.Data.EmployeePurchaseReference.PurchaseAuthType with
+      | PurchaseAuthType.BypassAuth ->
+         StateTransition.debitWithAuthBypass account cmd
+      | _ -> StateTransition.debit account cmd
    | AccountCommand.SettleDebit cmd -> StateTransition.settleDebit account cmd
    | AccountCommand.FailDebit cmd -> StateTransition.failDebit account cmd
    | AccountCommand.RefundDebit cmd -> StateTransition.refundDebit account cmd

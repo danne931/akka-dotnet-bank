@@ -251,9 +251,18 @@ module PurchaseIntentCommand =
 
          return
             BankEvent.create2<PurchaseInfo, CardPurchasePending> cmd {
-               Info = cmd.Data
+               Info = input
             }
       }
+
+   let toEventWithAuthBypass
+      (cmd: PurchaseIntentCommand)
+      : ValidationResult<BankEvent<CardPurchasePending>>
+      =
+      BankEvent.create2<PurchaseInfo, CardPurchasePending> cmd {
+         Info = cmd.Data
+      }
+      |> Ok
 
 type PurchaseProgressCommand = Command<CardIssuerPurchaseProgress>
 

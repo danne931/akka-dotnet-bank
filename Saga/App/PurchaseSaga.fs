@@ -10,6 +10,7 @@ open EmailMessage
 open Lib.Saga
 open PurchaseSaga
 open BankActorRegistry
+open Lib.SharedTypes
 
 let applyStartEvent
    (start: PurchaseSagaStartEvent)
@@ -37,6 +38,55 @@ let applyStartEvent
       }
       FailReason = None
      }
+   // NOTE:
+   // It is sometimes possible to receive a purchase progress update from Lithic without
+   // first receiving the purchase intent at the authorization stream access
+   // webhook.  This poses some risk in that they may allow a purchase to settle
+   // for an amount above the cardholder's balance, without affording the user
+   // the opportunity to decline.  Such situations may be subject to chargeback.
+   // See Purchase/Domain/PurchaseLifecycleEvent.fs cases 16-20.
+   | PurchaseSagaStartEvent.PurchaseProgress(purchaseInfo, progress) ->
+      let origin = progress.OriginatingEvent
+
+      let saga = {
+         PurchaseInfo = purchaseInfo
+         InitialPurchaseIntentAmount = origin.Money.Amount
+         CardIssuerPurchaseEvents = []
+         CardIssuerProgressAmounts = progress.Amounts
+         StartEvent = start
+         StartedAt = timestamp
+         Events = []
+         Status = PurchaseSagaStatus.InProgress
+         LifeCycle = SagaLifeCycle.empty
+         FailReason = None
+      }
+
+      if
+         saga.OriginatedFromForcePost.IsSome
+         || saga.OriginatedFromPendingAuthAdvice
+      then
+         {
+            saga with
+               LifeCycle.InProgress = [
+                  ActivityLifeCycle.init
+                     timestamp
+                     Activity.ReserveAccountFundsBypassingAuth
+
+                  ActivityLifeCycle.init
+                     timestamp
+                     Activity.ReserveEmployeeCardFundsBypassingAuth
+
+                  ActivityLifeCycle.init
+                     timestamp
+                     (Activity.BufferCardIssuerPurchaseProgress progress)
+               ]
+         }
+      else
+         // Ignore purchase progress start event
+         {
+            saga with
+               Status = PurchaseSagaStatus.Completed
+         }
 
 let applyEvent
    (saga: PurchaseSaga)
@@ -47,7 +97,6 @@ let applyEvent
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
-   let abortActivity = SagaLifeCycle.abortActivity timestamp
 
    let saga = {
       saga with
@@ -55,18 +104,31 @@ let applyEvent
    }
 
    match evt with
-   | PurchaseSagaEvent.AccountReservedFunds -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle |> finishActivity Activity.ReserveAccountFunds
-     }
-   | PurchaseSagaEvent.CardReservedFunds -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.ReserveEmployeeCardFunds
-            |> addActivity Activity.WaitForCardNetworkResolution
-     }
+   | PurchaseSagaEvent.AccountReservedFunds ->
+      let activity =
+         match saga.PurchaseInfo.AuthorizationType with
+         | PurchaseAuthType.BypassAuth ->
+            Activity.ReserveAccountFundsBypassingAuth
+         | _ -> Activity.ReserveAccountFunds
+
+      {
+         saga with
+            LifeCycle = saga.LifeCycle |> finishActivity activity
+      }
+   | PurchaseSagaEvent.CardReservedFunds ->
+      let activity =
+         match saga.PurchaseInfo.AuthorizationType with
+         | PurchaseAuthType.BypassAuth ->
+            Activity.ReserveEmployeeCardFundsBypassingAuth
+         | _ -> Activity.ReserveEmployeeCardFunds
+
+      {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity activity
+               |> addActivity Activity.WaitForCardNetworkResolution
+      }
    | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress ->
       let amount =
          match progress.Status with
@@ -86,12 +148,21 @@ let applyEvent
             }
             CardIssuerProgressAmounts = progress.Amounts
             CardIssuerPurchaseEvents =
-               saga.CardIssuerPurchaseEvents @ progress.Events
+               saga.CardIssuerPurchaseEvents
+               |> List.append (NonEmptyList.toList progress.Events)
                |> List.sortBy _.CreatedAt
             LifeCycle =
-               saga.LifeCycle
-               |> finishActivity Activity.WaitForCardNetworkResolution
+               let life =
+                  saga.LifeCycle
+                  |> finishActivity Activity.WaitForCardNetworkResolution
 
+               match saga.BufferedCardIssuerPurchaseProgress with
+               | Some buffer when buffer = progress ->
+                  life
+                  |> finishActivity (
+                     Activity.BufferCardIssuerPurchaseProgress buffer
+                  )
+               | _ -> life
       }
 
       let failSaga reason = {
@@ -105,9 +176,9 @@ let applyEvent
             }
             LifeCycle =
                saga.LifeCycle
+               |> SagaLifeCycle.abortActivities timestamp
                |> addActivity Activity.AcquireAccountFailureAcknowledgement
                |> addActivity Activity.AcquireCardFailureAcknowledgement
-               |> abortActivity Activity.SendPurchaseNotification
       }
 
       match progress.Status with
@@ -144,6 +215,7 @@ let applyEvent
          // expiry/reversal.
          let amount =
             progress.Events
+            |> NonEmptyList.toList
             |> List.sumBy (fun o ->
                match o.Type with
                | PurchaseEventType.Clearing
@@ -151,10 +223,7 @@ let applyEvent
                // Financial Auths are SMS requests, wherein auth
                // & clearing are combined into a single message.
                // See Purchase/Domain/PurchaseLifecycleEvent.fs case 13.
-               | PurchaseEventType.FinancialAuth ->
-                  match o.Flow with
-                  | MoneyFlow.Out -> -o.Amount
-                  | MoneyFlow.In -> o.Amount
+               | PurchaseEventType.FinancialAuth -> Money.amountSigned o.Money
                | _ -> 0m)
 
          if amount = 0m then
@@ -166,18 +235,11 @@ let applyEvent
             saga
          else
             let clearedAmount = {
-               ClearedAmount = {
-                  Flow = if amount < 0m then MoneyFlow.Out else MoneyFlow.In
-                  Amount = abs amount
-               }
+               ClearedAmount = Money.create amount
                // Deterministically set the ClearedId by consuming the Lithic
                // EventId of the oldest event in a CardIssuerPurchaseProgress.
                PurchaseClearedId =
-                  progress.Events
-                  |> List.sortBy _.CreatedAt
-                  |> List.head
-                  |> _.EventId
-                  |> PurchaseClearedId
+                  PurchaseClearedId progress.OriginatingEvent.EventId
             }
 
             {
@@ -331,8 +393,10 @@ let stateTransition
          activityIsDone Activity.AcquireAccountFailureAcknowledgement
       | PurchaseSagaEvent.AccountReservedFunds ->
          activityIsDone Activity.ReserveAccountFunds
+         && activityIsDone Activity.ReserveAccountFundsBypassingAuth
       | PurchaseSagaEvent.CardReservedFunds ->
          activityIsDone Activity.ReserveEmployeeCardFunds
+         && activityIsDone Activity.ReserveEmployeeCardFundsBypassingAuth
       | PurchaseSagaEvent.PurchaseSettledWithAccount clearing ->
          activityIsDone (Activity.SettlePurchaseWithAccount clearing)
       | PurchaseSagaEvent.PurchaseSettledWithCard clearing ->
@@ -343,13 +407,58 @@ let stateTransition
    else
       Ok(applyEvent saga evt timestamp)
 
+let private sendPurchaseEmail
+   (registry: #IEmailActor)
+   (purchase: PurchaseInfo)
+   =
+   let emailMsg = {
+      OrgId = purchase.OrgId
+      CorrelationId = purchase.CorrelationId
+      Info =
+         EmailInfo.Purchase {
+            Email = purchase.EmployeeEmail
+            Amount = purchase.Amount
+            CardNumberLast4 = purchase.CardNumberLast4
+            Merchant = purchase.Merchant
+         }
+   }
+
+   registry.EmailActor() <! emailMsg
+
+let private reserveCardFunds (registry: #IEmployeeActor) purchase =
+   let msg =
+      PurchaseIntentCommand.create purchase
+      |> EmployeeCommand.PurchaseIntent
+      |> EmployeeMessage.StateChange
+
+   registry.EmployeeActor purchase.EmployeeId <! msg
+
+
+let private reserveAccountFunds (registry: #IAccountActor) purchase =
+   let msg =
+      purchase
+      |> DebitCommand.fromPurchase
+      |> AccountCommand.Debit
+      |> AccountMessage.StateChange
+
+   registry.AccountActor purchase.ParentAccountId <! msg
+
 // Purchase Saga is started by PurchaseIntent event coming from the Employee actor.
-let onStartEventPersisted (evt: PurchaseSagaStartEvent) =
+let onStartEventPersisted
+   registry
+   (saga: PurchaseSaga)
+   (evt: PurchaseSagaStartEvent)
+   =
    match evt with
    | PurchaseSagaStartEvent.PurchaseIntent _ -> ()
+   | PurchaseSagaStartEvent.PurchaseProgress(purchase, _) ->
+      if saga.Status.IsInProgress then
+         reserveCardFunds registry purchase
+         reserveAccountFunds registry purchase
 
 let onEventPersisted
    (broadcaster: SignalRBroadcast.SignalRBroadcast)
+   (sendEventToSelf: PurchaseSagaEvent -> unit)
    (registry:
       #IEmployeeActor & #IAccountActor & #IEmailActor & #IPartnerBankServiceActor)
    (previousState: PurchaseSaga)
@@ -375,21 +484,6 @@ let onEventPersisted
          |> AccountMessage.StateChange
 
       registry.AccountActor purchaseInfo.ParentAccountId <! msg
-
-   let sendPurchaseEmail () =
-      let emailMsg = {
-         OrgId = purchaseInfo.OrgId
-         CorrelationId = purchaseInfo.CorrelationId
-         Info =
-            EmailInfo.Purchase {
-               Email = purchaseInfo.EmployeeEmail
-               Amount = purchaseInfo.Amount
-               CardNumberLast4 = purchaseInfo.CardNumberLast4
-               Merchant = purchaseInfo.Merchant
-            }
-      }
-
-      registry.EmailActor() <! emailMsg
 
    let sendPurchaseFailedEmail (reason: PurchaseFailReason) =
       let emailMsg = {
@@ -423,9 +517,20 @@ let onEventPersisted
 
       registry.EmployeeActor purchaseInfo.EmployeeId <! msg
 
+   let sendProgressFromBufferMaybe () =
+      match
+         updatedState.ReservedAccountFunds,
+         updatedState.ReservedEmployeeCardFunds,
+         updatedState.BufferedCardIssuerPurchaseProgress
+      with
+      | true, true, Some progress ->
+         PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress
+         |> sendEventToSelf
+      | _ -> ()
+
    match evt with
    | PurchaseSagaEvent.CardReservedFunds
-   | PurchaseSagaEvent.AccountReservedFunds -> ()
+   | PurchaseSagaEvent.AccountReservedFunds -> sendProgressFromBufferMaybe ()
    | PurchaseSagaEvent.PurchaseRejected reason ->
       if updatedState.ReservedEmployeeCardFunds then
          acquireCardFailureAcknowledgement reason
@@ -443,16 +548,15 @@ let onEventPersisted
 
       let sendPurchaseEmailMaybe () =
          if not updatedState.PurchaseNotificationSent then
-            sendPurchaseEmail ()
+            sendPurchaseEmail registry purchaseInfo
 
       match progress.Status with
       | PurchaseStatus.Pending -> sendPurchaseEmailMaybe ()
       | PurchaseStatus.Settled ->
          sendPurchaseEmailMaybe ()
 
-         match updatedState.OutgoingSettlementWithAccount with
-         | Some clearing -> settlePurchaseWithAccount clearing
-         | None -> ()
+         updatedState.OutgoingSettlementWithAccount
+         |> Option.iter settlePurchaseWithAccount
       | PurchaseStatus.Declined -> fail CardNetworkFailReason.Declined
       | PurchaseStatus.Expired -> fail CardNetworkFailReason.Expired
       | PurchaseStatus.Voided -> fail CardNetworkFailReason.Voided
@@ -469,14 +573,21 @@ let onEventPersisted
          | Activity.WaitForCardNetworkResolution
          | Activity.ReserveEmployeeCardFunds
          | Activity.ReserveAccountFunds -> ()
+         | Activity.ReserveEmployeeCardFundsBypassingAuth ->
+            reserveCardFunds registry purchaseInfo
+         | Activity.ReserveAccountFundsBypassingAuth ->
+            reserveAccountFunds registry purchaseInfo
          | Activity.SettlePurchaseWithCard clearing ->
             settlePurchaseWithCard clearing
          | Activity.SettlePurchaseWithAccount clearing ->
             settlePurchaseWithAccount clearing
-         | Activity.SendPurchaseNotification -> sendPurchaseEmail ()
+         | Activity.SendPurchaseNotification ->
+            sendPurchaseEmail registry purchaseInfo
          | Activity.AcquireCardFailureAcknowledgement ->
             updatedState.FailReason
             |> Option.iter acquireCardFailureAcknowledgement
          | Activity.AcquireAccountFailureAcknowledgement ->
             updatedState.FailReason
             |> Option.iter acquireAccountFailureAcknowledgement
+         | Activity.BufferCardIssuerPurchaseProgress _ ->
+            sendProgressFromBufferMaybe ()

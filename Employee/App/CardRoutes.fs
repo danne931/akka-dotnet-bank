@@ -88,6 +88,7 @@ let start (app: WebApplication) =
             (fun system registry cmd ->
                taskResult {
                   let conf = EnvEmployee.config
+                  let purchase = cmd.Data
 
                   let! envelope =
                      PurchaseIntentCommand.toEvent cmd
@@ -98,17 +99,17 @@ let start (app: WebApplication) =
                   // Route handler -> Lithic -> ASA Webhook route handler -> EmployeeActor
                   | false, Some apiKey ->
                      let! cardIssuerCardId =
-                        getIssuerCardIdFromInternalCardId cmd.Data.CardId
+                        getIssuerCardIdFromInternalCardId purchase.CardId
 
                      let! card =
                         CardIssuerService.getCard apiKey cardIssuerCardId
 
                      let! _ =
                         CardIssuerService.simulatePurchaseAuthorization apiKey {
-                           Amount = cmd.Data.Amount
-                           Descriptor = cmd.Data.Merchant
+                           Amount = purchase.Amount
+                           Descriptor = purchase.Merchant
                            CardNumber = card.Number
-                           MerchantCurrency = cmd.Data.CurrencyMerchant
+                           MerchantCurrency = purchase.CurrencyMerchant
                            Metadata = {
                               OrgId = cmd.OrgId
                               CorrelationId = cmd.CorrelationId
@@ -120,7 +121,7 @@ let start (app: WebApplication) =
                   | _ ->
                      let employeeRef =
                         (registry :> IEmployeeActor).EmployeeActor
-                           cmd.Data.EmployeeId
+                           purchase.EmployeeId
 
                      let msg =
                         cmd
@@ -136,50 +137,61 @@ let start (app: WebApplication) =
 
                      // Simulate Clearing event from card issuer
                      let progress: CardIssuerPurchaseProgress = {
-                        Events = [
-                           {
-                              Type = PurchaseEventType.Auth
-                              Amount = cmd.Data.Amount
-                              Flow = MoneyFlow.Out
-                              EnforcedRules = []
-                              EventId = Guid.NewGuid()
-                              CreatedAt = cmd.Timestamp
-                           }
-                           {
-                              Type = PurchaseEventType.Clearing
-                              Amount = cmd.Data.Amount
-                              Flow = MoneyFlow.Out
-                              EnforcedRules = []
-                              EventId = Guid.NewGuid()
-                              CreatedAt = cmd.Timestamp.AddSeconds(1)
-                           }
-                        ]
+                        Events =
+                           NonEmptyList.create
+                              {
+                                 Type = PurchaseEventType.Auth
+                                 Money = {
+                                    Amount = purchase.Amount
+                                    Flow = MoneyFlow.Out
+                                 }
+                                 EnforcedRules = []
+                                 EventId = Guid.NewGuid()
+                                 CreatedAt = cmd.Timestamp
+                              }
+                              [
+                                 {
+                                    Type = PurchaseEventType.Clearing
+                                    Money = {
+                                       Amount = purchase.Amount
+                                       Flow = MoneyFlow.Out
+                                    }
+                                    EnforcedRules = []
+                                    EventId = Guid.NewGuid()
+                                    CreatedAt = cmd.Timestamp.AddSeconds(1)
+                                 }
+                              ]
                         Result = "APPROVED"
                         Status = PurchaseStatus.Settled
-                        PurchaseId = cmd.Data.CardIssuerTransactionId
-                        CardIssuerCardId = cmd.Data.CardIssuerCardId
+                        PurchaseId = purchase.CardIssuerTransactionId
+                        CardIssuerCardId = purchase.CardIssuerCardId
+                        MerchantName = purchase.Merchant
                         Amounts = {
                            Hold = {
                               Amount = 0m
-                              Currency = cmd.Data.CurrencyMerchant
+                              Currency = purchase.CurrencyMerchant
                            }
                            Cardholder = {
-                              Amount = cmd.Data.Amount
-                              Currency = cmd.Data.CurrencyCardHolder
+                              Amount = purchase.Amount
+                              Currency = purchase.CurrencyCardHolder
                               ConversionRate = 1m
                            }
                            Merchant = {
-                              Amount = cmd.Data.Amount
-                              Currency = cmd.Data.CurrencyMerchant
+                              Amount = purchase.Amount
+                              Currency = purchase.CurrencyMerchant
                            }
                            Settlement = {
-                              Amount = cmd.Data.Amount
-                              Currency = cmd.Data.CurrencyMerchant
+                              Amount = purchase.Amount
+                              Currency = purchase.CurrencyMerchant
                            }
                         }
                      }
 
-                     employeeRef <! EmployeeMessage.PurchaseProgress progress
+                     employeeRef
+                     <! EmployeeMessage.PurchaseProgress(
+                        progress,
+                        purchase.CardId
+                     )
 
                      return!
                         match authResult with
@@ -298,13 +310,14 @@ let start (app: WebApplication) =
                   let! progress =
                      dtoAsEntityMaybe |> Result.mapError Err.UnexpectedError
 
-                  let! _, employeeId =
+                  let! cardId, employeeId =
                      getInternalIdsFromIssuerCardId progress.CardIssuerCardId
 
                   let employeeRef =
                      (registry :> IEmployeeActor).EmployeeActor employeeId
 
-                  employeeRef <! EmployeeMessage.PurchaseProgress progress
+                  employeeRef
+                  <! EmployeeMessage.PurchaseProgress(progress, cardId)
 
                   return ()
 
