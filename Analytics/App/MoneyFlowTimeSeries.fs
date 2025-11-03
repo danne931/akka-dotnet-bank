@@ -45,7 +45,7 @@ let moneyFlowDailyTimeSeriesAnalytics
          |> Sql.timestamptz
       ]
 
-      let query =
+      let queryBalanceHistory =
          $"""
          SELECT
             bh.account_id,
@@ -68,42 +68,44 @@ let moneyFlowDailyTimeSeriesAnalytics
             ON tsd.day = bh.date AND tsd.account_id = bh.account_id
          """
 
+      let queryToday =
+         $"""
+         SELECT
+            t.account_id,
+            t.date,
+            t.amount_in,
+            t.amount_out,
+            COALESCE(bh.balance, 0) AS prev_balance,
+            COALESCE(bh.balance, 0) + t.daily_diff AS balance
+         FROM (
+            SELECT
+               t.account_id,
+               t.day AS date,
+               t.amount_in,
+               t.amount_out,
+               t.amount_in - t.amount_out AS daily_diff
+            FROM {Functions.moneyFlowTimeSeriesDaily}(
+               @orgId,
+               CURRENT_DATE,
+               CURRENT_DATE
+            ) t
+         ) t
+         JOIN balance_history bh
+            ON bh.account_id = t.account_id
+            AND bh.date = t.date - interval '1 day'
+         """
+
       // NOTE: A balance history record is created daily for the previous day.
       // If the txnQuery.End falls on the current day then we need to compute
       // today's balance from the previous day balance history record with
       // the sum of todays transaction amounts.
       let query =
          if endDateAdjustedToPreviousDay.IsSome then
-            query
-            + $"""
-            UNION ALL
-
-            SELECT
-               t.account_id,
-               t.date,
-               t.amount_in,
-               t.amount_out,
-               COALESCE(bh.balance, 0) AS prev_balance,
-               COALESCE(bh.balance, 0) + t.daily_diff AS balance
-            FROM (
-               SELECT
-                  t.account_id,
-                  t.day AS date,
-                  t.amount_in,
-                  t.amount_out,
-                  t.amount_in - t.amount_out AS daily_diff
-               FROM {Functions.moneyFlowTimeSeriesDaily}(
-                  @orgId,
-                  CURRENT_DATE,
-                  CURRENT_DATE
-               ) t
-            ) t
-            JOIN balance_history bh
-               ON bh.account_id = t.account_id
-               AND bh.date = t.date - interval '1 day'
-            """
+            $"SELECT *
+              FROM ({queryBalanceHistory} UNION ALL {queryToday})
+              ORDER BY date ASC"
          else
-            query
+            queryBalanceHistory
 
       let! series =
          pgQuery<MoneyFlowDailyTimeSeriesByAccount>
