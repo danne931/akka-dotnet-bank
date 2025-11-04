@@ -1138,7 +1138,6 @@ process to establish a balance history for a few months worth of seed data.
 This is necessary for the analytics page time series chart.
 See Account.App/AccountSeederActor.fs';
 
-
 CREATE OR REPLACE PROCEDURE update_balance_history_for_yesterday()
 AS $$
 DECLARE
@@ -1219,15 +1218,7 @@ BEGIN
       ON ae.account_id = ids.account_id
       AND ae.timestamp::date = ds.day::date
       AND ae.money_flow IS NOT NULL
-      -- Exclude internal transfers within an org while
-      -- still fetching internal transfers between orgs.
-      AND ae.name NOT IN(
-         'InternalTransferWithinOrgDeducted',
-         'InternalTransferWithinOrgDeposited',
-         'InternalAutomatedTransferDeducted',
-         'InternalAutomatedTransferFailed',
-         'InternalAutomatedTransferDeposited'
-      )
+      AND ae.name IN ('DepositedCash', 'InternalTransferBetweenOrgsDeposited', 'InternalTransferBetweenOrgsSettled', 'DomesticTransferSettled', 'DebitSettled')
    GROUP BY ds.day, ids.account_id
    ORDER BY ds.day;
 END
@@ -1274,15 +1265,7 @@ BEGIN
          END
          AND money_flow IS NOT NULL
          AND DATE_TRUNC('month', timestamp) = months.month
-         -- Exclude internal transfers within an org while
-         -- still fetching internal transfers between orgs.
-         AND name NOT IN(
-            'InternalTransferWithinOrgDeducted',
-            'InternalTransferWithinOrgDeposited',
-            'InternalAutomatedTransferDeducted',
-            'InternalAutomatedTransferFailed',
-            'InternalAutomatedTransferDeposited'
-         )
+         AND name IN ('DepositedCash', 'InternalTransferBetweenOrgsDeposited', 'InternalTransferBetweenOrgsSettled', 'DomesticTransferSettled', 'DebitSettled')
    ) ae ON true
    GROUP BY months.month
    ORDER BY months.month;
@@ -1313,15 +1296,7 @@ BEGIN
       AND timestamp::date
          BETWEEN DATE_TRUNC('month', d)
          AND (DATE_TRUNC('month', d) + INTERVAL '1 month' - INTERVAL '1 day')
-      -- Exclude internal transfers within an org while
-      -- still fetching internal transfers between orgs.
-      AND name NOT IN(
-         'InternalTransferWithinOrgDeducted',
-         'InternalTransferWithinOrgDeposited',
-         'InternalAutomatedTransferDeducted',
-         'InternalAutomatedTransferFailed',
-         'InternalAutomatedTransferDeposited'
-      )
+         AND ae.name IN ('DepositedCash', 'InternalTransferBetweenOrgsDeposited', 'InternalTransferBetweenOrgsSettled', 'DomesticTransferSettled', 'DebitSettled')
    GROUP BY ae.source
    ORDER BY amount DESC
    LIMIT topN;
