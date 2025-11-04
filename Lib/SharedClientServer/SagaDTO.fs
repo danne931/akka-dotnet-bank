@@ -85,6 +85,8 @@ type SagaDTO = {
    StartedAt: DateTime
    Id: CorrelationId
    Status: SagaDTOStatus
+   StatusDetail: string
+   Events: string
 }
 
 type SagaCursor = {

@@ -141,10 +141,14 @@ let renderSagaExpandedView (saga: SagaDTO) =
       |> List.map activityToJson
 
    let json = {|
-      Failed = activities SagaActivityDTOStatus.Failed
-      Aborted = activities SagaActivityDTOStatus.Aborted
-      InProgress = activities SagaActivityDTOStatus.InProgress
-      Completed = activities SagaActivityDTOStatus.Completed
+      Activities = {|
+         Failed = activities SagaActivityDTOStatus.Failed
+         Aborted = activities SagaActivityDTOStatus.Aborted
+         InProgress = activities SagaActivityDTOStatus.InProgress
+         Completed = activities SagaActivityDTOStatus.Completed
+      |}
+      Events = Serialization.deserialize<obj> saga.Events
+      StatusDetail = Serialization.deserialize<obj> saga.StatusDetail
    |}
 
    classyNode Html.article [ "saga-expanded-view" ] [

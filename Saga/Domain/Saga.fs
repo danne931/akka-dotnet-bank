@@ -430,9 +430,11 @@ type Saga =
       let dto = {
          Id = (x :> ISaga).SagaId
          StartedAt = x.StartedAt
-         Status = x.Status
          Name = ""
          LifeCycle = []
+         Status = x.Status
+         StatusDetail = ""
+         Events = Serialization.serialize []
       }
 
       let activitiesToDTO
@@ -474,41 +476,57 @@ type Saga =
          dto with
             Name = "Purchase"
             LifeCycle = activitiesToDTO saga.LifeCycle
+            Events = Serialization.serialize saga.Events
+            StatusDetail = Serialization.serialize saga.Status
         }
       | Saga.DomesticTransfer saga -> {
          dto with
             Name = "Domestic Transfer"
             LifeCycle = activitiesToDTO saga.LifeCycle
+            Events = Serialization.serialize saga.Events
+            StatusDetail = Serialization.serialize saga.Status
         }
       | Saga.PlatformTransfer saga -> {
          dto with
             Name = "Platform Transfer"
             LifeCycle = activitiesToDTO saga.LifeCycle
+            Events = Serialization.serialize saga.Events
+            StatusDetail = Serialization.serialize saga.Status
         }
       | Saga.PaymentRequest saga -> {
          dto with
             Name = "Payment Request"
             LifeCycle = activitiesToDTO saga.LifeCycle
+            Events = Serialization.serialize saga.Events
+            StatusDetail = Serialization.serialize saga.Status
         }
       | Saga.Billing saga -> {
          dto with
             Name = "Billing"
             LifeCycle = activitiesToDTO saga.LifeCycle
+            Events = Serialization.serialize saga.Events
+            StatusDetail = Serialization.serialize saga.Status
         }
       | Saga.CardSetup saga -> {
          dto with
             Name = "Card Setup"
             LifeCycle = activitiesToDTO saga.LifeCycle
+            Events = Serialization.serialize saga.Events
+            StatusDetail = Serialization.serialize saga.Status
         }
       | Saga.EmployeeOnboarding saga -> {
          dto with
             Name = "Employee Onboarding"
             LifeCycle = activitiesToDTO saga.LifeCycle
+            Events = Serialization.serialize saga.Events
+            StatusDetail = Serialization.serialize saga.Status
         }
       | Saga.OrgOnboarding saga -> {
          dto with
             Name = "Organization Onboarding"
             LifeCycle = activitiesToDTO saga.LifeCycle
+            Events = Serialization.serialize saga.Events
+            StatusDetail = Serialization.serialize saga.Status
         }
 
 type AppSagaPersistableEvent = SagaPersistableEvent<StartEvent, Event>
