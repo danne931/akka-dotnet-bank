@@ -1,0 +1,24 @@
+// Scrollbar styling via css is limited in firefox
+@supports (-moz-appearance: none)
+  .active-page
+    scrollbar-width: thin
+    scrollbar-color: var(--secondary) transparent
+
+// Scrollbar styling in webkit-based browsers
+::-webkit-scrollbar
+  width: 6px
+  height: 12px
+
+::-webkit-scrollbar-track
+  background: transparent
+
+::-webkit-scrollbar-thumb
+  background: transparent
+  border-radius: 6px
+
+*:hover
+  ::-webkit-scrollbar-thumb
+    background: var(--secondary)
+
+  ::-webkit-scrollbar-thumb:hover
+    background: var(--primary-hover)
