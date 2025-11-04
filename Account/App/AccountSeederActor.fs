@@ -30,7 +30,6 @@ open RecurringPaymentSchedule
 open BankActorRegistry
 open Email
 open PartnerBank.Service.Domain
-open CardIssuer.Service.Domain
 
 module aeFields = AccountEventSqlMapper.Fields
 
@@ -376,7 +375,7 @@ let enableOrgSocialTransferDiscovery (registry: #IOrgGuaranteedDeliveryActor) =
 // Modifying system-produced event timestamps via update statements on
 // the read models as demonstrated below should be a sufficient strategy
 // for observing time based analytics on seed data.
-let seedBalanceHistory () = taskResultOption {
+let overwriteHistoricalAccountEventTimestamps () = taskResultOption {
    let query =
       $"""
       SELECT {EmployeeEventFields.timestamp}, {EmployeeEventFields.correlationId}
@@ -474,10 +473,88 @@ let seedBalanceHistory () = taskResultOption {
       sqlParams
    ]
 
-   let! _ = pgTransaction query |> TaskResult.map Some
-   let! res = pgProcedure "seed_balance_history" None |> TaskResult.map Some
-   return res
+   return! pgTransaction query |> TaskResult.map Some
 }
+
+let private expectedDomesticTransfersCount = 3
+
+// It takes a few minutes of interaction with mock partner bank for domestic transfers to transition from pending to settled.
+// Return None and try again after a few seconds until the domestic transfers are settled.
+let overwriteHistoricalDomesticTransferAccountEventTimestamps () = taskResultOption {
+   let countOfDomesticTransfersQuery =
+      $"""
+      SELECT COUNT(*) as count
+      FROM {AccountEventSqlMapper.table}
+      WHERE {aeFields.name} = 'DomesticTransferSettled'
+      """
+
+   let! countOfDomesticTransfers =
+      pgQuerySingle countOfDomesticTransfersQuery None (fun read ->
+         read.int "count")
+
+   if countOfDomesticTransfers < expectedDomesticTransfersCount then
+      return! Task.FromResult(Ok None)
+   else
+      let query =
+         $"""
+         SELECT {aeFields.timestamp}, {aeFields.correlationId}
+         FROM {AccountEventSqlMapper.table}
+         WHERE {aeFields.name} = 'DomesticTransferPending'
+         """
+
+      let! initialRequestsToModify =
+         pgQuery query None (fun read -> {|
+            CorrelationId = AccountEventSqlMapper.SqlReader.correlationId read
+            Timestamp = AccountEventSqlMapper.SqlReader.timestamp read
+         |})
+
+      let sqlParams =
+         initialRequestsToModify
+         |> List.map (fun o -> [
+            "correlationId",
+            AccountEventSqlMapper.SqlWriter.correlationId o.CorrelationId
+            "timestamp", AccountEventSqlMapper.SqlWriter.timestamp o.Timestamp
+         ])
+
+      let progressTimestamp =
+         "@timestamp + ((1 + random()) || ' minutes')::interval"
+
+      let updatedTimestamp =
+         $"""
+         CASE
+            WHEN {aeFields.name} = 'DomesticTransferProgressUpdated'
+            THEN {progressTimestamp}
+
+            WHEN {aeFields.name} IN ('DomesticTransferSettled', 'DomesticTransferFailed')
+            THEN @timestamp + '4 minutes'::interval
+
+            ELSE @timestamp
+         END
+         """
+
+      let updateQuery = [
+         $"""
+         UPDATE {AccountEventSqlMapper.table}
+         SET
+            {aeFields.timestamp} = {updatedTimestamp},
+            {aeFields.event} = jsonb_set(
+               {aeFields.event},
+               '{{1,Timestamp}}',
+               to_jsonb({updatedTimestamp}),
+               false
+            )
+         WHERE
+            {aeFields.correlationId} = @correlationId
+            AND {aeFields.name} <> 'DomesticTransferPending';
+         """,
+         sqlParams
+      ]
+
+      return! pgTransaction updateQuery |> TaskResult.map Some
+}
+
+let seedBalanceHistory () =
+   pgProcedure "seed_balance_history" None |> TaskResult.map Some
 
 let mockAccountOwnerCmd =
    let date = DateTime.Today
@@ -1298,10 +1375,7 @@ let seedAccountOwnerActions
             if month = 3 then
                let today = DateTime.UtcNow
 
-               if today.Day < nextMonth.Day then
-                  today
-               else
-                  nextMonth.AddDays -2
+               if today.Day < nextMonth.Day then today else nextMonth
             else
                nextMonth
 
@@ -1917,6 +1991,16 @@ let private scheduleInitialization (ctx: Actor<AccountSeederMessage>) =
       AccountSeederMessage.SeedAccounts
    |> ignore
 
+let private scheduleOverwriteDomesticTransferTimestamps
+   (ctx: Actor<AccountSeederMessage>)
+   (seconds: float)
+   =
+   ctx.Schedule
+      (TimeSpan.FromSeconds seconds)
+      ctx.Self
+      AccountSeederMessage.OverwriteDomesticTransferTimestamps
+   |> ignore
+
 let private getVerifiedAccounts (accountsToCreate: CreateAccountsMap) = async {
    let! lookupResults =
       accountsToCreate.Keys |> List.ofSeq |> getAccountsByIds |> Async.ofTask
@@ -2033,12 +2117,15 @@ let actorProps
 
                logInfo "Enabled social transfer discovery"
 
-               do! Task.Delay 60_000
+               do! Task.Delay(TimeSpan.FromMinutes 1.)
 
-               let! res = seedBalanceHistory ()
-               do! enableUpdatePreventionTriggers ()
+               do! overwriteHistoricalAccountEventTimestamps ()
 
-               match res with
+               scheduleOverwriteDomesticTransferTimestamps ctx 80.
+
+               let! balanceHistoryRes = seedBalanceHistory ()
+
+               match balanceHistoryRes with
                | Ok(Some _) ->
                   logInfo "Seeded balance history"
 
@@ -2068,6 +2155,25 @@ let actorProps
                      AccountsToCreate = remaining
                      AccountsToSeedWithTransactions = txnsSeedMap
                   }
+         | AccountSeederMessage.OverwriteDomesticTransferTimestamps ->
+            let! res =
+               overwriteHistoricalDomesticTransferAccountEventTimestamps ()
+
+            match res with
+            | Ok(Some _) ->
+               logInfo
+                  "Overwrote historical domestic transfer account event timestamps"
+               // Reset triggers on account_event & employee_event tables
+               // to ensure updates are not allowed to these tables after
+               // overwriting the timestamps during seeding.
+               do! enableUpdatePreventionTriggers ()
+               return ignored ()
+            | _ ->
+               logInfo
+                  "Waiting for domestic transfers to settle before overwriting timestamps."
+
+               scheduleOverwriteDomesticTransferTimestamps ctx 10.
+               return ignored ()
       }
 
       loop initState

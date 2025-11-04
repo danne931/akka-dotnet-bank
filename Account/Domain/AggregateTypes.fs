@@ -585,6 +585,7 @@ type AccountClosureMessage =
 type AccountSeederMessage =
    | SeedAccounts
    | VerifyAccountsCreated
+   | OverwriteDomesticTransferTimestamps
 
 module AccountLoadTestTypes =
    type ProgressCheck = {
