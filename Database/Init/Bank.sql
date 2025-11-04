@@ -1343,7 +1343,16 @@ BEGIN
    SELECT
       employee_event.employee_id,
       employee.first_name || ' ' || employee.last_name as employee_name,
-      COALESCE(SUM(ae.amount::numeric), 0) AS amount
+      COALESCE(
+         SUM(
+            CASE
+               WHEN ae.money_flow = 'In' THEN -ae.amount::numeric
+               WHEN ae.money_flow = 'Out' THEN ae.amount::numeric
+               ELSE 0
+            END
+         ),
+         0
+      ) AS amount
    FROM employee_event
    JOIN account_event ae
       ON ae.correlation_id = employee_event.correlation_id
@@ -1364,7 +1373,16 @@ $$ LANGUAGE plpgsql;
 CREATE VIEW daily_purchase_accrued AS
 SELECT
    account_id,
-   COALESCE(SUM(amount::numeric), 0) as amount_accrued
+   COALESCE(
+      SUM(
+         CASE
+            WHEN money_flow = 'In' THEN -amount::numeric
+            WHEN money_flow = 'Out' THEN amount::numeric
+            ELSE 0
+         END
+      ),
+      0
+   ) AS amount_accrued
 FROM account_event
 WHERE
    amount IS NOT NULL
@@ -1386,7 +1404,16 @@ GROUP BY account_id;
 CREATE VIEW daily_purchase_accrued_by_card AS
 SELECT
    card_id,
-   COALESCE(SUM(amount::numeric), 0) as amount_accrued
+   COALESCE(
+      SUM(
+         CASE
+            WHEN money_flow = 'In' THEN -amount::numeric
+            WHEN money_flow = 'Out' THEN amount::numeric
+            ELSE 0
+         END
+      ),
+      0
+   ) AS amount_accrued
 FROM account_event
 WHERE
    amount IS NOT NULL
@@ -1397,7 +1424,16 @@ GROUP BY card_id;
 CREATE VIEW monthly_purchase_accrued_by_card AS
 SELECT
    card_id,
-   COALESCE(SUM(amount::numeric), 0) as amount_accrued
+   COALESCE(
+      SUM(
+         CASE
+            WHEN money_flow = 'In' THEN -amount::numeric
+            WHEN money_flow = 'Out' THEN amount::numeric
+            ELSE 0
+         END
+      ),
+      0
+   ) AS amount_accrued
 FROM account_event
 WHERE
    amount IS NOT NULL
