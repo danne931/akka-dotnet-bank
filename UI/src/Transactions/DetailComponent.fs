@@ -428,7 +428,12 @@ let renderTransactionInfo
 
       Html.section [
          renderLabeledInfo "Status" txnInfo.Transaction.Status.Display
-         renderLabeledInfo "From" txn.Source
+         match txn.Source with
+         | TransactionOrigin.Simple src -> renderLabeledInfo "From" src
+         | TransactionOrigin.Purchase src ->
+            renderLabeledInfo "Account" src.Account
+            renderLabeledInfo "Employee" src.Employee
+            renderLabeledInfo "Card" src.Card
 
          match
             isEditingNickname,

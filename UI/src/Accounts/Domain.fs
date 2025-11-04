@@ -244,13 +244,29 @@ module TransactionBrowserQuery =
       EventType = None
    }
 
+type PurchaseTransactionSource = {
+   Employee: string
+   Card: string
+   Account: string
+}
+
+[<RequireQualifiedAccess>]
+type TransactionOrigin =
+   | Simple of string
+   | Purchase of PurchaseTransactionSource
+
+   override x.ToString() =
+      match x with
+      | Simple src -> src
+      | Purchase src -> $"{src.Account} via {src.Employee}'s card {src.Card}"
+
 type TransactionUIFriendly = {
    Name: string
    Date: string
    Amount: string
    Info: string
    MoneyFlow: MoneyFlow option
-   Source: string
+   Source: TransactionOrigin
    Destination: string
 }
 
@@ -303,7 +319,7 @@ let transactionUIFriendly
       Amount = Money.format txn.Amount
       Info = ""
       MoneyFlow = None
-      Source = ""
+      Source = TransactionOrigin.Simple ""
       Destination = ""
    }
 
@@ -341,7 +357,7 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.In
                | TransactionStatus.Failed -> None
-            Source = origin
+            Source = TransactionOrigin.Simple origin
             Destination = recipientAccount
       }
    | TransactionType.Purchase ->
@@ -386,7 +402,12 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
-            Source = $"{accountName} via {employee}'s card {card}"
+            Source =
+               TransactionOrigin.Purchase {
+                  Account = accountName
+                  Employee = employee
+                  Card = card
+               }
             Destination = merchant
       }
    | TransactionType.InternalTransferWithinOrg ->
@@ -406,7 +427,7 @@ let transactionUIFriendly
          props with
             Name = "Move Money Between Accounts"
             Info = $"Moved money from {sender} to {recipient}"
-            Source = sender
+            Source = TransactionOrigin.Simple sender
             Destination = recipient
       }
    | TransactionType.InternalTransferBetweenOrgs ->
@@ -441,7 +462,7 @@ let transactionUIFriendly
                | TransactionStatus.Scheduled
                | TransactionStatus.InProgress -> Some MoneyFlow.Out
                | TransactionStatus.Failed -> None
-            Source = sender
+            Source = TransactionOrigin.Simple sender
             Destination = recipient
       }
    | TransactionType.DomesticTransfer ->
@@ -480,7 +501,7 @@ let transactionUIFriendly
                | TransactionStatus.Scheduled
                | TransactionStatus.InProgress -> Some moneyFlow
                | TransactionStatus.Failed -> None
-            Source = sender
+            Source = TransactionOrigin.Simple sender
             Destination = recipient
       }
    | TransactionType.Payment ->
@@ -527,7 +548,7 @@ let transactionUIFriendly
                | TransactionStatus.Complete
                | TransactionStatus.InProgress -> moneyFlow
                | TransactionStatus.Failed -> None
-            Source = sender
+            Source = TransactionOrigin.Simple sender
             Destination = recipient
       }
    | TransactionType.InternalAutomatedTransfer ->
@@ -552,7 +573,7 @@ let transactionUIFriendly
             Info =
                $"Automatically moved money from {sender} to {recipient}
                - Reason: {reason}"
-            Source = sender
+            Source = TransactionOrigin.Simple sender
             Destination = recipient
       }
 
