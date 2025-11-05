@@ -1560,166 +1560,164 @@ let seedEmployeeActions
    (timestamp: DateTime)
    (mailbox: Actor<AccountSeederMessage>)
    =
-   let purchaseMerchants = [
-      [ "Cozy Hotel"; "Trader Joe's"; "In N Out"; "Lyft" ]
-      [
-         "Barn House BBQ and Beer"
-         "Nem nướng Happy Belly"
-         "Nhà Lồng Coffee"
-         "Cơm Chay All Day"
-         "Chickpea Eatery"
-         "Pho Number 1"
-         "Big C"
-         "Grab"
-         "Thai Spice ++"
-         "ร้าน บ้านไร่ยามเย็น"
-         "GoGym"
-         "Coffee Window @ 14 Soi 7"
-         "ร้านอาหารทับริมธาร"
+   task {
+      let purchaseMerchants = [
+         [ "Cozy Hotel"; "Trader Joe's"; "In N Out"; "Lyft" ]
+         [
+            "Barn House BBQ and Beer"
+            "Nem nướng Happy Belly"
+            "Nhà Lồng Coffee"
+            "Cơm Chay All Day"
+            "Chickpea Eatery"
+            "Pho Number 1"
+            "Big C"
+            "Grab"
+            "Thai Spice ++"
+            "ร้าน บ้านไร่ยามเย็น"
+            "GoGym"
+            "Coffee Window @ 14 Soi 7"
+            "ร้านอาหารทับริมธาร"
+         ]
+         [
+            "Lidl"
+            "Coop"
+            "Carrefour"
+            "Baita Resch"
+            "Mercato di Mezzo"
+            "La Locanda Dei Grulli"
+            "Rosso Vivo Pizzeria Verace"
+            "CAFFE' GM S.R.L."
+            "Pizzeria Via Cassia"
+            "Cantina Tramin"
+            "La Mora Viola (gelateria artigianale)"
+         ]
       ]
-      [
-         "Lidl"
-         "Coop"
-         "Carrefour"
-         "Baita Resch"
-         "Mercato di Mezzo"
-         "La Locanda Dei Grulli"
-         "Rosso Vivo Pizzeria Verace"
-         "CAFFE' GM S.R.L."
-         "Pizzeria Via Cassia"
-         "Cantina Tramin"
-         "La Mora Viola (gelateria artigianale)"
-      ]
-   ]
 
-   let rnd = new Random()
+      let rnd = new Random()
 
-   for month in [ 1..3 ] do
-      let timestamp = timestamp.AddMonths month
-      let purchaseMerchants = purchaseMerchants[month - 1]
+      for month in [ 1..3 ] do
+         let timestamp = timestamp.AddMonths month
+         let purchaseMerchants = purchaseMerchants[month - 1]
 
-      let maxPurchases =
-         if month = 3 then
-            DateTime.UtcNow.Day
-         else
-            DateTime.DaysInMonth(timestamp.Year, timestamp.Month)
-
-      for purchaseNum in [ 1..maxPurchases ] do
-         let maxDays =
+         let maxPurchases =
             if month = 3 then
-               let today = DateTime.UtcNow
-               if today.Day = 1 then None else Some(today.AddDays(-2).Day)
+               DateTime.UtcNow.Day
             else
-               Some(DateTime.DaysInMonth(timestamp.Year, timestamp.Month) - 1)
+               DateTime.DaysInMonth(timestamp.Year, timestamp.Month)
 
-         let purchaseDate =
-            match month = 3 && purchaseNum > maxPurchases - 1, maxDays with
-            | false, Some days -> timestamp.AddDays(float (randomAmount 0 days))
-            | false, None -> timestamp
-            | true, _ -> DateTime.UtcNow
+         for purchaseNum in [ 1..maxPurchases ] do
+            let maxDays =
+               if month = 3 then
+                  let today = DateTime.UtcNow
+                  if today.Day = 1 then None else Some(today.AddDays(-2).Day)
+               else
+                  Some(
+                     DateTime.DaysInMonth(timestamp.Year, timestamp.Month) - 1
+                  )
 
-         let initiator: Initiator = {
-            Id = InitiatedById employee.EmployeeId
-            Name = employee.Name
-         }
+            let purchaseDate =
+               match month = 3 && purchaseNum > maxPurchases - 1, maxDays with
+               | false, Some days ->
+                  timestamp.AddDays(float (randomAmount 0 days))
+               | false, None -> timestamp
+               | true, _ -> DateTime.UtcNow
 
-         let purchaseCmd = {
-            PurchaseIntentCommand.create {
-               CorrelationId = CorrelationId(Guid.NewGuid())
-               OrgId = employee.OrgId
-               EmployeeId = employee.EmployeeId
-               InitiatedBy = initiator
-               ParentAccountId = myOrg.ParentAccountId
-               AccountId = card.AccountId
-               CardId = card.CardId
-               CardNumberLast4 = card.CardNumberLast4
-               EmployeeName = employee.Name
-               EmployeeEmail = employee.Email
-               Date = purchaseDate
-               Amount = randomAmount 50 333
-               Merchant =
-                  purchaseMerchants[rnd.Next(0, purchaseMerchants.Length)]
-               Reference = None
-               CurrencyCardHolder = Currency.USD
-               CurrencyMerchant = Currency.USD
-               CardIssuerTransactionId =
-                  Guid.NewGuid() |> CardIssuerTransactionId
-               CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
-               CardNickname = card.CardNickname
-               AuthorizationType = PurchaseAuthType.Debit
-            } with
-               Timestamp = purchaseDate
-         }
+            let initiator: Initiator = {
+               Id = InitiatedById employee.EmployeeId
+               Name = employee.Name
+            }
 
-         let progress: CardIssuerPurchaseProgress = {
-            MerchantName = purchaseCmd.Data.Merchant
-            Events =
-               NonEmptyList.create
-                  {
-                     Type = PurchaseEventType.Auth
-                     Money = {
-                        Amount = purchaseCmd.Data.Amount
-                        Flow = MoneyFlow.Out
-                     }
-                     EnforcedRules = []
-                     EventId = Guid.NewGuid()
-                     CreatedAt = purchaseCmd.Timestamp
-                  }
-                  [
+            let purchaseCmd = {
+               PurchaseIntentCommand.create {
+                  CorrelationId = CorrelationId(Guid.NewGuid())
+                  OrgId = employee.OrgId
+                  EmployeeId = employee.EmployeeId
+                  InitiatedBy = initiator
+                  ParentAccountId = myOrg.ParentAccountId
+                  AccountId = card.AccountId
+                  CardId = card.CardId
+                  CardNumberLast4 = card.CardNumberLast4
+                  EmployeeName = employee.Name
+                  EmployeeEmail = employee.Email
+                  Date = purchaseDate
+                  Amount = randomAmount 50 333
+                  Merchant =
+                     purchaseMerchants[rnd.Next(0, purchaseMerchants.Length)]
+                  Reference = None
+                  CurrencyCardHolder = Currency.USD
+                  CurrencyMerchant = Currency.USD
+                  CardIssuerTransactionId =
+                     Guid.NewGuid() |> CardIssuerTransactionId
+                  CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
+                  CardNickname = card.CardNickname
+                  AuthorizationType = PurchaseAuthType.Debit
+               } with
+                  Timestamp = purchaseDate
+            }
+
+            let progress: CardIssuerPurchaseProgress = {
+               MerchantName = purchaseCmd.Data.Merchant
+               Events =
+                  NonEmptyList.create
                      {
-                        Type = PurchaseEventType.Clearing
+                        Type = PurchaseEventType.Auth
                         Money = {
                            Amount = purchaseCmd.Data.Amount
                            Flow = MoneyFlow.Out
                         }
                         EnforcedRules = []
                         EventId = Guid.NewGuid()
-                        CreatedAt = purchaseCmd.Timestamp.AddSeconds(1)
+                        CreatedAt = purchaseCmd.Timestamp
                      }
-                  ]
-            Result = "APPROVED"
-            Status = PurchaseStatus.Settled
-            PurchaseId = purchaseCmd.Data.CardIssuerTransactionId
-            CardIssuerCardId = purchaseCmd.Data.CardIssuerCardId
-            Amounts =
-               let currency = Currency.USD
+                     [
+                        {
+                           Type = PurchaseEventType.Clearing
+                           Money = {
+                              Amount = purchaseCmd.Data.Amount
+                              Flow = MoneyFlow.Out
+                           }
+                           EnforcedRules = []
+                           EventId = Guid.NewGuid()
+                           CreatedAt = purchaseCmd.Timestamp.AddSeconds(1)
+                        }
+                     ]
+               Result = "APPROVED"
+               Status = PurchaseStatus.Settled
+               PurchaseId = purchaseCmd.Data.CardIssuerTransactionId
+               CardIssuerCardId = purchaseCmd.Data.CardIssuerCardId
+               Amounts =
+                  let currency = Currency.USD
 
-               {
-                  Hold = { Amount = 0m; Currency = currency }
-                  Cardholder = {
-                     Amount = purchaseCmd.Data.Amount
-                     Currency = currency
-                     ConversionRate = 1m
+                  {
+                     Hold = { Amount = 0m; Currency = currency }
+                     Cardholder = {
+                        Amount = purchaseCmd.Data.Amount
+                        Currency = currency
+                        ConversionRate = 1m
+                     }
+                     Merchant = {
+                        Amount = purchaseCmd.Data.Amount
+                        Currency = currency
+                     }
+                     Settlement = {
+                        Amount = purchaseCmd.Data.Amount
+                        Currency = currency
+                     }
                   }
-                  Merchant = {
-                     Amount = purchaseCmd.Data.Amount
-                     Currency = currency
-                  }
-                  Settlement = {
-                     Amount = purchaseCmd.Data.Amount
-                     Currency = currency
-                  }
-               }
-         }
+            }
 
-         let msg =
-            purchaseCmd
-            |> EmployeeCommand.PurchaseIntent
-            |> EmployeeMessage.StateChange
+            let msg =
+               purchaseCmd
+               |> EmployeeCommand.PurchaseIntent
+               |> EmployeeMessage.StateChange
 
-         let employeeRef = registry.EmployeeActor purchaseCmd.Data.EmployeeId
+            let employeeRef = registry.EmployeeActor purchaseCmd.Data.EmployeeId
 
-         let authTask: PurchaseAuthorizationStatus Task =
-            employeeRef.Ask(msg, Some(TimeSpan.FromSeconds 4.5))
-            |> Async.StartAsTask
+            let authTask: PurchaseAuthorizationStatus Async =
+               employeeRef.Ask(msg, Some(TimeSpan.FromSeconds 10.))
 
-         authTask.ContinueWith(fun (t: Task) ->
-            if t.IsFaulted then
-               logError
-                  mailbox
-                  $"Purchase auth seed failed {t.Exception.Message}"
-            else
-               match authTask.Result with
+            try
+               match! authTask with
                | PurchaseAuthorizationStatus.Approved ->
                   // Simulate Clearing event from card issuer
                   employeeRef
@@ -1728,8 +1726,10 @@ let seedEmployeeActions
                      purchaseCmd.Data.CardId
                   )
                | err ->
-                  logWarning mailbox $"Purchase auth denied request: {err}")
-         |> ignore
+                  logWarning mailbox $"Purchase auth denied request: {err}"
+            with err ->
+               logError mailbox $"Purchase auth seed failed {err.Message}"
+   }
 
 let createAccountOwners (registry: #IEmployeeGuaranteedDeliveryActor) =
    let createAccountOwnerCmd (business: OrgSetup) =
@@ -1954,7 +1954,7 @@ let seedAccountTransactions
                   mailbox
                   $"Can not proceed with purchases - eId: {employeeId} cId: {cardId}"
             | Some(employee, card) ->
-               seedEmployeeActions card employee registry timestamp mailbox
+               do! seedEmployeeActions card employee registry timestamp mailbox
 
          do! seedPayments registry
    }
