@@ -60,6 +60,7 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                SagaMessage<'SagaStartEvent, 'SagaEvent>.CheckForRemainingWork
             |> Some
 
+
       // Passivate after a delay.
       // The ReadModelSync actor relies on GetSaga messages returning
       // the latest saga state for persisting as a read model.
@@ -84,27 +85,24 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
       // to the read model without having to perform GetSaga ask messages.
       // I will want to consider this if too many simultaneous Ask messages
       // becomes a performance concern but no perceived issue for now.
-      let sleep (reason: string) =
-         logDebug $"Passivate after delay: {reason}"
+      let sleep (reason: string) (preparingForSleep: bool) =
+         if not preparingForSleep then
+            logDebug $"Passivate after delay: {reason}"
 
-         ctx.Schedule
-            (TimeSpan.FromSeconds 10.)
-            ctx.Self
-            (SagaMessage<'SagaStartEvent, 'SagaEvent>.Sleep reason)
-         |> ignore
+            ctx.Schedule
+               (TimeSpan.FromSeconds 10.)
+               ctx.Self
+               (SagaMessage<'SagaStartEvent, 'SagaEvent>.Sleep reason)
+            |> ignore
 
       let rec loop (prepForSleep: bool) (state: 'Saga option) = actor {
          let! msg = ctx.Receive()
 
          let sleep reason =
-            sleep reason
+            sleep reason prepForSleep
             loop true state
 
          let loop = loop false
-
-         let handleMessageWhenPrepForSleep () =
-            logWarning $"Received saga message while prepping for sleep {msg}"
-            unhandled ()
 
          match msg with
          | Persisted ctx (:? SagaPersistableEvent<'SagaStartEvent, 'SagaEvent> as e) ->
@@ -139,8 +137,6 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             // Send message to parent actor (Persistence Supervisor)
             // for message command to confirmed event persistence.
             ctx.Parent() <! msg.Message
-         | :? ConfirmableMessageEnvelope as _ when prepForSleep ->
-            handleMessageWhenPrepForSleep ()
          | :? ConfirmableMessageEnvelope as envelope ->
             let unhandledMsg msg =
                logError
@@ -200,22 +196,11 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                               (persistableEvent evt)
                | other -> unhandledMsg other
             | other -> unhandledMsg other
-         | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg when prepForSleep ->
+         | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
             match msg with
             | SagaMessage.Sleep reason ->
                logDebug $"Passivating: {reason}"
                return passivate ()
-            | SagaMessage.GetSaga ->
-               ctx.Sender() <! state
-               return ignored ()
-            | _ -> handleMessageWhenPrepForSleep ()
-         | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
-            match msg with
-            | SagaMessage.Sleep _ ->
-               logWarning
-                  "Should not receive Sleep message if prepForSleep = false"
-
-               return unhandled ()
             | SagaMessage.GetSaga ->
                ctx.Sender() <! state
                return ignored ()
@@ -236,6 +221,8 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                         |> persistableEvent
                      )
                   | None -> ignored ()
+            | SagaMessage.CheckForRemainingWork when prepForSleep ->
+               return ignored ()
             | SagaMessage.CheckForRemainingWork ->
                return
                   match state with
