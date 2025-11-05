@@ -419,7 +419,7 @@ let private sendPurchaseEmail
             Email = purchase.EmployeeEmail
             Amount = purchase.Amount
             CardNumberLast4 = purchase.CardNumberLast4
-            Merchant = purchase.Merchant
+            Merchant = string purchase.Merchant
          }
    }
 

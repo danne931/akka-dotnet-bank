@@ -2,6 +2,7 @@ module TransactionMerchantSqlMapper
 
 open OrganizationSqlMapper
 open Bank.Org.Domain
+open Lib.SharedTypes
 
 let table = "merchant"
 
@@ -12,8 +13,13 @@ module MerchantFields =
 
 module MerchantSqlReader =
    let orgId = OrgSqlReader.orgId
-   let name (read: RowReader) = read.string MerchantFields.name
-   let alias (read: RowReader) = read.stringOrNone MerchantFields.alias
+
+   let name (read: RowReader) =
+      read.string MerchantFields.name |> NonEmptyString.deserializeUnsafe
+
+   let alias (read: RowReader) =
+      read.stringOrNone MerchantFields.alias
+      |> Option.map NonEmptyString.deserializeUnsafe
 
    let merchant (read: RowReader) : Merchant = {
       OrgId = orgId read
@@ -23,5 +29,7 @@ module MerchantSqlReader =
 
 module MerchantSqlWriter =
    let orgId = OrgSqlWriter.orgId
-   let name = Sql.string
-   let alias = Sql.stringOrNone
+   let name (str: NonEmptyString) = Sql.string str.Value
+
+   let alias (strOpt: NonEmptyString option) =
+      strOpt |> Option.map _.Value |> Sql.stringOrNone

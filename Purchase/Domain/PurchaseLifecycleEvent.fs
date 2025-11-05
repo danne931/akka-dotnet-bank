@@ -311,7 +311,7 @@ type CardIssuerPurchaseProgress = {
    Status: PurchaseStatus
    PurchaseId: CardIssuerTransactionId
    CardIssuerCardId: CardIssuerCardId
-   MerchantName: string
+   MerchantName: NonEmptyString
 } with
 
    member x.InitiatedViaSMSAuth =

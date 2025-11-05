@@ -82,5 +82,3 @@ let datePresentOrFutureValidatorFromString =
 let transferRecipientIdValidator senderId =
    let msg = sprintf "%s should not equal sender id"
    Check.WithMessage.String.notEquals senderId msg "Recipient Id"
-
-let merchantValidator = Check.String.greaterThanLen 2 "Merchant"

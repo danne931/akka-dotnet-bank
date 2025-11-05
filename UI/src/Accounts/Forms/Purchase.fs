@@ -42,7 +42,7 @@ let form
 
    let merchantField =
       Form.textField {
-         Parser = merchantValidator >> validationErrorsHumanFriendly
+         Parser = NonEmptyString.create
          Value = fun (values: Values) -> values.Merchant
          Update = fun newValue values -> { values with Merchant = newValue }
          Error = fun _ -> None

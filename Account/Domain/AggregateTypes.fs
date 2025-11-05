@@ -225,14 +225,15 @@ module AccountEvent =
       | AccountEvent.DepositedCash evt ->
          Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Origin
       | AccountEvent.DebitPending evt ->
-         Some evt.Data.Amount, Some MoneyFlow.Out, Some evt.Data.Merchant
+         Some evt.Data.Amount, Some MoneyFlow.Out, Some evt.Data.Merchant.Value
       | AccountEvent.DebitFailed evt ->
-         Some evt.Data.Amount, None, Some evt.Data.Merchant
+         Some evt.Data.Amount, None, Some evt.Data.Merchant.Value
       | AccountEvent.DebitSettled evt ->
          let clearing = evt.Data.Clearing.ClearedAmount
-         Some clearing.Amount, Some clearing.Flow, Some evt.Data.Merchant
+
+         Some clearing.Amount, Some clearing.Flow, Some evt.Data.Merchant.Value
       | AccountEvent.DebitRefunded evt ->
-         Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Merchant
+         Some evt.Data.Amount, Some MoneyFlow.In, Some evt.Data.Merchant.Value
       | AccountEvent.InternalTransferWithinOrgDeducted evt ->
          Some evt.Data.BaseInfo.Amount,
          Some MoneyFlow.Out,

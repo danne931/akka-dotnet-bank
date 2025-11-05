@@ -1622,6 +1622,7 @@ let seedEmployeeActions
                   Amount = randomAmount 50 333
                   Merchant =
                      purchaseMerchants[rnd.Next(0, purchaseMerchants.Length)]
+                     |> NonEmptyString.deserializeUnsafe
                   Reference = None
                   CurrencyCardHolder = Currency.USD
                   CurrencyMerchant = Currency.USD

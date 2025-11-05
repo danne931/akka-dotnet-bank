@@ -341,6 +341,6 @@ let upsertMerchant (merchant: Merchant) =
 
    pgPersist query [
       "orgId", Writer.orgId merchant.OrgId
-      "name", Writer.name <| merchant.Name.ToLower()
+      "name", Writer.name (NonEmptyString.map _.ToLower() merchant.Name)
       "alias", Writer.alias merchant.Alias
    ]

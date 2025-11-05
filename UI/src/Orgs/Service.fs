@@ -122,7 +122,7 @@ let getMerchants (orgId: OrgId) : Async<Result<Map<string, Merchant>, Err>> = as
       return
          responseText
          |> Serialization.deserialize<Merchant list>
-         |> Result.map (List.map (fun o -> o.Name, o) >> Map.ofList)
+         |> Result.map (List.map (fun o -> o.Name.Value, o) >> Map.ofList)
 }
 
 let updateMerchant (merchant: Merchant) : Async<Result<int, Err>> = async {

@@ -3,22 +3,21 @@ module Nickname
 open Feliz
 open Feliz.UseElmish
 open Elmish
-open System
 
 open Lib.SharedTypes
 
 type State = {
-   PendingNickname: string option
+   PendingNickname: NonEmptyString option
    NicknamePersistence: Deferred<Result<unit, Err>>
 }
 
 type Msg =
-   | SetPendingNickname of string option
+   | SetPendingNickname of NonEmptyString option
    | SaveNickname of
-      nickname: string option *
+      nickname: NonEmptyString option *
       AsyncOperationStatus<Result<unit, Err>>
 
-let init (alias: string option) () =
+let init (alias: NonEmptyString option) () =
    {
       PendingNickname = alias
       NicknamePersistence = Deferred.Idle
@@ -27,8 +26,8 @@ let init (alias: string option) () =
 
 let update
    (closeEdit: unit -> unit)
-   (persistNickname: string option -> Async<Result<unit, Err>>)
-   (onNicknameSaved: string option -> unit)
+   (persistNickname: NonEmptyString option -> Async<Result<unit, Err>>)
+   (onNicknameSaved: NonEmptyString option -> unit)
    msg
    state
    =
@@ -81,10 +80,10 @@ let private nicknameCancelButton onCancel =
 let NicknameEditComponent
    (props:
       {|
-         OriginalName: string
-         Alias: string option
-         persistNickname: string option -> Async<Result<unit, Err>>
-         onNicknameSaved: string option -> unit
+         OriginalName: NonEmptyString
+         Alias: NonEmptyString option
+         persistNickname: NonEmptyString option -> Async<Result<unit, Err>>
+         onNicknameSaved: NonEmptyString option -> unit
          onCancel: unit -> unit
       |})
    =
@@ -112,10 +111,13 @@ let NicknameEditComponent
          attr.type' "text"
          attr.placeholder "Edit nickname"
 
-         attr.value (pendingNickname |> Option.defaultValue "")
+         attr.value (
+            pendingNickname |> Option.map _.Value |> Option.defaultValue ""
+         )
 
          attr.onChange (fun input ->
-            if String.IsNullOrWhiteSpace input then None else Some input
+            NonEmptyString.create input
+            |> Result.toOption
             |> Msg.SetPendingNickname
             |> dispatch)
       ]
@@ -150,7 +152,8 @@ let NicknameEditComponent
                   e.preventDefault ()
 
                   Msg.SaveNickname(
-                     pendingNickname |> Option.map _.Trim(),
+                     pendingNickname
+                     |> Option.map (NonEmptyString.map _.Trim()),
                      Started
                   )
                   |> dispatch)

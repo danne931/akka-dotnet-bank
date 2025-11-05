@@ -47,8 +47,8 @@ type BusinessDetails = {
 
 type Merchant = {
    OrgId: OrgId
-   Name: string
-   Alias: string option
+   Name: NonEmptyString
+   Alias: NonEmptyString option
 }
 
 type FeatureFlagOrgSettings = {

@@ -49,14 +49,14 @@ type DebitPending = {
    AccountId: AccountId
    Date: DateTime
    Amount: decimal
-   Merchant: string
+   Merchant: NonEmptyString
    Reference: string option
    EmployeePurchaseReference: EmployeePurchaseReference
 }
 
 type DebitSettled = {
    AccountId: AccountId
-   Merchant: string
+   Merchant: NonEmptyString
    Amount: decimal
    Clearing: PurchaseClearing
    EmployeePurchaseReference: EmployeePurchaseReference
@@ -65,7 +65,7 @@ type DebitSettled = {
 type DebitRefunded = {
    AccountId: AccountId
    EmployeePurchaseReference: EmployeePurchaseReference
-   Merchant: string
+   Merchant: NonEmptyString
    Amount: decimal
    Reason: PurchaseRefundReason
 }
@@ -73,7 +73,7 @@ type DebitRefunded = {
 type DebitFailed = {
    AccountId: AccountId
    EmployeePurchaseReference: EmployeePurchaseReference
-   Merchant: string
+   Merchant: NonEmptyString
    Amount: decimal
    Reason: PurchaseFailReason
 }

@@ -4,6 +4,7 @@ open Feliz
 open Feliz.UseElmish
 open Feliz.Router
 open Elmish
+open FsToolkit.ErrorHandling
 
 open Bank.Org.Domain
 open Bank.Account.Domain
@@ -446,44 +447,57 @@ let renderTransactionInfo
             let counterparties = org.Counterparties
             let org = org.Org
 
-            let originalName, nickname =
+            let names =
                counterparties
                |> Map.tryFind counterpartyId
-               |> Option.map (fun r -> r.Name, r.Nickname)
-               |> Option.defaultValue ("", None)
+               |> Option.bind (fun r -> option {
+                  // TODO:
+                  // Use NonEmptyString type in counterparty definition
+                  // instead of coercing here to conform to Nickname component.
+                  let! name = NonEmptyString.create r.Name |> Result.toOption
 
-            Nickname.NicknameEditComponent {|
-               OriginalName = originalName
-               Alias = nickname
-               onCancel = fun () -> dispatch Msg.ToggleNicknameEdit
-               persistNickname =
-                  fun alias -> async {
-                     let command =
-                        NicknameCounterpartyCommand.create
-                           org.OrgId
-                           org.ParentAccountId
-                           session.AsInitiator
-                           {
-                              CounterpartyId = counterpartyId
-                              Nickname = alias |> Option.map _.Trim()
-                           }
-                        |> ParentAccountCommand.NicknameCounterparty
+                  let nickname =
+                     r.Nickname
+                     |> Option.bind (NonEmptyString.create >> Result.toOption)
 
-                     let! res =
-                        AccountService.submitParentAccountCommand command
+                  return (name, nickname)
+               })
 
-                     return res |> Result.map ignore
-                  }
-               onNicknameSaved = ignore
-            |}
+            match names with
+            | Some(originalName, nickname) ->
+               Nickname.NicknameEditComponent {|
+                  OriginalName = originalName
+                  Alias = nickname
+                  onCancel = fun () -> dispatch Msg.ToggleNicknameEdit
+                  persistNickname =
+                     fun alias -> async {
+                        let command =
+                           NicknameCounterpartyCommand.create
+                              org.OrgId
+                              org.ParentAccountId
+                              session.AsInitiator
+                              {
+                                 CounterpartyId = counterpartyId
+                                 Nickname = alias |> Option.map _.Value
+                              }
+                           |> ParentAccountCommand.NicknameCounterparty
+
+                        let! res =
+                           AccountService.submitParentAccountCommand command
+
+                        return res |> Result.map ignore
+                     }
+                  onNicknameSaved = ignore
+               |}
+            | None -> Html.p "Can not display nickname editor."
          | true, TransactionType.Purchase, Some merchant, _ ->
             let merchantAlias =
-               getMerchant merchant merchants |> Option.bind _.Alias
+               getMerchant merchant.Value merchants |> Option.bind _.Alias
 
-            let merchantFromNickname (nickname: string option) = {
+            let merchantFromNickname (nickname: NonEmptyString option) = {
                OrgId = session.OrgId
-               Name = merchant.ToLower()
-               Alias = nickname |> Option.map _.Trim()
+               Name = merchant |> NonEmptyString.map _.ToLower()
+               Alias = nickname |> Option.map (NonEmptyString.map _.Trim())
             }
 
             Nickname.NicknameEditComponent {|

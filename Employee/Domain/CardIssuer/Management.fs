@@ -51,7 +51,7 @@ type CardCloseResponse = {
 
 type SimulatePurchaseRequest = {
    Amount: decimal
-   Descriptor: string
+   Descriptor: NonEmptyString
    CardNumber: string
    MerchantCurrency: Currency
    Metadata: CardIssuerMetadata

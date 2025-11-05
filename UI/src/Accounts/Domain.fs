@@ -284,9 +284,11 @@ let debitWithMerchantAlias
    {
       evt with
          Data.Merchant =
-            getMerchant evt.Data.Merchant merchants
+            let merchant = evt.Data.Merchant
+
+            getMerchant merchant.Value merchants
             |> Option.bind _.Alias
-            |> Option.defaultValue evt.Data.Merchant
+            |> Option.defaultValue merchant
    }
 
 let autoTransferRuleDisplay (rule: AutomaticTransfer.AutomaticTransferRule) =
@@ -382,13 +384,13 @@ let transactionUIFriendly
             | _ -> None)
          |> Option.map (fun (em, merchant, accountId) ->
             let merchant =
-               getMerchant merchant merchants
+               getMerchant merchant.Value merchants
                |> Option.bind _.Alias
                |> Option.defaultValue merchant
 
             em.EmployeeName,
             $"{em.CardNickname} **{em.EmployeeCardNumberLast4}",
-            merchant,
+            merchant.Value,
             accountName accountId)
          |> Option.defaultValue ("Unknown", "Unknown", "Unknown", "Unknown")
 

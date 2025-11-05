@@ -43,7 +43,7 @@ module LithicSimulatePurchaseRequestDTO =
 
       {|
          amount = amount
-         descriptor = x.Descriptor
+         descriptor = x.Descriptor.Value
          pan = x.CardNumber
          merchant_currency = string x.MerchantCurrency
          merchant_amount = amount
@@ -136,6 +136,7 @@ type LithicAuthStreamAccessWebhookRequestDTO = {
       let! action = x.ActionParsed
       let! cardholderCurrency = Currency.create x.cardholder_currency
       let! merchantCurrency = Currency.create x.merchant_currency
+      let! merchantName = NonEmptyString.create x.merchant.descriptor
 
       return {
          Action = action
@@ -143,7 +144,7 @@ type LithicAuthStreamAccessWebhookRequestDTO = {
          Amount = decimal x.amount / 100m
          CardIssuerCardId = CardIssuerCardId x.card.token
          MerchantCategoryCode = int x.merchant.mcc
-         MerchantName = x.merchant.descriptor
+         MerchantName = merchantName
          CurrencyCardHolder = cardholderCurrency
          CurrencyMerchant = merchantCurrency
       }
@@ -364,6 +365,7 @@ type LithicCardTransactionDTO = {
    member x.AsEntity: Result<CardIssuerPurchaseProgress, string> = result {
       let! amounts = x.AmountsParsed
       let! status = x.StatusParsed
+      let! merchantName = NonEmptyString.create x.merchant.descriptor
 
       let! events =
          x.events
@@ -377,7 +379,7 @@ type LithicCardTransactionDTO = {
          PurchaseId = CardIssuerTransactionId x.token
          CardIssuerCardId = CardIssuerCardId x.card_token
          Amounts = amounts
-         MerchantName = x.merchant.descriptor
+         MerchantName = merchantName
       }
    }
 

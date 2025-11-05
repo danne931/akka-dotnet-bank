@@ -26,7 +26,7 @@ let reducer (state: Map<string, Merchant>) (action: Action) =
    match action with
    | SetMerchants merchants -> merchants
    | UpdateMerchantAlias merchant ->
-      Map.add (merchant.Name.ToLower()) merchant state
+      Map.add (merchant.Name.Value.ToLower()) merchant state
 
 [<ReactComponent>]
 let MerchantProvider (child: Fable.React.ReactElement) =

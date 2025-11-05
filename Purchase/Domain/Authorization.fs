@@ -29,7 +29,7 @@ type PurchaseAuthorization = {
    CardIssuerTransactionId: CardIssuerTransactionId
    Amount: decimal
    MerchantCategoryCode: int
-   MerchantName: string
+   MerchantName: NonEmptyString
    CurrencyCardHolder: Currency
    CurrencyMerchant: Currency
    CreatedAt: DateTime
@@ -49,7 +49,7 @@ type AuthStreamAccessWebhookRequest = {
    CardIssuerCardId: CardIssuerCardId
    Amount: decimal
    MerchantCategoryCode: int
-   MerchantName: string
+   MerchantName: NonEmptyString
    CurrencyCardHolder: Currency
    CurrencyMerchant: Currency
 }

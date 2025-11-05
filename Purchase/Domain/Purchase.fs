@@ -37,7 +37,7 @@ type PurchaseInfo = {
    CardNumberLast4: string
    Date: DateTime
    Amount: decimal
-   Merchant: string
+   Merchant: NonEmptyString
    CurrencyMerchant: Currency
    CurrencyCardHolder: Currency
    Reference: string option

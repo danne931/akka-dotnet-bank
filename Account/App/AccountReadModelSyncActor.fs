@@ -1442,12 +1442,10 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       $"""
       UPDATE {CounterpartySqlMapper.table}
       SET 
-         {CounterpartyFields.nickname} =
-            COALESCE(@nickname, {CounterpartyFields.nickname})
+         {CounterpartyFields.nickname} = @nickname
       WHERE {CounterpartyFields.counterpartyId} = @counterpartyId;
       """,
       sqlParamsDerivedFromAccountEvents.CounterpartyUpdate
-      |> List.map (Lib.Postgres.addCoalescableParamsForUpdate [ "nickname" ])
 
       $"""
       INSERT into {TransferSqlMapper.Table.domesticTransfer}

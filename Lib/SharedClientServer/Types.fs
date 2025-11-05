@@ -82,8 +82,27 @@ module NonEmptyList =
          |> _.Value
 
 // TODO:
-// Create NonEmptyString type and use in several places including
-// Address type below.
+// Need to use more frequently when validating incoming data from commands.
+// Currently only using when accepting webhook requests from card issuer Lithic.
+type NonEmptyString =
+   private
+   | NonEmptyString of string
+
+   override x.ToString() = string x.Value
+
+   member x.Value = let (NonEmptyString str) = x in str
+
+   static member map (transform: string -> string) (NonEmptyString str) =
+      NonEmptyString(transform str)
+
+   static member create(str: string) =
+      if String.IsNullOrWhiteSpace str then
+         Error "EmptyString"
+      else
+         Ok(NonEmptyString str)
+
+   static member deserializeUnsafe(str: string) =
+      str |> NonEmptyString.create |> Result.toOption |> _.Value
 
 module Guid =
    let parseOptional (id: string) =
