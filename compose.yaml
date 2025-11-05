@@ -25,6 +25,7 @@ services:
       - QueueConnection__Username=test
       - QueueConnection__Password=test
       - QueueConnection__VirtualHost=/
+      - MockSendingEmail=true
   account.1:
     image: account:latest
     hostname: account.1
@@ -53,6 +54,7 @@ services:
       - QueueConnection__Username=test
       - QueueConnection__Password=test
       - QueueConnection__VirtualHost=/
+      - MockSendingEmail=true
   account.2:
     image: account:latest
     hostname: account.2
@@ -79,6 +81,7 @@ services:
       - QueueConnection__Username=test
       - QueueConnection__Password=test
       - QueueConnection__VirtualHost=/
+      - MockSendingEmail=true
   scheduler:
     image: scheduler:latest
     hostname: scheduler

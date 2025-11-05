@@ -116,7 +116,8 @@ export const initBankEnvConfigMap = (
         QueueConnection__Port: '5672',
         QueueConnection__Username: rmqConfig.user,
         QueueConnection__Password: rmqConfig.password,
-        QueueConnection__VirtualHost: '/'
+        QueueConnection__VirtualHost: '/',
+        MockSendingEmail: isProduction ? 'false' : config.get('mockSendingEmail') ?? 'true'
       }
     },
     { provider }
