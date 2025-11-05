@@ -323,12 +323,18 @@ let enableUpdatePreventionTriggers () =
       "ALTER TABLE organization_event ENABLE TRIGGER prevent_update;", []
    ]
 
-let createOrgs (registry: #IOrgGuaranteedDeliveryActor) =
-   let orgs = myOrg :: otherOrgs
+let createOrgs
+   registry
+   (submitOrgOnboardingApplication:
+      #IOrgGuaranteedDeliveryActor
+         -> SubmitOrgOnboardingApplicationCommand
+         -> TaskResult<unit, Err>)
+   =
+   taskResult {
+      let orgs = myOrg :: otherOrgs
 
-   for org in orgs do
-      let msg =
-         {
+      for org in orgs do
+         let cmd = {
             SubmitOrgOnboardingApplicationCommand.create {
                BusinessDetails = org.BusinessDetails
                // TODO: Allow the org to set admin team email
@@ -340,15 +346,14 @@ let createOrgs (registry: #IOrgGuaranteedDeliveryActor) =
             } with
                Timestamp = DateTime.UtcNow.AddMonths -4
          }
-         |> OrgCommand.SubmitOnboardingApplication
-         |> OrgMessage.StateChange
-         |> GuaranteedDelivery.message org.OrgId.Value
 
-      registry.OrgGuaranteedDeliveryActor() <! msg
+         do! submitOrgOnboardingApplication registry cmd
+   }
+
 
 // Enable other orgs using the platform to be discoverable for
 // InternalTransferBetweenOrgs.
-let enableOrgSocialTransferDiscovery (registry: #IOrgGuaranteedDeliveryActor) =
+let enableOrgSocialTransferDiscovery (registry: #IOrgActor) =
    for org in otherOrgs do
       let msg =
          ConfigureFeatureFlagCommand.create org.OrgId Initiator.System {
@@ -359,9 +364,8 @@ let enableOrgSocialTransferDiscovery (registry: #IOrgGuaranteedDeliveryActor) =
          }
          |> OrgCommand.ConfigureFeatureFlag
          |> OrgMessage.StateChange
-         |> GuaranteedDelivery.message org.OrgId.Value
 
-      registry.OrgGuaranteedDeliveryActor() <! msg
+      registry.OrgActor org.OrgId <! msg
 
 // NOTE:
 // Initial employee purchase requests are configured with timestamps
@@ -887,9 +891,8 @@ let mockEmployeesPendingInviteConfirmation =
          Timestamp = mockAccountOwnerCmd.Timestamp
    })
 
-let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
+let seedPayments (registry: #IAccountActor) = task {
    let buffer = DateTime.UtcNow.AddDays -2
-   let accountRef = registry.AccountGuaranteedDeliveryActor()
 
    let mutable requestedAsRecurringPayment = false
 
@@ -949,15 +952,12 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
    ]
 
    for _, request in requestsFromDemoAccount do
-      let id = request.Data.SharedDetails.Payee.ParentAccountId.Value
+      let id = request.Data.SharedDetails.Payee.ParentAccountId
 
       let msg =
-         request
-         |> AccountCommand.RequestPayment
-         |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message id
+         request |> AccountCommand.RequestPayment |> AccountMessage.StateChange
 
-      accountRef <! msg
+      registry.AccountActor id <! msg
 
    let request3rdPartyPaymentMsg =
       RequestPaymentCommand.create
@@ -986,9 +986,8 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
          })
       |> AccountCommand.RequestPayment
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-   accountRef <! request3rdPartyPaymentMsg
+   registry.AccountActor myOrg.ParentAccountId <! request3rdPartyPaymentMsg
 
    do! Async.Sleep 2000
 
@@ -1037,9 +1036,8 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
       }
       |> AccountCommand.InternalTransferBetweenOrgs
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message payerStub.ParentAccountId.Value
 
-   accountRef <! msg
+   registry.AccountActor payerStub.ParentAccountId <! msg
 
    // Payment requests from other orgs to main demo org
    for payee in paymentRequesters do
@@ -1072,20 +1070,15 @@ let seedPayments (registry: #IAccountGuaranteedDeliveryActor) = task {
             })
 
       let msg =
-         cmd
-         |> AccountCommand.RequestPayment
-         |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message payee.ParentAccountId.Value
+         cmd |> AccountCommand.RequestPayment |> AccountMessage.StateChange
 
-      accountRef <! msg
+      registry.AccountActor payee.ParentAccountId <! msg
 }
 
 let configureAutoTransferRules
-   (registry: #IAccountGuaranteedDeliveryActor)
+   (registry: #IAccountActor)
    (timestamp: DateTime)
    =
-   let accountRef = registry.AccountGuaranteedDeliveryActor()
-
    // Set up percent distribution rule for demo account
    // ----------------------------------------
    let sender: InternalTransferSender = {
@@ -1143,9 +1136,8 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message sender.ParentAccountId.Value
 
-   accountRef <! msg
+   registry.AccountActor sender.ParentAccountId <! msg
 
    // Set up zero balance rule for demo account
    // ----------------------------------------
@@ -1181,9 +1173,8 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message sender.ParentAccountId.Value
 
-   accountRef <! msg
+   registry.AccountActor sender.ParentAccountId <! msg
 
    // Set up target balance rule for demo savings account
    // ----------------------------------------
@@ -1234,9 +1225,8 @@ let configureAutoTransferRules
       }
       |> AccountCommand.ConfigureAutoTransferRule
       |> AccountMessage.StateChange
-      |> GuaranteedDelivery.message target.ParentAccountId.Value
 
-   accountRef <! msg
+   registry.AccountActor target.ParentAccountId <! msg
 
    // Create auto transfer rules for other orgs
    // ---------------------------------------
@@ -1276,21 +1266,18 @@ let configureAutoTransferRules
          }
          |> AccountCommand.ConfigureAutoTransferRule
          |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message sender.ParentAccountId.Value
 
-      accountRef <! msg
+      registry.AccountActor sender.ParentAccountId <! msg
 
    socialTransferCandidates |> List.iter initZeroBalanceRule
 
 let createCounterparty
-   (registry: #IAccountGuaranteedDeliveryActor)
+   (registry: #IAccountActor)
    (createCounterPartyInPartnerBank:
       PartnerBankCounterpartyRequest
          -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
    =
    taskResult {
-      let accountRef = registry.AccountGuaranteedDeliveryActor()
-
       let domesticCounterpartyCmd =
          RegisterCounterpartyCommand.create mockAccountOwner {
             CounterpartyId = Guid.NewGuid() |> CounterpartyId
@@ -1347,15 +1334,14 @@ let createCounterparty
          |> ParentAccountCommand.RegisterCounterparty
          |> AccountCommand.ParentAccount
          |> AccountMessage.StateChange
-         |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-      accountRef <! msg
+      registry.AccountActor myOrg.ParentAccountId <! msg
 
       return domesticCounterparty
    }
 
 let seedAccountOwnerActions
-   (registry: #IAccountGuaranteedDeliveryActor)
+   (registry: #IAccountActor)
    (createCounterPartyInPartnerBank:
       PartnerBankCounterpartyRequest
          -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
@@ -1363,8 +1349,6 @@ let seedAccountOwnerActions
    (account: Account)
    =
    taskResult {
-      let accountRef = registry.AccountGuaranteedDeliveryActor()
-
       let! domesticCounterparty =
          createCounterparty registry createCounterPartyInPartnerBank
 
@@ -1404,9 +1388,8 @@ let seedAccountOwnerActions
             transferCmd
             |> AccountCommand.DomesticTransfer
             |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-         accountRef <! msg
+         registry.AccountActor myOrg.ParentAccountId <! msg
 
          for num in [ 1..3 ] do
             let maxDays =
@@ -1435,9 +1418,8 @@ let seedAccountOwnerActions
                   }
                   |> AccountCommand.DepositCash
                   |> AccountMessage.StateChange
-                  |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-               accountRef <! msg
+               registry.AccountActor myOrg.ParentAccountId <! msg
 
                let ind = int (randomAmount 0 (socialTransferSenders.Length - 1))
                let sender = socialTransferSenders |> List.item ind
@@ -1475,9 +1457,8 @@ let seedAccountOwnerActions
                   }
                   |> AccountCommand.InternalTransferBetweenOrgs
                   |> AccountMessage.StateChange
-                  |> GuaranteedDelivery.message sender.ParentAccountId.Value
 
-               accountRef <! msg
+               registry.AccountActor sender.ParentAccountId <! msg
 
                let timestamp = timestamp.AddDays(float (maxDays - 1))
 
@@ -1517,9 +1498,8 @@ let seedAccountOwnerActions
                   }
                   |> AccountCommand.InternalTransferBetweenOrgs
                   |> AccountMessage.StateChange
-                  |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-               accountRef <! msg
+               registry.AccountActor myOrg.ParentAccountId <! msg
 
                let msg =
                   {
@@ -1548,9 +1528,8 @@ let seedAccountOwnerActions
                   }
                   |> AccountCommand.InternalTransfer
                   |> AccountMessage.StateChange
-                  |> GuaranteedDelivery.message myOrg.ParentAccountId.Value
 
-               accountRef <! msg
+               registry.AccountActor myOrg.ParentAccountId <! msg
    }
 
 let seedEmployeeActions
@@ -1731,7 +1710,7 @@ let seedEmployeeActions
                logError mailbox $"Purchase auth seed failed {err.Message}"
    }
 
-let createAccountOwners (registry: #IEmployeeGuaranteedDeliveryActor) =
+let createAccountOwners (registry: #IEmployeeActor) =
    let createAccountOwnerCmd (business: OrgSetup) =
       let date = DateTime.Today
       let startOfMonth = DateTime(date.Year, date.Month, 1).ToUniversalTime()
@@ -1757,14 +1736,13 @@ let createAccountOwners (registry: #IEmployeeGuaranteedDeliveryActor) =
          cmd
          |> EmployeeCommand.CreateAccountOwner
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message cmd.EntityId.Value
 
-      registry.EmployeeGuaranteedDeliveryActor() <! createMsg
+      registry.EmployeeActor cmd.Data.EmployeeId <! createMsg
 
    accountOwnerCmds
 
 let confirmAccountOwnerInvites
-   (registry: #IEmployeeGuaranteedDeliveryActor)
+   (registry: #IEmployeeActor)
    (accountOwnerCmds: Command<CreateAccountOwnerInput> list)
    =
    for cmd in accountOwnerCmds do
@@ -1780,30 +1758,28 @@ let confirmAccountOwnerInvites
             }
          |> EmployeeCommand.ConfirmInvitation
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message cmd.EntityId.Value
 
-      registry.EmployeeGuaranteedDeliveryActor() <! confirmInviteCmd
+      registry.EmployeeActor cmd.Data.EmployeeId <! confirmInviteCmd
 
-let createEmployees (registry: #IEmployeeGuaranteedDeliveryActor) =
+let createEmployees (registry: #IEmployeeActor) =
    for employeeCreateCmd in mockEmployeesPendingInviteConfirmation do
       let msg =
          employeeCreateCmd
          |> EmployeeCommand.CreateEmployee
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message employeeCreateCmd.EntityId.Value
 
-      registry.EmployeeGuaranteedDeliveryActor() <! msg
+      registry.EmployeeActor(EmployeeId.fromEntityId employeeCreateCmd.EntityId)
+      <! msg
 
    for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
       let msg =
          employeeCreateCmd
          |> EmployeeCommand.CreateEmployee
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message employeeId.Value
 
-      registry.EmployeeGuaranteedDeliveryActor() <! msg
+      registry.EmployeeActor employeeId <! msg
 
-let confirmEmployeeInvites (registry: #IEmployeeGuaranteedDeliveryActor) =
+let confirmEmployeeInvites (registry: #IEmployeeActor) =
    for employeeId, (employeeCreateCmd, _) in Map.toSeq mockEmployees do
       let confirmInviteCmd = {
          ConfirmInvitationCommand.create
@@ -1826,11 +1802,10 @@ let confirmEmployeeInvites (registry: #IEmployeeGuaranteedDeliveryActor) =
          confirmInviteCmd
          |> EmployeeCommand.ConfirmInvitation
          |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message employeeId.Value
 
-      registry.EmployeeGuaranteedDeliveryActor() <! msg
+      registry.EmployeeActor employeeId <! msg
 
-let createEmployeeCards (registry: #IEmployeeGuaranteedDeliveryActor) =
+let createEmployeeCards (registry: #IEmployeeActor) =
    let accountOwnerTravelCardCreateCmd, accountOwnerBusinessCardCreateCmd =
       mockAccountOwnerCards
 
@@ -1842,13 +1817,9 @@ let createEmployeeCards (registry: #IEmployeeGuaranteedDeliveryActor) =
       @ employeeCardCreateCmds
 
    for cmd in cardCreateCmds do
-      let msg =
-         cmd
-         |> EmployeeCommand.CreateCard
-         |> EmployeeMessage.StateChange
-         |> GuaranteedDelivery.message cmd.EntityId.Value
+      let msg = cmd |> EmployeeCommand.CreateCard |> EmployeeMessage.StateChange
 
-      registry.EmployeeGuaranteedDeliveryActor() <! msg
+      registry.EmployeeActor(EmployeeId.fromEntityId cmd.EntityId) <! msg
 
    {|
       AccountOwnerTravelCard = accountOwnerTravelCardCreateCmd
@@ -1873,8 +1844,7 @@ let getEmployeeCardPair
 
 let seedAccountTransactions
    (mailbox: Actor<AccountSeederMessage>)
-   (registry:
-      #IAccountGuaranteedDeliveryActor & #IEmployeeGuaranteedDeliveryActor & #IAccountActor & #IEmployeeActor)
+   (registry: #IAccountActor & #IEmployeeActor)
    (createCounterPartyInPartnerBank:
       PartnerBankCounterpartyRequest
          -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
@@ -1899,9 +1869,8 @@ let seedAccountTransactions
             }
             |> AccountCommand.DepositCash
             |> AccountMessage.StateChange
-            |> GuaranteedDelivery.message command.EntityId.Value
 
-         registry.AccountGuaranteedDeliveryActor() <! msg
+         registry.AccountActor command.Data.ParentAccountId <! msg
       | None -> ()
 
       if accountId = myOrg.OpsAccountId then
@@ -2020,10 +1989,11 @@ let private initState = {
 }
 
 let actorProps
-   (registry: #IAccountGuaranteedDeliveryActor)
+   (registry: #IAccountActor)
    (createCounterPartyInPartnerBank:
       PartnerBankCounterpartyRequest
-         -> Task<Result<PartnerBankCreateCounterpartyResponse, Err>>)
+         -> TaskResult<PartnerBankCreateCounterpartyResponse, Err>)
+   submitOrgOnboardingApplication
    =
    let handler (ctx: Actor<AccountSeederMessage>) =
       let logInfo = logInfo ctx
@@ -2052,7 +2022,7 @@ let actorProps
                   logInfo "Seed postgres with accounts"
                   do! disableUpdatePreventionTriggers ()
 
-                  createOrgs registry
+                  do! createOrgs registry submitOrgOnboardingApplication
 
                   do! Task.Delay 10_000
 
@@ -2074,10 +2044,8 @@ let actorProps
                         command
                         |> AccountCommand.CreateVirtualAccount
                         |> AccountMessage.StateChange
-                        |> GuaranteedDelivery.message
-                              command.Data.ParentAccountId.Value
 
-                     registry.AccountGuaranteedDeliveryActor() <! msg
+                     registry.AccountActor command.Data.ParentAccountId <! msg
 
                   scheduleVerification ctx 5.
 

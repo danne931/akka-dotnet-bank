@@ -15,7 +15,6 @@ open CommandApproval
 type private SqlParams = SqlParameter list list
 
 type SqlParamsDerivedFromOrgEvents = {
-   OrgCreate: SqlParams
    OrgUpdate: SqlParams
    OrgEvent: SqlParams
    FeatureFlags: SqlParams
@@ -60,30 +59,7 @@ let sqlParamReducer
    }
 
    match evt with
-   | OrgEvent.OnboardingApplicationSubmitted e ->
-      let qParams = [
-         "orgId", OrgSqlWriter.orgId e.OrgId
-         "parentAccountId", OrgSqlWriter.parentAccountId e.Data.ParentAccountId
-         "name", OrgSqlWriter.name e.Data.BusinessDetails.BusinessName
-         "status", OrgSqlWriter.status OrgStatus.PendingOnboardingTasksFulfilled
-         "statusDetail",
-         OrgSqlWriter.statusDetail OrgStatus.PendingOnboardingTasksFulfilled
-         "adminTeamEmail", OrgSqlWriter.adminTeamEmail e.Data.AdminTeamEmail
-         "employerIdentificationNumber",
-         OrgSqlWriter.employerIdentificationNumber
-            e.Data.BusinessDetails.EmployerIdentificationNumber
-         "address", OrgSqlWriter.address e.Data.BusinessDetails.Address
-         "businessType",
-         OrgSqlWriter.businessType e.Data.BusinessDetails.LegalType
-         "description",
-         OrgSqlWriter.description e.Data.BusinessDetails.Description
-         "website", OrgSqlWriter.website e.Data.BusinessDetails.Website
-      ]
-
-      {
-         acc with
-            OrgCreate = qParams :: acc.OrgCreate
-      }
+   | OrgEvent.OnboardingApplicationSubmitted _ -> acc
    | OrgEvent.OnboardingFinished e ->
       let qParams = [
          "orgId", OrgSqlWriter.orgId e.OrgId
@@ -329,7 +305,6 @@ let upsertReadModels (orgEvents: OrgEvent list) =
       orgEvents
       |> List.sortByDescending (OrgEnvelope.unwrap >> snd >> _.Timestamp)
       |> List.fold sqlParamReducer {
-         OrgCreate = []
          OrgUpdate = []
          OrgEvent = []
          FeatureFlags = []
@@ -344,36 +319,6 @@ let upsertReadModels (orgEvents: OrgEvent list) =
       }
 
    let query = [
-      $"""
-      INSERT into {OrganizationSqlMapper.table}
-         ({OrgFields.orgId},
-          {OrgFields.parentAccountId},
-          {OrgFields.name},
-          {OrgFields.status},
-          {OrgFields.statusDetail},
-          {OrgFields.adminTeamEmail},
-          {OrgFields.employerIdentificationNumber},
-          {OrgFields.address},
-          {OrgFields.businessType},
-          {OrgFields.description},
-          {OrgFields.website})
-      VALUES
-         (@orgId,
-          @parentAccountId,
-          @name,
-          @status::{OrgTypeCast.status},
-          @statusDetail,
-          @adminTeamEmail,
-          @employerIdentificationNumber,
-          @address,
-          @businessType::{OrgTypeCast.businessType},
-          @description,
-          @website)
-      ON CONFLICT ({OrgFields.orgId})
-      DO NOTHING;
-      """,
-      sqlParams.OrgCreate
-
       $"""
       UPDATE {OrganizationSqlMapper.table}
       SET

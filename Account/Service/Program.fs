@@ -410,6 +410,7 @@ builder.Services.AddAkka(
                AccountSeederActor.actorProps
                   (getActorRegistry provider)
                   PartnerBankServiceActor.createCounterParty
+                  Bank.Org.Api.submitOnboardingApplication
                |> _.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )

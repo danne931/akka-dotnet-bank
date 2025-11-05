@@ -27,9 +27,6 @@ let processCommand
    taskResult {
       let validation =
          match command with
-         | OrgCommand.SubmitOnboardingApplication cmd ->
-            SubmitOrgOnboardingApplicationCommand.toEvent cmd
-            |> Result.map OrgEnvelope.get
          | OrgCommand.ConfigureApprovalRule cmd ->
             CommandApprovalRule.ConfigureApprovalRuleCommand.toEvent cmd
             |> Result.map OrgEnvelope.get
@@ -61,6 +58,72 @@ let processCommand
       registry.OrgGuaranteedDeliveryActor() <! msg
 
       return envelope
+   }
+
+let submitOnboardingApplication
+   (registry: #IOrgGuaranteedDeliveryActor)
+   (cmd: SubmitOrgOnboardingApplicationCommand)
+   =
+   taskResult {
+      let! e =
+         SubmitOrgOnboardingApplicationCommand.toEvent cmd
+         |> Result.mapError Err.ValidationError
+
+      let query =
+         $"""
+         INSERT into {OrganizationSqlMapper.table}
+            ({Fields.orgId},
+             {Fields.parentAccountId},
+             {Fields.name},
+             {Fields.status},
+             {Fields.statusDetail},
+             {Fields.adminTeamEmail},
+             {Fields.employerIdentificationNumber},
+             {Fields.address},
+             {Fields.businessType},
+             {Fields.description},
+             {Fields.website})
+         VALUES
+            (@orgId,
+             @parentAccountId,
+             @name,
+             @status::{TypeCast.status},
+             @statusDetail,
+             @adminTeamEmail,
+             @employerIdentificationNumber,
+             @address,
+             @businessType::{TypeCast.businessType},
+             @description,
+             @website)
+         """
+
+      let sqlParams = [
+         "orgId", Writer.orgId e.OrgId
+         "parentAccountId", Writer.parentAccountId e.Data.ParentAccountId
+         "name", Writer.name e.Data.BusinessDetails.BusinessName
+         "status", Writer.status OrgStatus.PendingOnboardingTasksFulfilled
+         "statusDetail",
+         Writer.statusDetail OrgStatus.PendingOnboardingTasksFulfilled
+         "adminTeamEmail", Writer.adminTeamEmail e.Data.AdminTeamEmail
+         "employerIdentificationNumber",
+         Writer.employerIdentificationNumber
+            e.Data.BusinessDetails.EmployerIdentificationNumber
+         "address", Writer.address e.Data.BusinessDetails.Address
+         "businessType", Writer.businessType e.Data.BusinessDetails.LegalType
+         "description", Writer.description e.Data.BusinessDetails.Description
+         "website", Writer.website e.Data.BusinessDetails.Website
+      ]
+
+      let! _ = pgPersist query sqlParams
+
+      let msg =
+         GuaranteedDelivery.message
+            e.EntityId.Value
+            (OrgMessage.StateChange(OrgCommand.SubmitOnboardingApplication cmd))
+
+      registry.OrgGuaranteedDeliveryActor() <! msg
+
+      return ()
    }
 
 type private OrgDBResult =

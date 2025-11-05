@@ -17,7 +17,6 @@ open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Bank.Payment.Domain
 open Bank.Purchase.Domain
-open CardIssuer.Service.Domain
 open BillingStatement
 open AutomaticTransfer
 open SignalRBroadcast

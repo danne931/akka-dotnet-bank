@@ -1,13 +1,11 @@
 [<RequireQualifiedAccess>]
 module OrgActor
 
-open Akka.Actor
 open Akka.Persistence
 open Akka.Persistence.Extras
 open Akka.Delivery
 open Akkling
 open Akkling.Persistence
-open Akkling.Cluster.Sharding
 open System
 
 open Lib.SharedTypes
@@ -23,6 +21,14 @@ open SignalRBroadcast
 open OrgOnboardingSaga
 open EmployeeOnboardingSaga
 open BankActorRegistry
+
+// TODO:
+// This actor doesn't do much other than handle approvable commands to employee
+// and account actors now that org onboarding is in a saga.
+//
+// See about moving approvable command logic into employee & account actors.
+// Then remove the org actor, persisting changes directly to postgres.
+
 
 // Sends the ApprovableCommand to the appropriate Account or Employee actor
 // when the approval process is complete or no approval required.
