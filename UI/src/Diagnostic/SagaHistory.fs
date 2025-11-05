@@ -11,6 +11,7 @@ open UIDomain
 open UIDomain.Diagnostic
 open TableControlPanel
 open Pagination
+open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
 type SagaFilterView =
@@ -160,9 +161,9 @@ let renderSagaExpandedView (saga: SagaDTO) =
          |> Routes.DiagnosticUrl.queryPath
          |> Router.navigate)
 
-      Html.section [
-         Html.h6 saga.Name
+      Html.h5 saga.Name
 
+      Html.section [
          renderLabeledInfo "Saga ID" (string saga.Id)
 
          renderLabeledInfo "Status" saga.Status.Display
@@ -170,10 +171,27 @@ let renderSagaExpandedView (saga: SagaDTO) =
          renderLabeledInfo
             "Started On"
             (DateTime.dateUIFriendlyShort saga.StartedAt)
+      ]
+
+      Html.section [
+         Html.h6 "Saga Lifecycle"
 
          renderSagaActivities saga
 
          JsonTree.renderJsonTree json
+      ]
+
+      Html.button [
+         attr.text "View Transaction"
+         attr.classes [ "outline" ]
+
+         attr.onClick (fun _ ->
+            {
+               Routes.IndexUrl.transactionBrowserQuery () with
+                  Transaction = Some(TransactionId saga.Id)
+            }
+            |> Routes.TransactionsUrl.queryPath
+            |> Router.navigate)
       ]
    ]
 

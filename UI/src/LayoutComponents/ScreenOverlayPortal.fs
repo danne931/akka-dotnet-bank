@@ -56,7 +56,7 @@ let manageVisibility (url: Routes.IndexUrl) =
       | Routes.IndexUrl.Diagnostic url ->
          match url with
          | Routes.DiagnosticUrl.WithSearchQuery query ->
-            query.SagaId |> Option.map (fun _ -> OverlaySize.Wide)
+            query.SagaId |> Option.map (fun _ -> OverlaySize.Standard)
          | _ -> None
       | _ -> None
 
