@@ -2025,7 +2025,7 @@ let actorProps
 
                   do! createOrgs registry submitOrgOnboardingApplication
 
-                  do! Task.Delay 10_000
+                  do! Task.Delay 15_000
 
                   let accountOwnerCmds = createAccountOwners registry
 

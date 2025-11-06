@@ -583,3 +583,27 @@ module PersistenceSupervisor =
          if not confirmed then
             confirmed <- true
             ctx.Parent() <! Confirmation(confirmationId, ctx.Pid))
+
+type FunPersistentShardingHostedActor<'Message>
+   (actor: Eventsourced<'Message> -> Effect<'Message>, persistenceId: string)
+   =
+   inherit FunPersistentActor<'Message>(actor)
+
+   override _.PersistenceId = persistenceId
+
+/// Use instead of Akkling propsPersist to appropriately set the
+/// persistence_id for akka_event_journal when creating an
+/// eventsourced, sharded actor via Akka.Hosting.
+let propsPersistShardingHosted
+   (receive: Eventsourced<'Message> -> Effect<'Message>)
+   (persistenceId: string)
+   : Props<'Message>
+   =
+   Props<'Message>
+      .ArgsCreate<
+         FunPersistentShardingHostedActor<'Message>,
+         Eventsourced<'Message>,
+         'Message
+        >(
+         [| receive; persistenceId |]
+      )

@@ -209,10 +209,10 @@ builder.Services.AddAkka(
                         registry
                         orgSettingsCache
                         broadcaster
-                        Env.config.AccountActorSupervisor
                         Env.config.SagaPassivateIdleEntityAfter
                         persistenceId
-                        (Some(typed controllerRef)))),
+                        (Some(typed controllerRef))
+                     |> _.ToProps())),
             ClusterMetadata.sagaShardRegion.messageExtractor,
             ShardOptions(
                RememberEntities = false,

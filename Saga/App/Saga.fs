@@ -9,7 +9,6 @@ open Akkling.Cluster.Sharding
 open FSharp.Control
 
 open Lib.SharedTypes
-open Lib.Types
 open Lib.Saga
 open CachedOrgSettings
 open PurchaseSaga
@@ -383,14 +382,12 @@ let initProps
    registry
    (orgSettingsCache: OrgSettingsCache)
    (broadcaster: SignalRBroadcast.SignalRBroadcast)
-   (persistenceSupervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
    (guaranteedDeliveryConsumerControllerRef:
       Option<IActorRef<ConsumerController.IConsumerCommand<AppSagaMessage>>>)
    =
    SagaActor.initProps<Saga, StartEvent, Event>
-      persistenceSupervisorEnvConfig
       sagaPassivateIdleEntityAfter
       persistenceId
       guaranteedDeliveryConsumerControllerRef

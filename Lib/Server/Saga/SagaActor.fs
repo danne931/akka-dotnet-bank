@@ -3,14 +3,12 @@ module SagaActor
 
 open Akka.Actor
 open Akka.Persistence
-open Akka.Persistence.Extras
 open Akka.Delivery
 open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
 open System
 
-open Lib.Types
 open Lib.Saga
 open ActorUtil
 
@@ -28,6 +26,7 @@ type SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga> = {
 }
 
 let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
+   (persistenceId: string)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (guaranteedDeliveryConsumerControllerRef:
       Option<
@@ -59,7 +58,6 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                ctx.Self
                SagaMessage<'SagaStartEvent, 'SagaEvent>.CheckForRemainingWork
             |> Some
-
 
       // Passivate after a delay.
       // The ReadModelSync actor relies on GetSaga messages returning
@@ -95,6 +93,51 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                (SagaMessage<'SagaStartEvent, 'SagaEvent>.Sleep reason)
             |> ignore
 
+      let handleSagaProgression (state: 'Saga option) msg envelope =
+         let withAck persistentEffect =
+            persistentEffect
+            |> Effects.andThen (fun _ ->
+               envelope |> Option.iter GuaranteedDelivery.ack)
+            :> Effect<_>
+
+         match msg with
+         | SagaMessage.Start startEvent ->
+            match state with
+            | Some _ ->
+               logWarning SagaStateTransitionError.HasAlreadyStarted
+               ignored ()
+            | None ->
+               match
+                  sagaHandler.stateTransitionStart
+                     startEvent.Data
+                     startEvent.Timestamp
+               with
+               | Error err ->
+                  logWarning
+                     $"Will not persist saga start event due to {err} {startEvent}"
+
+                  ignored ()
+               | Ok _ -> Persist(persistableStartEvent startEvent) |> withAck
+         | SagaMessage.Event evt ->
+            match state with
+            | None ->
+               logWarning $"{SagaStateTransitionError.HasNotStarted} {evt}"
+               ignored ()
+            | Some currentState ->
+               match
+                  sagaHandler.stateTransition
+                     currentState
+                     evt.Data
+                     evt.Timestamp
+               with
+               | Error err ->
+                  logWarning $"Will not persist saga event due to {err} {evt}"
+                  ignored ()
+               | Ok _ -> Persist(persistableEvent evt) |> withAck
+         | msg ->
+            logError $"Unhandled message during saga progression - {msg}"
+            unhandled ()
+
       let rec loop (prepForSleep: bool) (state: 'Saga option) = actor {
          let! msg = ctx.Receive()
 
@@ -110,8 +153,8 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             | Some _, SagaPersistableEvent.StartEvent _ ->
                logError SagaStateTransitionError.HasAlreadyStarted
                return unhandled ()
-            | None, SagaPersistableEvent.Event _ ->
-               logError SagaStateTransitionError.HasNotStarted
+            | None, SagaPersistableEvent.Event e ->
+               logError $"{SagaStateTransitionError.HasNotStarted} {e}"
                return unhandled ()
             | None, SagaPersistableEvent.StartEvent e ->
                let newState = sagaHandler.applyStartEvent e.Data e.Timestamp
@@ -131,73 +174,16 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
          | :? SnapshotOffer as o -> return! loop (unbox o.Snapshot)
          | :? ConsumerController.Delivery<
             SagaMessage<'SagaStartEvent, 'SagaEvent>
-            > as msg ->
-            GuaranteedDelivery.ack msg
-
-            // Send message to parent actor (Persistence Supervisor)
-            // for message command to confirmed event persistence.
-            ctx.Parent() <! msg.Message
-         | :? ConfirmableMessageEnvelope as envelope ->
-            let unhandledMsg msg =
-               logError
-                  $"Unhandled message in ConfirmableMessageEnvelope - {msg}"
-
-               unhandled ()
-
-            match envelope.Message with
-            | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
-               match msg with
-               | SagaMessage.Start startEvent ->
-                  match state with
-                  | Some _ ->
-                     logWarning SagaStateTransitionError.HasAlreadyStarted
-                     return ignored ()
-                  | None ->
-                     match
-                        sagaHandler.stateTransitionStart
-                           startEvent.Data
-                           startEvent.Timestamp
-                     with
-                     | Error err ->
-                        logWarning
-                           $"Will not persist saga start event due to {err}"
-
-                        return ignored ()
-                     | Ok _ ->
-                        return!
-                           PersistenceSupervisor.confirmPersist
-                              ctx
-                              envelope.ConfirmationId
-                              (persistableStartEvent startEvent)
-               | SagaMessage.Event evt ->
-                  match state with
-                  | None ->
-                     logWarning SagaStateTransitionError.HasNotStarted
-                     return ignored ()
-                  | Some currentState ->
-                     match
-                        sagaHandler.stateTransition
-                           currentState
-                           evt.Data
-                           evt.Timestamp
-                     with
-                     | Error err ->
-                        let evtType = evt.Data.GetType().FullName
-
-                        logWarning
-                           $"Will not persist saga event due to {err} {evtType}"
-
-                        return ignored ()
-                     | Ok _ ->
-                        return!
-                           PersistenceSupervisor.confirmPersist
-                              ctx
-                              envelope.ConfirmationId
-                              (persistableEvent evt)
-               | other -> unhandledMsg other
-            | other -> unhandledMsg other
+            > as envelope ->
+            return handleSagaProgression state envelope.Message (Some envelope)
+         // Some messages are sent through traditional AtMostOnceDelivery via
+         // a reference to the cluster sharded entity ref rather than Akka.Delivery
+         // AtLeastOnceDelivery producer ref so will not hit the
+         // ConsumerController.Delivery match case above
          | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
             match msg with
+            | SagaMessage.Start _
+            | SagaMessage.Event _ -> return handleSagaProgression state msg None
             | SagaMessage.Sleep reason ->
                logDebug $"Passivating: {reason}"
                return passivate ()
@@ -261,16 +247,6 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                         // wait for the SagaAlarmClockActor to wake the
                         // actor back up to check for remaining work.
                         sleep "No remaining saga work at this time."
-            // Some messages are sent through traditional AtMostOnceDelivery via
-            // a reference to the cluster sharded entity ref rather than Akka.Delivery
-            // AtLeastOnceDelivery producer ref so will not hit the
-            // ConsumerController.Delivery match case above so need to send message
-            // to parent actor (Persistence Supervisor) so the command gets wrapped in a
-            // ConfirmableMessageEnvelope for Akka.Persistence.Extras.Confirmation/
-            | SagaMessage.Start _
-            | SagaMessage.Event _ ->
-               ctx.Parent() <! msg
-               return ignored ()
          // Event replay on actor start
          | :? SagaPersistableEvent<'SagaStartEvent, 'SagaEvent> as e when
             ctx.IsRecovering()
@@ -279,9 +255,9 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             | Some _, SagaPersistableEvent.StartEvent _ ->
                logError SagaStateTransitionError.HasAlreadyStarted
                return ignored ()
-            | None, SagaPersistableEvent.Event _ ->
-               logError SagaStateTransitionError.HasNotStarted
-               return! ignored ()
+            | None, SagaPersistableEvent.Event e ->
+               logError $"{SagaStateTransitionError.HasNotStarted} {e}"
+               return ignored ()
             | None, SagaPersistableEvent.StartEvent e ->
                let newState = sagaHandler.applyStartEvent e.Data e.Timestamp
                return! loop (Some newState)
@@ -296,8 +272,6 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                   PersistentActorEventHandler.init with
                      LifecyclePreStart =
                         fun _ ->
-                           setWorkCheckTimer (TimeSpan.FromSeconds 10.)
-
                            let startConsumerCtrlMsg =
                               new ConsumerController.Start<
                                  SagaMessage<'SagaStartEvent, 'SagaEvent>
@@ -324,10 +298,9 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
 
       loop false None
 
-   propsPersist handler
+   propsPersistShardingHosted handler persistenceId
 
 let initProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
-   (supervisorEnvConfig: PersistenceSupervisorEnvConfig)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
    (guaranteedDeliveryConsumerControllerRef:
@@ -340,21 +313,8 @@ let initProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
        >)
    (sagaHandler: SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent>)
    =
-   let childProps =
-      actorProps
-         sagaPassivateIdleEntityAfter
-         guaranteedDeliveryConsumerControllerRef
-         sagaHandler
-
-   PersistenceSupervisor.create {
-      EnvConfig = supervisorEnvConfig
-      ChildProps = childProps.ToProps()
-      PersistenceId = persistenceId
-      CompatibleWithGuaranteedDelivery =
-         guaranteedDeliveryConsumerControllerRef.IsSome
-      IsPersistableMessage =
-         function
-         | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
-            msg.IsStart || msg.IsEvent
-         | _ -> false
-   }
+   actorProps
+      persistenceId
+      sagaPassivateIdleEntityAfter
+      guaranteedDeliveryConsumerControllerRef
+      sagaHandler
