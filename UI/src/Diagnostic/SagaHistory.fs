@@ -123,77 +123,81 @@ let renderSagaActivities saga =
          ]
    ]
 
-let renderSagaExpandedView (saga: SagaDTO) =
-   let activityToJson (activity: SagaActivityDTO) = {|
-      Status = string activity.Status
-      Name = activity.Name
-      Attempts = activity.Attempts
-      MaxAttempts = activity.MaxAttempts
-      StartedAt = activity.Start
-      EndedAt = activity.End
-   |}
-
-   let statusMatch (status: SagaActivityDTOStatus) (activity: SagaActivityDTO) =
-      status = activity.Status
-
-   let activities (status: SagaActivityDTOStatus) =
-      saga.LifeCycle
-      |> List.filter (statusMatch status)
-      |> List.map activityToJson
-
-   let json = {|
-      Activities = {|
-         Failed = activities SagaActivityDTOStatus.Failed
-         Aborted = activities SagaActivityDTOStatus.Aborted
-         InProgress = activities SagaActivityDTOStatus.InProgress
-         Completed = activities SagaActivityDTOStatus.Completed
+let renderSagaExpandedView =
+   React.memo (fun (saga: SagaDTO) ->
+      let activityToJson (activity: SagaActivityDTO) = {|
+         Status = string activity.Status
+         Name = activity.Name
+         Attempts = activity.Attempts
+         MaxAttempts = activity.MaxAttempts
+         StartedAt = activity.Start
+         EndedAt = activity.End
       |}
-      Events = Serialization.deserialize<obj> saga.Events
-      StatusDetail = Serialization.deserialize<obj> saga.StatusDetail
-   |}
 
-   classyNode Html.article [ "saga-expanded-view" ] [
-      CloseButton.render (fun _ ->
-         {
-            Routes.IndexUrl.diagnosticBrowserQuery () with
-               SagaId = None
-         }
-         |> Routes.DiagnosticUrl.queryPath
-         |> Router.navigate)
+      let statusMatch
+         (status: SagaActivityDTOStatus)
+         (activity: SagaActivityDTO)
+         =
+         status = activity.Status
 
-      Html.h5 saga.Name
+      let activities (status: SagaActivityDTOStatus) =
+         saga.LifeCycle
+         |> List.filter (statusMatch status)
+         |> List.map activityToJson
 
-      Html.section [
-         renderLabeledInfo "Saga ID" (string saga.Id)
+      let json = {|
+         Activities = {|
+            Failed = activities SagaActivityDTOStatus.Failed
+            Aborted = activities SagaActivityDTOStatus.Aborted
+            InProgress = activities SagaActivityDTOStatus.InProgress
+            Completed = activities SagaActivityDTOStatus.Completed
+         |}
+         Events = Serialization.deserialize<obj> saga.Events
+         StatusDetail = Serialization.deserialize<obj> saga.StatusDetail
+      |}
 
-         renderLabeledInfo "Status" saga.Status.Display
-
-         renderLabeledInfo
-            "Started On"
-            (DateTime.dateUIFriendlyShort saga.StartedAt)
-      ]
-
-      Html.section [
-         Html.h6 "Saga Lifecycle"
-
-         renderSagaActivities saga
-
-         JsonTree.renderJsonTree json
-      ]
-
-      Html.button [
-         attr.text "View Transaction"
-         attr.classes [ "outline" ]
-
-         attr.onClick (fun _ ->
+      classyNode Html.article [ "saga-expanded-view" ] [
+         CloseButton.render (fun _ ->
             {
-               Routes.IndexUrl.transactionBrowserQuery () with
-                  Transaction = Some(TransactionId saga.Id)
+               Routes.IndexUrl.diagnosticBrowserQuery () with
+                  SagaId = None
             }
-            |> Routes.TransactionsUrl.queryPath
+            |> Routes.DiagnosticUrl.queryPath
             |> Router.navigate)
-      ]
-   ]
+
+         Html.h5 saga.Name
+
+         Html.section [
+            renderLabeledInfo "Saga ID" (string saga.Id)
+
+            renderLabeledInfo "Status" saga.Status.Display
+
+            renderLabeledInfo
+               "Started On"
+               (DateTime.dateUIFriendlyShort saga.StartedAt)
+         ]
+
+         Html.section [
+            Html.h6 "Saga Lifecycle"
+
+            renderSagaActivities saga
+
+            JsonTree.renderJsonTree json
+         ]
+
+         Html.button [
+            attr.text "View Transaction"
+            attr.classes [ "outline" ]
+
+            attr.onClick (fun _ ->
+               {
+                  Routes.IndexUrl.transactionBrowserQuery () with
+                     Transaction = Some(TransactionId saga.Id)
+               }
+               |> Routes.TransactionsUrl.queryPath
+               |> Router.navigate)
+         ]
+      ])
 
 let renderSaga (saga: SagaDTO) =
    classyNode Html.div [ "saga-history-item" ] [
@@ -356,17 +360,20 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
 
    let signalRConnection = React.useContext SignalRConnectionProvider.context
 
+   let includeSignalREventMaybe =
+      React.useCallbackRef (
+         includeSignalREventMaybe state.Pagination dispatch browserQuery
+      )
+
    React.useEffect (
       fun () ->
          match signalRConnection with
          | Some conn ->
-            DiagnosticsService.listenForSagaUpdate
-               (includeSignalREventMaybe state.Pagination dispatch browserQuery)
-               conn
+            DiagnosticsService.listenForSagaUpdate includeSignalREventMaybe conn
          | _ -> ()
 
          ()
-      , [| box signalRConnection; state.Pagination |]
+      , [| box signalRConnection |]
    )
 
    Html.div [

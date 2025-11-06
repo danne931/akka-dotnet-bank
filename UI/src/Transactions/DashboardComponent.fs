@@ -776,7 +776,7 @@ let TransactionDashboardComponent
       | Deferred.Resolved(Ok(Some org)) ->
          React.suspense (
             [ Interop.reactApi.createElement (OrgMetricsComponent, org) ],
-            Html.progress []
+            Html.footer [ Html.progress [] ]
          )
       | _ -> ()
    ]
