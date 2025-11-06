@@ -20,6 +20,9 @@ type IPromiseConnection =
    [<Emit("$0.on($1, $2)")>]
    abstract on: string * (string -> unit) -> unit
 
+   [<Emit("$0.off($1)")>]
+   abstract off: string -> unit
+
 type Connection(conn: IPromiseConnection) =
    member x.start() =
       conn.start ()
@@ -60,6 +63,8 @@ type Connection(conn: IPromiseConnection) =
 
    member x.on(eventName: string, eventHandler: string -> unit) =
       conn.on (eventName, eventHandler)
+
+   member x.off(eventName: string) = conn.off eventName
 
 type private IHubConnectionBuilder =
    abstract withUrl: string -> IHubConnectionBuilder

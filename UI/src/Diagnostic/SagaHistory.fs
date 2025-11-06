@@ -367,12 +367,14 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
 
    React.useEffect (
       fun () ->
-         match signalRConnection with
-         | Some conn ->
-            DiagnosticsService.listenForSagaUpdate includeSignalREventMaybe conn
-         | _ -> ()
+         signalRConnection
+         |> Option.iter (
+            DiagnosticsService.listenForSagaUpdate includeSignalREventMaybe
+         )
 
-         ()
+         React.createDisposable (fun () ->
+            signalRConnection
+            |> Option.iter DiagnosticsService.removeSagaUpdateListener)
       , [| box signalRConnection |]
    )
 

@@ -93,12 +93,16 @@ let ServiceHealthComponent () =
 
    React.useEffect (
       fun () ->
-         match signalRConnection with
-         | Some conn ->
-            DiagnosticsService.listenForCircuitBreakerEvent
-               (ServiceHealthEventReceived >> dispatch)
-               conn
-         | _ -> ()
+         signalRConnection
+         |> Option.iter (
+            DiagnosticsService.listenForCircuitBreakerEvent (
+               ServiceHealthEventReceived >> dispatch
+            )
+         )
+
+         React.createDisposable (fun () ->
+            signalRConnection
+            |> Option.iter DiagnosticsService.removeCircuitBreakerListener)
       , [| box signalRConnection |]
    )
 

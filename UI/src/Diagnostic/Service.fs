@@ -43,12 +43,16 @@ let getServiceHealth () : Async<Result<ServiceDiagnostics, Err>> = async {
          })
 }
 
+[<Literal>]
+let private CircuitBreakerSignalRName = "CircuitBreakerMessage"
+
+/// Register a callback for handling circuit breaker updates received over SignalR
 let listenForCircuitBreakerEvent
    (onCircuitBreakerEvent: CircuitBreakerEvent -> unit)
    (conn: SignalR.Connection)
    =
    conn.on (
-      "CircuitBreakerMessage",
+      CircuitBreakerSignalRName,
       fun (msg: string) ->
          let deserialized = Serialization.deserialize<CircuitBreakerEvent> msg
 
@@ -58,12 +62,20 @@ let listenForCircuitBreakerEvent
          | Ok msg -> onCircuitBreakerEvent msg
    )
 
+/// Remove event listener for circuit breaker updates via SignalR
+let removeCircuitBreakerListener (conn: SignalR.Connection) =
+   conn.off CircuitBreakerSignalRName
+
+[<Literal>]
+let private SagaSignalRName = "SagaUpdated"
+
+/// Register a callback for handling saga updates received over SignalR
 let listenForSagaUpdate
    (onSagaUpdated: SignalRBroadcast.SagaUpdated -> unit)
    (conn: SignalR.Connection)
    =
    conn.on (
-      "SagaUpdated",
+      SagaSignalRName,
       fun (msg: string) ->
          let deserialized =
             Serialization.deserialize<SignalRBroadcast.SagaUpdated> msg
@@ -72,6 +84,10 @@ let listenForSagaUpdate
          | Error err -> Log.error $"Error deserializing saga update msg {err}"
          | Ok msg -> onSagaUpdated msg
    )
+
+/// Remove event listener for saga updates via SignalR
+let removeSagaUpdateListener (conn: SignalR.Connection) =
+   conn.off SagaSignalRName
 
 let getSagaHistory
    (orgId: OrgId)
