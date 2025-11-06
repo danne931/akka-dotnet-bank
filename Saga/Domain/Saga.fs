@@ -359,6 +359,17 @@ type Saga =
       | Saga.PaymentRequest s -> s.StartedAt
       | Saga.Billing s -> s.StartedAt
 
+   member x.Kind =
+      match x with
+      | Saga.OrgOnboarding _ -> SagaKind.OrgOnboarding
+      | Saga.EmployeeOnboarding _ -> SagaKind.EmployeeOnboarding
+      | Saga.CardSetup _ -> SagaKind.CardSetup
+      | Saga.Purchase _ -> SagaKind.Purchase
+      | Saga.DomesticTransfer _ -> SagaKind.DomesticTransfer
+      | Saga.PlatformTransfer _ -> SagaKind.PlatformTransfer
+      | Saga.PaymentRequest _ -> SagaKind.PaymentRequest
+      | Saga.Billing _ -> SagaKind.BillingStatement
+
    member x.Status =
       let saga = x
 
@@ -433,6 +444,7 @@ type Saga =
          Name = ""
          LifeCycle = []
          Status = x.Status
+         SagaKind = x.Kind
          StatusDetail = ""
          Events = Serialization.serialize []
       }

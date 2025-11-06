@@ -39,19 +39,33 @@ let getAllSagas
          query.DateRange
 
    let agg =
+      let filters = query.Status |> Option.defaultValue SagaDTOStatus.All
+      let queryParams, where = agg
+
+      [
+         "status",
+         filters
+         |> List.map Writer.fromSagaDTOStatus
+         |> List.toArray
+         |> Sql.stringArray
+      ]
+      @ queryParams,
+      $"{where} AND {Fields.status}::text = ANY(@status)"
+
+   let agg =
       Option.fold
          (fun (queryParams, where) filters ->
             [
-               "status",
+               "kind",
                filters
-               |> List.map Writer.fromSagaDTOStatus
+               |> List.map Writer.nameFromKind
                |> List.toArray
                |> Sql.stringArray
             ]
             @ queryParams,
-            $"{where} AND {Fields.status}::text = ANY(@status)")
+            $"{where} AND {Fields.name}::text = ANY(@kind)")
          agg
-         query.Status
+         query.SagaKind
 
    let agg =
       Option.fold

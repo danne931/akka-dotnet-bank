@@ -1066,8 +1066,7 @@ CREATE TABLE saga(
 SELECT add_created_at_column('saga');
 SELECT add_updated_at_column_and_trigger('saga');
 
-CREATE INDEX saga_status_idx ON saga(status);
-CREATE INDEX saga_org_id_idx ON saga(org_id);
+CREATE INDEX saga_status_idx ON saga(org_id, status);
 CREATE INDEX saga_activity_in_progress_count_idx ON saga(activity_in_progress_count);
 
 COMMENT ON COLUMN saga.inactivity_timeout IS

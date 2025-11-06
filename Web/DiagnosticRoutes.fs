@@ -109,6 +109,7 @@ let start (app: WebApplication) =
             Guid,
             string,
             string,
+            string,
             Nullable<int>,
             Nullable<Guid>,
             string,
@@ -118,12 +119,14 @@ let start (app: WebApplication) =
                  orgId
                  ([<FromQuery>] date)
                  ([<FromQuery>] status)
+                 ([<FromQuery>] kind)
                  ([<FromQuery>] pageLimit)
                  ([<FromQuery>] cursorSagaId)
                  ([<FromQuery>] cursorCreatedAt) ->
                let query = {
                   DateRange = dateRangeFromQueryString date
                   Status = SagaDTOStatus.fromQueryString status
+                  SagaKind = SagaKind.fromQueryString kind
                   PageLimit =
                      if pageLimit.HasValue then pageLimit.Value else 50
                   Cursor =

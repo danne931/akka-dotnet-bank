@@ -109,6 +109,10 @@ let getSagaHistory
             | None -> ()
             | Some filters -> "status", listToQueryString filters
 
+            match query.SagaKind with
+            | None -> ()
+            | Some filters -> "kind", listToQueryString filters
+
             match query.DateRange with
             | None -> ()
             | Some(startDate, endDate) ->

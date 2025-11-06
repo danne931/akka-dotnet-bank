@@ -17,11 +17,13 @@ open Lib.SharedTypes
 type SagaFilterView =
    | Date
    | Status
+   | SagaKind
 
 [<RequireQualifiedAccess>]
 type SagaFilter =
    | Date of DateFilter option
    | Status of SagaDTOStatus list option
+   | SagaKind of SagaKind list option
 
 type Msg =
    | UpdateFilter of SagaFilter
@@ -78,6 +80,7 @@ let update (session: UserSession) msg (state: State) =
          match filter with
          | SagaFilter.Date filter -> { browserQuery with Date = filter }
          | SagaFilter.Status filter -> { browserQuery with Status = filter }
+         | SagaFilter.SagaKind filter -> { browserQuery with SagaKind = filter }
 
       let browserQueryParams =
          browserQuery
@@ -242,6 +245,7 @@ let renderTableControlPanel
       FilterViewOptions = [
          SagaFilterView.Date, "Created At"
          SagaFilterView.Status, "Status"
+         SagaFilterView.SagaKind, "Kind"
       ]
       RenderFilterViewOnSelect =
          fun view ->
@@ -261,6 +265,20 @@ let renderTableControlPanel
                   OnChange =
                      fun filters ->
                         SagaFilter.Status filters
+                        |> Msg.UpdateFilter
+                        |> dispatch
+               |}
+            | SagaFilterView.SagaKind ->
+               let selectableFilters = SagaKind.All
+
+               CheckboxFieldset.render {|
+                  Options =
+                     selectableFilters
+                     |> List.map (fun o -> { Id = o; Display = o.Display })
+                  SelectedItems = browserQuery.SagaKind
+                  OnChange =
+                     fun filters ->
+                        SagaFilter.SagaKind filters
                         |> Msg.UpdateFilter
                         |> dispatch
                |}
@@ -284,6 +302,19 @@ let renderTableControlPanel
                   else
                      SagaDTOStatus.listToDisplay selected)
          }
+         {
+            View = SagaFilterView.SagaKind
+            OnDelete =
+               fun () ->
+                  SagaFilter.SagaKind None |> Msg.UpdateFilter |> dispatch
+            Content =
+               state.Query.SagaKind
+               |> Option.map (fun selected ->
+                  if selected.Length > 3 then
+                     $"{selected.Length} Kinds Selected"
+                  else
+                     SagaKind.listToDisplay selected)
+         }
       ]
       SubsequentChildren = Some [ renderPagination state dispatch ]
    |}
@@ -298,16 +329,21 @@ let realtimeSagaUpdateConformsToSelectedFilter
       | Some dateFilter ->
          DateFilter.qualifiedDate dateFilter update.Saga.StartedAt
 
-   let allowedByFilters =
+   let qualifiedStatus =
       match query.Status with
-      | Some filters ->
+      | Some allowedStatuses ->
          // Include completed sagas even if the filter does not
          // include the completed status.
          update.Saga.Status = SagaDTOStatus.Completed
-         || filters |> List.contains update.Saga.Status
+         || allowedStatuses |> List.contains update.Saga.Status
       | None -> true
 
-   qualifiedDate && allowedByFilters
+   let qualifiedKind =
+      match query.SagaKind with
+      | Some allowedKinds -> allowedKinds |> List.contains update.Saga.SagaKind
+      | None -> true
+
+   qualifiedDate && qualifiedStatus && qualifiedKind
 
 // Conditionally apply SignalR saga update to pagination results.
 let includeSignalREventMaybe

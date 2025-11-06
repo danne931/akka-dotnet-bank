@@ -198,6 +198,7 @@ let SidebarMenuComponent (currentUrl: Routes.IndexUrl) (session: UserSession) =
                            |> Some
                         Date = Some UIDomain.DateFilter.Last7Days
                         SagaId = None
+                        SagaKind = None
                      }
                      |> SagaBrowserQuery.toQueryParams
                      |> Router.encodeQueryString

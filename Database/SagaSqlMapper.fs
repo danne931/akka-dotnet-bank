@@ -88,6 +88,17 @@ module Writer =
       | SagaDTOStatus.Exhausted -> "Exhausted"
       | SagaDTOStatus.CompensationExhausted -> "CompensationExhausted"
 
+   let nameFromKind =
+      function
+      | SagaKind.OrgOnboarding -> "OrgOnboarding"
+      | SagaKind.EmployeeOnboarding -> "EmployeeOnboarding"
+      | SagaKind.CardSetup -> "CardSetup"
+      | SagaKind.Purchase -> "Purchase"
+      | SagaKind.DomesticTransfer -> "DomesticTransfer"
+      | SagaKind.PlatformTransfer -> "PlatformTransfer"
+      | SagaKind.PaymentRequest -> "PaymentRequest"
+      | SagaKind.BillingStatement -> "BillingStatement"
+
    let status (saga: AppSaga.Saga) = Sql.string (string saga.Status)
 
    let activityInProgressCount (saga: ISaga) =
