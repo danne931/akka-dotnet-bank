@@ -103,8 +103,20 @@ let renderLabeledInfo (label: string) (text: string) =
    ]
 
 let renderSagaActivities saga =
+   let activities =
+      saga.LifeCycle
+      |> List.sortBy (fun a ->
+         let status =
+            match a.Status with
+            | SagaActivityDTOStatus.Completed -> 0
+            | SagaActivityDTOStatus.InProgress -> 1
+            | SagaActivityDTOStatus.Aborted -> 2
+            | SagaActivityDTOStatus.Failed -> 3
+
+         status, a.Start)
+
    classyNode Html.div [ "saga-activities"; "grid" ] [
-      for activity in saga.LifeCycle do
+      for activity in activities do
          let date =
             match activity.End with
             | Some finishedAt -> finishedAt
@@ -422,9 +434,11 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
          let sagaOpt =
             sagaHistory |> List.tryFind (fun saga -> saga.Id = sagaId)
 
-         match sagaOpt with
-         | None -> Html.p "Not found"
-         | Some saga -> ScreenOverlay.Portal(renderSagaExpandedView saga)
+         ScreenOverlay.Portal(
+            match sagaOpt with
+            | None -> Html.article [ Html.p "Not found" ]
+            | Some saga -> renderSagaExpandedView saga
+         )
       | _ -> ()
 
       Html.h6 [
