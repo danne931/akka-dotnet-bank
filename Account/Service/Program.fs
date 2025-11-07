@@ -404,6 +404,44 @@ builder.Services.AddAkka(
                (props handler).ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
+         // TODO:
+         // We may not always receive Lithic purchase progress updates via webhook.
+         // We should reconcile InProgress purchases that have not received updates in some time.
+         // We will query our card issuer (ex: Lithic) for a purchase progress report
+         // and compare with InProgress purchase saga states.
+         .WithSingleton<ActorMarker.PurchaseReconciliation>(
+            ActorMetadata.purchaseReconciliation.Name,
+            (fun system _ _ ->
+               let handler (ctx: Actor<_>) =
+                  let rec loop () = actor {
+                     let! msg = ctx.Receive()
+                     return ignored ()
+                  }
+
+                  loop ()
+
+               (props handler).ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
+         )
+         // TODO:
+         // We may not always receive transfer progress updates from partner bank.
+         // We should reconcile InProgress transfers that have not received updates in some time.
+         // We will query our partner banks (ex: Column) for a progress report and compare with
+         // InProgress transfer saga states.
+         .WithSingleton<ActorMarker.TransferReconciliation>(
+            ActorMetadata.transferReconciliation.Name,
+            (fun system _ _ ->
+               let handler (ctx: Actor<_>) =
+                  let rec loop () = actor {
+                     let! msg = ctx.Receive()
+                     return ignored ()
+                  }
+
+                  loop ()
+
+               (props handler).ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
+         )
          .WithSingleton<ActorMarker.AccountSeeder>(
             ActorMetadata.accountSeeder.Name,
             (fun _ _ _ ->

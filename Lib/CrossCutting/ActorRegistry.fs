@@ -82,6 +82,10 @@ module ActorMarker =
 
    type SagaAlarmClock() = class end
 
+   type PurchaseReconciliation() = class end
+
+   type TransferReconciliation() = class end
+
    type Account() = class end
 
    type AccountGuaranteedDeliveryProducer() = class end

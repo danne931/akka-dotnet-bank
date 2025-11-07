@@ -227,6 +227,16 @@ module ActorMetadata =
       Route = "saga-alarm-clock"
    }
 
+   let purchaseReconciliation = {
+      Name = "purchase-reconciliation"
+      Route = "purchase-reconciliation"
+   }
+
+   let transferReconciliation = {
+      Name = "transfer-reconciliation"
+      Route = "transfer-reconciliation"
+   }
+
    let autoTransferScheduling = {
       Name = "auto-transfer-scheduling"
       Route = "auto-transfer-scheduling"
