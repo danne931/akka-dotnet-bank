@@ -372,9 +372,11 @@ let includeSignalREventMaybe
    // existing pagination results & the browser query filter criteria are met.
    |> Option.orElse (
       match paginatedSagas.Items |> Map.tryFind 1 with
-      | Some(Deferred.Resolved(Ok(Some sagas))) ->
+      | Some(Deferred.Resolved(Ok opt)) ->
          if realtimeSagaUpdateConformsToSelectedFilter browserQuery update then
-            Some(1, Some(update.Saga :: sagas))
+            match opt with
+            | None -> Some(1, Some [ update.Saga ])
+            | Some sagas -> Some(1, Some(update.Saga :: sagas))
          else
             None
       | _ -> None

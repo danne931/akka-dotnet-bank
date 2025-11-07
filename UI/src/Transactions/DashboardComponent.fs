@@ -653,14 +653,18 @@ let TransactionDashboardComponent
       React.useMemo (
          fun () ->
             match txns with
-            | Some(Resolved(Ok(Some txns))) ->
+            | Some(Resolved(Ok txnsOpt)) ->
+               let txns = txnsOpt |> Option.defaultValue []
+
                let txns =
                   if state.Pagination.Page = 1 then
                      transactions txnQuery txns signalRCtx.RealtimeAccountEvents
                   else
                      txns
 
-               Some(Resolved(Ok(Some txns)))
+               let txnsOpt = if txns.IsEmpty then None else Some txns
+
+               Some(Resolved(Ok txnsOpt))
             | _ -> txns
          , [| box txns; box signalRCtx.RealtimeAccountEvents |]
       )
