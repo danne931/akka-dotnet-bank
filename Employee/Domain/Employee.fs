@@ -99,7 +99,7 @@ let updatePendingPurchase
       {
          purchase with
             Status = progress.Status
-            Events = purchase.Events @ (NonEmptyList.toList progress.Events)
+            Events = purchase.Events @ NonEmptyList.toList progress.Events
             Info.Amount = amount
       }
 
@@ -342,6 +342,9 @@ let applyEvent
    {
       Info = updatedEmployee
       Events = evt :: state.Events
+      ProcessedCommands =
+         let _, envelope = EmployeeEnvelope.unwrap evt
+         state.ProcessedCommands |> Map.add envelope.Id envelope.Timestamp
       PendingPurchaseDeductions = state.PendingPurchaseDeductions
       PendingPurchases = state.PendingPurchases
       CardIssuerLinks = updatedCardIssuerLinks

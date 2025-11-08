@@ -593,7 +593,8 @@ module Message =
       message orgId corrId (Event.EmployeeOnboarding evt)
 
    let purchaseStart orgId corrId (evt: PurchaseSagaStartEvent) =
-      startMessage orgId corrId (StartEvent.Purchase evt)
+      SagaEvent.create orgId corrId (StartEvent.Purchase evt)
+      |> SagaMessage.Start
 
    let purchase orgId corrId (evt: PurchaseSagaEvent) =
       message orgId corrId (Event.Purchase evt)

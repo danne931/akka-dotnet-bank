@@ -107,7 +107,7 @@ let private hasPurchaseFail (cmd: EmployeeCommand) (err: Err) =
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
    mailbox
-   (registry: #ISagaGuaranteedDeliveryActor)
+   (registry: #ISagaActor)
    (employee: Employee)
    (cmd: EmployeeCommand)
    (err: Err)
@@ -132,11 +132,12 @@ let private handleValidationError
             purchaseInfo.OrgId
             purchaseInfo.CorrelationId
             evt
-         |> GuaranteedDelivery.message purchaseInfo.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      registry.SagaActor purchaseInfo.CorrelationId <! msg
 
-      mailbox.Sender() <! PurchaseAuthorizationStatus.fromCardFailReason reason
+      if not purchaseInfo.AuthorizationType.IsBypassAuth then
+         mailbox.Sender()
+         <! PurchaseAuthorizationStatus.fromCardFailReason reason
    | None -> ()
 
 let private closeEmployeeCards
@@ -328,6 +329,12 @@ let actorProps
             match envelope.Message with
             | :? EmployeeMessage as msg ->
                match msg with
+               // Handle potential for receiving the same command multiple times.
+               | EmployeeMessage.StateChange cmd when
+                  state.ProcessedCommands.ContainsKey cmd.Envelope.Id
+                  ->
+                  logDebug mailbox $"Received duplicate command {cmd}"
+                  return ignored ()
                | EmployeeMessage.StateChange cmd ->
                   let validation = Employee.stateTransition state cmd
 
@@ -397,7 +404,7 @@ let actorProps
                         purchase.CorrelationId
                         evt
 
-                  registry.SagaGuaranteedDeliveryActor() <! msg
+                  registry.SagaActor purchase.CorrelationId <! msg
                | Some purchase, _ ->
                   let msg =
                      PurchaseProgressCommand.create
@@ -422,7 +429,7 @@ let actorProps
                      intent.CorrelationId
                      (PurchaseSagaStartEvent.PurchaseIntent purchase)
 
-               registry.SagaGuaranteedDeliveryActor() <! msg
+               registry.SagaActor intent.CorrelationId <! msg
 
                match Employee.stateTransition state cmd with
                | Ok(evt, _) ->
@@ -456,6 +463,19 @@ let actorProps
             | EmployeeMessage.StateChange _ ->
                mailbox.Parent() <! msg
                return ignored ()
+            | EmployeeMessage.PruneIdempotencyChecker ->
+               // Keep last 24 hours of processed commands
+               let stateOpt =
+                  stateOpt
+                  |> Option.map (fun state -> {
+                     state with
+                        ProcessedCommands =
+                           state.ProcessedCommands
+                           |> Map.filter (fun _ date ->
+                              date > DateTime.UtcNow.AddHours -24)
+                  })
+
+               return! loop stateOpt
          // Event replay on actor start
          | :? EmployeeEvent as e when mailbox.IsRecovering() ->
             return! loop <| Some(Employee.applyEvent state e)
@@ -472,6 +492,13 @@ let actorProps
                            <! new ConsumerController.Start<EmployeeMessage>(
                               untyped mailbox.Self
                            )
+
+                           mailbox.ScheduleRepeatedly
+                              (TimeSpan.FromHours 4)
+                              (TimeSpan.FromHours 4)
+                              mailbox.Self
+                              EmployeeMessage.PruneIdempotencyChecker
+                           |> ignore
 
                            ignored ()
                      LifecyclePostStop =

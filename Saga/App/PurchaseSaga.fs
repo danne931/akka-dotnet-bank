@@ -12,6 +12,8 @@ open PurchaseSaga
 open BankActorRegistry
 open Lib.SharedTypes
 
+// TODO: Evaluate scenarios requiring compensation
+
 let applyStartEvent
    (start: PurchaseSagaStartEvent)
    (timestamp: DateTime)
@@ -113,7 +115,13 @@ let applyEvent
 
       {
          saga with
-            LifeCycle = saga.LifeCycle |> finishActivity activity
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity activity
+               |> if saga.ReservedEmployeeCardFunds then
+                     addActivity Activity.WaitForCardNetworkResolution
+                  else
+                     id
       }
    | PurchaseSagaEvent.CardReservedFunds ->
       let activity =
@@ -127,8 +135,22 @@ let applyEvent
             LifeCycle =
                saga.LifeCycle
                |> finishActivity activity
-               |> addActivity Activity.WaitForCardNetworkResolution
+               |> if saga.ReservedAccountFunds then
+                     addActivity Activity.WaitForCardNetworkResolution
+                  else
+                     id
       }
+   | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress when
+      not saga.ReservedFunds
+        ->
+        {
+           saga with
+              LifeCycle =
+                 saga.LifeCycle
+                 |> addActivity (
+                    Activity.BufferCardIssuerPurchaseProgress progress
+                 )
+        }
    | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress ->
       let amount =
          match progress.Status with
@@ -433,7 +455,6 @@ let private reserveCardFunds (registry: #IEmployeeActor) purchase =
 
    registry.EmployeeActor purchase.EmployeeId <! msg
 
-
 let private reserveAccountFunds (registry: #IAccountActor) purchase =
    let msg =
       purchase
@@ -443,7 +464,9 @@ let private reserveAccountFunds (registry: #IAccountActor) purchase =
 
    registry.AccountActor purchase.ParentAccountId <! msg
 
-// Purchase Saga is started by PurchaseIntent event coming from the Employee actor.
+// Purchase Saga is started in 2 ways:
+// 1. Lithic Authorization Stream Access Webhook -> EmployeeActor -> PurchaseIntent command reserves funds
+// 2. Lithic Transaction Update Webhook -> Employee Actor -> PurchaseProgress command -> May lead to force post of funds
 let onStartEventPersisted
    registry
    (saga: PurchaseSaga)
@@ -519,11 +542,10 @@ let onEventPersisted
 
    let sendProgressFromBufferMaybe () =
       match
-         updatedState.ReservedAccountFunds,
-         updatedState.ReservedEmployeeCardFunds,
+         updatedState.ReservedFunds,
          updatedState.BufferedCardIssuerPurchaseProgress
       with
-      | true, true, Some progress ->
+      | true, Some progress ->
          PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress
          |> sendEventToSelf
       | _ -> ()

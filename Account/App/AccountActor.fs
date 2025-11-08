@@ -1,6 +1,7 @@
 [<RequireQualifiedAccess>]
 module AccountActor
 
+open System
 open Akka.Persistence
 open Akka.Persistence.Extras
 open Akka.Delivery
@@ -41,7 +42,7 @@ let private canProduceAutoTransfer =
       flow.IsSome
 
 let private onValidationError
-   (registry: #ISagaGuaranteedDeliveryActor & #ISagaActor)
+   (registry: #ISagaActor)
    (broadcaster: SignalRBroadcast)
    mailbox
    (cmd: AccountCommand)
@@ -57,7 +58,7 @@ let private onValidationError
    broadcaster.accountEventError orgId cmd.AccountId corrId err
 
    match cmd with
-   | AccountCommand.Debit _ -> option {
+   | AccountCommand.Debit cmd -> option {
       let! reason =
          match err with
          | AccountStateTransitionError ParentAccountNotActive ->
@@ -77,12 +78,14 @@ let private onValidationError
          PurchaseFailReason.Account reason
          |> PurchaseSagaEvent.PurchaseRejected
          |> AppSaga.Message.purchase orgId corrId
-         |> GuaranteedDelivery.message corrId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      registry.SagaActor corrId <! msg
 
-      mailbox.Sender()
-      <! PurchaseAuthorizationStatus.fromAccountFailReason reason
+      if
+         not cmd.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth
+      then
+         mailbox.Sender()
+         <! PurchaseAuthorizationStatus.fromAccountFailReason reason
      }
    | AccountCommand.DomesticTransfer cmd when cmd.Data.OriginatedFromSchedule -> option {
       let! reason =
@@ -479,6 +482,12 @@ let actorProps
             match envelope.Message with
             | :? AccountMessage as msg ->
                match msg with
+               // Handle potential for receiving the same command multiple times.
+               | AccountMessage.StateChange cmd when
+                  state.ProcessedCommands.ContainsKey cmd.Envelope.Id
+                  ->
+                  logDebug mailbox $"Received duplicate command {cmd}"
+                  return ignored ()
                | AccountMessage.StateChange cmd ->
                   let validation = ParentAccount.stateTransition state cmd
 
@@ -609,6 +618,19 @@ let actorProps
             | AccountMessage.StateChange _ ->
                mailbox.Parent() <! msg
                return ignored ()
+            | AccountMessage.PruneIdempotencyChecker ->
+               // Keep last 24 hours of processed commands
+               let stateOpt =
+                  stateOpt
+                  |> Option.map (fun state -> {
+                     state with
+                        ProcessedCommands =
+                           state.ProcessedCommands
+                           |> Map.filter (fun _ date ->
+                              date > DateTime.UtcNow.AddHours(-24))
+                  })
+
+               return! loop stateOpt
             | _ -> return unhandled ()
          // Event replay on actor start
          | :? AccountEvent as e when mailbox.IsRecovering() ->
@@ -635,6 +657,13 @@ let actorProps
                            <! new ConsumerController.Start<AccountMessage>(
                               untyped mailbox.Self
                            )
+
+                           mailbox.ScheduleRepeatedly
+                              (TimeSpan.FromHours 4)
+                              (TimeSpan.FromHours 4)
+                              mailbox.Self
+                              AccountMessage.PruneIdempotencyChecker
+                           |> ignore
 
                            ignored ()
                }

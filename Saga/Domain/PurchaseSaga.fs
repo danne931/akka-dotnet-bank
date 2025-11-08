@@ -112,6 +112,9 @@ type PurchaseSaga = {
       || x.LifeCycle.Completed
          |> List.exists _.Activity.IsReserveAccountFundsBypassingAuth
 
+   member x.ReservedFunds =
+      x.ReservedAccountFunds && x.ReservedEmployeeCardFunds
+
    /// Should immediately designate funds as settled after fund reservation
    member x.OriginatedFromForcePost =
       match x.StartEvent with

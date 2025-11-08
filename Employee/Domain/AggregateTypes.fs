@@ -140,6 +140,7 @@ type EmployeeMessage =
    | AuthorizePurchase of PurchaseAuthorization
    | PurchaseProgress of CardIssuerPurchaseProgress * CardId
    | Delete
+   | PruneIdempotencyChecker
 
 type Employee = {
    EmployeeId: EmployeeId
@@ -191,6 +192,7 @@ type EmployeeSnapshot = {
    CardIssuerLinks: Map<CardId, CardIssuerLink>
    PendingPurchaseDeductions: Map<CardId, PendingFunds>
    PendingPurchases: Map<CardIssuerTransactionId, Purchase>
+   ProcessedCommands: Map<EventId, DateTime>
 } with
 
    static member Empty = {
@@ -199,6 +201,7 @@ type EmployeeSnapshot = {
       CardIssuerLinks = Map.empty
       PendingPurchaseDeductions = Map.empty
       PendingPurchases = Map.empty
+      ProcessedCommands = Map.empty
    }
 
 type CardWithMetrics = {

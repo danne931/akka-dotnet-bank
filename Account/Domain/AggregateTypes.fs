@@ -489,6 +489,7 @@ type ParentAccountSnapshot = {
    Status: ParentAccountStatus
    Counterparties: Map<CounterpartyId, Counterparty>
    Events: AccountEvent list
+   ProcessedCommands: Map<EventId, DateTime>
 } with
 
    static member empty: ParentAccountSnapshot = {
@@ -510,6 +511,7 @@ type ParentAccountSnapshot = {
       }
       Counterparties = Map.empty
       Events = []
+      ProcessedCommands = Map.empty
    }
 
    member x.eventsForAccount(accountId: AccountId) =
@@ -574,6 +576,7 @@ type AccountMessage =
    | DomesticTransfersRetryableUponRecipientEdit of
       Result<DomesticTransfer list option, Err>
    | Delete
+   | PruneIdempotencyChecker
 
 [<RequireQualifiedAccess>]
 type AccountClosureMessage =
