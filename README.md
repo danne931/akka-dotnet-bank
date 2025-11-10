@@ -34,20 +34,21 @@
 10. Billing statements issued for each billing cycle
 11. Emails sent for payment requests, employee invites, purchase declined, etc.
 
-![8-29-business-banking](https://github.com/user-attachments/assets/beb5de07-66e9-49be-abe2-5ea30ba06c7a)
-
 ### Demonstration
 #### Automatic Balance Management
-![auto-balance-manage](https://github.com/user-attachments/assets/3ba9a011-90f3-4327-8b39-36d26a654a7d)
+![auto-balance-management](https://github.com/user-attachments/assets/7fdeaaf8-e255-4d64-a9ff-33addf9f9fa5)
+
+#### Recurring Payments
+![payment-recurring](https://github.com/user-attachments/assets/07681a74-cdb5-4112-a9f2-7b49858f0ce9)
 
 #### Analytics
-![analytics-timeseries](https://github.com/user-attachments/assets/ad4566f6-c2af-42cd-98bf-e06367437a84)
-![analytics-top-n](https://github.com/user-attachments/assets/9359f424-9f1c-4e0e-90a8-bff3476683da)
-#### Transactions
-![transaction-back-button](https://github.com/user-attachments/assets/99437c22-e484-4d57-957e-3bb5253784e1)
-![transactions-date](https://github.com/user-attachments/assets/f5f8d6da-93fe-451c-a739-775d6108c02f)
+![analytics](https://github.com/user-attachments/assets/a68249dd-8c6d-4473-a08e-3f9814400664)
 
-### More Demonstration GIFs included at the bottom of the README.
+#### Approvals
+![approvals](https://github.com/user-attachments/assets/e81135c5-bc2a-4e6c-9c8d-00a3f832f792)
+
+#### Transactions
+![transactions](https://github.com/user-attachments/assets/70ac0809-03f5-4868-9e3f-7aca0748f222)
 
 ### Running with Kubernetes via minikube
 1. Dependencies: [.NET 9](https://dotnet.microsoft.com/en-us/download), [minikube](https://minikube.sigs.k8s.io/docs/start/), [pulumi](https://www.pulumi.com/docs/install/), [Node.js 18](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
@@ -87,28 +88,7 @@
 This project was inspired from reading [Functional Programming in C#](https://www.manning.com/books/functional-programming-in-c-sharp-second-edition)
 by **Enrico Buonanno**.  
 
-The first iteration of this project [(see CSharpWithLanguageExt directory)](https://github.com/danne931/akka-dotnet-bank/tree/main/Archive/CSharpWithLanguageExt) expands on **Enrico Buonanno**'s banking account example [actor](https://github.com/la-yumba/functional-csharp-code-2/blob/master/Examples/Chapter19/Boc/AccountProcess.cs)
-and [domain logic](https://github.com/la-yumba/functional-csharp-code-2/blob/master/Examples/Chapter13/Domain/Account.cs) to include
+The first iteration of this project [(see CSharpWithLanguageExt directory)](https://github.com/danne931/akka-dotnet-bank/tree/main/Archive/CSharpWithLanguageExt) expands on **Enrico Buonanno**'s banking account example [actor](https://github.com/la-yumba/functional-csharp-code-2/blob/master/Examples/Chapter19/Boc/AccountProcess.cs) to include
 additional business use cases as well as integration with [EventStoreDB](https://www.eventstore.com/eventstoredb) and C#'s functional programming toolkit, [language-ext](https://github.com/louthy/language-ext).
 
 The second iteration [(see FSharpWithAkka directory)](https://github.com/danne931/akka-dotnet-bank/tree/main/Archive/FSharpWithAkka) is close to a one-to-one representation of the CSharpWithLanguageExt directory, with all use cases rewritten in F#.  I saw that [F#'s type inference](https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/type-inference), [computation expressions](https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/computation-expressions) and immutable data structures made writing programs with typed functional programming more second nature than with C# so I decided to continue with it for the final iteration.
-
-### Additional Demonstration
-#### Payments
-![payments](https://github.com/user-attachments/assets/7c6baaa3-9e5b-4cd6-a7d2-afccc2e3be41)
-
-#### Employee Card Management & Employee History
-![card-purchase-limits-and-nickname](https://github.com/user-attachments/assets/821518a2-6c29-4152-9ba9-1f1dd3aef969)
-![card-lock-employee-history](https://github.com/user-attachments/assets/303676ba-3534-487b-bc7f-3eb99ea87aab)
-![employee-history](https://github.com/user-attachments/assets/30c5f2af-d717-405d-b080-cff13bb2af84)
-![employee-management](https://github.com/user-attachments/assets/e9486950-2553-4447-b101-22d53a90ad9b)
-
-#### Transfers within an org & between orgs on the platform
-![transfer-internal](https://github.com/user-attachments/assets/06708061-822e-417b-94bf-9406f324443d)
-
-#### Transactions
-![transactions-money-flow](https://github.com/user-attachments/assets/aee4c129-892a-4d40-b676-4c2edaff729c)
-![transactions-transfers](https://github.com/user-attachments/assets/7fd0676f-d2c1-44bf-9cae-3d6bc58d48d0)
-![transactions-initiated-by](https://github.com/user-attachments/assets/a07cf94f-d915-4839-adb9-58f900b5aacf)
-![transactions-employee-card](https://github.com/user-attachments/assets/acd51183-8cc3-49d5-abe0-0d8d7b7613de)
-![transactions-category](https://github.com/user-attachments/assets/772f5fd1-fba6-48e9-84ad-710dda18e8d6)
