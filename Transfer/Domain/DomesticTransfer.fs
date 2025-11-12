@@ -120,6 +120,7 @@ type DomesticTransferInfraFailReason =
 [<RequireQualifiedAccess>]
 type DomesticTransferPartnerBankFailReason =
    | InvalidAmount
+   | SenderAccountNotActive
    | CounterpartyAccountInvalidInfo
    | CounterpartyAccountNotActive
    | NoTransferFound
@@ -128,6 +129,7 @@ type DomesticTransferPartnerBankFailReason =
    member x.Display =
       match x with
       | InvalidAmount -> "Invalid Amount"
+      | SenderAccountNotActive -> "Sender Account Not Active"
       | CounterpartyAccountInvalidInfo ->
          "Invalid Counterparty Account Info Provided"
       | CounterpartyAccountNotActive -> "Counterparty Account Not Active"

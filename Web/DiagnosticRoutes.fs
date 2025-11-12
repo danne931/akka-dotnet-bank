@@ -147,3 +147,39 @@ let start (app: WebApplication) =
       )
       .RBAC(Permissions.Diagnostic)
    |> ignore
+
+
+   app
+      .MapPost(
+         DiagnosticPath.RetrySagaActivity,
+         Func<BankActorRegistry, Guid, Guid, string, Task<IResult>>
+            (fun registry orgId sagaId activity -> task {
+               let activity =
+                  SagaDTO.ActivityRecoverableByHumanInTheLoop.fromString
+                     activity
+
+               match activity with
+               | None -> return Results.BadRequest "Unknown Activity"
+               | Some activity ->
+                  let corrId = CorrelationId sagaId
+                  let aref = (registry :> ISagaActor).SagaActor corrId
+
+                  match activity with
+                  | ActivityRecoverableByHumanInTheLoop.DomesticTransferServiceDevelopmentFix ->
+                     let evt =
+                        DomesticTransferSaga.DomesticTransferSagaEvent.RetryTransferServiceRequest
+                           None
+
+                     let msg =
+                        AppSaga.Message.domesticTransfer
+                           (OrgId orgId)
+                           corrId
+                           evt
+
+                     aref <! msg
+
+                  return Results.Ok()
+            })
+      )
+      .RBAC(Permissions.Diagnostic)
+   |> ignore

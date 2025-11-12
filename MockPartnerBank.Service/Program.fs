@@ -163,7 +163,6 @@ let processTransferRequest (req: TransferRequest) (res: TransferResponse) =
 
 let processProgressCheckRequest (req: TransferRequest) (res: TransferResponse) =
    let exists, existing = transfersInProgress.TryGetValue req.idempotency_key
-   let progressCheckCount, transfer = existing
 
    if not exists then
       {
@@ -171,7 +170,9 @@ let processProgressCheckRequest (req: TransferRequest) (res: TransferResponse) =
             ok = false
             reason = "NoTransferProcessing"
       }
-   else if progressCheckCount < 1 then
+   else if fst existing < 1 then
+      let progressCheckCount, transfer = existing
+
       transfersInProgress.TryUpdate(
          req.idempotency_key,
          (progressCheckCount + 1, transfer),

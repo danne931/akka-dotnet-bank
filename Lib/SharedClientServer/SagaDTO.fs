@@ -137,6 +137,16 @@ type SagaActivityDTO = {
    Status: SagaActivityDTOStatus
 }
 
+[<RequireQualifiedAccess>]
+type ActivityRecoverableByHumanInTheLoop =
+   | DomesticTransferServiceDevelopmentFix
+
+   static member fromString(str: string) =
+      match str with
+      | "DomesticTransferServiceDevelopmentFix" ->
+         Some DomesticTransferServiceDevelopmentFix
+      | _ -> None
+
 type SagaDTO = {
    SagaKind: SagaKind
    Name: string
@@ -146,6 +156,7 @@ type SagaDTO = {
    Status: SagaDTOStatus
    StatusDetail: string
    Events: string
+   RecoverableActivity: ActivityRecoverableByHumanInTheLoop option
 }
 
 type SagaCursor = {

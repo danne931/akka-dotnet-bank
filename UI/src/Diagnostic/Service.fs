@@ -132,3 +132,19 @@ let getSagaHistory
             Serialization.deserialize<SagaDTO list> responseText
             |> Result.map Some
    }
+
+let retrySagaActivity
+   (orgId: OrgId)
+   (sagaId: CorrelationId)
+   (activity: ActivityRecoverableByHumanInTheLoop)
+   : Async<Result<unit, Err>>
+   =
+   async {
+      let path = DiagnosticPath.retrySagaActivity orgId sagaId (string activity)
+      let! code, _ = Http.post path null
+
+      if code <> 200 then
+         return Error(Err.InvalidStatusCodeError("Diagnostic Service", code))
+      else
+         return Ok()
+   }

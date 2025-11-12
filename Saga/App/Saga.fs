@@ -23,8 +23,7 @@ open AppSaga
 open BankActorRegistry
 
 let sagaHandler
-   (registry:
-      #IOrgActor & #IEmployeeActor & #IAccountActor & #IEmailActor & #ISchedulerActor & #IKYCServiceActor & #IPartnerBankServiceActor & #ICardIssuerServiceActor & #ISagaActor)
+   (registry: #ISagaActor)
    (orgSettingsCache: OrgSettingsCache)
    (broadcaster: SignalRBroadcast.SignalRBroadcast)
    : SagaActor.SagaHandler<Saga, StartEvent, Event>

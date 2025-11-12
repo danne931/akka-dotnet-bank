@@ -102,13 +102,16 @@ type PartnerBankDomesticTransferResponse = {
       | Contains "InvalidAction" ->
          FailReason.Infra InfraFailReason.InvalidAction
       | Contains "InvalidAmount" -> FailReason.InvalidAmount
-      | Contains "InvalidAccountInfo" ->
-         FailReason.CounterpartyAccountInvalidInfo
       | Contains "InvalidPaymentNetwork" ->
          FailReason.Infra InfraFailReason.InvalidPaymentNetwork
       | Contains "InvalidDepository" ->
          FailReason.Infra InfraFailReason.InvalidDepository
-      | Contains "InactiveAccount" -> FailReason.CounterpartyAccountNotActive
+      | Contains "InvalidAccountInfo" ->
+         FailReason.CounterpartyAccountInvalidInfo
+      | Contains "SenderBankAccountNotFound" ->
+         FailReason.SenderAccountNotActive
+      | Contains "CounterpartyNotFound" ->
+         FailReason.CounterpartyAccountNotActive
       | Contains "NoTransferProcessing" -> FailReason.NoTransferFound
       | e -> FailReason.Infra(InfraFailReason.Unknown e)
 

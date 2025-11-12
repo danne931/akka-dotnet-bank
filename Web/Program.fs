@@ -64,6 +64,7 @@ builder.Services.AddAkka(
          .WithCustomSerializer(
             BankSerializer.Name,
             [
+               typedefof<AppSaga.AppSagaMessage>
                typedefof<OrgMessage>
                typedefof<AccountMessage>
                typedefof<Account>
@@ -100,6 +101,13 @@ builder.Services.AddAkka(
             ClusterMetadata.employeeShardRegion.name,
             ClusterMetadata.roles.employee,
             ClusterMetadata.employeeShardRegion.messageExtractor
+         )
+         // Proxy human-in-the-loop saga activity retry requests
+         // and diagnostic get state calls.
+         .WithShardRegionProxy<ActorMarker.Saga>(
+            ClusterMetadata.sagaShardRegion.name,
+            ClusterMetadata.roles.saga,
+            ClusterMetadata.sagaShardRegion.messageExtractor
          )
          .WithSingletonProxy<ActorMarker.CircuitBreaker>(
             ActorMetadata.circuitBreaker.Name,

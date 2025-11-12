@@ -28,10 +28,15 @@ type SagaFilter =
 type Msg =
    | UpdateFilter of SagaFilter
    | PaginationMsg of Pagination.Msg<SagaDTO>
+   | RetryActivity of
+      sagaId: CorrelationId *
+      ActivityRecoverableByHumanInTheLoop *
+      AsyncOperationStatus<Result<unit, Err>>
 
 type State = {
    Query: SagaQuery
    Pagination: Pagination.State<SagaCursor, SagaDTO>
+   RetryingActivityProgress: bool
 }
 
 let init (browserQuery: SagaBrowserQuery) () =
@@ -40,6 +45,7 @@ let init (browserQuery: SagaBrowserQuery) () =
    {
       Query = SagaBrowserQuery.toNetworkQuery browserQuery
       Pagination = paginationState
+      RetryingActivityProgress = false
    },
    Cmd.map PaginationMsg cmd
 
@@ -88,6 +94,33 @@ let update (session: UserSession) msg (state: State) =
          |> Router.encodeQueryString
 
       state, Cmd.navigate (Routes.DiagnosticUrl.BasePath, browserQueryParams)
+   | RetryActivity(sagaId, activity, Started) ->
+      let retry = async {
+         let! res =
+            DiagnosticsService.retrySagaActivity session.OrgId sagaId activity
+
+         return Msg.RetryActivity(sagaId, activity, Finished res)
+      }
+
+      {
+         state with
+            RetryingActivityProgress = true
+      },
+      Cmd.fromAsync retry
+   | RetryActivity(_, _, Finished(Ok _)) ->
+      {
+         state with
+            RetryingActivityProgress = false
+      },
+      Alerts.toastSuccessCommand "Retrying activity momentarily"
+   | RetryActivity(_, _, Finished(Error err)) ->
+      Log.error $"Error retrying activity: {err}"
+
+      {
+         state with
+            RetryingActivityProgress = false
+      },
+      Alerts.toastCommand err
 
 let renderLabeledInfo (label: string) (text: string) =
    Html.div [
@@ -109,11 +142,11 @@ let renderSagaActivities saga =
          let status =
             match a.Status with
             | SagaActivityDTOStatus.Completed -> 0
-            | SagaActivityDTOStatus.InProgress -> 1
-            | SagaActivityDTOStatus.Aborted -> 2
-            | SagaActivityDTOStatus.Failed -> 3
+            | SagaActivityDTOStatus.Aborted -> 1
+            | SagaActivityDTOStatus.Failed -> 2
+            | SagaActivityDTOStatus.InProgress -> 3
 
-         status, a.Start)
+         a.Start, status)
 
    classyNode Html.div [ "saga-activities"; "grid" ] [
       for activity in activities do
@@ -138,8 +171,8 @@ let renderSagaActivities saga =
          ]
    ]
 
-let renderSagaExpandedView =
-   React.memo (fun (saga: SagaDTO) ->
+let renderSagaExpandedView dispatch =
+   React.memo (fun (saga: SagaDTO, isActivityRetryInProgress: bool) ->
       let activityToJson (activity: SagaActivityDTO) = {|
          Status = string activity.Status
          Name = activity.Name
@@ -212,6 +245,23 @@ let renderSagaExpandedView =
                |> Routes.TransactionsUrl.queryPath
                |> Router.navigate)
          ]
+
+         match saga.RecoverableActivity with
+         | Some activity ->
+            let title =
+               match activity with
+               | ActivityRecoverableByHumanInTheLoop.DomesticTransferServiceDevelopmentFix ->
+                  "Retry syncing to partner bank"
+
+            Html.button [
+               attr.text title
+               attr.classes [ "outline" ]
+               attr.disabled isActivityRetryInProgress
+
+               attr.onClick (fun _ ->
+                  dispatch <| Msg.RetryActivity(saga.Id, activity, Started))
+            ]
+         | None -> ()
       ])
 
 let renderSaga (saga: SagaDTO) =
@@ -437,7 +487,10 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
          ScreenOverlay.Portal(
             match sagaOpt with
             | None -> Html.article [ Html.p "Not found" ]
-            | Some saga -> renderSagaExpandedView saga
+            | Some saga ->
+               renderSagaExpandedView
+                  dispatch
+                  (saga, state.RetryingActivityProgress)
          )
       | _ -> ()
 

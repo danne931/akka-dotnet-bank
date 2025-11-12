@@ -447,6 +447,7 @@ type Saga =
          SagaKind = x.Kind
          StatusDetail = ""
          Events = Serialization.serialize []
+         RecoverableActivity = None
       }
 
       let activitiesToDTO
@@ -497,6 +498,12 @@ type Saga =
             LifeCycle = activitiesToDTO saga.LifeCycle
             Events = Serialization.serialize saga.Events
             StatusDetail = Serialization.serialize saga.Status
+            RecoverableActivity =
+               if saga.RequiresTransferServiceDevelopmentFix then
+                  Some
+                     ActivityRecoverableByHumanInTheLoop.DomesticTransferServiceDevelopmentFix
+               else
+                  None
         }
       | Saga.PlatformTransfer saga -> {
          dto with

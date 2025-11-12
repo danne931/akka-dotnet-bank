@@ -1323,9 +1323,17 @@ let createCounterparty
             Address = domesticCounterparty.Address
          }
 
+      // Rewrite partner bank counterparty id with id from service response
       let domesticCounterparty = {
          domesticCounterparty with
             PartnerBankCounterpartyId =
+               cpCreateResponse.PartnerBankCounterpartyId
+      }
+
+      // Rewrite partner bank counterparty id with id from service response
+      let domesticCounterpartyCmd = {
+         domesticCounterpartyCmd with
+            Data.PartnerBankCounterpartyId =
                cpCreateResponse.PartnerBankCounterpartyId
       }
 

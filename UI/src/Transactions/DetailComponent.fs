@@ -384,8 +384,8 @@ let renderTransactionInfo
       canEditCounterparty org.Counterparties txnInfo.Transaction
 
    let expectedSettlementDate =
-      match txnInfo.Transaction.Type with
-      | TransactionType.DomesticTransfer ->
+      match txnInfo.Transaction.Status, txnInfo.Transaction.Type with
+      | TransactionStatus.InProgress, TransactionType.DomesticTransfer ->
          txnInfo.Transaction.History
          |> List.choose (function
             | History.Account h ->

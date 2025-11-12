@@ -64,6 +64,16 @@ module DiagnosticPath =
    let Sagas = Base + "/saga/{orgId}"
    let sagas (orgId: OrgId) = $"{Base}/saga/{orgId}"
 
+   let RetrySagaActivity =
+      Base + "/retry-saga-activity/{orgId}/{sagaId}/{activity}"
+
+   let retrySagaActivity
+      (orgId: OrgId)
+      (sagaId: CorrelationId)
+      (activity: string)
+      =
+      $"{Base}/retry-saga-activity/{orgId}/{sagaId}/{activity}"
+
 module TransferPath =
    let Base = $"{API}/transfers"
    let InternalWithinOrg = Base + "/internal-within-org"

@@ -74,6 +74,7 @@ let applyEvent
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
    let failActivity = SagaLifeCycle.failActivity timestamp
+   let retryActivity = SagaLifeCycle.retryActivity timestamp
 
    let saga = {
       saga with
@@ -144,26 +145,27 @@ let applyEvent
          }
 
          match reason with
-         | DomesticTransferPartnerBankFailReason.Infra _ -> {
-            saga with
-               LifeCycle =
-                  saga.LifeCycle
-                  |> addActivity Activity.WaitForDevelopmentTeamFix
-           }
+         | DomesticTransferPartnerBankFailReason.Infra _ ->
+            let activity = Activity.WaitForDevelopmentTeamFix
+
+            let life =
+               if saga.LifeCycle.ActivityIsInProgress activity then
+                  retryActivity activity saga.LifeCycle
+               else
+                  addActivity activity saga.LifeCycle
+
+            { saga with LifeCycle = life }
          | DomesticTransferPartnerBankFailReason.NoTransferFound
          | DomesticTransferPartnerBankFailReason.InvalidAmount
+         | DomesticTransferPartnerBankFailReason.SenderAccountNotActive
          | DomesticTransferPartnerBankFailReason.CounterpartyAccountInvalidInfo
          | DomesticTransferPartnerBankFailReason.CounterpartyAccountNotActive ->
-            let refundIfNotRetrying =
-               if saga.ReasonForRetryServiceAck.IsSome then
-                  id
-               else
-                  addActivity Activity.ReleaseSenderReservedFunds
+            let life =
+               saga.LifeCycle
+               |> addActivity Activity.ReleaseSenderReservedFunds
+               |> finishActivity Activity.WaitForDevelopmentTeamFix
 
-            {
-               saga with
-                  LifeCycle = refundIfNotRetrying saga.LifeCycle
-            }
+            { saga with LifeCycle = life }
    | DomesticTransferSagaEvent.RetryTransferServiceRequest updated -> {
       saga with
          ReasonForRetryServiceAck =
