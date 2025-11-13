@@ -36,7 +36,7 @@ type Msg =
 type State = {
    Query: SagaQuery
    Pagination: Pagination.State<SagaCursor, SagaDTO>
-   RetryingActivityProgress: bool
+   ActivityRetryInProgress: bool
 }
 
 let init (browserQuery: SagaBrowserQuery) () =
@@ -45,7 +45,7 @@ let init (browserQuery: SagaBrowserQuery) () =
    {
       Query = SagaBrowserQuery.toNetworkQuery browserQuery
       Pagination = paginationState
-      RetryingActivityProgress = false
+      ActivityRetryInProgress = false
    },
    Cmd.map PaginationMsg cmd
 
@@ -104,13 +104,13 @@ let update (session: UserSession) msg (state: State) =
 
       {
          state with
-            RetryingActivityProgress = true
+            ActivityRetryInProgress = true
       },
       Cmd.fromAsync retry
    | RetryActivity(_, _, Finished(Ok _)) ->
       {
          state with
-            RetryingActivityProgress = false
+            ActivityRetryInProgress = false
       },
       Alerts.toastSuccessCommand "Retrying activity momentarily"
    | RetryActivity(_, _, Finished(Error err)) ->
@@ -118,7 +118,7 @@ let update (session: UserSession) msg (state: State) =
 
       {
          state with
-            RetryingActivityProgress = false
+            ActivityRetryInProgress = false
       },
       Alerts.toastCommand err
 
@@ -223,6 +223,10 @@ let renderSagaExpandedView dispatch =
             renderLabeledInfo
                "Started On"
                (DateTime.dateUIFriendlyShort saga.StartedAt)
+
+            match saga.Amount with
+            | Some amount -> renderLabeledInfo "Amount" (Money.format amount)
+            | None -> ()
          ]
 
          Html.section [
@@ -269,9 +273,20 @@ let renderSaga (saga: SagaDTO) =
       Html.div [
          Html.p [ attr.style [ style.marginBottom 0 ]; attr.text saga.Name ]
 
-         Html.div [ Html.small saga.Status.Display ]
+         Html.div [
+            Html.small [
+               attr.text saga.Status.Display
+               attr.style [ style.color "var(--primary)" ]
+            ]
+         ]
 
-         Html.small $"Started {DateTime.dateUIFriendlyShort saga.StartedAt}"
+         renderLabeledInfo
+            "Started"
+            (DateTime.dateUIFriendlyShort saga.StartedAt)
+
+         match saga.Amount with
+         | Some amount -> renderLabeledInfo "Amount" (Money.format amount)
+         | None -> ()
 
          Html.hr []
 
@@ -490,7 +505,7 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
             | Some saga ->
                renderSagaExpandedView
                   dispatch
-                  (saga, state.RetryingActivityProgress)
+                  (saga, state.ActivityRetryInProgress)
          )
       | _ -> ()
 

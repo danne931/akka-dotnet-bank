@@ -157,6 +157,7 @@ type SagaDTO = {
    StatusDetail: string
    Events: string
    RecoverableActivity: ActivityRecoverableByHumanInTheLoop option
+   Amount: decimal option
 }
 
 type SagaCursor = {

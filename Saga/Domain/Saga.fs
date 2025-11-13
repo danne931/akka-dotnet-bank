@@ -448,6 +448,7 @@ type Saga =
          StatusDetail = ""
          Events = Serialization.serialize []
          RecoverableActivity = None
+         Amount = None
       }
 
       let activitiesToDTO
@@ -491,6 +492,7 @@ type Saga =
             LifeCycle = activitiesToDTO saga.LifeCycle
             Events = Serialization.serialize saga.Events
             StatusDetail = Serialization.serialize saga.Status
+            Amount = Some saga.PurchaseInfo.Amount
         }
       | Saga.DomesticTransfer saga -> {
          dto with
@@ -504,6 +506,7 @@ type Saga =
                      ActivityRecoverableByHumanInTheLoop.DomesticTransferServiceDevelopmentFix
                else
                   None
+            Amount = Some saga.TransferInfo.Amount
         }
       | Saga.PlatformTransfer saga -> {
          dto with
@@ -511,6 +514,7 @@ type Saga =
             LifeCycle = activitiesToDTO saga.LifeCycle
             Events = Serialization.serialize saga.Events
             StatusDetail = Serialization.serialize saga.Status
+            Amount = Some saga.TransferInfo.Amount
         }
       | Saga.PaymentRequest saga -> {
          dto with
@@ -518,6 +522,7 @@ type Saga =
             LifeCycle = activitiesToDTO saga.LifeCycle
             Events = Serialization.serialize saga.Events
             StatusDetail = Serialization.serialize saga.Status
+            Amount = Some saga.PaymentInfo.SharedDetails.Amount
         }
       | Saga.Billing saga -> {
          dto with
