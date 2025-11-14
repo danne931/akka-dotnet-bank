@@ -367,10 +367,12 @@ let onEventPersisted
    (state: PaymentRequestSaga)
    (evt: Event)
    =
-   broadcaster.sagaUpdated (AppSaga.Saga.PaymentRequest state).AsDTO
-
    let payment = state.PaymentInfo
    let emailRef = registry.EmailActor()
+
+   broadcaster.sagaUpdated
+      payment.SharedDetails.Payee.OrgId
+      (AppSaga.Saga.PaymentRequest state).AsDTO
 
    let scheduleNextRecurringPayment (dueDate: DateTime) =
       let nextPaymentRequestMsg =

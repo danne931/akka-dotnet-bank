@@ -115,11 +115,12 @@ let init
             sendToSignalR (SignalRActor.Msg.CircuitBreaker msg)
 
       sagaUpdated =
-         fun saga ->
+         fun orgId saga ->
             let msg =
                SignalRActor.Msg.SagaUpdated {
                   Date = DateTime.UtcNow
                   Saga = saga
+                  OrgId = orgId
                }
 
             sendToSignalR msg

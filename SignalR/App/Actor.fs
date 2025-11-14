@@ -69,7 +69,10 @@ let actorProps (hub: IHubContext<BankHub, IBankClient>) =
             hub.Clients.All.CircuitBreakerMessage(Serialization.serialize msg)
             |> ignore
          | Msg.SagaUpdated msg ->
-            hub.Clients.All.SagaUpdated(Serialization.serialize msg) |> ignore
+            hub.Clients
+               .Group(string msg.OrgId)
+               .SagaUpdated(Serialization.serialize msg)
+            |> ignore
       }
 
    props handler

@@ -316,10 +316,12 @@ let onEventPersisted
    (currentState: DomesticTransferSaga)
    (evt: DomesticTransferSagaEvent)
    =
-   broadcaster.sagaUpdated (AppSaga.Saga.DomesticTransfer currentState).AsDTO
-
    let info = currentState.TransferInfo
    let correlationId = info.TransferId.AsCorrelationId
+
+   broadcaster.sagaUpdated
+      info.Originator.OrgId
+      (AppSaga.Saga.DomesticTransfer currentState).AsDTO
 
    let deductFromSenderAccount () =
       let cmd =

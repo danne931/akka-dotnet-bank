@@ -73,6 +73,7 @@ type EventProcessingError =
 type SagaUpdated = {
    Date: DateTime
    Saga: SagaDTO.SagaDTO
+   OrgId: OrgId
 }
 
 type SignalRBroadcast = {
@@ -84,5 +85,5 @@ type SignalRBroadcast = {
    employeeEventError: OrgId -> EmployeeId -> CorrelationId -> Err -> unit
    orgEventPersisted: OrgEvent -> Org -> unit
    orgEventError: OrgId -> CorrelationId -> Err -> unit
-   sagaUpdated: SagaDTO.SagaDTO -> unit
+   sagaUpdated: OrgId -> SagaDTO.SagaDTO -> unit
 }

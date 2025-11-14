@@ -72,8 +72,11 @@ let private SagaSignalRName = "SagaUpdated"
 /// Register a callback for handling saga updates received over SignalR
 let listenForSagaUpdate
    (onSagaUpdated: SignalRBroadcast.SagaUpdated -> unit)
+   (orgId: OrgId)
    (conn: SignalR.Connection)
    =
+   conn.addOrgToConnectionGroup orgId |> ignore
+
    conn.on (
       SagaSignalRName,
       fun (msg: string) ->

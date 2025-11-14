@@ -298,10 +298,12 @@ let onEventPersisted
    (currentState: PlatformTransferSaga)
    (evt: TransferEvent)
    =
-   broadcaster.sagaUpdated (AppSaga.Saga.PlatformTransfer currentState).AsDTO
-
    let transfer = currentState.TransferInfo
    let correlationId = transfer.TransferId.AsCorrelationId
+
+   broadcaster.sagaUpdated
+      transfer.Sender.OrgId
+      (AppSaga.Saga.PlatformTransfer currentState).AsDTO
 
    let reserveSenderFunds () =
       let cmd = {

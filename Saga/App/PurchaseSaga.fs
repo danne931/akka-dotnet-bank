@@ -488,9 +488,11 @@ let onEventPersisted
    (updatedState: PurchaseSaga)
    (evt: PurchaseSagaEvent)
    =
-   broadcaster.sagaUpdated (AppSaga.Saga.Purchase updatedState).AsDTO
-
    let purchaseInfo = updatedState.PurchaseInfo
+
+   broadcaster.sagaUpdated
+      purchaseInfo.OrgId
+      (AppSaga.Saga.Purchase updatedState).AsDTO
 
    let acquireCardFailureAcknowledgement reason =
       let msg =

@@ -202,6 +202,12 @@ let renderIncomingTableRow
                   "Updates to Fulfilled when all approvals acquired."
                )
          ]
+
+         Html.td (
+            match payment.SharedDetails.RecurrenceSettings with
+            | None -> "-"
+            | Some settings -> settings.Pattern.Display
+         )
       ]
    ]
 
@@ -223,6 +229,8 @@ let renderIncomingTable
                Html.th [ attr.scope "col"; attr.text "Amount" ]
 
                Html.th [ attr.scope "col"; attr.text "Status" ]
+
+               Html.th [ attr.scope "col"; attr.text "Schedule" ]
             ]
          ]
 

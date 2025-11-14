@@ -484,7 +484,9 @@ let SagaHistoryComponent (url: Routes.DiagnosticUrl) (session: UserSession) =
       fun () ->
          signalRConnection
          |> Option.iter (
-            DiagnosticsService.listenForSagaUpdate includeSignalREventMaybe
+            DiagnosticsService.listenForSagaUpdate
+               includeSignalREventMaybe
+               session.OrgId
          )
 
          React.createDisposable (fun () ->

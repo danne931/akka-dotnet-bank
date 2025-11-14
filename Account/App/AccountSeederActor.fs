@@ -900,6 +900,7 @@ let seedPayments (registry: #IAccountActor) = task {
    let requestsFromDemoAccount = [
       for payer in paymentPayers ->
          let paymentId = Guid.NewGuid() |> PaymentRequestId
+         let dueDate = DateTime.UtcNow.AddDays 15
 
          let recurringPaymentReference =
             if not requestedAsRecurringPayment then
@@ -912,7 +913,7 @@ let seedPayments (registry: #IAccountActor) = task {
                         RepeatEvery = 1
                         Interval =
                            RecurrenceInterval.Monthly(
-                              RecurrenceIntervalMonthly.DayOfMonth 13
+                              RecurrenceIntervalMonthly.DayOfMonth dueDate.Day
                            )
                      }
                      Termination = RecurrenceTerminationCondition.Never
@@ -937,7 +938,7 @@ let seedPayments (registry: #IAccountActor) = task {
                         ParentAccountId = myOrg.ParentAccountId
                      }
                      Memo = "Services rendered..."
-                     DueAt = DateTime.UtcNow.AddDays 15
+                     DueAt = dueDate
                   }
                   Payer = {
                      OrgId = payer.OrgId
@@ -1039,8 +1040,62 @@ let seedPayments (registry: #IAccountActor) = task {
 
    registry.AccountActor payerStub.ParentAccountId <! msg
 
+   let payee = List.head paymentRequesters
+
+   let cmd =
+      let dueDate = DateTime.UtcNow.AddDays 13
+
+      RequestPaymentCommand.create
+         {
+            Id = InitiatedById payee.AccountOwnerId
+            Name = payee.BusinessDetails.BusinessName
+         }
+         (PaymentRequested.Platform {
+            SharedDetails = {
+               Id = Guid.NewGuid() |> PaymentRequestId
+               Amount = 5000m + randomAmount 1000 3000
+               Payee = {
+                  OrgId = payee.OrgId
+                  OrgName = payee.BusinessDetails.BusinessName
+                  AccountId = payee.PrimaryAccountId
+                  ParentAccountId = payee.ParentAccountId
+               }
+               DueAt = dueDate
+               Memo = "Services rendered..."
+            }
+            Invoice = None
+            RecurringPaymentReference =
+               Some {
+                  Settings = {
+                     Id = RecurrenceScheduleId(Guid.NewGuid())
+                     Pattern = {
+                        RepeatEvery = 1
+                        Interval =
+                           RecurrenceInterval.Monthly(
+                              RecurrenceIntervalMonthly.OccurrenceOfDay(
+                                 OccurrenceOfDayInMonth.Last,
+                                 DayOfWeek.Wednesday
+                              )
+                           )
+                     }
+                     Termination = RecurrenceTerminationCondition.MaxPayments 8
+                     PaymentsRequestedCount = 1
+                  }
+                  OriginPaymentId = shared.Id
+               }
+            Payer = {
+               OrgId = myOrg.OrgId
+               OrgName = myOrg.BusinessDetails.BusinessName
+               ParentAccountId = myOrg.ParentAccountId
+            }
+         })
+
+   let msg = cmd |> AccountCommand.RequestPayment |> AccountMessage.StateChange
+
+   registry.AccountActor payee.ParentAccountId <! msg
+
    // Payment requests from other orgs to main demo org
-   for payee in paymentRequesters do
+   for payee in List.tail paymentRequesters do
       let cmd =
          RequestPaymentCommand.create
             {
