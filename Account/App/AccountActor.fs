@@ -273,6 +273,12 @@ let onPersisted
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
 
       registry.SagaActor e.CorrelationId <! msg
+   | AccountEvent.InternalTransferBetweenOrgsFailed e ->
+      let msg =
+         PlatformTransferSagaEvent.SenderReleasedReservedFunds
+         |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+
+      registry.SagaActor e.CorrelationId <! msg
    | AccountEvent.InternalTransferBetweenOrgsSettled e ->
       let info = e.Data.BaseInfo
 
