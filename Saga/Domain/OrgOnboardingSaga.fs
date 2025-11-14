@@ -79,6 +79,11 @@ type Activity =
          | InitializeOrgSettingsCache
          | ActivateOrg -> Some(TimeSpan.FromSeconds 5.)
 
+type OutgoingCommandIdempotencyKeys = {
+   InitPrimaryCheckingAccount: EventId
+   FinishOrgOnboarding: EventId
+}
+
 type OrgOnboardingSaga = {
    OrgId: OrgId
    CorrelationId: CorrelationId
@@ -90,6 +95,7 @@ type OrgOnboardingSaga = {
    LifeCycle: SagaLifeCycle<Activity>
    ApplicationRequiresRevision:
       OrgOnboardingApplicationRequiresUpdateInfo option
+   OutgoingCommandIdempotencyKeys: OutgoingCommandIdempotencyKeys
 } with
 
    member x.PartnerBankLegalEntity =

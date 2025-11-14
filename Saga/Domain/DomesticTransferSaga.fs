@@ -80,6 +80,13 @@ type Activity =
          hash "WaitForScheduledTransferActivation"
       | _ -> hash (string x)
 
+
+type OutgoingCommandIdempotencyKeys = {
+   ReserveFunds: EventId
+   FailTransfer: EventId
+   SettleFunds: EventId
+}
+
 type DomesticTransferSaga = {
    StartEvent: DomesticTransferSagaStartEvent
    StartedAt: DateTime
@@ -90,6 +97,7 @@ type DomesticTransferSaga = {
    ExpectedSettlementDate: DateTime
    LifeCycle: SagaLifeCycle<Activity>
    ReasonForRetryServiceAck: DomesticTransferFailReason option
+   OutgoingCommandIdempotencyKeys: OutgoingCommandIdempotencyKeys
 } with
 
    member x.OriginatedFromSchedule = x.StartEvent.IsScheduleTransferRequest

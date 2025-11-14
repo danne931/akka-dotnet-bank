@@ -46,6 +46,11 @@ let applyStartEvent
                }
             ]
       }
+      OutgoingCommandIdempotencyKeys = {
+         ReserveFunds = EventId.create ()
+         FailTransfer = EventId.create ()
+         SettleFunds = EventId.create ()
+      }
      }
    | DomesticTransferSagaStartEvent.ScheduleTransferRequest(evt, link) -> {
       Status = DomesticTransferProgress.Scheduled
@@ -63,6 +68,11 @@ let applyStartEvent
          |> SagaLifeCycle.addActivity
                timestamp
                (Activity.WaitForScheduledTransferActivation timeUntil)
+      OutgoingCommandIdempotencyKeys = {
+         ReserveFunds = EventId.create ()
+         FailTransfer = EventId.create ()
+         SettleFunds = EventId.create ()
+      }
      }
 
 let applyEvent
@@ -336,7 +346,12 @@ let onEventPersisted
          }
 
       let msg =
-         cmd |> AccountCommand.DomesticTransfer |> AccountMessage.StateChange
+         {
+            cmd with
+               Id = currentState.OutgoingCommandIdempotencyKeys.ReserveFunds
+         }
+         |> AccountCommand.DomesticTransfer
+         |> AccountMessage.StateChange
 
       registry.AccountActor info.Originator.ParentAccountId <! msg
 
@@ -365,7 +380,7 @@ let onEventPersisted
       sendTransferToProcessorService DomesticTransferServiceAction.ProgressCheck
 
    let updateTransferProgress (progress: DomesticTransferPartnerBankUpdate) =
-      let cmd =
+      let msg =
          UpdateDomesticTransferProgressCommand.create
             correlationId
             info.InitiatedBy
@@ -378,9 +393,6 @@ let onEventPersisted
                      Some p.ExpectedSettlementDate
                   | _ -> None
             }
-
-      let msg =
-         cmd
          |> AccountCommand.UpdateDomesticTransferProgress
          |> AccountMessage.StateChange
 
@@ -394,7 +406,10 @@ let onEventPersisted
          }
 
       let msg =
-         cmd
+         {
+            cmd with
+               Id = currentState.OutgoingCommandIdempotencyKeys.SettleFunds
+         }
          |> AccountCommand.SettleDomesticTransfer
          |> AccountMessage.StateChange
 
@@ -414,10 +429,16 @@ let onEventPersisted
       registry.EmailActor() <! emailMsg
 
    let releaseSenderAccountReservedFunds reason =
-      let msg =
+      let cmd =
          FailDomesticTransferCommand.create correlationId info.InitiatedBy {
             BaseInfo = info
             Reason = reason
+         }
+
+      let msg =
+         {
+            cmd with
+               Id = currentState.OutgoingCommandIdempotencyKeys.FailTransfer
          }
          |> AccountCommand.FailDomesticTransfer
          |> AccountMessage.StateChange

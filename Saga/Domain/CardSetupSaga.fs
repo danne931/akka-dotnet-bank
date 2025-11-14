@@ -55,6 +55,8 @@ type Activity =
          | SendCardSetupFailNotification -> Some(TimeSpan.FromMinutes 4.)
          | LinkProviderCardId -> Some(TimeSpan.FromSeconds 5.)
 
+type OutgoingCommandIdempotencyKeys = { LinkProviderCardId: EventId }
+
 type CardSetupSaga = {
    CardId: CardId
    CardNickname: string option
@@ -72,6 +74,7 @@ type CardSetupSaga = {
    Events: CardSetupSagaEvent list
    Status: CardSetupSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
+   OutgoingCommandIdempotencyKeys: OutgoingCommandIdempotencyKeys
 } with
 
    member x.CardCreateResponse =

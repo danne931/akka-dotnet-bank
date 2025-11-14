@@ -4,6 +4,7 @@ open System
 
 open Bank.Purchase.Domain
 open Lib.Saga
+open Lib.SharedTypes
 
 [<RequireQualifiedAccess>]
 type PurchaseSagaStatus =
@@ -89,6 +90,13 @@ type Activity =
          hash "BufferCardIssuerPurchaseProgress"
       | _ -> hash (string x)
 
+type OutgoingCommandIdempotencyKeys = {
+   ReserveEmployeeCardFunds: EventId
+   ReserveAccountFunds: EventId
+   AcquireCardFailureAcknowledgement: EventId
+   AcquireAccountFailureAcknowledgement: EventId
+}
+
 type PurchaseSaga = {
    PurchaseInfo: PurchaseInfo
    InitialPurchaseIntentAmount: decimal
@@ -100,6 +108,7 @@ type PurchaseSaga = {
    Status: PurchaseSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
    FailReason: PurchaseFailReason option
+   OutgoingCommandIdempotencyKeys: OutgoingCommandIdempotencyKeys
 } with
 
    member x.ReservedEmployeeCardFunds =

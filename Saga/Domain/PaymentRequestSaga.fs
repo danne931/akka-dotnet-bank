@@ -139,6 +139,8 @@ let finishPaymentReminderActivity
          Completed = complete
    }
 
+type OutgoingCommandIdempotencyKeys = { RequestPayment: EventId }
+
 type PaymentRequestSaga = {
    StartEvent: PaymentRequestSagaStartEvent
    StartedAt: DateTime
@@ -147,6 +149,7 @@ type PaymentRequestSaga = {
    PaymentInfo: PaymentRequested
    LifeCycle: SagaLifeCycle<Activity>
    InitiatedBy: Initiator
+   OutgoingCommandIdempotencyKeys: OutgoingCommandIdempotencyKeys
 } with
 
    member x.NextRecurringPaymentDueDate =

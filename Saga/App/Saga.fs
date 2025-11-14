@@ -199,10 +199,10 @@ let sagaHandler
                else
                   notHandled ()
             | StartEvent.EmployeeOnboarding e ->
-               if state.IsEmployeeOnboarding then
-                  EmployeeOnboardingSaga.onStartEventPersisted registry e
-               else
-                  notHandled ()
+               match state with
+               | Saga.EmployeeOnboarding saga ->
+                  EmployeeOnboardingSaga.onStartEventPersisted registry saga e
+               | _ -> notHandled ()
             | StartEvent.CardSetup e ->
                if state.IsCardSetup then
                   CardSetupSaga.onStartEventPersisted registry e
@@ -214,10 +214,10 @@ let sagaHandler
                else
                   notHandled ()
             | StartEvent.PlatformTransfer evt ->
-               if state.IsPlatformTransfer then
-                  PlatformTransferSaga.onStartEventPersisted registry evt
-               else
-                  notHandled ()
+               match state with
+               | Saga.PlatformTransfer saga ->
+                  PlatformTransferSaga.onStartEventPersisted registry saga evt
+               | _ -> notHandled ()
             | StartEvent.PaymentRequest evt ->
                match state with
                | Saga.PaymentRequest saga ->

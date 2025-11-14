@@ -55,6 +55,9 @@ let applyStartEvent
                }
             ]
       }
+      OutgoingCommandIdempotencyKeys = {
+         LinkProviderCardId = EventId.create ()
+      }
    }
 
 let applyEvent
@@ -210,7 +213,7 @@ let onEventPersisted
       registry.EmailActor() <! emailMsg
 
    let linkProviderCardId (res: CardCreateResponse) =
-      let msg =
+      let cmd =
          LinkCardCommand.create {
             Link = {
                CardIssuerName = res.CardIssuerName
@@ -222,6 +225,13 @@ let onEventPersisted
             EmployeeId = updatedState.EmployeeId
             CorrelationId = corrId
             InitiatedBy = updatedState.InitiatedBy
+         }
+
+      let msg =
+         {
+            cmd with
+               Id =
+                  updatedState.OutgoingCommandIdempotencyKeys.LinkProviderCardId
          }
          |> EmployeeCommand.LinkCard
          |> EmployeeMessage.StateChange

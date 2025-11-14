@@ -134,6 +134,8 @@ type EventId =
 
    member x.Value = let (EventId id) = x in id
 
+   static member create() = EventId <| Guid.NewGuid()
+
 type TransactionId =
    | TransactionId of CorrelationId
 

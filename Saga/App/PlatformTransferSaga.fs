@@ -28,6 +28,12 @@ let applyStartEvent
       TransferInfo = e.Data.BaseInfo
       PartnerBankSenderAccountLink = Some partnerBankSenderAccountLink
       PartnerBankRecipientAccountLink = None
+      OutgoingCommandIdempotencyKeys = {
+         ReserveSenderFunds = EventId.create ()
+         FailTransfer = EventId.create ()
+         DepositToRecipientAccount = EventId.create ()
+         SettleFunds = EventId.create ()
+      }
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -55,6 +61,12 @@ let applyStartEvent
       TransferInfo = e.Data.BaseInfo
       PartnerBankSenderAccountLink = None
       PartnerBankRecipientAccountLink = None
+      OutgoingCommandIdempotencyKeys = {
+         ReserveSenderFunds = EventId.create ()
+         FailTransfer = EventId.create ()
+         DepositToRecipientAccount = EventId.create ()
+         SettleFunds = EventId.create ()
+      }
       LifeCycle =
          let timeUntil = e.Data.BaseInfo.ScheduledDate - DateTime.UtcNow
 
@@ -264,6 +276,7 @@ type private TransferEvent = PlatformTransferSagaEvent
 
 let private depositTransfer
    (registry: #IAccountActor)
+   (saga: PlatformTransferSaga)
    (transfer: BaseInternalTransferBetweenOrgsInfo)
    =
    let cmd =
@@ -273,16 +286,23 @@ let private depositTransfer
          { BaseInfo = transfer }
 
    let msg =
-      cmd
+      {
+         cmd with
+            Id = saga.OutgoingCommandIdempotencyKeys.DepositToRecipientAccount
+      }
       |> AccountCommand.DepositTransferBetweenOrgs
       |> AccountMessage.StateChange
 
    registry.AccountActor transfer.Recipient.ParentAccountId <! msg
 
-let onStartEventPersisted registry (evt: TransferStartEvent) =
+let onStartEventPersisted
+   registry
+   (saga: PlatformTransferSaga)
+   (evt: TransferStartEvent)
+   =
    match evt with
    | TransferStartEvent.SenderReservedFunds(e, _) ->
-      depositTransfer registry e.Data.BaseInfo
+      depositTransfer registry saga e.Data.BaseInfo
    | TransferStartEvent.ScheduleTransferRequest _ -> ()
 
 type OperationEnv = {
@@ -316,6 +336,7 @@ let onEventPersisted
             OriginatedFromSchedule = true
             OriginatedFromPaymentRequest = transfer.FromPaymentRequest
          } with
+            Id = currentState.OutgoingCommandIdempotencyKeys.ReserveSenderFunds
             CorrelationId = correlationId
       }
 
@@ -326,7 +347,8 @@ let onEventPersisted
 
       registry.AccountActor transfer.Sender.ParentAccountId <! msg
 
-   let depositTransfer () = depositTransfer registry transfer
+   let depositTransfer () =
+      depositTransfer registry currentState transfer
 
    let transferSentEmail () =
       let msg =
@@ -375,7 +397,7 @@ let onEventPersisted
       | _ -> ()
 
    let settleTransfer settlementId =
-      let msg =
+      let cmd =
          SettleInternalTransferBetweenOrgsCommand.create
             correlationId
             transfer.InitiatedBy
@@ -383,6 +405,12 @@ let onEventPersisted
                BaseInfo = transfer
                SettlementId = settlementId
             }
+
+      let msg =
+         {
+            cmd with
+               Id = currentState.OutgoingCommandIdempotencyKeys.SettleFunds
+         }
          |> AccountCommand.SettleInternalTransferBetweenOrgs
          |> AccountMessage.StateChange
 
@@ -421,7 +449,10 @@ let onEventPersisted
                { BaseInfo = transfer; Reason = reason }
 
          let msg =
-            cmd
+            {
+               cmd with
+                  Id = currentState.OutgoingCommandIdempotencyKeys.FailTransfer
+            }
             |> AccountCommand.FailInternalTransferBetweenOrgs
             |> AccountMessage.StateChange
 
@@ -456,7 +487,11 @@ let onEventPersisted
                      { BaseInfo = transfer; Reason = reason }
 
                let msg =
-                  cmd
+                  {
+                     cmd with
+                        Id =
+                           currentState.OutgoingCommandIdempotencyKeys.FailTransfer
+                  }
                   |> AccountCommand.FailInternalTransferBetweenOrgs
                   |> AccountMessage.StateChange
 

@@ -6,6 +6,7 @@ open Akkling
 open Bank.Account.Domain
 open EmailMessage
 open Lib.Saga
+open Lib.SharedTypes
 open BillingSaga
 open BankActorRegistry
 
@@ -42,6 +43,10 @@ let applyStartEvent
                   Attempts = 1
                }
             ]
+      }
+      OutgoingCommandIdempotencyKeys = {
+         MaintenanceFee = EventId.create ()
+         SkipMaintenanceFee = EventId.create ()
       }
    }
 
@@ -166,22 +171,36 @@ let onEventPersisted
          processing.PrimaryCheckingAccountId, parentAccountId, orgId
 
       if processing.MaintenanceFeeCriteria.CanSkipFee then
-         let msg =
+         let cmd =
             SkipMaintenanceFeeCommand.create
                compositeId
                corrId
                criteria
                updatedState.BillingCycleDate
+
+         let msg =
+            {
+               cmd with
+                  Id =
+                     updatedState.OutgoingCommandIdempotencyKeys.SkipMaintenanceFee
+            }
             |> AccountCommand.SkipMaintenanceFee
             |> AccountMessage.StateChange
 
          registry.AccountActor parentAccountId <! msg
       else
-         let msg =
+         let cmd =
             MaintenanceFeeCommand.create
                compositeId
                corrId
                updatedState.BillingCycleDate
+
+         let msg =
+            {
+               cmd with
+                  Id =
+                     updatedState.OutgoingCommandIdempotencyKeys.MaintenanceFee
+            }
             |> AccountCommand.MaintenanceFee
             |> AccountMessage.StateChange
 

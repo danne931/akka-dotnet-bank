@@ -86,6 +86,13 @@ type Activity =
          hash "WaitForScheduledTransferActivation"
       | _ -> hash (string x)
 
+type OutgoingCommandIdempotencyKeys = {
+   ReserveSenderFunds: EventId
+   FailTransfer: EventId
+   DepositToRecipientAccount: EventId
+   SettleFunds: EventId
+}
+
 type PlatformTransferSaga = {
    StartEvent: PlatformTransferSagaStartEvent
    StartedAt: DateTime
@@ -95,6 +102,7 @@ type PlatformTransferSaga = {
    LifeCycle: SagaLifeCycle<Activity>
    PartnerBankSenderAccountLink: PartnerBankInternalAccountLink option
    PartnerBankRecipientAccountLink: PartnerBankInternalAccountLink option
+   OutgoingCommandIdempotencyKeys: OutgoingCommandIdempotencyKeys
 } with
 
    member x.SyncedToPartnerBank =

@@ -28,6 +28,10 @@ let applyStartEvent
       Events = []
       Application = evt.Data
       ApplicationRequiresRevision = None
+      OutgoingCommandIdempotencyKeys = {
+         InitPrimaryCheckingAccount = EventId.create ()
+         FinishOrgOnboarding = EventId.create ()
+      }
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -458,12 +462,19 @@ let onEventPersisted
       =
       let parentAccountId = application.ParentAccountId
 
-      let msg =
+      let cmd =
          InitializePrimaryCheckingAccountCommand.create {
             OrgId = orgId
             CorrelationId = corrId
             ParentAccountId = parentAccountId
             PartnerBankLink = partnerBankLink
+         }
+
+      let msg =
+         {
+            cmd with
+               Id =
+                  updatedState.OutgoingCommandIdempotencyKeys.InitPrimaryCheckingAccount
          }
          |> AccountCommand.InitializePrimaryCheckingAccount
          |> AccountMessage.StateChange
@@ -485,12 +496,19 @@ let onEventPersisted
       operationEnv.sendEventToSelf orgId corrId asyncEvt
 
    let activateOrg () =
-      let msg =
+      let cmd =
          FinishOrgOnboardingCommand.create {
             OrgId = orgId
             ParentAccountId = application.ParentAccountId
             CorrelationId = corrId
             InitiatedBy = Initiator.System
+         }
+
+      let msg =
+         {
+            cmd with
+               Id =
+                  updatedState.OutgoingCommandIdempotencyKeys.FinishOrgOnboarding
          }
          |> OrgCommand.FinishOrgOnboarding
          |> OrgMessage.StateChange

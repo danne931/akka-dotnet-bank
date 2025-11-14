@@ -58,6 +58,11 @@ type Activity =
          | ProcessMaintenanceFee -> Some(TimeSpan.FromSeconds 10.)
          | SendBillingEmail -> Some(TimeSpan.FromMinutes 4.)
 
+type OutgoingCommandIdempotencyKeys = {
+   MaintenanceFee: EventId
+   SkipMaintenanceFee: EventId
+}
+
 type BillingSaga = {
    CorrelationId: CorrelationId
    ParentAccountId: ParentAccountId
@@ -70,4 +75,5 @@ type BillingSaga = {
    Events: BillingSagaEvent list
    Status: BillingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
+   OutgoingCommandIdempotencyKeys: OutgoingCommandIdempotencyKeys
 }

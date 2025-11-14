@@ -58,6 +58,10 @@ let applyStartEvent
                }
             ]
       }
+      OutgoingCommandIdempotencyKeys = {
+         ApproveAccess = EventId.create ()
+         CreateCard = EventId.create ()
+      }
      }
    | EmployeeOnboardingSagaStartEvent.AccountOwnerCreated evt -> {
       Status = EmployeeOnboardingSagaStatus.InProgress
@@ -94,6 +98,10 @@ let applyStartEvent
                }
             ]
       }
+      OutgoingCommandIdempotencyKeys = {
+         ApproveAccess = EventId.create ()
+         CreateCard = EventId.create ()
+      }
      }
    | EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored o -> {
       Status = EmployeeOnboardingSagaStatus.InProgress
@@ -129,6 +137,10 @@ let applyStartEvent
                   Attempts = 1
                }
             ]
+      }
+      OutgoingCommandIdempotencyKeys = {
+         ApproveAccess = EventId.create ()
+         CreateCard = EventId.create ()
       }
      }
 
@@ -264,6 +276,7 @@ let stateTransition
 // event coming from the Org actor.
 let onStartEventPersisted
    (registry: #IOrgActor & #IEmailActor)
+   (saga: EmployeeOnboardingSaga)
    (evt: EmployeeOnboardingSagaStartEvent)
    =
    match evt with
@@ -279,7 +292,7 @@ let onStartEventPersisted
       registry.EmailActor() <! emailMsg
    | EmployeeOnboardingSagaStartEvent.EmployeeCreated e ->
       if e.Data.OrgRequiresEmployeeInviteApproval.IsSome then
-         let msg =
+         let cmd =
             ApproveAccessCommand.create
                (EmployeeId.fromEntityId e.EntityId, e.OrgId)
                e.InitiatedBy
@@ -288,6 +301,12 @@ let onStartEventPersisted
                   Name = $"{e.Data.FirstName} {e.Data.LastName}"
                   Reference = None
                }
+
+         let msg =
+            {
+               cmd with
+                  Id = saga.OutgoingCommandIdempotencyKeys.ApproveAccess
+            }
             |> InviteEmployee
             |> ApprovableCommand.PerCommand
             |> OrgMessage.ApprovableRequest
@@ -338,7 +357,7 @@ let onEventPersisted
       registry.EmailActor() <! emailMsg
 
    let requestAccessApproval () =
-      let msg =
+      let cmd =
          ApproveAccessCommand.create
             (employeeId, orgId)
             updatedState.InitiatedBy
@@ -347,6 +366,12 @@ let onEventPersisted
                Name = employeeName
                Reference = None
             }
+
+      let msg =
+         {
+            cmd with
+               Id = updatedState.OutgoingCommandIdempotencyKeys.ApproveAccess
+         }
          |> InviteEmployee
          |> ApprovableCommand.PerCommand
          |> OrgMessage.ApprovableRequest
@@ -354,7 +379,7 @@ let onEventPersisted
       registry.OrgActor orgId <! msg
 
    let associateCardWithEmployee (info: EmployeeInviteSupplementaryCardInfo) =
-      let msg =
+      let cmd =
          CreateCardCommand.create {
             AccountId = info.LinkedAccountId
             DailyPurchaseLimit = Some info.DailyPurchaseLimit
@@ -368,6 +393,12 @@ let onEventPersisted
             CardType = CardType.Debit
             InitiatedBy = updatedState.InitiatedBy
             OriginatedFromEmployeeOnboarding = Some corrId
+         }
+
+      let msg =
+         {
+            cmd with
+               Id = updatedState.OutgoingCommandIdempotencyKeys.CreateCard
          }
          |> EmployeeCommand.CreateCard
          |> EmployeeMessage.StateChange

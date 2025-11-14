@@ -69,6 +69,11 @@ type Activity =
          | SendEmployeeInviteNotification
          | RequestAccessApproval -> Some(TimeSpan.FromSeconds 5.)
 
+type OutgoingCommandIdempotencyKeys = {
+   ApproveAccess: EventId
+   CreateCard: EventId
+}
+
 type EmployeeOnboardingSaga = {
    EmployeeId: EmployeeId
    OrgId: OrgId
@@ -83,6 +88,7 @@ type EmployeeOnboardingSaga = {
    Events: EmployeeOnboardingSagaEvent list
    Status: EmployeeOnboardingSagaStatus
    LifeCycle: SagaLifeCycle<Activity>
+   OutgoingCommandIdempotencyKeys: OutgoingCommandIdempotencyKeys
 } with
 
    member x.IsWaitingForInviteConfirmation =

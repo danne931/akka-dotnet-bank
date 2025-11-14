@@ -101,6 +101,7 @@ let applyStartEvent (e: PaymentRequestSagaStartEvent) (timestamp: DateTime) =
          PaymentRequestSagaStatus.InProgress PaymentRequestStatus.Requested
       PaymentInfo = evt.Data
       InitiatedBy = evt.InitiatedBy
+      OutgoingCommandIdempotencyKeys = { RequestPayment = EventId.create () }
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
@@ -375,8 +376,14 @@ let onEventPersisted
       (AppSaga.Saga.PaymentRequest state).AsDTO
 
    let scheduleNextRecurringPayment (dueDate: DateTime) =
-      let nextPaymentRequestMsg =
+      let cmd =
          RequestPaymentCommand.fromRecurring state.InitiatedBy payment dueDate
+
+      let nextPaymentRequestMsg =
+         {
+            cmd with
+               Id = state.OutgoingCommandIdempotencyKeys.RequestPayment
+         }
          |> AccountCommand.RequestPayment
          |> AccountMessage.StateChange
 

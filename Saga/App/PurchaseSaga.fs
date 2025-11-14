@@ -39,6 +39,12 @@ let applyStartEvent
             ]
       }
       FailReason = None
+      OutgoingCommandIdempotencyKeys = {
+         ReserveEmployeeCardFunds = EventId.create ()
+         ReserveAccountFunds = EventId.create ()
+         AcquireCardFailureAcknowledgement = EventId.create ()
+         AcquireAccountFailureAcknowledgement = EventId.create ()
+      }
      }
    // NOTE:
    // It is sometimes possible to receive a purchase progress update from Lithic without
@@ -61,6 +67,12 @@ let applyStartEvent
          Status = PurchaseSagaStatus.InProgress
          LifeCycle = SagaLifeCycle.empty
          FailReason = None
+         OutgoingCommandIdempotencyKeys = {
+            ReserveEmployeeCardFunds = EventId.create ()
+            ReserveAccountFunds = EventId.create ()
+            AcquireCardFailureAcknowledgement = EventId.create ()
+            AcquireAccountFailureAcknowledgement = EventId.create ()
+         }
       }
 
       if
@@ -447,18 +459,31 @@ let private sendPurchaseEmail
 
    registry.EmailActor() <! emailMsg
 
-let private reserveCardFunds (registry: #IEmployeeActor) purchase =
+let private reserveCardFunds
+   (registry: #IEmployeeActor)
+   (id: EventId)
+   purchase
+   =
    let msg =
-      PurchaseIntentCommand.create purchase
+      {
+         PurchaseIntentCommand.create purchase with
+            Id = id
+      }
       |> EmployeeCommand.PurchaseIntent
       |> EmployeeMessage.StateChange
 
    registry.EmployeeActor purchase.EmployeeId <! msg
 
-let private reserveAccountFunds (registry: #IAccountActor) purchase =
+let private reserveAccountFunds
+   (registry: #IAccountActor)
+   (id: EventId)
+   purchase
+   =
    let msg =
-      purchase
-      |> DebitCommand.fromPurchase
+      {
+         DebitCommand.fromPurchase purchase with
+            Id = id
+      }
       |> AccountCommand.Debit
       |> AccountMessage.StateChange
 
@@ -476,8 +501,15 @@ let onStartEventPersisted
    | PurchaseSagaStartEvent.PurchaseIntent _ -> ()
    | PurchaseSagaStartEvent.PurchaseProgress(purchase, _) ->
       if saga.Status.IsInProgress then
-         reserveCardFunds registry purchase
-         reserveAccountFunds registry purchase
+         reserveCardFunds
+            registry
+            saga.OutgoingCommandIdempotencyKeys.ReserveEmployeeCardFunds
+            purchase
+
+         reserveAccountFunds
+            registry
+            saga.OutgoingCommandIdempotencyKeys.ReserveAccountFunds
+            purchase
 
 let onEventPersisted
    (broadcaster: SignalRBroadcast.SignalRBroadcast)
@@ -495,16 +527,29 @@ let onEventPersisted
       (AppSaga.Saga.Purchase updatedState).AsDTO
 
    let acquireCardFailureAcknowledgement reason =
-      let msg =
+      let cmd =
          FailPurchaseCommand.create { Info = purchaseInfo; Reason = reason }
+
+      let msg =
+         {
+            cmd with
+               Id =
+                  updatedState.OutgoingCommandIdempotencyKeys.AcquireCardFailureAcknowledgement
+         }
          |> EmployeeCommand.FailPurchase
          |> EmployeeMessage.StateChange
 
       registry.EmployeeActor purchaseInfo.EmployeeId <! msg
 
    let acquireAccountFailureAcknowledgement reason =
+      let cmd = FailDebitCommand.fromPurchase purchaseInfo reason
+
       let msg =
-         FailDebitCommand.fromPurchase purchaseInfo reason
+         {
+            cmd with
+               Id =
+                  updatedState.OutgoingCommandIdempotencyKeys.AcquireAccountFailureAcknowledgement
+         }
          |> AccountCommand.FailDebit
          |> AccountMessage.StateChange
 
@@ -524,18 +569,29 @@ let onEventPersisted
       registry.EmailActor() <! emailMsg
 
    let settlePurchaseWithAccount clearing =
+      let cmd = SettleDebitCommand.create purchaseInfo clearing
+
       let msg =
-         SettleDebitCommand.create purchaseInfo clearing
+         {
+            cmd with
+               Id = EventId clearing.PurchaseClearedId.Value
+         }
          |> AccountCommand.SettleDebit
          |> AccountMessage.StateChange
 
       registry.AccountActor purchaseInfo.ParentAccountId <! msg
 
    let settlePurchaseWithCard clearing =
-      let msg =
+      let cmd =
          SettlePurchaseWithCardCommand.create {
             Info = purchaseInfo
             Clearing = clearing
+         }
+
+      let msg =
+         {
+            cmd with
+               Id = EventId clearing.PurchaseClearedId.Value
          }
          |> EmployeeCommand.SettlePurchase
          |> EmployeeMessage.StateChange
@@ -598,9 +654,15 @@ let onEventPersisted
          | Activity.ReserveEmployeeCardFunds
          | Activity.ReserveAccountFunds -> ()
          | Activity.ReserveEmployeeCardFundsBypassingAuth ->
-            reserveCardFunds registry purchaseInfo
+            reserveCardFunds
+               registry
+               updatedState.OutgoingCommandIdempotencyKeys.ReserveEmployeeCardFunds
+               purchaseInfo
          | Activity.ReserveAccountFundsBypassingAuth ->
-            reserveAccountFunds registry purchaseInfo
+            reserveAccountFunds
+               registry
+               updatedState.OutgoingCommandIdempotencyKeys.ReserveAccountFunds
+               purchaseInfo
          | Activity.SettlePurchaseWithCard clearing ->
             settlePurchaseWithCard clearing
          | Activity.SettlePurchaseWithAccount clearing ->
