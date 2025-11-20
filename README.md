@@ -1,4 +1,4 @@
-**Aims to be the swiss army knife for your business banking operations.**
+**Exploring business banking with F#.**
 
 ### Key Technologies
 1. Akka.NET: [actor model](https://getakka.net/articles/concepts/actor-systems.html), [event sourcing](https://getakka.net/articles/persistence/architecture.html), [cluster sharded entities](https://getakka.net/articles/clustering/cluster-sharding.html)
@@ -33,6 +33,9 @@
 9. Monitor employee purchases and other activities on the platform
 10. Billing statements issued for each billing cycle
 11. Emails sent for payment requests, employee invites, purchase declined, etc.
+
+### Join me in this YouTube video where I explore coordinating long-running workflows in Akka.NET:
+[![YouTube Video Thumbnail](https://img.youtube.com/vi/mf2HOgjh5O8/maxresdefault.jpg)](https://www.youtube.com/watch?v=mf2HOgjh5O8)
 
 ### Demonstration
 #### Automatic Balance Management
@@ -91,4 +94,4 @@ by **Enrico Buonanno**.
 The first iteration of this project [(see CSharpWithLanguageExt directory)](https://github.com/danne931/akka-dotnet-bank/tree/main/Archive/CSharpWithLanguageExt) expands on **Enrico Buonanno**'s banking account example [actor](https://github.com/la-yumba/functional-csharp-code-2/blob/master/Examples/Chapter19/Boc/AccountProcess.cs) to include
 additional business use cases as well as integration with [EventStoreDB](https://www.eventstore.com/eventstoredb) and C#'s functional programming toolkit, [language-ext](https://github.com/louthy/language-ext).
 
-The second iteration [(see FSharpWithAkka directory)](https://github.com/danne931/akka-dotnet-bank/tree/main/Archive/FSharpWithAkka) is close to a one-to-one representation of the CSharpWithLanguageExt directory, with all use cases rewritten in F#.  I saw that [F#'s type inference](https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/type-inference), [computation expressions](https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/computation-expressions) and immutable data structures made writing programs with typed functional programming more second nature than with C# so I decided to continue with it for the final iteration.
+The second iteration [(see FSharpWithAkka directory)](https://github.com/danne931/akka-dotnet-bank/tree/main/Archive/FSharpWithAkka) is close to a one-to-one representation of the CSharpWithLanguageExt directory, with all use cases rewritten in F#.  I saw that [F#'s type inference](https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/type-inference), [computation expressions](https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/computation-expressions) and immutable data structures made writing programs with typed functional programming more second nature than with C# so I decided to continue with it for future development.
