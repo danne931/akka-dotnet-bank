@@ -1069,6 +1069,12 @@ SELECT add_updated_at_column_and_trigger('saga');
 CREATE INDEX saga_status_idx ON saga(org_id, status);
 CREATE INDEX saga_activity_in_progress_count_idx ON saga(activity_in_progress_count);
 
+CREATE INDEX saga_alarm_clock_idx
+ON saga(status, updated_at, inactivity_timeout)
+WHERE
+  inactivity_timeout IS NOT NULL
+  AND status IN ('Scheduled', 'InProgress', 'Compensating');
+
 COMMENT ON COLUMN saga.inactivity_timeout IS
 'A saga alarm clock actor will periodically check this state, wake up the
 corresponding saga actor which then evaluates remaining in-progress activities.

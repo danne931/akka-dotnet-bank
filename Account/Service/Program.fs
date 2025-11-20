@@ -188,7 +188,10 @@ builder.Services.AddAkka(
                         persistenceId
                         (typed controllerRef))),
             ClusterMetadata.employeeShardRegion.messageExtractor,
-            ShardOptions(Role = ClusterMetadata.roles.employee)
+            ShardOptions(
+               RememberEntities = true,
+               Role = ClusterMetadata.roles.employee
+            )
          )
          .WithShardRegion<ActorMarker.Saga>(
             ClusterMetadata.sagaShardRegion.name,
