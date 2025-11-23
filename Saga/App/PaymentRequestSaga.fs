@@ -350,10 +350,11 @@ let onStartEventPersisted
 
       e.Data.RecurringPaymentReference
       |> Option.iter (fun info ->
-         sendEventToPaymentSaga
-            e.OrgId
-            info.OriginPaymentId
-            PaymentRequestSagaEvent.PaymentSagaStartedForNextRecurringPayment)
+         if info.Settings.PaymentsRequestedCount > 1 then
+            sendEventToPaymentSaga
+               e.OrgId
+               info.OriginPaymentId
+               PaymentRequestSagaEvent.PaymentSagaStartedForNextRecurringPayment)
 
 type OperationEnv = {
    sendEventToPaymentSaga:
