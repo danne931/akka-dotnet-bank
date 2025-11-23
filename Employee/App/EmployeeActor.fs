@@ -155,7 +155,7 @@ let private closeEmployeeCards
          }
       }
 
-let private onPersist
+let private notifySaga
    (registry: #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (mailbox: Eventsourced<obj>)
    (state: EmployeeSnapshot)
@@ -260,9 +260,6 @@ let private onPersist
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
       registry.SagaGuaranteedDeliveryActor() <! msg
-
-      if not e.Data.Info.AuthorizationType.IsBypassAuth then
-         mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
    | EmployeeEvent.PurchaseProgress e ->
       let evt = PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress e.Data.Info
 
@@ -287,16 +284,70 @@ let private onPersist
       registry.SagaGuaranteedDeliveryActor() <! msg
    | _ -> ()
 
+type private PurchaseAuthTimeout() = class end
+
 let actorProps
-   (registry: #IAccountActor)
+   (registry: #IAccountActor & #ISagaGuaranteedDeliveryActor)
    (broadcaster: SignalRBroadcast)
-   (guaranteedDeliveryConsumerControllerRef:
-      IActorRef<ConsumerController.IConsumerCommand<EmployeeMessage>>)
+   (onLifeCycleEvent: Eventsourced<obj> -> Employee -> obj -> Effect<obj>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
 
-      let rec loop (stateOpt: EmployeeSnapshot option) = actor {
+      let rec waitForPurchaseAuthResponseByAccountActor
+         replyTo
+         state
+         (evt: EmployeeEvent)
+         =
+         let authTimeout =
+            mailbox.Schedule
+               (TimeSpan.FromSeconds 4.5)
+               mailbox.Self
+               (PurchaseAuthTimeout())
+
+         actor {
+            let! msg = mailbox.Receive()
+
+            match box msg with
+            | Persisted mailbox (:? EmployeeEvent as evt) ->
+               let state = Employee.applyEvent state evt
+               let employee = state.Info
+
+               broadcaster.employeeEventPersisted evt employee
+
+               notifySaga registry mailbox state evt
+
+               replyTo <! PurchaseAuthorizationStatus.Approved
+
+               mailbox.UnstashAll()
+
+               return! operating (Some state)
+            | :? PurchaseAuthorizationStatus as authStatusFromAccount ->
+               authTimeout.Cancel()
+
+               match authStatusFromAccount with
+               | PurchaseAuthorizationStatus.Approved ->
+                  return! Persist(box evt)
+               | _ ->
+                  replyTo <! authStatusFromAccount
+
+                  mailbox.UnstashAll()
+
+                  return! operating (Some state)
+            | :? ConfirmableMessageEnvelope
+            | :? EmployeeMessage -> mailbox.Stash()
+            | :? PurchaseAuthTimeout ->
+               logWarning
+                  mailbox
+                  "Purchase Auth Timeout waiting for Account Actor response"
+
+               replyTo <! PurchaseAuthorizationStatus.VelocityExceeded
+
+               return! operating (Some state)
+            | other -> return onLifeCycleEvent mailbox state.Info other
+         }
+
+      and operating (stateOpt: EmployeeSnapshot option) = actor {
          let! msg = mailbox.Receive()
 
          let state = stateOpt |> Option.defaultValue EmployeeSnapshot.Empty
@@ -313,10 +364,10 @@ let actorProps
 
             broadcaster.employeeEventPersisted evt employee
 
-            onPersist registry mailbox state evt
+            notifySaga registry mailbox state evt
 
-            return! loop <| Some state
-         | :? SnapshotOffer as o -> return! loop <| Some(unbox o.Snapshot)
+            return! operating (Some state)
+         | :? SnapshotOffer as o -> return! operating <| Some(unbox o.Snapshot)
          | :? ConsumerController.Delivery<EmployeeMessage> as msg ->
             GuaranteedDelivery.ack msg
 
@@ -364,7 +415,8 @@ let actorProps
                      Info.Status = EmployeeStatus.ReadyForDelete
                }
 
-               return! loop (Some newState) <@> DeleteMessages Int64.MaxValue
+               return!
+                  operating (Some newState) <@> DeleteMessages Int64.MaxValue
             | EmployeeMessage.AuthorizePurchase auth ->
                match state.Info.Cards.TryFind auth.CardId with
                | None ->
@@ -442,15 +494,13 @@ let actorProps
                      |> AccountCommand.Debit
                      |> AccountMessage.StateChange
 
-                  let! (authStatus: PurchaseAuthorizationStatus) =
-                     accountRef <? msg
+                  accountRef <! msg
 
-                  match authStatus with
-                  | PurchaseAuthorizationStatus.Approved ->
-                     return! Persist(box evt)
-                  | _ ->
-                     mailbox.Sender() <! authStatus
-                     return ignored ()
+                  return
+                     waitForPurchaseAuthResponseByAccountActor
+                        (mailbox.Sender())
+                        state
+                        evt
                | Error err ->
                   handleValidationError cmd err
                   return ignored ()
@@ -475,53 +525,61 @@ let actorProps
                               date > DateTime.UtcNow.AddHours -24)
                   })
 
-               return! loop stateOpt
+               return! operating stateOpt
          // Event replay on actor start
          | :? EmployeeEvent as e when mailbox.IsRecovering() ->
-            return! loop <| Some(Employee.applyEvent state e)
-         | msg ->
-            PersistentActorEventHandler.handleEvent
-               {
-                  PersistentActorEventHandler.init with
-                     LifecyclePreStart =
-                        fun _ ->
-                           logDebug mailbox $"EMPLOYEE PRESTART"
-
-                           // Start Guaranteed Delivery Consumer Controller
-                           guaranteedDeliveryConsumerControllerRef
-                           <! new ConsumerController.Start<EmployeeMessage>(
-                              untyped mailbox.Self
-                           )
-
-                           mailbox.ScheduleRepeatedly
-                              (TimeSpan.FromHours 4)
-                              (TimeSpan.FromHours 4)
-                              mailbox.Self
-                              EmployeeMessage.PruneIdempotencyChecker
-                           |> ignore
-
-                           ignored ()
-                     LifecyclePostStop =
-                        fun _ ->
-                           logDebug mailbox $"EMPLOYEE POSTSTOP"
-                           ignored ()
-                     DeleteMessagesSuccess =
-                        fun _ ->
-                           if
-                              employee.Status = EmployeeStatus.ReadyForDelete
-                           then
-                              logDebug mailbox "<Passivate Employee Actor>"
-                              passivate ()
-                           else
-                              ignored ()
-               }
-               mailbox
-               msg
+            return! operating <| Some(Employee.applyEvent state e)
+         | msg -> return onLifeCycleEvent mailbox employee msg
       }
 
-      loop None
+      operating None
 
    propsPersist handler
+
+let private handleLifeCycleEvent
+   (guaranteedDeliveryConsumerControllerRef:
+      IActorRef<ConsumerController.IConsumerCommand<EmployeeMessage>>)
+   (mailbox: Eventsourced<obj>)
+   (employee: Employee)
+   (msg: obj)
+   =
+   let logDebug = logDebug mailbox
+
+   PersistentActorEventHandler.handleEvent
+      {
+         PersistentActorEventHandler.init with
+            LifecyclePreStart =
+               fun _ ->
+                  logDebug "<PreStart Employee Actor>"
+
+                  // Start Guaranteed Delivery Consumer Controller
+                  guaranteedDeliveryConsumerControllerRef
+                  <! new ConsumerController.Start<EmployeeMessage>(
+                     untyped mailbox.Self
+                  )
+
+                  mailbox.ScheduleRepeatedly
+                     TimeSpan.Zero
+                     (TimeSpan.FromHours 4)
+                     mailbox.Self
+                     EmployeeMessage.PruneIdempotencyChecker
+                  |> ignore
+
+                  ignored ()
+            LifecyclePostStop =
+               fun _ ->
+                  logDebug "<PostStop Employee Actor>"
+                  ignored ()
+            DeleteMessagesSuccess =
+               fun _ ->
+                  if employee.Status = EmployeeStatus.ReadyForDelete then
+                     logDebug "<Passivate Employee Actor>"
+                     passivate ()
+                  else
+                     ignored ()
+      }
+      mailbox
+      msg
 
 let initProps
    registry
@@ -531,7 +589,11 @@ let initProps
    (consumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<EmployeeMessage>>)
    =
-   let childProps = actorProps registry broadcaster consumerControllerRef
+   let childProps =
+      actorProps
+         registry
+         broadcaster
+         (handleLifeCycleEvent consumerControllerRef)
 
    PersistenceSupervisor.create {
       EnvConfig = supervisorEnvConfig

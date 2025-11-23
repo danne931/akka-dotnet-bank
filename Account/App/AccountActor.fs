@@ -158,7 +158,7 @@ let private onValidationError
    | _ -> None
    |> ignore
 
-let onPersisted
+let notifySaga
    (registry: #IEmailActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (getRetryableTransfers:
       CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
@@ -430,8 +430,7 @@ let actorProps
    (broadcaster: SignalRBroadcast)
    (getDomesticTransfersRetryableUponRecipientEdit:
       CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
-   (guaranteedDeliveryConsumerControllerRef:
-      IActorRef<ConsumerController.IConsumerCommand<AccountMessage>>)
+   (onLifeCycleEvent: Eventsourced<obj> -> obj -> Effect<obj>)
    =
    let handler (mailbox: Eventsourced<obj>) =
       let logError = logError mailbox
@@ -454,7 +453,7 @@ let actorProps
                state.VirtualAccounts.TryFind evt.AccountId
                |> Option.iter (broadcaster.accountEventPersisted evt)
 
-            onPersisted
+            notifySaga
                registry
                getDomesticTransfersRetryableUponRecipientEdit
                mailbox
@@ -641,45 +640,54 @@ let actorProps
          // Event replay on actor start
          | :? AccountEvent as e when mailbox.IsRecovering() ->
             return! loop <| Some(ParentAccount.applyEvent state e)
-         | msg ->
-            PersistentActorEventHandler.handleEvent
-               {
-                  PersistentActorEventHandler.init with
-                     (*
-                     DeleteMessagesSuccess =
-                        fun _ ->
-                           if account.Status = AccountStatus.ReadyForDelete then
-                              logDebug mailbox "<Passivate>"
-                              passivate ()
-                           else
-                              ignored ()
-                     *)
-                     LifecyclePreStart =
-                        fun _ ->
-                           logDebug mailbox "ACCOUNT PRESTART"
-
-                           // Start Guaranteed Delivery Consumer Controller
-                           guaranteedDeliveryConsumerControllerRef
-                           <! new ConsumerController.Start<AccountMessage>(
-                              untyped mailbox.Self
-                           )
-
-                           mailbox.ScheduleRepeatedly
-                              (TimeSpan.FromHours 4)
-                              (TimeSpan.FromHours 4)
-                              mailbox.Self
-                              AccountMessage.PruneIdempotencyChecker
-                           |> ignore
-
-                           ignored ()
-               }
-               mailbox
-               msg
+         | msg -> onLifeCycleEvent mailbox msg
       }
 
       loop None
 
    propsPersist handler
+
+let private handleLifeCycleEvent
+   (guaranteedDeliveryConsumerControllerRef:
+      IActorRef<ConsumerController.IConsumerCommand<AccountMessage>>)
+   (mailbox: Eventsourced<obj>)
+   (msg: obj)
+   =
+   let logDebug = logDebug mailbox
+
+   PersistentActorEventHandler.handleEvent
+      {
+         PersistentActorEventHandler.init with
+            (*
+            DeleteMessagesSuccess =
+               fun _ ->
+                  if account.Status = AccountStatus.ReadyForDelete then
+                     logDebug "<Passivate>"
+                     passivate ()
+                  else
+                     ignored ()
+            *)
+            LifecyclePreStart =
+               fun _ ->
+                  logDebug "<PreStart Account Actor>"
+
+                  // Start Guaranteed Delivery Consumer Controller
+                  guaranteedDeliveryConsumerControllerRef
+                  <! new ConsumerController.Start<AccountMessage>(
+                     untyped mailbox.Self
+                  )
+
+                  mailbox.ScheduleRepeatedly
+                     TimeSpan.Zero
+                     (TimeSpan.FromHours 4)
+                     mailbox.Self
+                     AccountMessage.PruneIdempotencyChecker
+                  |> ignore
+
+                  ignored ()
+      }
+      mailbox
+      msg
 
 let initProps
    registry
@@ -696,7 +704,7 @@ let initProps
          registry
          broadcaster
          getDomesticTransfersRetryableUponRecipientEdit
-         guaranteedDeliveryConsumerControllerRef
+         (handleLifeCycleEvent guaranteedDeliveryConsumerControllerRef)
 
    PersistenceSupervisor.create {
       EnvConfig = supervisorEnvConfig

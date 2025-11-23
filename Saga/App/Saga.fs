@@ -259,7 +259,7 @@ let sagaHandler
                                  asyncEvt
                                  |> Async.map (Message.orgOnboard orgId corrId)
 
-                              mailbox.Parent() <!| asyncMsg
+                              retype mailbox.Self <!| asyncMsg
                      }
                      priorState
                      state
@@ -292,7 +292,7 @@ let sagaHandler
                               state.PurchaseInfo.CorrelationId
                               evt
 
-                        mailbox.Parent() <! msg)
+                        mailbox.Self <! msg)
                      registry
                      priorState
                      state
@@ -309,7 +309,7 @@ let sagaHandler
                               transfer.TransferId.AsCorrelationId
                               evt
 
-                        mailbox.Parent() <! msg
+                        mailbox.Self <! msg
                }
 
                match priorState, state with
@@ -332,7 +332,7 @@ let sagaHandler
                               transfer.TransferId.AsCorrelationId
                               evt
 
-                        mailbox.Parent() <! msg
+                        mailbox.Self <! msg
                }
 
                match priorState, state with

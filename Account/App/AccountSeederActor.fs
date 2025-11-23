@@ -481,6 +481,7 @@ let overwriteHistoricalAccountEventTimestamps () = taskResultOption {
 }
 
 let private expectedDomesticTransfersCount = 3
+let private numberOfMonthsToGenerateDataFor = 3
 
 // It takes a few minutes of interaction with mock partner bank for domestic transfers to transition from pending to settled.
 // Return None and try again after a few seconds until the domestic transfers are settled.
@@ -573,7 +574,7 @@ let mockAccountOwnerCmd =
          EmployeeId = myOrg.AccountOwnerId
          ParentAccountId = myOrg.ParentAccountId
       } with
-         Timestamp = startOfMonth.AddMonths -3
+         Timestamp = startOfMonth.AddMonths -numberOfMonthsToGenerateDataFor
    }
 
 let mockAccountOwner: Initiator = {
@@ -712,7 +713,7 @@ let mockAccounts =
 let accountInitialDeposits =
    Map [
       apCheckingAccountId, 2_500_931m
-      myOrg.OpsAccountId, 1_391_100m
+      myOrg.OpsAccountId, 53_931_100m
       myOrg.SavingsAccountId, 70_000m
 
       for org in otherOrgs do
@@ -1415,11 +1416,11 @@ let seedAccountOwnerActions
       let! domesticCounterparty =
          createCounterparty registry createCounterPartyInPartnerBank
 
-      for month in [ 1..3 ] do
+      for month in [ 1..numberOfMonthsToGenerateDataFor ] do
          let nextMonth = timestamp.AddMonths month
 
          let timestamp =
-            if month = 3 then
+            if month = numberOfMonthsToGenerateDataFor then
                let today = DateTime.UtcNow
 
                if today.Day < nextMonth.Day then today else nextMonth
@@ -1458,7 +1459,7 @@ let seedAccountOwnerActions
             let maxDays =
                let daysToAdd = num * (5 + num)
 
-               if month = 3 then
+               if month = numberOfMonthsToGenerateDataFor then
                   let buffer = DateTime.UtcNow.AddDays(-2).Day
                   if buffer / daysToAdd >= 1 then daysToAdd else 0
                else
@@ -1637,19 +1638,21 @@ let seedEmployeeActions
 
       let rnd = new Random()
 
-      for month in [ 1..3 ] do
+      for month in [ 1..numberOfMonthsToGenerateDataFor ] do
          let timestamp = timestamp.AddMonths month
-         let purchaseMerchants = purchaseMerchants[month - 1]
+
+         let purchaseMerchants =
+            purchaseMerchants[(month - 1) % purchaseMerchants.Length]
 
          let maxPurchases =
-            if month = 3 then
+            if month = numberOfMonthsToGenerateDataFor then
                DateTime.UtcNow.Day
             else
                DateTime.DaysInMonth(timestamp.Year, timestamp.Month)
 
          for purchaseNum in [ 1..maxPurchases ] do
             let maxDays =
-               if month = 3 then
+               if month = numberOfMonthsToGenerateDataFor then
                   let today = DateTime.UtcNow
                   if today.Day = 1 then None else Some(today.AddDays(-2).Day)
                else
@@ -1658,7 +1661,11 @@ let seedEmployeeActions
                   )
 
             let purchaseDate =
-               match month = 3 && purchaseNum > maxPurchases - 1, maxDays with
+               match
+                  month = numberOfMonthsToGenerateDataFor
+                  && purchaseNum > maxPurchases - 1,
+                  maxDays
+               with
                | false, Some days ->
                   timestamp.AddDays(float (randomAmount 0 days))
                | false, None -> timestamp
@@ -1757,7 +1764,7 @@ let seedEmployeeActions
             let employeeRef = registry.EmployeeActor purchaseCmd.Data.EmployeeId
 
             let authTask: PurchaseAuthorizationStatus Async =
-               employeeRef.Ask(msg, Some(TimeSpan.FromSeconds 10.))
+               employeeRef.Ask(msg, Some(TimeSpan.FromSeconds 5.))
 
             try
                match! authTask with
@@ -1778,7 +1785,7 @@ let createAccountOwners (registry: #IEmployeeActor) =
    let createAccountOwnerCmd (business: OrgSetup) =
       let date = DateTime.Today
       let startOfMonth = DateTime(date.Year, date.Month, 1).ToUniversalTime()
-      let ts = startOfMonth.AddMonths -3
+      let ts = startOfMonth.AddMonths -numberOfMonthsToGenerateDataFor
 
       {
          CreateAccountOwnerCommand.create {
@@ -1948,8 +1955,6 @@ let seedAccountTransactions
          let businessCardCreateCmd = cardCreateCmds.AccountOwnerBusinessCard
          let timestamp = businessCardCreateCmd.Timestamp
 
-         configureAutoTransferRules registry timestamp
-
          let! account =
             registry.AccountActor command.Data.ParentAccountId
             <? AccountMessage.GetVirtualAccount accountId
@@ -1990,6 +1995,8 @@ let seedAccountTransactions
                do! seedEmployeeActions card employee registry timestamp mailbox
 
          do! seedPayments registry
+
+         configureAutoTransferRules registry timestamp
    }
 
 // Creates a new Map consisting of initial state of accounts to create
