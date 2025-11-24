@@ -11,17 +11,36 @@ open Akkling
 type Message<'Msg> = { EntityId: Guid; Message: 'Msg }
 
 type ClusterShardingProducerActor<'Msg>() as x =
-   inherit ReceiveActor()
+   inherit UntypedActor()
+
    let mutable sendNext: IActorRef = ActorRefs.Nobody
+   let mutable stash: IStash = null
+   let mutable currentBehavior = x.Idle
 
-   do
-      x.Receive<Message<'Msg>>(fun (msg: Message<'Msg>) ->
-         sendNext.Tell(ShardingEnvelope(string msg.EntityId, msg.Message)))
+   interface IWithUnboundedStash with
+      member _.Stash
+         with get () = stash
+         and set value = stash <- value
 
-   do
-      x.Receive<ShardingProducerController.RequestNext<'Msg>>
-         (fun (next: ShardingProducerController.RequestNext<'Msg>) ->
-            sendNext <- next.SendNextTo)
+   member x.Active(msg: obj) =
+      match msg with
+      | :? Message<'Msg> as msg ->
+         sendNext.Tell(ShardingEnvelope(string msg.EntityId, msg.Message))
+         currentBehavior <- x.Idle
+      | :? ShardingProducerController.RequestNext<'Msg> as next ->
+         sendNext <- next.SendNextTo
+      | _ -> x.Unhandled(msg)
+
+   member x.Idle(msg: obj) =
+      match msg with
+      | :? Message<'Msg> -> stash.Stash()
+      | :? ShardingProducerController.RequestNext<'Msg> as next ->
+         sendNext <- next.SendNextTo
+         currentBehavior <- x.Active
+         stash.UnstashAll()
+      | _ -> x.Unhandled(msg)
+
+   override _.OnReceive(msg) = currentBehavior msg
 
 type ClusterShardingProducerOptions = {
    System: ActorSystem
