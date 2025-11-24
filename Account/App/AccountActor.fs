@@ -640,7 +640,7 @@ let actorProps
          // Event replay on actor start
          | :? AccountEvent as e when mailbox.IsRecovering() ->
             return! loop <| Some(ParentAccount.applyEvent state e)
-         | msg -> onLifeCycleEvent mailbox msg
+         | msg -> return onLifeCycleEvent mailbox msg
       }
 
       loop None

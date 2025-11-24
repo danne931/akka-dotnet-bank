@@ -2,6 +2,7 @@
   <ItemGroup>
     <Compile Include="Logging.fs" />
     <Compile Include="Serialization.fs" />
+    <Compile Include="AkkaDeadLetterMonitor.fs" />
     <Compile Include="Akka.fs" />
   </ItemGroup>
 

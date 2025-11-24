@@ -1,9 +1,7 @@
 open Microsoft.Extensions.DependencyInjection
 open Akka.Actor
-open Akka.Event
 open Akka.Hosting
 open Akka.Cluster.Hosting
-open Akka.Persistence
 open Akka.Persistence.Hosting
 open Akka.Persistence.Sql.Hosting
 open Akkling
@@ -61,19 +59,10 @@ builder.Services.AddAkka(
    Env.config.AkkaSystemName,
    (fun builder provider ->
       let builder =
-         builder
-            .AddHocon(
-               "akka.reliable-delivery.sharding.consumer-controller.allow-bypass: true",
-               HoconAddMode.Prepend
-            )
-            // TODO: Remove once guaranteed delivery consumer controller logging
-            // on passivation fixed:
-            // https://github.com/akkadotnet/akka.net/issues/7664#issuecomment-2991799919
-            .ConfigureLoggers(fun conf ->
-               conf.WithLogFilter(fun logBuilder ->
-                  logBuilder.ExcludeMessageContaining("DeathWatch").Build()
-                  |> ignore)
-               |> ignore)
+         builder.AddHocon(
+            "akka.reliable-delivery.sharding.consumer-controller.allow-bypass: true",
+            HoconAddMode.Prepend
+         )
 
       let initConfig =
          AkkaInfra.withClustering [|
@@ -380,31 +369,10 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
          )
-         // TODO: Do more than just printing dead letter messages.
          .WithSingleton<ActorMarker.Auditor>(
             ActorMetadata.auditor.Name,
             (fun system _ _ ->
-               let handler (ctx: Actor<_>) =
-                  EventStreaming.subscribe ctx.Self system.EventStream
-                  |> ignore
-
-                  logInfo ctx "Auditor subscribed to system event stream"
-
-                  let rec loop () = actor {
-                     let! (msg: AllDeadLetters) = ctx.Receive()
-
-                     let logMsg = $"Dead letter: {msg}"
-
-                     match msg.Message with
-                     | :? SaveSnapshotSuccess -> logWarning ctx logMsg
-                     | _ -> logError ctx logMsg
-
-                     return! loop ()
-                  }
-
-                  loop ()
-
-               (props handler).ToProps()),
+               (AkkaDeadLetterMonitor.actorProps system).ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          // TODO:
