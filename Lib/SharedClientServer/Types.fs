@@ -658,3 +658,12 @@ module Address =
       PostalCode = ""
       State = ""
    }
+
+module Map =
+   /// Keep n elements of a map.
+   /// NOTE: Does not preserve insertion order.
+   let _keep (limit: int) (map: Map<_, _>) =
+      if map.Count <= limit then
+         map
+      else
+         Map.toSeq map |> Seq.take limit |> Map.ofSeq

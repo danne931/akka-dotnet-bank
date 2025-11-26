@@ -41,6 +41,29 @@ let private canProduceAutoTransfer =
       let _, flow, _ = AccountEvent.moneyTransaction e
       flow.IsSome
 
+let private signalRBroadcast broadcaster state evt =
+   match evt with
+   | AccountEvent.ParentAccount evt ->
+      broadcaster.parentAccountEventPersisted evt
+   | _ ->
+      state.VirtualAccounts.TryFind evt.AccountId
+      |> Option.iter (fun account ->
+         broadcaster.accountEventPersisted evt {
+            // NOTE:
+            // Hack to avoid SignalR messages being over max allowed bytes,
+            // which can happen during data seeding process in development
+            // when increasing 'numberOfMonthsToGenerateDataFor'.
+            //
+            // In production this is likely unnecessary as an org will likely
+            // not have near 500 pending transactions.
+            account with
+               PendingFunds =
+                  if Env.isProd then
+                     account.PendingFunds
+                  else
+                     Map._keep 500 account.PendingFunds
+         })
+
 let private onValidationError
    (registry: #ISagaActor)
    (broadcaster: SignalRBroadcast)
@@ -446,12 +469,7 @@ let actorProps
          | Persisted mailbox (:? AccountEvent as evt) ->
             let state = ParentAccount.applyEvent state evt
 
-            match evt with
-            | AccountEvent.ParentAccount evt ->
-               broadcaster.parentAccountEventPersisted evt
-            | _ ->
-               state.VirtualAccounts.TryFind evt.AccountId
-               |> Option.iter (broadcaster.accountEventPersisted evt)
+            signalRBroadcast broadcaster state evt
 
             notifySaga
                registry
