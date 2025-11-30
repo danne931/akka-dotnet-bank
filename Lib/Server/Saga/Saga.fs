@@ -271,3 +271,10 @@ type SagaStateTransitionError =
    | HasAlreadyStarted
    | InvalidStepProgression
    | HasAlreadyCompleted
+
+/// Use to reply to RabbitMQ consumer actor which is expecting
+/// an acknowledgment of message delivery.
+[<RequireQualifiedAccess>]
+type SagaDeliveryResponse =
+   | Persisted
+   | Ignored of SagaStateTransitionError

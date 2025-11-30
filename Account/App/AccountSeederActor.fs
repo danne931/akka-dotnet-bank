@@ -480,8 +480,8 @@ let overwriteHistoricalAccountEventTimestamps () = taskResultOption {
    return! pgTransaction query |> TaskResult.map Some
 }
 
-let private expectedDomesticTransfersCount = 3
-let private numberOfMonthsToGenerateDataFor = 3
+let private expectedDomesticTransfersCount = 10
+let private numberOfMonthsToGenerateDataFor = 12
 
 // It takes a few minutes of interaction with mock partner bank for domestic transfers to transition from pending to settled.
 // Return None and try again after a few seconds until the domestic transfers are settled.
@@ -1416,11 +1416,11 @@ let seedAccountOwnerActions
       let! domesticCounterparty =
          createCounterparty registry createCounterPartyInPartnerBank
 
-      for month in [ 1..numberOfMonthsToGenerateDataFor ] do
+      for month in [ 1..expectedDomesticTransfersCount ] do
          let nextMonth = timestamp.AddMonths month
 
          let timestamp =
-            if month = numberOfMonthsToGenerateDataFor then
+            if month = expectedDomesticTransfersCount then
                let today = DateTime.UtcNow
 
                if today.Day < nextMonth.Day then today else nextMonth
@@ -1454,6 +1454,17 @@ let seedAccountOwnerActions
             |> AccountMessage.StateChange
 
          registry.AccountActor myOrg.ParentAccountId <! msg
+
+      for month in [ 1..numberOfMonthsToGenerateDataFor ] do
+         let nextMonth = timestamp.AddMonths month
+
+         let timestamp =
+            if month = numberOfMonthsToGenerateDataFor then
+               let today = DateTime.UtcNow
+
+               if today.Day < nextMonth.Day then today else nextMonth
+            else
+               nextMonth
 
          for num in [ 1..3 ] do
             let maxDays =
@@ -2155,6 +2166,19 @@ let actorProps
                enableOrgSocialTransferDiscovery registry
 
                logInfo "Enabled social transfer discovery"
+
+               // TODO:
+               // Call "overwriteHistoricalAccountEventTimestamps" once an
+               // expected number of transactions complete, based on
+               // "numberOfMonthsToGenerateDataFor" multiplied by an expected
+               // txns count per month, rather than creating this delay here.
+
+               // Reason: This delay is fine for 12 months worth of
+               // transaction data but if we seed 200 months worth
+               // of transaction data then it will take more than a minute
+               // to process. This results in analytics charts showing
+               // several million dollars worth of MoneyOut transaction occurring
+               // today rather than with their timestamps overwritten to past dates.
 
                do! Task.Delay(TimeSpan.FromMinutes 1.)
 

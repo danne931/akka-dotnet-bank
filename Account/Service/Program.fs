@@ -5,6 +5,7 @@ open Akka.Cluster.Hosting
 open Akka.Persistence.Hosting
 open Akka.Persistence.Sql.Hosting
 open Akkling
+open System
 
 open CachedOrgSettings
 open Bank.Org.Domain
@@ -17,6 +18,7 @@ open ActorUtil
 open SignalRBroadcast
 open BankActorRegistry
 open EmailMessage
+open Lib.SharedTypes
 
 let builder = Env.builder
 
@@ -185,26 +187,13 @@ builder.Services.AddAkka(
          .WithShardRegion<ActorMarker.Saga>(
             ClusterMetadata.sagaShardRegion.name,
             (fun persistenceId ->
-               let system = provider.GetRequiredService<ActorSystem>()
-               let registry = getActorRegistry provider
-
-               let orgSettingsCache =
-                  provider.GetRequiredService<OrgSettingsCache>()
-
-               let broadcaster =
-                  provider.GetRequiredService<SignalRBroadcast>()
-
-               GuaranteedDelivery.consumer<AppSaga.AppSagaMessage>
-                  system
-                  (fun controllerRef ->
-                     AppSaga.initProps
-                        registry
-                        orgSettingsCache
-                        broadcaster
-                        Env.config.SagaPassivateIdleEntityAfter
-                        persistenceId
-                        (Some(typed controllerRef))
-                     |> _.ToProps())),
+               AppSaga.initProps
+                  (getActorRegistry provider)
+                  (provider.GetRequiredService<OrgSettingsCache>())
+                  (provider.GetRequiredService<SignalRBroadcast>())
+                  Env.config.SagaPassivateIdleEntityAfter
+                  persistenceId
+               |> _.ToProps()),
             ClusterMetadata.sagaShardRegion.messageExtractor,
             ShardOptions(
                RememberEntities = false,
@@ -212,6 +201,33 @@ builder.Services.AddAkka(
                   Env.config.SagaPassivateIdleEntityAfter,
                Role = ClusterMetadata.roles.saga
             )
+         )
+         .WithSingleton<ActorMarker.SagaGuaranteedDeliveryConsumer>(
+            $"{ClusterMetadata.sagaShardRegion.name}-consumer",
+            (fun system _ _ ->
+               Lib.Queue.consumerShardRegionForwarder<
+                  AppSaga.AppSagaMessage,
+                  Lib.Saga.SagaDeliveryResponse
+                >
+                  {
+                     QueueConnection = getQueueConnection provider
+                     QueueSettings = Env.config.SagaQueue
+                     StreamRestartSettings =
+                        Env.config.QueueConsumerStreamBackoffRestart
+                     sendToShardRegion =
+                        fun msg ->
+                           let aref =
+                              AppSaga.getEntityRefGuaranteedDelivery
+                                 system
+                                 (CorrelationId msg.EntityId)
+
+                           aref.Ask<Lib.Saga.SagaDeliveryResponse>(
+                              msg,
+                              Some <| TimeSpan.FromSeconds(5.)
+                           )
+                  }
+               |> _.ToProps()),
+            ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
          )
          // The KnowYourCustomerService will consume know-your-customer
          // messages from RabbitMq & interact with a third party business
@@ -518,11 +534,13 @@ builder.Services.AddAkka(
             )
 
             registry.Register<ActorMarker.SagaGuaranteedDeliveryProducer>(
-               GuaranteedDelivery.producer<AppSaga.AppSagaMessage> {
-                  System = system
-                  ShardRegion = registry.Get<ActorMarker.Saga>()
-                  ProducerName = "bank-to-saga-actor"
-               }
+               Lib.Queue.startProducer<
+                  GuaranteedDelivery.Message<AppSaga.AppSagaMessage>
+                >
+                  system
+                  (getQueueConnection provider)
+                  Env.config.SagaQueue
+                  Env.config.QueueConsumerStreamBackoffRestart
                |> untyped
             )
 

@@ -3,7 +3,6 @@ module AppSaga
 
 open System
 open Akka.Actor
-open Akka.Delivery
 open Akkling
 open Akkling.Cluster.Sharding
 open FSharp.Control
@@ -377,17 +376,24 @@ let getEntityRef
       ActorUtil.ClusterMetadata.sagaShardRegion
       correlationId.Value
 
+let getEntityRefGuaranteedDelivery
+   (sys: ActorSystem)
+   (correlationId: CorrelationId)
+   : IEntityRef<GuaranteedDelivery.Message<AppSagaMessage>>
+   =
+   ActorUtil.getEntityRef
+      sys
+      ActorUtil.ClusterMetadata.sagaShardRegion
+      correlationId.Value
+
 let initProps
    registry
    (orgSettingsCache: OrgSettingsCache)
    (broadcaster: SignalRBroadcast.SignalRBroadcast)
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
-   (guaranteedDeliveryConsumerControllerRef:
-      Option<IActorRef<ConsumerController.IConsumerCommand<AppSagaMessage>>>)
    =
    SagaActor.initProps<Saga, StartEvent, Event>
       sagaPassivateIdleEntityAfter
       persistenceId
-      guaranteedDeliveryConsumerControllerRef
       (sagaHandler registry orgSettingsCache broadcaster)

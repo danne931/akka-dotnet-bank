@@ -190,6 +190,10 @@ type private BankConfigInput = {
    QueueConsumerStreamBackoffRestart: StreamBackoffRestartSettingsInput
    SagaPassivateIdleEntityAfter: TimeSpan option
    SagaWakeFromSleepBurstLimit: int option
+   SagaQueue: {|
+      Name: string option
+      MaxParallelism: int option
+   |}
 }
 
 type BankConfig = {
@@ -216,6 +220,7 @@ type BankConfig = {
    QueueConsumerStreamBackoffRestart: Akka.Streams.RestartSettings
    SagaPassivateIdleEntityAfter: TimeSpan
    SagaWakeFromSleepBurstLimit: int
+   SagaQueue: QueueEnvConfig
 }
 
 let config =
@@ -285,7 +290,7 @@ let config =
          AccountEventProjectionChunking = {
             Size =
                input.AccountEventProjectionChunking.Size
-               |> Option.defaultValue 5000
+               |> Option.defaultValue 500
             Duration =
                input.AccountEventProjectionChunking.Seconds
                |> Option.defaultValue 5.
@@ -320,6 +325,11 @@ let config =
             |> Option.defaultValue (TimeSpan.FromMinutes 2.)
          SagaWakeFromSleepBurstLimit =
             input.SagaWakeFromSleepBurstLimit |> Option.defaultValue 50
+         SagaQueue = {
+            Name = input.SagaQueue.Name |> Option.defaultValue "saga"
+            MaxParallelism =
+               input.SagaQueue.MaxParallelism |> Option.defaultValue 70
+         }
       }
    | Error err ->
       match err with

@@ -5,7 +5,7 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
   <PropertyGroup Label="SharedVersions">
-    <AkkaVersion>1.5.53</AkkaVersion>
+    <AkkaVersion>1.5.55</AkkaVersion>
     <AkklingVersion>0.17.0</AkklingVersion>
     <PbmVersion>1.4.6</PbmVersion>
     <QuartzVersion>3.8.1</QuartzVersion>
@@ -17,11 +17,11 @@
     <PackageVersion Include="Akka.Cluster.Sharding" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Cluster.Hosting" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.DependencyInjection" Version="$(AkkaVersion)" />
-    <PackageVersion Include="Akka.Discovery.KubernetesApi" Version="1.5.52" />
+    <PackageVersion Include="Akka.Discovery.KubernetesApi" Version="1.5.55" />
     <PackageVersion Include="Akka.HealthCheck.Hosting.Web" Version="1.5.37" />
     <PackageVersion Include="Akka.Hosting" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Logger.Serilog" Version="1.5.25" />
-    <PackageVersion Include="Akka.Management" Version="1.5.52" />
+    <PackageVersion Include="Akka.Management" Version="1.5.55" />
     <PackageVersion Include="Akka.Persistence.Extras" Version="1.5.1" />
     <PackageVersion Include="Akka.Persistence.Hosting" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Persistence.Sql.Hosting" Version="$(AkkaVersion)" />

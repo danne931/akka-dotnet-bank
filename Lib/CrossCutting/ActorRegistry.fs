@@ -78,6 +78,8 @@ module ActorMarker =
 
    type SagaGuaranteedDeliveryProducer() = class end
 
+   type SagaGuaranteedDeliveryConsumer() = class end
+
    type SagaReadModelSync() = class end
 
    type SagaAlarmClock() = class end

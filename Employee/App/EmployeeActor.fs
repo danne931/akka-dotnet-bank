@@ -107,7 +107,7 @@ let private hasPurchaseFail (cmd: EmployeeCommand) (err: Err) =
 let private handleValidationError
    (broadcaster: SignalRBroadcast)
    mailbox
-   (registry: #ISagaActor)
+   (registry: #ISagaGuaranteedDeliveryActor)
    (employee: Employee)
    (cmd: EmployeeCommand)
    (err: Err)
@@ -132,8 +132,9 @@ let private handleValidationError
             purchaseInfo.OrgId
             purchaseInfo.CorrelationId
             evt
+         |> GuaranteedDelivery.message purchaseInfo.CorrelationId.Value
 
-      registry.SagaActor purchaseInfo.CorrelationId <! msg
+      registry.SagaGuaranteedDeliveryActor() <! msg
 
       if not purchaseInfo.AuthorizationType.IsBypassAuth then
          mailbox.Sender()
@@ -156,12 +157,13 @@ let private closeEmployeeCards
       }
 
 let private notifySaga
-   (registry: #ISagaActor & #ISagaGuaranteedDeliveryActor)
+   (registry: #ISagaGuaranteedDeliveryActor)
    (mailbox: Eventsourced<obj>)
    (state: EmployeeSnapshot)
    evt
    =
    let employee = state.Info
+   let sagaRef = registry.SagaGuaranteedDeliveryActor()
 
    match evt with
    | EmployeeEvent.CreatedAccountOwner e ->
@@ -169,19 +171,20 @@ let private notifySaga
          EmployeeOnboardingSagaStartEvent.AccountOwnerCreated e
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | EmployeeEvent.CreatedEmployee e ->
       let msg =
          EmployeeOnboardingSagaStartEvent.EmployeeCreated e
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | EmployeeEvent.AccessApproved e ->
       let msg =
          EmployeeOnboardingSagaEvent.AccessApproved
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | EmployeeEvent.AccessRestored e ->
       let msg =
          EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored {|
@@ -192,26 +195,29 @@ let private notifySaga
          |}
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | EmployeeEvent.InvitationTokenRefreshed e ->
       let msg =
          e.Data.InviteToken
          |> EmployeeOnboardingSagaEvent.InviteTokenRefreshed
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | EmployeeEvent.InvitationCancelled e ->
       let msg =
          EmployeeOnboardingSagaEvent.InviteCancelled e.Data.Reason
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | EmployeeEvent.InvitationConfirmed e ->
       let msg =
          EmployeeOnboardingSagaEvent.InviteConfirmed
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | EmployeeEvent.CreatedCard e ->
       let msg =
          AppSaga.Message.cardSetupStart e.OrgId e.CorrelationId {
@@ -220,7 +226,7 @@ let private notifySaga
             EmployeeEmail = employee.Email
          }
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | EmployeeEvent.UpdatedRole e ->
       match e.Data.Role, e.Data.CardInfo with
       | Role.Scholar, _ -> closeEmployeeCards registry state e.CorrelationId
@@ -249,8 +255,9 @@ let private notifySaga
       let msg =
          CardSetupSagaEvent.ProviderCardIdLinked
          |> AppSaga.Message.cardSetup e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | EmployeeEvent.PurchasePending e ->
       let msg =
          AppSaga.Message.purchase
@@ -259,7 +266,7 @@ let private notifySaga
             PurchaseSagaEvent.CardReservedFunds
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | EmployeeEvent.PurchaseProgress e ->
       let evt = PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress e.Data.Info
 
@@ -267,27 +274,27 @@ let private notifySaga
          AppSaga.Message.purchase e.OrgId e.CorrelationId evt
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | EmployeeEvent.PurchaseSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettledWithCard e.Data.Clearing
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | EmployeeEvent.PurchaseFailed e ->
       let msg =
          PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | _ -> ()
 
 type private PurchaseAuthTimeout() = class end
 
 let actorProps
-   (registry: #IAccountActor & #ISagaGuaranteedDeliveryActor)
+   (registry: #IAccountActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (broadcaster: SignalRBroadcast)
    (onLifeCycleEvent: Eventsourced<obj> -> Employee -> obj -> Effect<obj>)
    =
@@ -455,8 +462,9 @@ let actorProps
                         employee.OrgId
                         purchase.CorrelationId
                         evt
+                     |> GuaranteedDelivery.message purchase.CorrelationId.Value
 
-                  registry.SagaActor purchase.CorrelationId <! msg
+                  registry.SagaGuaranteedDeliveryActor() <! msg
                | Some purchase, _ ->
                   let msg =
                      PurchaseProgressCommand.create
@@ -480,8 +488,9 @@ let actorProps
                      intent.OrgId
                      intent.CorrelationId
                      (PurchaseSagaStartEvent.PurchaseIntent purchase)
+                  |> GuaranteedDelivery.message intent.CorrelationId.Value
 
-               registry.SagaActor intent.CorrelationId <! msg
+               registry.SagaGuaranteedDeliveryActor() <! msg
 
                match Employee.stateTransition state cmd with
                | Ok(evt, _) ->

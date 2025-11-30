@@ -65,7 +65,7 @@ let private signalRBroadcast broadcaster state evt =
          })
 
 let private onValidationError
-   (registry: #ISagaActor)
+   (registry: #ISagaGuaranteedDeliveryActor)
    (broadcaster: SignalRBroadcast)
    mailbox
    (cmd: AccountCommand)
@@ -79,6 +79,8 @@ let private onValidationError
    let corrId = cmd.Envelope.CorrelationId
 
    broadcaster.accountEventError orgId cmd.AccountId corrId err
+
+   let sagaRef = registry.SagaGuaranteedDeliveryActor()
 
    match cmd with
    | AccountCommand.Debit cmd -> option {
@@ -101,8 +103,9 @@ let private onValidationError
          PurchaseFailReason.Account reason
          |> PurchaseSagaEvent.PurchaseRejected
          |> AppSaga.Message.purchase orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
 
-      registry.SagaActor corrId <! msg
+      sagaRef <! msg
 
       if
          not cmd.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth
@@ -123,8 +126,9 @@ let private onValidationError
       let msg =
          DomesticTransferSagaEvent.SenderUnableToReserveFunds reason
          |> AppSaga.Message.domesticTransfer orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
 
-      registry.SagaActor corrId <! msg
+      sagaRef <! msg
      }
    | AccountCommand.InternalTransferBetweenOrgs cmd when
       cmd.Data.OriginatedFromSchedule
@@ -143,8 +147,9 @@ let private onValidationError
            let msg =
               PlatformTransferSagaEvent.SenderUnableToReserveFunds reason
               |> AppSaga.Message.platformTransfer orgId corrId
+              |> GuaranteedDelivery.message corrId.Value
 
-           registry.SagaActor corrId <! msg
+           sagaRef <! msg
 
            let! paymentId = cmd.Data.OriginatedFromPaymentRequest
            let corrId = paymentId.AsCorrelationId
@@ -155,16 +160,18 @@ let private onValidationError
                  PaymentFailReason.AccountClosed
               )
               |> AppSaga.Message.paymentRequest orgId corrId
+              |> GuaranteedDelivery.message corrId.Value
 
-           registry.SagaActor corrId <! msg
+           sagaRef <! msg
         }
    | AccountCommand.DepositTransferBetweenOrgs cmd -> option {
       let msg =
          InternalTransferFailReason.AccountNotActive
          |> PlatformTransferSagaEvent.RecipientUnableToDepositFunds
          |> AppSaga.Message.platformTransfer orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
 
-      registry.SagaActor corrId <! msg
+      sagaRef <! msg
 
       let! paymentId = cmd.Data.BaseInfo.FromPaymentRequest
       let corrId = paymentId.AsCorrelationId
@@ -175,27 +182,31 @@ let private onValidationError
             PaymentFailReason.AccountClosed
          )
          |> AppSaga.Message.paymentRequest orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
 
-      registry.SagaActor corrId <! msg
+      sagaRef <! msg
      }
    | _ -> None
    |> ignore
 
 let notifySaga
-   (registry: #IEmailActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
+   (registry: #IEmailActor & #ISagaGuaranteedDeliveryActor)
    (getRetryableTransfers:
       CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
    (mailbox: Eventsourced<obj>)
    (state: ParentAccountSnapshot)
    (evt: AccountEvent)
    =
+   let sagaRef = registry.SagaGuaranteedDeliveryActor()
+
    match evt with
    | AccountEvent.InitializedPrimaryCheckingAccount e ->
       let msg =
          OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount
          |> AppSaga.Message.orgOnboard e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.CreatedVirtualAccount e ->
       let msg =
          EmailMessage.create
@@ -218,7 +229,7 @@ let notifySaga
             PurchaseSagaEvent.AccountReservedFunds
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
 
       if not e.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth then
          mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
@@ -228,52 +239,57 @@ let notifySaga
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | AccountEvent.DebitFailed e ->
       let msg =
          PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | AccountEvent.MaintenanceFeeDebited e ->
       let msg =
          BillingSagaEvent.MaintenanceFeeProcessed
          |> AppSaga.Message.billing e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.MaintenanceFeeSkipped e ->
       let msg =
          BillingSagaEvent.MaintenanceFeeProcessed
          |> AppSaga.Message.billing e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.PaymentRequested e ->
       let msg =
          PaymentRequestSagaStartEvent.PaymentRequested e
          |> AppSaga.Message.paymentRequestStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | AccountEvent.PaymentRequestDeclined e ->
       let msg =
          PaymentRequestSagaEvent.PaymentRequestDeclined
          |> AppSaga.Message.paymentRequest e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.PaymentRequestCancelled e ->
       let msg =
          PaymentRequestSagaEvent.PaymentRequestCancelled
          |> AppSaga.Message.paymentRequest e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.InternalTransferBetweenOrgsPending e ->
       if e.Data.FromSchedule then
          let msg =
             state.PartnerBankLink
             |> PlatformTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+            |> GuaranteedDelivery.message e.CorrelationId.Value
 
-         registry.SagaActor e.CorrelationId <! msg
+         sagaRef <! msg
       else
          let msg =
             PlatformTransferSagaStartEvent.SenderReservedFunds(
@@ -282,26 +298,28 @@ let notifySaga
             )
             |> AppSaga.Message.platformTransferStart e.OrgId e.CorrelationId
 
-         registry.SagaGuaranteedDeliveryActor() <! msg
+         sagaRef <! msg
    | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
       let msg =
          PlatformTransferSagaStartEvent.ScheduleTransferRequest e
          |> AppSaga.Message.platformTransferStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       let msg =
          state.PartnerBankLink
          |> PlatformTransferSagaEvent.RecipientDepositedFunds
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.InternalTransferBetweenOrgsFailed e ->
       let msg =
          PlatformTransferSagaEvent.SenderReleasedReservedFunds
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.InternalTransferBetweenOrgsSettled e ->
       let info = e.Data.BaseInfo
 
@@ -310,7 +328,7 @@ let notifySaga
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
 
       match info.FromPaymentRequest with
       | Some paymentRequestId ->
@@ -324,7 +342,7 @@ let notifySaga
             |> AppSaga.Message.paymentRequest info.Recipient.OrgId corrId
             |> GuaranteedDelivery.message corrId.Value
 
-         registry.SagaGuaranteedDeliveryActor() <! msg
+         sagaRef <! msg
       | None -> ()
    | AccountEvent.DomesticTransferScheduled e ->
       let msg =
@@ -334,14 +352,15 @@ let notifySaga
          )
          |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      sagaRef <! msg
    | AccountEvent.DomesticTransferPending e ->
       if e.Data.FromSchedule then
          let msg =
             DomesticTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
+            |> GuaranteedDelivery.message e.CorrelationId.Value
 
-         registry.SagaActor e.CorrelationId <! msg
+         sagaRef <! msg
       else
          let msg =
             DomesticTransferSagaStartEvent.SenderReservedFunds(
@@ -350,19 +369,21 @@ let notifySaga
             )
             |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
-         registry.SagaGuaranteedDeliveryActor() <! msg
+         sagaRef <! msg
    | AccountEvent.DomesticTransferFailed e ->
       let msg =
          DomesticTransferSagaEvent.SenderReleasedReservedFunds
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.DomesticTransferSettled e ->
       let msg =
          DomesticTransferSagaEvent.SenderDeductedFunds
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      sagaRef <! msg
    | AccountEvent.ParentAccount(ParentAccountEvent.EditedCounterparty e) ->
       // Retries domestic transfers which failed due to the mock partner bank
       // regarding the Recipient of the Transfer as having
@@ -554,8 +575,9 @@ let actorProps
                         PrimaryCheckingAccountId = state.PrimaryVirtualAccountId
                      }
                      |> AppSaga.Message.billing state.OrgId corrId
+                     |> GuaranteedDelivery.message corrId.Value
 
-                  registry.SagaActor corrId <! msg
+                  registry.SagaGuaranteedDeliveryActor() <! msg
 
                   let billing = {
                      OrgId = state.OrgId
@@ -614,8 +636,9 @@ let actorProps
                            transfer.Originator.OrgId
                            corrId
                            evt
+                        |> GuaranteedDelivery.message corrId.Value
 
-                     registry.SagaActor corrId <! msg
+                     registry.SagaGuaranteedDeliveryActor() <! msg
 
                return ignored ()
             (*

@@ -24,7 +24,7 @@ export default function initPostgres (
     {
       // https://hub.docker.com/r/bitnamicharts/postgresql
       chart: 'oci://registry-1.docker.io/bitnamicharts/postgresql',
-      version: '18.1.1',
+      version: '18.1.13',
 
       namespace: namespace.metadata.name,
 
