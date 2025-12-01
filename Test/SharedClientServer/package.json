@@ -6,9 +6,9 @@
     "start": "dotnet fable tests -o dist --run npx webpack-dev-server"
   },
   "devDependencies": {
-    "html-webpack-plugin": "^5.6.3",
-    "mocha": "^8.3.2",
-    "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.1.0"
+    "html-webpack-plugin": "^5.6.5",
+    "mocha": "^11.7.5",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^4.15.2"
   }
 }
