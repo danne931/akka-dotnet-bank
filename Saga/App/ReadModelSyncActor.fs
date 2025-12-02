@@ -1,7 +1,6 @@
 [<RequireQualifiedAccess>]
 module AppSagaReadModelSyncActor
 
-open System
 open Akkling
 open Akkling.Cluster.Sharding
 
@@ -67,7 +66,6 @@ let initProps
          -> IEntityRef<SagaMessage<AppSaga.StartEvent, AppSaga.Event>>)
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
-   (retryPersistenceAfter: TimeSpan)
    =
    actorProps<AppSaga.Saga, AppSaga.AppSagaPersistableEvent>
    <| ReadModelSyncConfig.AggregateLookupMode {
@@ -81,7 +79,6 @@ let initProps
          }
       Chunking = chunking
       RestartSettings = restartSettings
-      RetryPersistenceAfter = retryPersistenceAfter
       UpsertReadModels = upsertReadModels
       EventJournalTag = Constants.AKKA_APP_SAGA_JOURNAL
    }

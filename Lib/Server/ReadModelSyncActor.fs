@@ -2,9 +2,7 @@ module Lib.ReadModelSyncActor
 
 open System
 open System.Threading.Tasks
-open Akka.Actor
 open Akka.Persistence
-open Akka.Streams
 open Akka.Streams.Dsl
 open Akkling
 open Akkling.Persistence
@@ -14,7 +12,6 @@ open FsToolkit.ErrorHandling
 open Lib.SharedTypes
 open Lib.Types
 open ActorUtil
-open Lib.BulkWriteStreamFlow
 
 type ReadModelUpsert<'TEvent> = 'TEvent list -> Result<int list, Err> Task
 
@@ -25,7 +22,6 @@ type Config<'TEvent> = {
    EventJournalTag: string
    Chunking: StreamChunkingEnvConfig
    RestartSettings: Akka.Streams.RestartSettings
-   RetryPersistenceAfter: TimeSpan
    UpsertReadModels: ReadModelUpsert<'TEvent>
 }
 
@@ -45,7 +41,6 @@ type Config<'TAggregate, 'TEvent> = {
    GetAggregate: Guid -> 'TAggregate option Task
    Chunking: StreamChunkingEnvConfig
    RestartSettings: Akka.Streams.RestartSettings
-   RetryPersistenceAfter: TimeSpan
    UpsertReadModels: ReadModelUpsert<'TAggregate, 'TEvent>
 }
 
@@ -54,15 +49,6 @@ type State = {
 }
 
 type Message = SaveOffset of Akka.Persistence.Query.Sequence
-
-let initFailedWritesSource
-   (system: ActorSystem)
-   : Source<'TEvent list, Akka.NotUsed> * IActorRef<'TEvent list>
-   =
-   let failedWritesSource = Source.actorRef OverflowStrategy.DropHead 1000
-   let preMat = failedWritesSource.PreMaterialize system
-
-   preMat.Last(), preMat.Head()
 
 let initReadJournalSource
    (mailbox: Eventsourced<obj>)
@@ -87,7 +73,30 @@ let initReadJournalSource
 
          evts)
 
-   RestartSource.OnFailuresWithBackoff((fun _ -> source), restartSettings)
+   RestartSource.WithBackoff((fun _ -> source), restartSettings)
+
+let initSink mailbox name =
+   let name = name + "-ReadModelSync"
+
+   Sink.onComplete (function
+      | None -> logWarning mailbox $"Rabbit Consumer Stream Completed ({name})"
+      | Some err ->
+         logError
+            mailbox
+            $"Rabbit Consumer Stream Completed With Error ({name}): {err}")
+
+let bulkWriteFlow mailbox name persist =
+   Flow.id
+   |> Flow.taskMap 1 (fun (statements: 'T list) -> task {
+      let! res = persist statements
+
+      return
+         match res with
+         | Ok res ->
+            logInfo mailbox $"Saved read models for journal {name} {res}"
+            statements
+         | Error e -> failwith $"Bulk insert failed for {name}: {e}"
+   })
 
 let startProjection<'TEvent>
    (conf: Config<'TEvent>)
@@ -108,33 +117,23 @@ let startProjection<'TEvent>
          conf.RestartSettings
          conf.EventJournalTag
 
-   let failedWritesSource, failedWritesRef = initFailedWritesSource system
-
-   let bulkWriteFlow, _ =
-      initBulkWriteFlow<'TEvent list> system conf.RestartSettings {
-         RetryAfter = conf.RetryPersistenceAfter
-         persist = Seq.collect id >> List.ofSeq >> conf.UpsertReadModels
-         // Feed failed upserts back into the stream
-         onRetry =
-            fun (props: ('TEvent list) seq) ->
-               for events in props do
-                  failedWritesRef <! events
-         onPersistOk =
-            fun _ response ->
-               logInfo
-                  mailbox
-                  $"Saved read models for journal {conf.EventJournalTag} {response}"
-      }
-
    let flow =
       Flow.id<'TEvent list, 'TEvent list>
-      |> Flow.map (fun events -> seq [ events ])
-      |> Flow.via bulkWriteFlow
+      |> Flow.map (fun events ->
+         logInfo
+            mailbox
+            $"Will sync read models for {events.Length} events from journal {conf.EventJournalTag}"
+
+         events)
+      |> Flow.via (
+         bulkWriteFlow mailbox conf.EventJournalTag conf.UpsertReadModels
+      )
+
+   let sink = initSink mailbox conf.EventJournalTag
 
    readJournalSource
-   |> Source.merge failedWritesSource
    |> Source.via flow
-   |> Source.runWith (system.Materializer()) Sink.ignore
+   |> Source.runWith (system.Materializer()) sink
 
 let startProjectionWithAggregateLookup<'TAggregate, 'TEvent>
    (conf: Config<'TAggregate, 'TEvent>)
@@ -155,41 +154,23 @@ let startProjectionWithAggregateLookup<'TAggregate, 'TEvent>
          conf.RestartSettings
          conf.EventJournalTag
 
-   let failedWritesSource, failedWritesRef = initFailedWritesSource system
-
    let getAggregate ((aggId, evts): Guid * 'TEvent list) = task {
       let! res = conf.GetAggregate aggId
       return res |> Option.map (fun agg -> agg, evts)
    }
 
-   let bulkWriteFlow, _ =
-      initBulkWriteFlow<'TAggregate * 'TEvent list> system conf.RestartSettings {
-         RetryAfter = conf.RetryPersistenceAfter
-         persist =
-            fun (props: ('TAggregate * 'TEvent list) seq) ->
-               props
-               |> Seq.fold
-                     (fun (aggAcc, eventsAcc) grouping ->
-                        let agg, aggEvents = grouping
+   let persist =
+      List.fold
+         (fun (aggAcc, eventsAcc) grouping ->
+            let agg, aggEvents = grouping
 
-                        agg :: aggAcc, List.append aggEvents eventsAcc)
-                     ([], [])
-               |> conf.UpsertReadModels
-         // Feed failed upserts back into the stream
-         onRetry =
-            fun (props: ('TAggregate * 'TEvent list) seq) ->
-               for _, events in props do
-                  failedWritesRef <! events
-         onPersistOk =
-            fun _ response ->
-               logInfo
-                  mailbox
-                  $"Saved aggregate read models for journal {conf.EventJournalTag} {response}"
-      }
+            agg :: aggAcc, List.append aggEvents eventsAcc)
+         ([], [])
+      >> conf.UpsertReadModels
 
    let flow =
       Flow.id<'TEvent list, 'TAggregate * 'TEvent list>
-      |> Flow.asyncMap 1000 (fun events -> async {
+      |> Flow.asyncMap conf.Chunking.Size (fun events -> async {
          let distinctAggregateIds =
             events
             |> List.fold
@@ -208,14 +189,15 @@ let startProjectionWithAggregateLookup<'TAggregate, 'TEvent>
             |> Array.map getAggregate
 
          let! res = Task.WhenAll distinctAggregateIds |> Async.AwaitTask
-         return res |> Array.toSeq |> Seq.choose id
+         return res |> Array.toList |> List.choose id
       })
-      |> Flow.via bulkWriteFlow
+      |> Flow.via (bulkWriteFlow mailbox conf.EventJournalTag persist)
+
+   let sink = initSink mailbox conf.EventJournalTag
 
    readJournalSource
-   |> Source.merge failedWritesSource
    |> Source.via flow
-   |> Source.runWith (system.Materializer()) Sink.ignore
+   |> Source.runWith (system.Materializer()) sink
 
 [<RequireQualifiedAccess>]
 type ReadModelSyncConfig<'TAggregate, 'TEvent> =
@@ -230,6 +212,8 @@ type ReadModelSyncConfig<'TAggregate, 'TEvent> =
 let actorProps<'TAggregate, 'TEvent>
    (conf: ReadModelSyncConfig<'TAggregate, 'TEvent>)
    =
+   let name = $"ReadModelSync-{conf.EventJournalTag}"
+
    let handler (mailbox: Eventsourced<obj>) =
       let logInfo = logInfo mailbox
 
@@ -241,8 +225,7 @@ let actorProps<'TAggregate, 'TEvent>
          | :? Message as msg ->
             match msg with
             | SaveOffset offset ->
-               logInfo
-                  $"Saving offset for journal {conf.EventJournalTag}: {offset.Value}"
+               logInfo $"Saving offset for {name}: {offset.Value}"
 
                let newState = { Offset = offset }
 
@@ -265,11 +248,17 @@ let actorProps<'TAggregate, 'TEvent>
                                     mailbox
                                     state
                                  |> ignored
+                        LifecyclePreRestart =
+                           fun _ err msg ->
+                              logInfo $"<PreRestart> {name} - {err} - {msg}"
+                              ignored ()
+                        LifecyclePreStart =
+                           fun _ ->
+                              logInfo $"<PreStart> {name}"
+                              ignored ()
                         LifecyclePostStop =
                            fun _ ->
-                              logInfo
-                                 $"PostStop ReadModelSync ({conf.EventJournalTag})"
-
+                              logInfo $"<PostStop> {name}"
                               SaveSnapshot state
                   }
                   mailbox

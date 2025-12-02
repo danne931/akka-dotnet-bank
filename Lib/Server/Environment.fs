@@ -185,7 +185,6 @@ type private BankConfigInput = {
    AccountEventReadModelPersistenceBackoffRestart:
       StreamBackoffRestartSettingsInput
    BillingStatementPersistenceChunking: StreamChunkingInput
-   BillingStatementPersistenceBackoffRestart: StreamBackoffRestartSettingsInput
    CircuitBreakerActorSupervisor: BackoffSupervisorInput
    QueueConsumerStreamBackoffRestart: StreamBackoffRestartSettingsInput
    SagaPassivateIdleEntityAfter: TimeSpan option
@@ -212,10 +211,7 @@ type BankConfig = {
    AccountDeleteThrottle: StreamThrottleEnvConfig
    AccountEventProjectionChunking: StreamChunkingEnvConfig
    AccountEventReadModelPersistenceBackoffRestart: Akka.Streams.RestartSettings
-   AccountEventReadModelRetryPersistenceAfter: TimeSpan
    BillingStatementPersistenceChunking: StreamChunkingEnvConfig
-   BillingStatementPersistenceBackoffRestart: Akka.Streams.RestartSettings
-   BillingStatementRetryPersistenceAfter: TimeSpan
    CircuitBreakerActorSupervisor: BackoffSupervisorEnvConfig
    QueueConsumerStreamBackoffRestart: Akka.Streams.RestartSettings
    SagaPassivateIdleEntityAfter: TimeSpan
@@ -299,7 +295,6 @@ let config =
          AccountEventReadModelPersistenceBackoffRestart =
             streamBackoffRestartSettingsFromInput
                input.AccountEventReadModelPersistenceBackoffRestart
-         AccountEventReadModelRetryPersistenceAfter = TimeSpan.FromSeconds 7.
          BillingStatementPersistenceChunking = {
             Size =
                input.BillingStatementPersistenceChunking.Size
@@ -309,10 +304,6 @@ let config =
                |> Option.defaultValue 5.
                |> TimeSpan.FromSeconds
          }
-         BillingStatementPersistenceBackoffRestart =
-            streamBackoffRestartSettingsFromInput
-               input.BillingStatementPersistenceBackoffRestart
-         BillingStatementRetryPersistenceAfter = TimeSpan.FromSeconds 7.
          CircuitBreakerActorSupervisor =
             backoffSupervisorOptionsFromInput
                input.CircuitBreakerActorSupervisor

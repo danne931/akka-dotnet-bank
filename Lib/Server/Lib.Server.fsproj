@@ -14,7 +14,6 @@
     <Compile Include="CircuitBreakerActor.fs" />
     <Compile Include="AtLeastOnceDeliveryActor.fs" />
     <Compile Include="Queue.fs" />
-    <Compile Include="BulkWriteStreamFlow.fs" />
     <Compile Include="ReadModelSyncActor.fs" />
     <Compile Include="Saga/Saga.fs" />
     <Compile Include="Saga/SagaActor.fs" />

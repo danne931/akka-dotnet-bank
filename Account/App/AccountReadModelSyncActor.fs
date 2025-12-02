@@ -645,7 +645,6 @@ let sqlParamReducer
                TransferCategory.InternalBetweenOrgs
          ]
 
-
       internalTransferBetweenOrgsStatusReducer
          {
             acc with
@@ -1505,13 +1504,11 @@ let upsertReadModels (accountEvents: AccountEvent list) =
 let initProps
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
-   (retryPersistenceAfter: TimeSpan)
    =
    actorProps<ParentAccountSnapshot, AccountEvent>
    <| ReadModelSyncConfig.DefaultMode {
       Chunking = chunking
       RestartSettings = restartSettings
-      RetryPersistenceAfter = retryPersistenceAfter
       UpsertReadModels = upsertReadModels
       EventJournalTag = Constants.AKKA_ACCOUNT_JOURNAL
    }

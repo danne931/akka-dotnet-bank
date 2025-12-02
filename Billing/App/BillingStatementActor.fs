@@ -15,7 +15,6 @@ open ActorUtil
 open Lib.Postgres
 open Lib.SharedTypes
 open Lib.Types
-open Lib.BulkWriteStreamFlow
 open BankActorRegistry
 
 type BillingPersistence = {
@@ -26,26 +25,19 @@ let initQueueSource
    (system: ActorSystem)
    (persistence: BillingPersistence)
    (chunking: StreamChunkingEnvConfig)
-   (restartSettings: Akka.Streams.RestartSettings)
-   (retryAfter: TimeSpan)
    (registry: #ISagaGuaranteedDeliveryActor)
-   (billingStatementActorRef: IActorRef<obj>)
    =
-   let flow, bulkWriteRef =
-      initBulkWriteFlow<BillingPersistable> system restartSettings {
-         RetryAfter = retryAfter
-         persist =
-            fun (statements: BillingPersistable seq) ->
-               statements |> List.ofSeq |> persistence.saveBillingStatements
-         // Feed failed inserts back into the stream
-         onRetry =
-            fun (statements: BillingPersistable seq) ->
-               for bill in statements do
-                  billingStatementActorRef
-                  <! BillingStatementMessage.BulkPersist bill
-         onPersistOk =
-            fun statements response ->
-               SystemLog.info system $"Saved billing statements {response}"
+   let source =
+      Source.queue OverflowStrategy.Backpressure 1000
+      |> Source.groupedWithin chunking.Size chunking.Duration
+      |> Source.taskMap 1 (fun (statements: BillingPersistable seq) -> task {
+         let! res =
+            statements |> List.ofSeq |> persistence.saveBillingStatements
+
+         return
+            match res with
+            | Ok res ->
+               SystemLog.info system $"Saved billing statements {res}"
 
                for s in statements do
                   let msg =
@@ -54,21 +46,17 @@ let initQueueSource
                      |> AppSaga.Message.guaranteedDelivery s.CorrelationId
 
                   registry.SagaGuaranteedDeliveryActor() <! msg
-      }
 
-   let source =
-      Source.queue OverflowStrategy.Backpressure 1000
-      |> Source.groupedWithin chunking.Size chunking.Duration
-      |> Source.via flow
+               statements
+            | Error e -> failwith $"Bulk insert failed: {e}"
+      })
 
-   bulkWriteRef, source
+   source
 
 let actorProps
    (system: ActorSystem)
    (persistence: BillingPersistence)
    (chunking: StreamChunkingEnvConfig)
-   (restartSettings: Akka.Streams.RestartSettings)
-   (retryFailedPersistenceAfter: TimeSpan)
    registry
    =
    let rec init (ctx: Actor<obj>) = actor {
@@ -80,22 +68,15 @@ let actorProps
          | PreStart ->
             logInfo ctx "Prestart - Init BillingStatementActor Queue Source"
 
-            let bulkWriteRef, queueSource =
-               initQueueSource
-                  system
-                  persistence
-                  chunking
-                  restartSettings
-                  retryFailedPersistenceAfter
-                  registry
-                  ctx.Self
+            let queueSource =
+               initQueueSource system persistence chunking registry
 
             let queue =
                queueSource
                |> Source.toMat Sink.ignore Keep.left
                |> Graph.run (system.Materializer())
 
-            return! processing ctx queue bulkWriteRef
+            return! processing ctx queue
          | _ -> return ignored ()
       | msg ->
          logError ctx $"Unknown msg {msg}"
@@ -105,7 +86,6 @@ let actorProps
    and processing
       (ctx: Actor<obj>)
       (queue: ISourceQueueWithComplete<BillingPersistable>)
-      (bulkWriteRef: IActorRef<BulkWriteMessage<BillingPersistable>>)
       =
       actor {
          let! msg = ctx.Receive()
@@ -120,11 +100,6 @@ let actorProps
                   match result with
                   | Ok effect -> effect
                   | Error errMsg -> failwith errMsg
-            | BillingStatementMessage.GetFailedWrites ->
-               let! failedWrites =
-                  bulkWriteRef <? BulkWriteMessage.GetFailedWrites
-
-               ctx.Sender() <! failedWrites
          | LifecycleEvent e ->
             match e with
             | PostStop ->
@@ -227,8 +202,6 @@ let private saveBillingStatements (items: BillingPersistable list) =
 let start
    (system: ActorSystem)
    (chunking: StreamChunkingEnvConfig)
-   (restartSettings: Akka.Streams.RestartSettings)
-   (retryFailedPersistenceAfter: TimeSpan)
    registry
    : IActorRef<BillingStatementMessage>
    =
@@ -239,7 +212,5 @@ let start
             saveBillingStatements = saveBillingStatements
          }
          chunking
-         restartSettings
-         retryFailedPersistenceAfter
          registry
    |> retype

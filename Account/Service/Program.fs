@@ -339,7 +339,6 @@ builder.Services.AddAkka(
                      //       account env var here.
                      Env.config.AccountEventProjectionChunking
                      Env.config.AccountEventReadModelPersistenceBackoffRestart
-                     Env.config.AccountEventReadModelRetryPersistenceAfter
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.org)
@@ -351,7 +350,6 @@ builder.Services.AddAkka(
                   AccountReadModelSyncActor.initProps
                      Env.config.AccountEventProjectionChunking
                      Env.config.AccountEventReadModelPersistenceBackoffRestart
-                     Env.config.AccountEventReadModelRetryPersistenceAfter
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
@@ -365,7 +363,6 @@ builder.Services.AddAkka(
                      //       account env var here.
                      Env.config.AccountEventProjectionChunking
                      Env.config.AccountEventReadModelPersistenceBackoffRestart
-                     Env.config.AccountEventReadModelRetryPersistenceAfter
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.employee)
@@ -380,7 +377,6 @@ builder.Services.AddAkka(
                      //       account env var here.
                      Env.config.AccountEventProjectionChunking
                      Env.config.AccountEventReadModelPersistenceBackoffRestart
-                     Env.config.AccountEventReadModelRetryPersistenceAfter
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)
@@ -481,8 +477,6 @@ builder.Services.AddAkka(
                BillingStatementActor.start
                   system
                   Env.config.BillingStatementPersistenceChunking
-                  Env.config.BillingStatementPersistenceBackoffRestart
-                  Env.config.BillingStatementRetryPersistenceAfter
                   (getActorRegistry provider)
                |> untyped
             )
