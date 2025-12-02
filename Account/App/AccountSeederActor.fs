@@ -1471,8 +1471,8 @@ let seedAccountOwnerActions
                let daysToAdd = num * (5 + num)
 
                if month = numberOfMonthsToGenerateDataFor then
-                  let buffer = DateTime.UtcNow.AddDays(-2).Day
-                  if buffer / daysToAdd >= 1 then daysToAdd else 0
+                  let today = DateTime.UtcNow.Day
+                  if today / daysToAdd >= 1 then daysToAdd else 0
                else
                   daysToAdd
 
