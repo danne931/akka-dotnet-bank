@@ -1665,7 +1665,7 @@ let seedEmployeeActions
             let maxDays =
                if month = numberOfMonthsToGenerateDataFor then
                   let today = DateTime.UtcNow
-                  if today.Day = 1 then None else Some(today.AddDays(-2).Day)
+                  if today.Day = 1 then None else Some(today.AddDays(-1).Day)
                else
                   Some(
                      DateTime.DaysInMonth(timestamp.Year, timestamp.Month) - 1
