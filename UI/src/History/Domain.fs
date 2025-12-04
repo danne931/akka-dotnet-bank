@@ -119,10 +119,6 @@ let employeeHistoryUIFriendly (txn: EmployeeHistory) : HistoryUIFriendly =
                $"Purchase processing at {info.Merchant} with card {info.CardNickname} **{info.CardNumberLast4}"
             Amount = Some <| Money.format info.Amount
       }
-   | EmployeeEvent.PurchaseProgress e -> {
-      props with
-         Name = "Purchase Progress"
-     }
    | EmployeeEvent.PurchaseSettled e ->
       let info = e.Data.Info
       let cleared = e.Data.Clearing.ClearedAmount

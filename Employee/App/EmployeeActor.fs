@@ -267,14 +267,6 @@ let private notifySaga
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
       sagaRef <! msg
-   | EmployeeEvent.PurchaseProgress e ->
-      let evt = PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress e.Data.Info
-
-      let msg =
-         AppSaga.Message.purchase e.OrgId e.CorrelationId evt
-         |> GuaranteedDelivery.message e.CorrelationId.Value
-
-      sagaRef <! msg
    | EmployeeEvent.PurchaseSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettledWithCard e.Data.Clearing
@@ -466,16 +458,17 @@ let actorProps
 
                   registry.SagaGuaranteedDeliveryActor() <! msg
                | Some purchase, _ ->
-                  let msg =
-                     PurchaseProgressCommand.create
-                        purchase.Info.OrgId
-                        purchase.Info.CorrelationId
-                        purchase.Info.EmployeeId
+                  let evt =
+                     PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress
                         progress
-                     |> EmployeeCommand.PurchaseProgress
-                     |> EmployeeMessage.StateChange
 
-                  mailbox.Self <! msg
+                  let info = purchase.Info
+
+                  let msg =
+                     AppSaga.Message.purchase info.OrgId info.CorrelationId evt
+                     |> GuaranteedDelivery.message info.CorrelationId.Value
+
+                  registry.SagaGuaranteedDeliveryActor() <! msg
 
                return ignored ()
             | EmployeeMessage.StateChange(EmployeeCommand.PurchaseIntent intent as cmd) when

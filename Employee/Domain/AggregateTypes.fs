@@ -13,7 +13,6 @@ type EmployeeCommand =
    | CreateCard of CreateCardCommand
    | LinkCard of LinkCardCommand
    | PurchaseIntent of PurchaseIntentCommand
-   | PurchaseProgress of PurchaseProgressCommand
    | SettlePurchase of SettlePurchaseWithCardCommand
    | FailPurchase of FailPurchaseCommand
    | RefundPurchase of RefundPurchaseCommand
@@ -35,7 +34,6 @@ type EmployeeCommand =
       | CreateCard cmd -> Command.envelope cmd
       | LinkCard cmd -> Command.envelope cmd
       | PurchaseIntent cmd -> Command.envelope cmd
-      | PurchaseProgress cmd -> Command.envelope cmd
       | SettlePurchase cmd -> Command.envelope cmd
       | FailPurchase cmd -> Command.envelope cmd
       | RefundPurchase cmd -> Command.envelope cmd
@@ -56,7 +54,6 @@ type EmployeeEvent =
    | CreatedCard of BankEvent<CreatedCard>
    | CardLinked of BankEvent<CardLinked>
    | PurchasePending of BankEvent<CardPurchasePending>
-   | PurchaseProgress of BankEvent<CardIssuerUpdatedPurchaseProgress>
    | PurchaseSettled of BankEvent<CardPurchaseSettled>
    | PurchaseFailed of BankEvent<CardPurchaseFailed>
    | PurchaseRefunded of BankEvent<CardPurchaseRefunded>
@@ -92,8 +89,6 @@ module EmployeeEnvelope =
       | :? BankEvent<CreatedCard> as evt -> CreatedCard evt
       | :? BankEvent<CardLinked> as evt -> CardLinked evt
       | :? BankEvent<CardPurchasePending> as evt -> PurchasePending evt
-      | :? BankEvent<CardIssuerUpdatedPurchaseProgress> as evt ->
-         PurchaseProgress evt
       | :? BankEvent<CardPurchaseSettled> as evt -> PurchaseSettled evt
       | :? BankEvent<CardPurchaseFailed> as evt -> PurchaseFailed evt
       | :? BankEvent<CardPurchaseRefunded> as evt -> PurchaseRefunded evt
@@ -118,7 +113,6 @@ module EmployeeEnvelope =
       | CreatedCard evt -> wrap evt, get evt
       | CardLinked evt -> wrap evt, get evt
       | PurchasePending evt -> wrap evt, get evt
-      | PurchaseProgress evt -> wrap evt, get evt
       | PurchaseSettled evt -> wrap evt, get evt
       | PurchaseFailed evt -> wrap evt, get evt
       | PurchaseRefunded evt -> wrap evt, get evt

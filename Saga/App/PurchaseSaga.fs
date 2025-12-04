@@ -12,7 +12,181 @@ open PurchaseSaga
 open BankActorRegistry
 open Lib.SharedTypes
 
-// TODO: Evaluate scenarios requiring compensation
+let private newEventsFromCardIssuer
+   (saga: PurchaseSaga)
+   (progress: CardIssuerPurchaseProgress)
+   =
+   let existingEvtIds =
+      saga.CardIssuerPurchaseEvents |> List.map _.EventId |> Set.ofList
+
+   let evtsToAdd =
+      progress.Events
+      |> NonEmptyList.toList
+      |> List.filter (_.EventId >> existingEvtIds.Contains >> not)
+      |> List.sortBy _.CreatedAt
+
+   NonEmptyList.fromList evtsToAdd |> Result.toOption
+
+let evaluatePurchaseProgress
+   (timestamp: DateTime)
+   (saga: PurchaseSaga)
+   (progress: CardIssuerPurchaseProgress)
+   (newCardIssuerEvents: PurchaseEvent NonEmptyList)
+   =
+   let finishActivity = SagaLifeCycle.finishActivity timestamp
+   let addActivity = SagaLifeCycle.addActivity timestamp
+
+   let amount =
+      match progress.Status with
+      | PurchaseStatus.Pending -> progress.Amounts.Hold.Amount
+      | PurchaseStatus.Settled -> progress.Amounts.Settlement.Amount
+      | PurchaseStatus.Declined
+      | PurchaseStatus.Voided
+      | PurchaseStatus.Expired -> saga.PurchaseInfo.Amount
+
+   let priorState = saga
+
+   let saga = {
+      saga with
+         PurchaseInfo = {
+            saga.PurchaseInfo with
+               Amount = amount
+         }
+         CardIssuerProgressAmounts = progress.Amounts
+         CardIssuerPurchaseEvents =
+            saga.CardIssuerPurchaseEvents
+            |> List.append (NonEmptyList.toList newCardIssuerEvents)
+            |> List.sortBy _.CreatedAt
+         LifeCycle =
+            let life =
+               saga.LifeCycle
+               |> finishActivity Activity.WaitForCardNetworkResolution
+
+            match saga.BufferedCardIssuerPurchaseProgress with
+            | Some buffer when buffer = progress ->
+               life
+               |> finishActivity (
+                  Activity.BufferCardIssuerPurchaseProgress buffer
+               )
+            | _ -> life
+   }
+
+   let failSaga reason = {
+      saga with
+         Status =
+            PurchaseFailReason.CardNetwork reason |> PurchaseSagaStatus.Failed
+         PurchaseInfo = {
+            saga.PurchaseInfo with
+               Amount = saga.InitialPurchaseIntentAmount
+         }
+         LifeCycle =
+            saga.LifeCycle
+            |> SagaLifeCycle.abortActivities timestamp
+            |> addActivity Activity.AcquireAccountFailureAcknowledgement
+            |> addActivity Activity.AcquireCardFailureAcknowledgement
+   }
+
+   match progress.Status with
+   | PurchaseStatus.Pending ->
+      if saga.PurchaseNotificationSent then
+         saga
+      else
+         // Send purchase notification upon receiving initial Auth confirmation event
+         {
+            saga with
+               LifeCycle =
+                  saga.LifeCycle
+                  |> addActivity Activity.SendPurchaseNotification
+         }
+   | PurchaseStatus.Settled ->
+      // NOTE:
+      // PurchaseEventType.AuthExpiry & AuthReversal occurring after
+      // a clearing will not alter the settled amount.
+      //
+      // NOTE:
+      // It is not certain from the docs whether a PARTIAL AuthExpiry or
+      // AuthReversal can occur before the first clearing.
+      // If it does, the behavior of this program is to record the fact in
+      // sagaState.CardIssuerPurchaseEvents without interacting with
+      // account & employee actors.  As such, no funds reserved from the
+      // initial purchase intent will be released from the card or account entities
+      // until the first clearing or COMPLETE expiry/reversal of funds.
+      //
+      // TODO:
+      // If this situation can occur and we observe a large enough gap in time
+      // between the AuthExpiry/AuthRelease and the Clearing then we may want
+      // to interact with the account/employee actors to release those funds
+      // instead of waiting for the first clearing or complete
+      // expiry/reversal.
+      let amount =
+         progress.Events
+         |> NonEmptyList.toList
+         |> List.sumBy (fun o ->
+            match o.Type with
+            | PurchaseEventType.Clearing
+            | PurchaseEventType.Return
+            // Financial Auths are SMS requests, wherein auth
+            // & clearing are combined into a single message.
+            // See Purchase/Domain/PurchaseLifecycleEvent.fs case 13.
+            | PurchaseEventType.FinancialAuth -> Money.amountSigned o.Money
+            | _ -> 0m)
+
+      if amount = 0m then
+         saga
+      elif
+         priorState.Status = PurchaseSagaStatus.Completed
+         && priorState.PurchaseInfo.Amount = progress.Amounts.Settlement.Amount
+      then
+         saga
+      else
+         let clearedAmount = {
+            ClearedAmount = Money.create amount
+            // Deterministically set the ClearedId by consuming the Lithic
+            // EventId of the oldest event in a CardIssuerPurchaseProgress.
+            PurchaseClearedId =
+               PurchaseClearedId progress.OriginatingEvent.EventId
+         }
+
+         {
+            saga with
+               LifeCycle =
+                  saga.LifeCycle
+                  |> addActivity (
+                     Activity.SettlePurchaseWithAccount clearedAmount
+                  )
+                  |> if saga.PurchaseNotificationSent then
+                        id
+                     else
+                        addActivity Activity.SendPurchaseNotification
+               Status =
+                  // If a clearing event was previously received from Lithic
+                  // and the workflow completed we would have marked the saga
+                  // with Completed status.  It is still possible to receive
+                  // follow up clearing events indicating the need to
+                  // apply additional settled funds to the account.
+                  // See Purchase/Domain/PurchaseLifecycleEvent.fs
+                  // Multiple Completion section, specifically cases
+                  // 9-12.
+                  //
+                  // NOTE:
+                  // A purchase may continue receiving updates from Lithic
+                  // for 7 days, but sometimes 30 days for some txns such as
+                  // auto rentals and hotel reservations.
+                  //
+                  // TODO:
+                  // Determine whether resetting the saga status to
+                  // InProgress, as we do here, is ideal or if it may be
+                  // preferable to keep the saga status as InProgress after
+                  // the initial clearing and only set it to Completed after
+                  // the 7 or 30 day window (no news is good news).
+                  if saga.Status = PurchaseSagaStatus.Completed then
+                     PurchaseSagaStatus.InProgress
+                  else
+                     saga.Status
+         }
+   | PurchaseStatus.Expired -> failSaga CardNetworkFailReason.Expired
+   | PurchaseStatus.Voided -> failSaga CardNetworkFailReason.Voided
+   | PurchaseStatus.Declined -> failSaga CardNetworkFailReason.Declined
 
 let applyStartEvent
    (start: PurchaseSagaStartEvent)
@@ -164,158 +338,9 @@ let applyEvent
                  )
         }
    | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress ->
-      let amount =
-         match progress.Status with
-         | PurchaseStatus.Pending -> progress.Amounts.Hold.Amount
-         | PurchaseStatus.Settled -> progress.Amounts.Settlement.Amount
-         | PurchaseStatus.Declined
-         | PurchaseStatus.Voided
-         | PurchaseStatus.Expired -> saga.PurchaseInfo.Amount
-
-      let priorState = saga
-
-      let saga = {
-         saga with
-            PurchaseInfo = {
-               saga.PurchaseInfo with
-                  Amount = amount
-            }
-            CardIssuerProgressAmounts = progress.Amounts
-            CardIssuerPurchaseEvents =
-               saga.CardIssuerPurchaseEvents
-               |> List.append (NonEmptyList.toList progress.Events)
-               |> List.sortBy _.CreatedAt
-            LifeCycle =
-               let life =
-                  saga.LifeCycle
-                  |> finishActivity Activity.WaitForCardNetworkResolution
-
-               match saga.BufferedCardIssuerPurchaseProgress with
-               | Some buffer when buffer = progress ->
-                  life
-                  |> finishActivity (
-                     Activity.BufferCardIssuerPurchaseProgress buffer
-                  )
-               | _ -> life
-      }
-
-      let failSaga reason = {
-         saga with
-            Status =
-               PurchaseFailReason.CardNetwork reason
-               |> PurchaseSagaStatus.Failed
-            PurchaseInfo = {
-               saga.PurchaseInfo with
-                  Amount = saga.InitialPurchaseIntentAmount
-            }
-            LifeCycle =
-               saga.LifeCycle
-               |> SagaLifeCycle.abortActivities timestamp
-               |> addActivity Activity.AcquireAccountFailureAcknowledgement
-               |> addActivity Activity.AcquireCardFailureAcknowledgement
-      }
-
-      match progress.Status with
-      | PurchaseStatus.Pending ->
-         if saga.PurchaseNotificationSent then
-            saga
-         else
-            // Send purchase notification upon receiving initial Auth confirmation event
-            {
-               saga with
-                  LifeCycle =
-                     saga.LifeCycle
-                     |> addActivity Activity.SendPurchaseNotification
-            }
-      | PurchaseStatus.Settled ->
-         // NOTE:
-         // PurchaseEventType.AuthExpiry & AuthReversal occurring after
-         // a clearing will not alter the settled amount.
-         //
-         // NOTE:
-         // It is not certain from the docs whether a PARTIAL AuthExpiry or
-         // AuthReversal can occur before the first clearing.
-         // If it does, the behavior of this program is to record the fact in
-         // sagaState.CardIssuerPurchaseEvents without interacting with
-         // account & employee actors.  As such, no funds reserved from the
-         // initial purchase intent will be released from the card or account entities
-         // until the first clearing or COMPLETE expiry/reversal of funds.
-         //
-         // TODO:
-         // If this situation can occur and we observe a large enough gap in time
-         // between the AuthExpiry/AuthRelease and the Clearing then we may want
-         // to interact with the account/employee actors to release those funds
-         // instead of waiting for the first clearing or complete
-         // expiry/reversal.
-         let amount =
-            progress.Events
-            |> NonEmptyList.toList
-            |> List.sumBy (fun o ->
-               match o.Type with
-               | PurchaseEventType.Clearing
-               | PurchaseEventType.Return
-               // Financial Auths are SMS requests, wherein auth
-               // & clearing are combined into a single message.
-               // See Purchase/Domain/PurchaseLifecycleEvent.fs case 13.
-               | PurchaseEventType.FinancialAuth -> Money.amountSigned o.Money
-               | _ -> 0m)
-
-         if amount = 0m then
-            saga
-         elif
-            priorState.Status = PurchaseSagaStatus.Completed
-            && priorState.PurchaseInfo.Amount = progress.Amounts.Settlement.Amount
-         then
-            saga
-         else
-            let clearedAmount = {
-               ClearedAmount = Money.create amount
-               // Deterministically set the ClearedId by consuming the Lithic
-               // EventId of the oldest event in a CardIssuerPurchaseProgress.
-               PurchaseClearedId =
-                  PurchaseClearedId progress.OriginatingEvent.EventId
-            }
-
-            {
-               saga with
-                  LifeCycle =
-                     saga.LifeCycle
-                     |> addActivity (
-                        Activity.SettlePurchaseWithAccount clearedAmount
-                     )
-                     |> if saga.PurchaseNotificationSent then
-                           id
-                        else
-                           addActivity Activity.SendPurchaseNotification
-                  Status =
-                     // If a clearing event was previously received from Lithic
-                     // and the workflow completed we would have marked the saga
-                     // with Completed status.  It is still possible to receive
-                     // follow up clearing events indicating the need to
-                     // apply additional settled funds to the account.
-                     // See Purchase/Domain/PurchaseLifecycleEvent.fs
-                     // Multiple Completion section, specifically cases
-                     // 9-12.
-                     //
-                     // NOTE:
-                     // A purchase may continue receiving updates from Lithic
-                     // for 7 days, but sometimes 30 days for some txns such as
-                     // auto rentals and hotel reservations.
-                     //
-                     // TODO:
-                     // Determine whether resetting the saga status to
-                     // InProgress, as we do here, is ideal or if it may be
-                     // preferable to keep the saga status as InProgress after
-                     // the initial clearing and only set it to Completed after
-                     // the 7 or 30 day window (no news is good news).
-                     if saga.Status = PurchaseSagaStatus.Completed then
-                        PurchaseSagaStatus.InProgress
-                     else
-                        saga.Status
-            }
-      | PurchaseStatus.Expired -> failSaga CardNetworkFailReason.Expired
-      | PurchaseStatus.Voided -> failSaga CardNetworkFailReason.Voided
-      | PurchaseStatus.Declined -> failSaga CardNetworkFailReason.Declined
+      match newEventsFromCardIssuer saga progress with
+      | None -> saga
+      | Some events -> evaluatePurchaseProgress timestamp saga progress events
    | PurchaseSagaEvent.PurchaseSettledWithAccount clearing -> {
       saga with
          LifeCycle =
@@ -619,6 +644,10 @@ let onEventPersisted
          acquireAccountFailureAcknowledgement reason
 
       sendPurchaseFailedEmail reason
+   | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress when
+      (newEventsFromCardIssuer previousState progress).IsNone
+      ->
+      ()
    | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress ->
       let fail reason =
          let reason = PurchaseFailReason.CardNetwork reason
