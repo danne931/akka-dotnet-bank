@@ -259,14 +259,15 @@ let private notifySaga
 
       sagaRef <! msg
    | EmployeeEvent.PurchasePending e ->
-      let msg =
-         AppSaga.Message.purchase
-            e.OrgId
-            e.CorrelationId
-            PurchaseSagaEvent.CardReservedFunds
-         |> GuaranteedDelivery.message e.CorrelationId.Value
+      if e.Data.Info.AuthorizationType.IsBypassAuth then
+         let msg =
+            AppSaga.Message.purchase
+               e.OrgId
+               e.CorrelationId
+               PurchaseSagaEvent.CardReservedFunds
+            |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      sagaRef <! msg
+         sagaRef <! msg
    | EmployeeEvent.PurchaseSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettledWithCard e.Data.Clearing

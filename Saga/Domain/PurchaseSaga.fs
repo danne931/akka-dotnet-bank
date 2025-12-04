@@ -41,8 +41,6 @@ type PurchaseSagaEvent =
 
 [<RequireQualifiedAccess; CustomEquality; NoComparison>]
 type Activity =
-   | ReserveEmployeeCardFunds
-   | ReserveAccountFunds
    | ReserveEmployeeCardFundsBypassingAuth
    | ReserveAccountFundsBypassingAuth
    | BufferCardIssuerPurchaseProgress of CardIssuerPurchaseProgress
@@ -56,9 +54,7 @@ type Activity =
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | WaitForCardNetworkResolution
-         | ReserveEmployeeCardFunds
-         | ReserveAccountFunds -> 1
+         | WaitForCardNetworkResolution -> 1
          | _ -> 3
 
       member x.InactivityTimeout =
@@ -68,8 +64,6 @@ type Activity =
          | ReserveAccountFundsBypassingAuth
          | BufferCardIssuerPurchaseProgress _ -> Some(TimeSpan.FromMinutes 1.)
          | SendPurchaseNotification -> Some(TimeSpan.FromMinutes 4.)
-         | ReserveEmployeeCardFunds
-         | ReserveAccountFunds
          | AcquireCardFailureAcknowledgement
          | AcquireAccountFailureAcknowledgement
          | SettlePurchaseWithAccount _
@@ -112,14 +106,12 @@ type PurchaseSaga = {
 } with
 
    member x.ReservedEmployeeCardFunds =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsReserveEmployeeCardFunds
-      || x.LifeCycle.Completed
-         |> List.exists _.Activity.IsReserveEmployeeCardFundsBypassingAuth
+      x.LifeCycle.Completed
+      |> List.exists _.Activity.IsReserveEmployeeCardFundsBypassingAuth
 
    member x.ReservedAccountFunds =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsReserveAccountFunds
-      || x.LifeCycle.Completed
-         |> List.exists _.Activity.IsReserveAccountFundsBypassingAuth
+      x.LifeCycle.Completed
+      |> List.exists _.Activity.IsReserveAccountFundsBypassingAuth
 
    member x.ReservedFunds =
       x.ReservedAccountFunds && x.ReservedEmployeeCardFunds

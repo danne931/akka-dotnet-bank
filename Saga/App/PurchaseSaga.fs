@@ -206,10 +206,9 @@ let applyStartEvent
       LifeCycle = {
          SagaLifeCycle.empty with
             InProgress = [
-               ActivityLifeCycle.init timestamp Activity.ReserveAccountFunds
                ActivityLifeCycle.init
                   timestamp
-                  Activity.ReserveEmployeeCardFunds
+                  Activity.WaitForCardNetworkResolution
             ]
       }
       FailReason = None
@@ -284,7 +283,7 @@ let applyEvent
    =
    let addActivity = SagaLifeCycle.addActivity timestamp
    let finishActivity = SagaLifeCycle.finishActivity timestamp
-   let failActivity = SagaLifeCycle.failActivity timestamp
+   let abortActivity = SagaLifeCycle.abortActivity timestamp
 
    let saga = {
       saga with
@@ -292,42 +291,28 @@ let applyEvent
    }
 
    match evt with
-   | PurchaseSagaEvent.AccountReservedFunds ->
-      let activity =
-         match saga.PurchaseInfo.AuthorizationType with
-         | PurchaseAuthType.BypassAuth ->
-            Activity.ReserveAccountFundsBypassingAuth
-         | _ -> Activity.ReserveAccountFunds
-
-      {
-         saga with
-            LifeCycle =
-               saga.LifeCycle
-               |> finishActivity activity
-               |> if saga.ReservedEmployeeCardFunds then
-                     addActivity Activity.WaitForCardNetworkResolution
-                  else
-                     id
-      }
-   | PurchaseSagaEvent.CardReservedFunds ->
-      let activity =
-         match saga.PurchaseInfo.AuthorizationType with
-         | PurchaseAuthType.BypassAuth ->
-            Activity.ReserveEmployeeCardFundsBypassingAuth
-         | _ -> Activity.ReserveEmployeeCardFunds
-
-      {
-         saga with
-            LifeCycle =
-               saga.LifeCycle
-               |> finishActivity activity
-               |> if saga.ReservedAccountFunds then
-                     addActivity Activity.WaitForCardNetworkResolution
-                  else
-                     id
-      }
+   | PurchaseSagaEvent.AccountReservedFunds -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.ReserveAccountFundsBypassingAuth
+            |> if saga.ReservedEmployeeCardFunds then
+                  addActivity Activity.WaitForCardNetworkResolution
+               else
+                  id
+     }
+   | PurchaseSagaEvent.CardReservedFunds -> {
+      saga with
+         LifeCycle =
+            saga.LifeCycle
+            |> finishActivity Activity.ReserveEmployeeCardFundsBypassingAuth
+            |> if saga.ReservedAccountFunds then
+                  addActivity Activity.WaitForCardNetworkResolution
+               else
+                  id
+     }
    | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress when
-      not saga.ReservedFunds
+      saga.PurchaseInfo.AuthorizationType.IsBypassAuth && not saga.ReservedFunds
         ->
         {
            saga with
@@ -369,32 +354,16 @@ let applyEvent
          LifeCycle =
             finishActivity Activity.SendPurchaseNotification saga.LifeCycle
      }
-   | PurchaseSagaEvent.PurchaseRejected reason ->
-      let life = saga.LifeCycle
-
-      let life =
-         if saga.ReservedEmployeeCardFunds then
-            addActivity Activity.AcquireCardFailureAcknowledgement life
-         else
-            life
-
-      let life =
-         if saga.ReservedAccountFunds then
-            addActivity Activity.AcquireAccountFailureAcknowledgement life
-         else
-            life
-
-      let life =
-         life
-         |> failActivity Activity.ReserveAccountFunds
-         |> failActivity Activity.ReserveEmployeeCardFunds
-
-      {
-         saga with
-            Status = PurchaseSagaStatus.Failed reason
-            FailReason = Some reason
-            LifeCycle = life
-      }
+   | PurchaseSagaEvent.PurchaseRejected reason -> {
+      saga with
+         Status = PurchaseSagaStatus.Failed reason
+         FailReason = Some reason
+         LifeCycle =
+            saga.LifeCycle
+            |> abortActivity Activity.WaitForCardNetworkResolution
+            |> addActivity Activity.AcquireCardFailureAcknowledgement
+            |> addActivity Activity.AcquireAccountFailureAcknowledgement
+     }
    | PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard -> {
       saga with
          LifeCycle =
@@ -451,11 +420,9 @@ let stateTransition
       | PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount ->
          activityIsDone Activity.AcquireAccountFailureAcknowledgement
       | PurchaseSagaEvent.AccountReservedFunds ->
-         activityIsDone Activity.ReserveAccountFunds
-         && activityIsDone Activity.ReserveAccountFundsBypassingAuth
+         activityIsDone Activity.ReserveAccountFundsBypassingAuth
       | PurchaseSagaEvent.CardReservedFunds ->
-         activityIsDone Activity.ReserveEmployeeCardFunds
-         && activityIsDone Activity.ReserveEmployeeCardFundsBypassingAuth
+         activityIsDone Activity.ReserveEmployeeCardFundsBypassingAuth
       | PurchaseSagaEvent.PurchaseSettledWithAccount clearing ->
          activityIsDone (Activity.SettlePurchaseWithAccount clearing)
       | PurchaseSagaEvent.PurchaseSettledWithCard clearing ->
@@ -637,12 +604,8 @@ let onEventPersisted
    | PurchaseSagaEvent.CardReservedFunds
    | PurchaseSagaEvent.AccountReservedFunds -> sendProgressFromBufferMaybe ()
    | PurchaseSagaEvent.PurchaseRejected reason ->
-      if updatedState.ReservedEmployeeCardFunds then
-         acquireCardFailureAcknowledgement reason
-
-      if updatedState.ReservedAccountFunds then
-         acquireAccountFailureAcknowledgement reason
-
+      acquireCardFailureAcknowledgement reason
+      acquireAccountFailureAcknowledgement reason
       sendPurchaseFailedEmail reason
    | PurchaseSagaEvent.CardIssuerUpdatedPurchaseProgress progress when
       (newEventsFromCardIssuer previousState progress).IsNone
@@ -679,9 +642,7 @@ let onEventPersisted
    | PurchaseSagaEvent.EvaluateRemainingWork ->
       for activity in previousState.LifeCycle.ActivitiesRetryableAfterInactivity do
          match activity.Activity with
-         | Activity.WaitForCardNetworkResolution
-         | Activity.ReserveEmployeeCardFunds
-         | Activity.ReserveAccountFunds -> ()
+         | Activity.WaitForCardNetworkResolution -> ()
          | Activity.ReserveEmployeeCardFundsBypassingAuth ->
             reserveCardFunds
                registry

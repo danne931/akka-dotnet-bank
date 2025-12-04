@@ -222,16 +222,16 @@ let notifySaga
       *)
       ()
    | AccountEvent.DebitPending e ->
-      let msg =
-         AppSaga.Message.purchase
-            e.OrgId
-            e.CorrelationId
-            PurchaseSagaEvent.AccountReservedFunds
-         |> GuaranteedDelivery.message e.CorrelationId.Value
+      if e.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth then
+         let msg =
+            AppSaga.Message.purchase
+               e.OrgId
+               e.CorrelationId
+               PurchaseSagaEvent.AccountReservedFunds
+            |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      sagaRef <! msg
-
-      if not e.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth then
+         sagaRef <! msg
+      else
          mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
    | AccountEvent.DebitSettled e ->
       let msg =
