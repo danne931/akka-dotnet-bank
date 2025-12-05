@@ -194,8 +194,10 @@ type Event =
             "PlatformTransferRecipientUnableToDepositFunds"
          | PlatformTransferSagaEvent.PartnerBankSyncResponse _ ->
             "PlatformTransferPartnerBankSyncResponse"
-         | PlatformTransferSagaEvent.TransferSettled ->
+         | PlatformTransferSagaEvent.TransferSettled _ ->
             "PlatformTransferSettled"
+         | PlatformTransferSagaEvent.AckPaymentFulfillment ->
+            "PlatformTransferAckPaymentFulfillment"
          | PlatformTransferSagaEvent.SupportTeamResolvedPartnerBankSync ->
             "PlatformTransferSupportTeamResolvedPartnerBankSync"
          | PlatformTransferSagaEvent.SenderReleasedReservedFunds ->
@@ -565,8 +567,8 @@ module Message =
    // It is up to the consumer to decide whether they want to include the extra overhead cost for
    // non-start messages.
    //
-   // For non-start messages to saga actors it is likely not necessary to use GuaranteedDelivery
-   // as Lib/Saga/SagaActor.fs will reattempt activities for which it does not receive a response before
+   // For non-start messages to saga actors it may not necessary to use GuaranteedDelivery since
+   // Lib/Saga/SagaActor.fs will reattempt activities for which it does not receive a response before
    // the Saga activity's inactivity timeout.
    let private startMessage
       orgId
@@ -587,6 +589,12 @@ module Message =
       : GuaranteedDelivery.Message<AppSagaMessage>
       =
       GuaranteedDelivery.message corrId.Value msg
+
+   let redelivered (msg: AppSagaMessage) =
+      match msg with
+      | AppSagaMessage.Start e -> AppSagaMessage.Start e.AsDeliveryRetry
+      | AppSagaMessage.Event e -> AppSagaMessage.Event e.AsDeliveryRetry
+      | _ -> msg
 
    let orgOnboardStart orgId corrId (evt: OrgOnboardingSagaStartEvent) =
       startMessage orgId corrId (StartEvent.OrgOnboarding evt)

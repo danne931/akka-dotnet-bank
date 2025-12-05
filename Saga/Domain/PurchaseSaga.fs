@@ -60,14 +60,14 @@ type Activity =
       member x.InactivityTimeout =
          match x with
          | WaitForCardNetworkResolution -> None
+         | BufferCardIssuerPurchaseProgress _ -> Some(TimeSpan.FromMinutes 3.)
          | ReserveEmployeeCardFundsBypassingAuth
          | ReserveAccountFundsBypassingAuth
-         | BufferCardIssuerPurchaseProgress _ -> Some(TimeSpan.FromMinutes 1.)
-         | SendPurchaseNotification -> Some(TimeSpan.FromMinutes 4.)
+         | SendPurchaseNotification
          | AcquireCardFailureAcknowledgement
          | AcquireAccountFailureAcknowledgement
          | SettlePurchaseWithAccount _
-         | SettlePurchaseWithCard _ -> Some(TimeSpan.FromSeconds 4.)
+         | SettlePurchaseWithCard _ -> Some(TimeSpan.FromMinutes 1.)
 
    override x.Equals compareTo =
       match compareTo with

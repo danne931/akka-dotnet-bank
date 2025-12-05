@@ -478,6 +478,42 @@ type Account = {
       AutoTransferRule = None
    }
 
+/// If the account actor receives a message with an ID equivalent
+/// to an event we already persisted then we ignore it.  This ignores
+/// messages that may be duplicated due to AtLeastOnceDelivery.
+/// However, we need to have slightly different behavior if the
+/// message comes from a saga actor since it has retry capabilities.
+/// If the saga actor has an in-progress activity which has reached its
+/// InactivityTimeout (it did not complete within the expected time),
+/// then it will resend the message to the account actor using
+/// the same ID. So, in that case the saga actor wants to receive an
+/// ACK that the account actor indeed processed the message so it can
+/// complete it's activity.
+/// Scenario:
+///    1. Account event persisted
+///    2. message sent from account actor to saga actor
+///    3. message lost in translation instead of delivered
+///    (probably will be a rare situation since I am delivering most
+///     messages to saga actors via RabbitMQ but better safe than sorry)
+/// Reconciliation:
+///    1. saga actor receives EvaluateRemainingWork message a few
+///       seconds/minutes into the future due to having an in-progress activity
+///       with an expired InactivityTimeout
+///    2. saga actor reattempts delivery of the message to the account actor
+///    3. account actor receives message and checks Outbox to see
+///       if it has already associated an outbox message with the same ID
+///    4. since an outgoing saga message exists in the Outbox, it will
+///       resend that saga message
+///    5. saga actor will receive the message, complete the activity, and resume
+///       processing next steps
+type AccountOutboxMessage =
+   // NOTE:
+   // AppSaga.AppSagaMessage in Saga/Domain directory depends
+   // on Account/Domain directory so can not reference it here.
+   // Instead will use obj here and interpret it in the account actor.
+   // Good enough for now.
+   | Saga of obj
+
 type ParentAccountSnapshot = {
    OrgId: OrgId
    ParentAccountId: ParentAccountId
@@ -490,6 +526,7 @@ type ParentAccountSnapshot = {
    Counterparties: Map<CounterpartyId, Counterparty>
    Events: AccountEvent list
    ProcessedCommands: Map<EventId, DateTime>
+   Outbox: Map<EventId, DateTime * AccountOutboxMessage>
 } with
 
    static member empty: ParentAccountSnapshot = {
@@ -512,6 +549,7 @@ type ParentAccountSnapshot = {
       Counterparties = Map.empty
       Events = []
       ProcessedCommands = Map.empty
+      Outbox = Map.empty
    }
 
    member x.eventsForAccount(accountId: AccountId) =
@@ -577,6 +615,7 @@ type AccountMessage =
       Result<DomesticTransfer list option, Err>
    | Delete
    | PruneIdempotencyChecker
+   | PruneOutbox
 
 [<RequireQualifiedAccess>]
 type AccountClosureMessage =

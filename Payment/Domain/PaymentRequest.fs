@@ -28,6 +28,7 @@ type PaymentFailReason =
    | InsufficientFunds
 
 type PaymentFulfillment = {
+   PaymentRequestId: PaymentRequestId
    TransferId: TransferId
    FulfilledAt: DateTime
 }

@@ -701,6 +701,7 @@ let sqlParamReducer
          let status =
             PaymentRequestStatus.Fulfilled {
                TransferId = info.TransferId
+               PaymentRequestId = paymentId
                FulfilledAt = e.Timestamp
             }
 

@@ -307,14 +307,13 @@ let applyEvent
       | _ -> state.CardIssuerLinks
 
    {
-      Info = updatedEmployee
-      Events = evt :: state.Events
-      ProcessedCommands =
-         let _, envelope = EmployeeEnvelope.unwrap evt
-         state.ProcessedCommands |> Map.add envelope.Id envelope.Timestamp
-      PendingPurchaseDeductions = state.PendingPurchaseDeductions
-      PendingPurchases = state.PendingPurchases
-      CardIssuerLinks = updatedCardIssuerLinks
+      state with
+         Info = updatedEmployee
+         Events = evt :: state.Events
+         ProcessedCommands =
+            let _, envelope = EmployeeEnvelope.unwrap evt
+            state.ProcessedCommands |> Map.add envelope.Id envelope.Timestamp
+         CardIssuerLinks = updatedCardIssuerLinks
    }
 
 module private StateTransition =

@@ -58,7 +58,7 @@ type Activity =
                if Env.isProd then
                   TimeSpan.FromHours 4.
                else
-                  TimeSpan.FromMinutes 1.
+                  TimeSpan.FromSeconds 30.
             )
          | TransferServiceAck
          | SendTransferInitiatedNotification -> Some(TimeSpan.FromMinutes 4.)

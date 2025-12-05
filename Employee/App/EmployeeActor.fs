@@ -22,6 +22,8 @@ open EmployeeOnboardingSaga
 open CardSetupSaga
 open BankActorRegistry
 
+type LookbackHours = { Outbox: int; ProcessedCommands: int }
+
 module private PurchaseInfo =
    let fromAuth
       (auth: PurchaseAuthorization)
@@ -156,35 +158,31 @@ let private closeEmployeeCards
          }
       }
 
-let private notifySaga
-   (registry: #ISagaGuaranteedDeliveryActor)
-   (mailbox: Eventsourced<obj>)
-   (state: EmployeeSnapshot)
-   evt
+let private computeOutboxMessage
+   (employee: Employee)
+   (evt: EmployeeEvent)
+   : EmployeeOutboxMessage option
    =
-   let employee = state.Info
-   let sagaRef = registry.SagaGuaranteedDeliveryActor()
-
    match evt with
    | EmployeeEvent.CreatedAccountOwner e ->
       let msg =
          EmployeeOnboardingSagaStartEvent.AccountOwnerCreated e
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      sagaRef <! msg
+      Some(EmployeeOutboxMessage.Saga msg)
    | EmployeeEvent.CreatedEmployee e ->
       let msg =
          EmployeeOnboardingSagaStartEvent.EmployeeCreated e
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      sagaRef <! msg
+      Some(EmployeeOutboxMessage.Saga msg)
    | EmployeeEvent.AccessApproved e ->
       let msg =
          EmployeeOnboardingSagaEvent.AccessApproved
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      sagaRef <! msg
+      Some(EmployeeOutboxMessage.Saga msg)
    | EmployeeEvent.AccessRestored e ->
       let msg =
          EmployeeOnboardingSagaStartEvent.EmployeeAccessRestored {|
@@ -195,7 +193,7 @@ let private notifySaga
          |}
          |> AppSaga.Message.employeeOnboardStart e.OrgId e.CorrelationId
 
-      sagaRef <! msg
+      Some(EmployeeOutboxMessage.Saga msg)
    | EmployeeEvent.InvitationTokenRefreshed e ->
       let msg =
          e.Data.InviteToken
@@ -203,21 +201,21 @@ let private notifySaga
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      sagaRef <! msg
+      Some(EmployeeOutboxMessage.Saga msg)
    | EmployeeEvent.InvitationCancelled e ->
       let msg =
          EmployeeOnboardingSagaEvent.InviteCancelled e.Data.Reason
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      sagaRef <! msg
+      Some(EmployeeOutboxMessage.Saga msg)
    | EmployeeEvent.InvitationConfirmed e ->
       let msg =
          EmployeeOnboardingSagaEvent.InviteConfirmed
          |> AppSaga.Message.employeeOnboard e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      sagaRef <! msg
+      Some(EmployeeOutboxMessage.Saga msg)
    | EmployeeEvent.CreatedCard e ->
       let msg =
          AppSaga.Message.cardSetupStart e.OrgId e.CorrelationId {
@@ -226,7 +224,62 @@ let private notifySaga
             EmployeeEmail = employee.Email
          }
 
-      sagaRef <! msg
+      Some(EmployeeOutboxMessage.Saga msg)
+   | EmployeeEvent.CardLinked e ->
+      let msg =
+         CardSetupSagaEvent.ProviderCardIdLinked
+         |> AppSaga.Message.cardSetup e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
+
+      Some(EmployeeOutboxMessage.Saga msg)
+   | EmployeeEvent.PurchasePending e when
+      e.Data.Info.AuthorizationType.IsBypassAuth
+      ->
+      let msg =
+         AppSaga.Message.purchase
+            e.OrgId
+            e.CorrelationId
+            PurchaseSagaEvent.CardReservedFunds
+         |> GuaranteedDelivery.message e.CorrelationId.Value
+
+      Some(EmployeeOutboxMessage.Saga msg)
+   | EmployeeEvent.PurchaseSettled e ->
+      let msg =
+         PurchaseSagaEvent.PurchaseSettledWithCard e.Data.Clearing
+         |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
+
+      Some(EmployeeOutboxMessage.Saga msg)
+   | EmployeeEvent.PurchaseFailed e ->
+      let msg =
+         PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard
+         |> AppSaga.Message.purchase e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
+
+      Some(EmployeeOutboxMessage.Saga msg)
+   | _ -> None
+
+let applyComputedOutboxToState (state: EmployeeSnapshot) (evt: EmployeeEvent) =
+   let computed = computeOutboxMessage state.Info evt
+   let _, envelope = EmployeeEnvelope.unwrap evt
+
+   match computed with
+   | Some msg -> {
+      state with
+         Outbox = state.Outbox |> Map.add envelope.Id (envelope.Timestamp, msg)
+     }
+   | None -> state
+
+let private forwardMessagesAfterEventPersistence
+   (registry: #ISagaGuaranteedDeliveryActor & #ISagaActor)
+   (mailbox: Eventsourced<obj>)
+   (state: EmployeeSnapshot)
+   (evt: EmployeeEvent)
+   =
+   let employee = state.Info
+   let _, envelope = EmployeeEnvelope.unwrap evt
+
+   match evt with
    | EmployeeEvent.UpdatedRole e ->
       match e.Data.Role, e.Data.CardInfo with
       | Role.Scholar, _ -> closeEmployeeCards registry state e.CorrelationId
@@ -251,44 +304,23 @@ let private notifySaga
 
          mailbox.Parent() <! msg
       | _ -> ()
-   | EmployeeEvent.CardLinked e ->
-      let msg =
-         CardSetupSagaEvent.ProviderCardIdLinked
-         |> AppSaga.Message.cardSetup e.OrgId e.CorrelationId
-         |> GuaranteedDelivery.message e.CorrelationId.Value
-
-      sagaRef <! msg
-   | EmployeeEvent.PurchasePending e ->
-      if e.Data.Info.AuthorizationType.IsBypassAuth then
-         let msg =
-            AppSaga.Message.purchase
-               e.OrgId
-               e.CorrelationId
-               PurchaseSagaEvent.CardReservedFunds
-            |> GuaranteedDelivery.message e.CorrelationId.Value
-
-         sagaRef <! msg
-   | EmployeeEvent.PurchaseSettled e ->
-      let msg =
-         PurchaseSagaEvent.PurchaseSettledWithCard e.Data.Clearing
-         |> AppSaga.Message.purchase e.OrgId e.CorrelationId
-         |> GuaranteedDelivery.message e.CorrelationId.Value
-
-      sagaRef <! msg
-   | EmployeeEvent.PurchaseFailed e ->
-      let msg =
-         PurchaseSagaEvent.PurchaseFailureAcknowledgedByCard
-         |> AppSaga.Message.purchase e.OrgId e.CorrelationId
-         |> GuaranteedDelivery.message e.CorrelationId.Value
-
-      sagaRef <! msg
-   | _ -> ()
+   | _ ->
+      match computeOutboxMessage employee evt with
+      | Some(EmployeeOutboxMessage.Saga msg) ->
+         match msg with
+         | :? AppSaga.AppSagaMessage as msg ->
+            registry.SagaActor envelope.CorrelationId <! msg
+         | :? GuaranteedDelivery.Message<AppSaga.AppSagaMessage> as msg ->
+            registry.SagaGuaranteedDeliveryActor() <! msg
+         | msg -> logError mailbox $"Unknown outbox message {msg}"
+      | None -> ()
 
 type private PurchaseAuthTimeout() = class end
 
 let actorProps
    (registry: #IAccountActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (broadcaster: SignalRBroadcast)
+   (lookbackHours: LookbackHours)
    (onLifeCycleEvent: Eventsourced<obj> -> Employee -> obj -> Effect<obj>)
    =
    let handler (mailbox: Eventsourced<obj>) =
@@ -310,17 +342,10 @@ let actorProps
 
             match box msg with
             | Persisted mailbox (:? EmployeeEvent as evt) ->
-               let state = Employee.applyEvent state evt
-               let employee = state.Info
-
-               broadcaster.employeeEventPersisted evt employee
-
-               notifySaga registry mailbox state evt
-
                replyTo <! PurchaseAuthorizationStatus.Approved
-
                mailbox.UnstashAll()
 
+               let state = Employee.applyEvent state evt
                return! operating (Some state)
             | :? PurchaseAuthorizationStatus as authStatusFromAccount ->
                authTimeout.Cancel()
@@ -364,8 +389,9 @@ let actorProps
 
             broadcaster.employeeEventPersisted evt employee
 
-            notifySaga registry mailbox state evt
+            forwardMessagesAfterEventPersistence registry mailbox state evt
 
+            let state = applyComputedOutboxToState state evt
             return! operating (Some state)
          | :? SnapshotOffer as o -> return! operating <| Some(unbox o.Snapshot)
          | :? ConsumerController.Delivery<EmployeeMessage> as msg ->
@@ -380,6 +406,42 @@ let actorProps
             match envelope.Message with
             | :? EmployeeMessage as msg ->
                match msg with
+               // Redeliver messages in outbox to saga actor.
+               // See EmployeeOutbox type for more information.
+               | EmployeeMessage.StateChange cmd when
+                  state.Outbox.ContainsKey cmd.Envelope.Id
+                  ->
+                  let corrId = cmd.Envelope.CorrelationId
+
+                  match state.Outbox |> Map.tryFind cmd.Envelope.Id with
+                  | Some(timestamp, EmployeeOutboxMessage.Saga msg) ->
+                     let logOutboxRedeliver () =
+                        logWarning
+                           mailbox
+                           $"Associated message exists in outbox {msg} {timestamp}"
+
+                     match msg with
+                     | :? AppSaga.AppSagaMessage as msg ->
+                        logOutboxRedeliver ()
+
+                        registry.SagaActor corrId
+                        <! AppSaga.Message.redelivered msg
+
+                        return ignored ()
+                     | :? GuaranteedDelivery.Message<AppSaga.AppSagaMessage> as msg ->
+                        logOutboxRedeliver ()
+
+                        let msg =
+                           AppSaga.Message.guaranteedDelivery
+                              corrId
+                              (AppSaga.Message.redelivered msg.Message)
+
+                        registry.SagaGuaranteedDeliveryActor() <! msg
+                        return ignored ()
+                     | other ->
+                        logError
+                           $"Unknown message in outbox {other} {timestamp}"
+                  | None -> return ignored ()
                // Handle potential for receiving the same command multiple times.
                | EmployeeMessage.StateChange cmd when
                   state.ProcessedCommands.ContainsKey cmd.Envelope.Id
@@ -517,21 +579,37 @@ let actorProps
                mailbox.Parent() <! msg
                return ignored ()
             | EmployeeMessage.PruneIdempotencyChecker ->
-               // Keep last 24 hours of processed commands
+               let cutoff =
+                  DateTime.UtcNow.AddHours -lookbackHours.ProcessedCommands
+
                let stateOpt =
                   stateOpt
                   |> Option.map (fun state -> {
                      state with
                         ProcessedCommands =
                            state.ProcessedCommands
-                           |> Map.filter (fun _ date ->
-                              date > DateTime.UtcNow.AddHours -24)
+                           |> Map.filter (fun _ date -> date > cutoff)
+                  })
+
+               return! operating stateOpt
+            | EmployeeMessage.PruneOutbox ->
+               let cutoff = DateTime.UtcNow.AddHours -lookbackHours.Outbox
+
+               let stateOpt =
+                  stateOpt
+                  |> Option.map (fun state -> {
+                     state with
+                        Outbox =
+                           state.Outbox
+                           |> Map.filter (fun _ (date, _) -> date > cutoff)
                   })
 
                return! operating stateOpt
          // Event replay on actor start
          | :? EmployeeEvent as e when mailbox.IsRecovering() ->
-            return! operating <| Some(Employee.applyEvent state e)
+            let state = Employee.applyEvent state e
+            let state = applyComputedOutboxToState state e
+            return! operating (Some state)
          | msg -> return onLifeCycleEvent mailbox employee msg
       }
 
@@ -568,6 +646,13 @@ let private handleLifeCycleEvent
                      EmployeeMessage.PruneIdempotencyChecker
                   |> ignore
 
+                  mailbox.ScheduleRepeatedly
+                     TimeSpan.Zero
+                     (TimeSpan.FromHours 4)
+                     mailbox.Self
+                     EmployeeMessage.PruneOutbox
+                  |> ignore
+
                   ignored ()
             LifecyclePostStop =
                fun _ ->
@@ -592,10 +677,13 @@ let initProps
    (consumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<EmployeeMessage>>)
    =
+   let lookbackHours = { Outbox = 24; ProcessedCommands = 24 }
+
    let childProps =
       actorProps
          registry
          broadcaster
+         lookbackHours
          (handleLifeCycleEvent consumerControllerRef)
 
    PersistenceSupervisor.create {
