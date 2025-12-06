@@ -22,32 +22,23 @@ export default function initPostgres (
   return new k8s.helm.v4.Chart(
     config.k8ResourceName,
     {
-      // https://hub.docker.com/r/bitnamicharts/postgresql
-      chart: 'oci://registry-1.docker.io/bitnamicharts/postgresql',
-      version: '18.1.13',
+      // https://artifacthub.io/packages/helm/cloudpirates-postgres/postgres
+      chart: 'oci://registry-1.docker.io/cloudpirates/postgres',
+      version: '0.12.4',
 
       namespace: namespace.metadata.name,
 
       values: {
-        global: {
-          postgresql: {
-            auth: {
-              username: config.user,
-              password: config.password
-            }
-          }
-        },
-
         auth: {
-          database: config.database
+          database: config.database,
+          username: config.user,
+          password: config.password
         },
 
-        primary: {
-          initdb: {
-            // postgres-schemas configmap containing SQL files
-            // from Database/Init directory.
-            scriptsConfigMap: schemaConfigMap.metadata.name
-          }
+        initdb: {
+          // postgres-schemas configmap containing SQL files
+          // from Database/Init directory.
+          scriptsConfigMap: schemaConfigMap.metadata.name
         }
       }
     },
