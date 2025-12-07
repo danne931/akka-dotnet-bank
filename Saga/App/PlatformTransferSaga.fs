@@ -190,35 +190,60 @@ let applyEvent (saga: PlatformTransferSaga) (evt: Event) (timestamp: DateTime) =
       saga with
          LifeCycle = SagaLifeCycle.resetInProgressActivities saga.LifeCycle
      }
-   | Event.TransferSettled -> {
+   | Event.TransferSettled fulfillment -> {
       saga with
          LifeCycle =
             saga.LifeCycle
             |> finishActivity Activity.SettleTransfer
             |> addActivity Activity.SendTransferNotification
             |> addActivity Activity.SendTransferDepositNotification
+            |> match fulfillment with
+               | Some _ -> addActivity Activity.FulfillPayment
+               | None -> id
      }
-   | Event.TransferNotificationSent -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle |> finishActivity Activity.SendTransferNotification
-         Status =
-            if saga.TransferDepositNotificationSent then
-               PlatformTransferSagaStatus.Completed
-            else
-               saga.Status
-     }
-   | Event.TransferDepositNotificationSent -> {
-      saga with
-         LifeCycle =
-            saga.LifeCycle
-            |> finishActivity Activity.SendTransferDepositNotification
-         Status =
-            if saga.TransferNotificationSent then
-               PlatformTransferSagaStatus.Completed
-            else
-               saga.Status
-     }
+   | Event.AckPaymentFulfillment ->
+      let saga = {
+         saga with
+            LifeCycle = saga.LifeCycle |> finishActivity Activity.FulfillPayment
+      }
+
+      if saga.ClosingConcurrentActivitiesFinished then
+         {
+            saga with
+               Status = PlatformTransferSagaStatus.Completed
+         }
+      else
+         saga
+   | Event.TransferNotificationSent ->
+      let saga = {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.SendTransferNotification
+      }
+
+      if saga.ClosingConcurrentActivitiesFinished then
+         {
+            saga with
+               Status = PlatformTransferSagaStatus.Completed
+         }
+      else
+         saga
+   | Event.TransferDepositNotificationSent ->
+      let saga = {
+         saga with
+            LifeCycle =
+               saga.LifeCycle
+               |> finishActivity Activity.SendTransferDepositNotification
+      }
+
+      if saga.ClosingConcurrentActivitiesFinished then
+         {
+            saga with
+               Status = PlatformTransferSagaStatus.Completed
+         }
+      else
+         saga
 
 let stateTransitionStart
    (evt: PlatformTransferSagaStartEvent)
@@ -261,8 +286,10 @@ let stateTransition
          activityIsDone Activity.SendTransferDepositNotification
       | PlatformTransferSagaEvent.SenderReleasedReservedFunds ->
          activityIsDone Activity.ReleaseSenderFunds
-      | PlatformTransferSagaEvent.TransferSettled ->
+      | PlatformTransferSagaEvent.TransferSettled _ ->
          activityIsDone Activity.SettleTransfer
+      | PlatformTransferSagaEvent.AckPaymentFulfillment ->
+         activityIsDone Activity.FulfillPayment
 
    if saga.Status = PlatformTransferSagaStatus.Completed then
       Error SagaStateTransitionError.HasAlreadyCompleted
@@ -312,7 +339,8 @@ type OperationEnv = {
 
 let onEventPersisted
    (broadcaster: SignalRBroadcast.SignalRBroadcast)
-   (registry: #IAccountActor & #IEmailActor & #IPartnerBankServiceActor)
+   (registry:
+      #IAccountActor & #IEmailActor & #IPartnerBankServiceActor & #ISagaGuaranteedDeliveryActor)
    (operationEnv: OperationEnv)
    (previousState: PlatformTransferSaga)
    (currentState: PlatformTransferSaga)
@@ -416,6 +444,16 @@ let onEventPersisted
 
       registry.AccountActor transfer.Sender.ParentAccountId <! msg
 
+   let fulfillPayment (fulfillment: Bank.Payment.Domain.PaymentFulfillment) =
+      let corrId = fulfillment.PaymentRequestId.AsCorrelationId
+
+      let msg =
+         PaymentRequestSaga.PaymentRequestSagaEvent.PaymentFulfilled fulfillment
+         |> AppSaga.Message.paymentRequest transfer.Recipient.OrgId corrId
+         |> GuaranteedDelivery.message corrId.Value
+
+      registry.SagaGuaranteedDeliveryActor() <! msg
+
    match evt with
    | TransferEvent.ScheduledTransferActivated -> reserveSenderFunds ()
    | TransferEvent.SenderReservedFunds _ -> depositTransfer ()
@@ -462,9 +500,11 @@ let onEventPersisted
       // reattempt syncing transaction to partner bank.
       syncToPartnerBank ()
    | TransferEvent.SenderReleasedReservedFunds -> ()
-   | TransferEvent.TransferSettled ->
+   | TransferEvent.TransferSettled fulfillment ->
       transferSentEmail ()
       transferDepositEmail ()
+      fulfillment |> Option.iter fulfillPayment
+   | TransferEvent.AckPaymentFulfillment -> ()
    | TransferEvent.RecipientDepositUndo -> ()
    | TransferEvent.ResetInProgressActivityAttempts -> ()
    | TransferEvent.EvaluateRemainingWork ->
@@ -475,6 +515,12 @@ let onEventPersisted
          | Activity.SyncToPartnerBank -> syncToPartnerBank ()
          | Activity.SendTransferNotification -> transferSentEmail ()
          | Activity.SendTransferDepositNotification -> transferDepositEmail ()
+         | Activity.FulfillPayment ->
+            currentState.Events
+            |> List.tryPick (function
+               | TransferEvent.TransferSettled fulfillment -> fulfillment
+               | _ -> None)
+            |> Option.iter fulfillPayment
          | Activity.ReleaseSenderFunds ->
             match
                currentState.RequiresReleaseSenderFunds, currentState.Status

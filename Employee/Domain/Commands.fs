@@ -263,34 +263,6 @@ module PurchaseIntentCommand =
       }
       |> Ok
 
-type PurchaseProgressCommand = Command<CardIssuerPurchaseProgress>
-
-module PurchaseProgressCommand =
-   let create
-      orgId
-      correlationId
-      (employeeId: EmployeeId)
-      (data: CardIssuerPurchaseProgress)
-      =
-      Command.create
-         employeeId.AsEntityId
-         orgId
-         correlationId
-         Initiator.System
-         data
-
-   let toEvent
-      (cmd: PurchaseProgressCommand)
-      : ValidationResult<BankEvent<CardIssuerUpdatedPurchaseProgress>>
-      =
-      BankEvent.create2<
-         CardIssuerPurchaseProgress,
-         CardIssuerUpdatedPurchaseProgress
-       >
-         cmd
-         { Info = cmd.Data }
-      |> Ok
-
 type SettlePurchaseWithCardCommand = Command<CardPurchaseSettled>
 
 module SettlePurchaseWithCardCommand =

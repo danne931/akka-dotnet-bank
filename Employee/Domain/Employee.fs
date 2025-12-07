@@ -70,7 +70,6 @@ let addPendingPurchase (state: EmployeeSnapshot) (info: PurchaseInfo) =
             state.PendingPurchases
             |> Map.add txnId {
                Info = info
-               Events = []
                Status = PurchaseStatus.Pending
             }
          PendingPurchaseDeductions =
@@ -78,36 +77,6 @@ let addPendingPurchase (state: EmployeeSnapshot) (info: PurchaseInfo) =
             |> Map.change
                   info.CardId
                   (Option.map (PendingFunds.add txnId.Value fund))
-   }
-
-let updatePendingPurchase
-   (state: EmployeeSnapshot)
-   (progress: CardIssuerPurchaseProgress)
-   =
-   let txnId = progress.PurchaseId
-
-   let updateProgress (purchase: Purchase) =
-      // Purchase amount may change when receiving AuthAdvice events
-      let amount =
-         match progress.Status with
-         | PurchaseStatus.Pending -> progress.Amounts.Hold.Amount
-         | PurchaseStatus.Settled -> progress.Amounts.Settlement.Amount
-         | PurchaseStatus.Declined
-         | PurchaseStatus.Voided
-         | PurchaseStatus.Expired -> purchase.Info.Amount
-
-      {
-         purchase with
-            Status = progress.Status
-            Events = purchase.Events @ NonEmptyList.toList progress.Events
-            Info.Amount = amount
-      }
-
-   {
-      state with
-         PendingPurchases =
-            state.PendingPurchases
-            |> Map.change txnId (Option.map updateProgress)
    }
 
 let applyEvent
@@ -191,7 +160,6 @@ let applyEvent
 
         }
       | PurchasePending _ -> em
-      | PurchaseProgress _ -> em
       | PurchaseFailed _ -> em
       | PurchaseRefunded _ -> em
       | ConfiguredRollingPurchaseLimit e -> {
@@ -330,7 +298,6 @@ let applyEvent
                         info.CardId
                         (Option.map (PendingFunds.remove txnId.Value))
          }
-      | PurchaseProgress e -> updatePendingPurchase state e.Data.Info
       | _ -> state
 
    let updatedCardIssuerLinks =
@@ -340,14 +307,13 @@ let applyEvent
       | _ -> state.CardIssuerLinks
 
    {
-      Info = updatedEmployee
-      Events = evt :: state.Events
-      ProcessedCommands =
-         let _, envelope = EmployeeEnvelope.unwrap evt
-         state.ProcessedCommands |> Map.add envelope.Id envelope.Timestamp
-      PendingPurchaseDeductions = state.PendingPurchaseDeductions
-      PendingPurchases = state.PendingPurchases
-      CardIssuerLinks = updatedCardIssuerLinks
+      state with
+         Info = updatedEmployee
+         Events = evt :: state.Events
+         ProcessedCommands =
+            let _, envelope = EmployeeEnvelope.unwrap evt
+            state.ProcessedCommands |> Map.add envelope.Id envelope.Timestamp
+         CardIssuerLinks = updatedCardIssuerLinks
    }
 
 module private StateTransition =
@@ -474,30 +440,6 @@ module private StateTransition =
          state
          (PurchaseIntentCommand.toEventWithAuthBypass cmd)
 
-   let purchaseProgress
-      (state: EmployeeSnapshot)
-      (cmd: PurchaseProgressCommand)
-      =
-      let update = cmd.Data
-
-      match state.PendingPurchases.TryFind update.PurchaseId with
-      | None -> transitionErr PurchaseProgressPurchaseNotFound
-      | Some purchase ->
-         let existingEvtIds =
-            purchase.Events |> List.map _.EventId |> Set.ofList
-
-         let evtsToAdd =
-            update.Events
-            |> NonEmptyList.toList
-            |> List.filter (_.EventId >> existingEvtIds.Contains >> not)
-            |> List.sortBy _.CreatedAt
-
-         match NonEmptyList.fromList evtsToAdd with
-         | Error _ -> transitionErr PurchaseProgressNoAdditionalEvents
-         | Ok nel ->
-            let cmd = { cmd with Data.Events = nel }
-            map PurchaseProgress state (PurchaseProgressCommand.toEvent cmd)
-
    let settlePurchase
       (state: EmployeeSnapshot)
       (cmd: SettlePurchaseWithCardCommand)
@@ -600,8 +542,6 @@ let stateTransition (state: EmployeeSnapshot) (command: EmployeeCommand) =
       | PurchaseAuthType.BypassAuth ->
          StateTransition.purchaseIntentWithAuthBypass state cmd
       | _ -> StateTransition.purchaseIntent state cmd
-   | EmployeeCommand.PurchaseProgress cmd ->
-      StateTransition.purchaseProgress state cmd
    | EmployeeCommand.SettlePurchase cmd ->
       StateTransition.settlePurchase state cmd
    | EmployeeCommand.FailPurchase cmd -> StateTransition.failPurchase state cmd

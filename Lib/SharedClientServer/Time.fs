@@ -75,13 +75,17 @@ module DateTime =
    let dayOfWeekDisplayShort = dayOfWeekDisplay >> _.Substring(0, 3)
 
    let formatShort (date: DateTime) =
+      let date = date.ToLocalTime()
       $"{numberToDisplayMonth[date.Month]} {date.Day}"
 
    let formatShortWithDayOfWeek (date: DateTime) =
+      let date = date.ToLocalTime()
       let day = dayOfWeekDisplay date.DayOfWeek |> _.Substring(0, 3)
       formatShort date + $" {day}"
 
-   let format (date: DateTime) = formatShort date + $", {date.Year}"
+   let format (date: DateTime) =
+      let date = date.ToLocalTime()
+      formatShort date + $", {date.Year}"
 
    let formatRangeShort (dateStart: DateTime) (dateEnd: DateTime) =
       let withYear =
@@ -90,6 +94,7 @@ module DateTime =
          || dateEnd.Year <> DateTime.UtcNow.Year
 
       let format (date: DateTime) =
+         let date = date.ToLocalTime()
          let formatted = $"{date.Month}/{date.Day}"
          if withYear then $"{formatted}/{date.Year}" else formatted
 

@@ -232,6 +232,11 @@ type SagaEvent<'E> = {
       Data = data
    }
 
+   /// If sending the same event to a saga for a subsequent try, update the
+   /// timestamp so the End date will be updated when the associated activity
+   /// is marked as completed or failed.
+   member x.AsDeliveryRetry = { x with Timestamp = DateTime.UtcNow }
+
 type IPersistableSagaEvent = interface end
 
 [<RequireQualifiedAccess>]
@@ -271,3 +276,10 @@ type SagaStateTransitionError =
    | HasAlreadyStarted
    | InvalidStepProgression
    | HasAlreadyCompleted
+
+/// Use to reply to RabbitMQ consumer actor which is expecting
+/// an acknowledgment of message delivery.
+[<RequireQualifiedAccess>]
+type SagaDeliveryResponse =
+   | Persisted
+   | Ignored of SagaStateTransitionError

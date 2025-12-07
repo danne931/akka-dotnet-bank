@@ -1,8 +1,6 @@
 [<RequireQualifiedAccess>]
 module EmployeeReadModelSyncActor
 
-open System
-
 open Lib.SharedTypes
 open Lib.Types
 open Lib.Postgres
@@ -535,13 +533,11 @@ let upsertReadModels (employeeEvents: EmployeeEvent list) =
 let initProps
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
-   (retryPersistenceAfter: TimeSpan)
    =
    actorProps<Employee, EmployeeEvent>
    <| ReadModelSyncConfig.DefaultMode {
       Chunking = chunking
       RestartSettings = restartSettings
-      RetryPersistenceAfter = retryPersistenceAfter
       UpsertReadModels = upsertReadModels
       EventJournalTag = Constants.AKKA_EMPLOYEE_JOURNAL
    }

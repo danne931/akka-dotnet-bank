@@ -115,6 +115,7 @@ let update orgId msg state =
                         | Some paymentId ->
                            let status =
                               PaymentRequestStatus.Fulfilled {
+                                 PaymentRequestId = paymentId
                                  TransferId = e.Data.BaseInfo.TransferId
                                  FulfilledAt = e.Timestamp
                               }

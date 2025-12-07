@@ -142,6 +142,12 @@ type private AppSagaShardEnvelope = {
    Message: AppSaga.AppSagaMessage
 }
 
+type private AppSagaRabbitShardEnvelope = {
+   EntityId: string
+   ShardId: string
+   Message: GuaranteedDelivery.Message<AppSaga.AppSagaMessage>
+}
+
 type BankSerializer(system: ExtendedActorSystem) =
    inherit SerializerWithStringManifest(system)
 
@@ -169,9 +175,12 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? EmployeeEvent -> "EmployeeEvent"
       | :? AppSaga.SagaAlarmClockMessage -> "SagaAlarmClockMessage"
       | :? AppSaga.AppSagaMessage -> "AppSagaMessage"
+      | :? GuaranteedDelivery.Message<AppSaga.AppSagaMessage> ->
+         "AppSagaMessageAtLeastOnceDelivery"
       | :? AppSaga.AppSagaPersistableEvent -> "AppSagaEvent"
       | :? AppSaga.Saga -> "AppSaga"
       | :? Option<AppSaga.Saga> -> "AppSagaSnapshot"
+      | :? SagaDeliveryResponse -> "SagaDeliveryResponse"
       | :? ScheduledTransfersLowBalanceMessage ->
          "ScheduledTransfersLowBalanceMessage"
       | :? AccountLoadTestTypes.AccountLoadTestMessage ->
@@ -199,6 +208,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | :? AccountMessage -> "AccountShardEnvelope"
          | :? EmployeeMessage -> "EmployeeShardEnvelope"
          | :? AppSaga.AppSagaMessage -> "AppSagaShardEnvelope"
+         | :? GuaranteedDelivery.Message<AppSaga.AppSagaMessage> ->
+            "AppSagaRabbitShardEnvelope"
          | _ -> raise <| NotImplementedException()
       | :? EmailMessage.EmailMessage -> "EmailMessage"
       | _ -> raise <| NotImplementedException()
@@ -223,6 +234,8 @@ type BankSerializer(system: ExtendedActorSystem) =
          | :? EmployeeMessage ->
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | :? AppSaga.AppSagaMessage ->
+            JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
+         | :? GuaranteedDelivery.Message<AppSaga.AppSagaMessage> ->
             JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
          | _ -> raise <| NotImplementedException()
       // AccountEvent, EmployeeEvent, & OrgEvent messages to be persisted
@@ -285,7 +298,11 @@ type BankSerializer(system: ExtendedActorSystem) =
          JsonSerializer.SerializeToUtf8Bytes(e, Serialization.jsonOptions)
       | :? EmployeeMessage as msg ->
          JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+      // AtMostOnceDelivery messages to saga actors
       | :? AppSaga.AppSagaMessage as msg ->
+         JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
+      // AtLeastOnceDelivery messages to saga actors
+      | :? GuaranteedDelivery.Message<AppSaga.AppSagaMessage> as msg ->
          JsonSerializer.SerializeToUtf8Bytes(msg, Serialization.jsonOptions)
       // Saga event persistence
       | :? AppSaga.AppSagaPersistableEvent
@@ -294,6 +311,8 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? Option<AppSaga.Saga>
       // Messages from SchedulingActor to Saga.App/SagaAlarmClockActor
       | :? AppSaga.SagaAlarmClockMessage
+      // Delivery confirmation replies from saga actor to RabbitMQ consumer
+      | :? SagaDeliveryResponse
       // Messages from SchedulingActor to ScheduledTransfersLowBalanceWarningActor
       | :? ScheduledTransfersLowBalanceMessage
       // OrgMessage.GetCommandApprovalDailyAccrualByInitiatedBy response
@@ -374,11 +393,18 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "AccountMessage" -> typeof<AccountMessage>
          | "AccountShardEnvelope" -> typeof<AccountShardEnvelope>
          | "AppSagaMessage" -> typeof<AppSaga.AppSagaMessage>
+         | "AppSagaMessageAtLeastOnceDelivery"
+         // TODO: Jeez, see if can rectify rabbitmq serialized messages not
+         //       abiding by simple manifest name "AppSagaMessageAtLeastOnceDelivery"
+         | "GuaranteedDelivery+Message`1[[Lib.Saga+SagaMessage`2[[AppSaga+StartEvent, Saga.Domain],[AppSaga+Event, Saga.Domain]], Lib.Server]], Lib.Server" ->
+            typeof<GuaranteedDelivery.Message<AppSaga.AppSagaMessage>>
          | "AppSagaEvent" -> typeof<AppSaga.AppSagaPersistableEvent>
          | "AppSagaShardEnvelope" -> typeof<AppSagaShardEnvelope>
+         | "AppSagaRabbitShardEnvelope" -> typeof<AppSagaRabbitShardEnvelope>
          | "AppSaga" -> typeof<AppSaga.Saga>
          | "AppSagaSnapshot" -> typeof<AppSaga.Saga option>
          | "SagaAlarmClockMessage" -> typeof<AppSaga.SagaAlarmClockMessage>
+         | "SagaDeliveryResponse" -> typeof<SagaDeliveryResponse>
          | "ScheduledTransfersLowBalanceMessage" ->
             typeof<ScheduledTransfersLowBalanceMessage>
          | "SignalRMessage" -> typeof<SignalRActor.Msg>
@@ -433,6 +459,14 @@ type BankSerializer(system: ExtendedActorSystem) =
 
          envelope
       | :? AppSagaShardEnvelope as e ->
+         let envelope: ShardEnvelope = {
+            EntityId = e.EntityId
+            ShardId = e.ShardId
+            Message = e.Message
+         }
+
+         envelope
+      | :? AppSagaRabbitShardEnvelope as e ->
          let envelope: ShardEnvelope = {
             EntityId = e.EntityId
             ShardId = e.ShardId

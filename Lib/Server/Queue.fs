@@ -397,3 +397,112 @@ let consumerActorProps
       }
 
    props init
+
+type ClusterShardingQueueConsumerOptions<'Msg, 'Response> = {
+   QueueConnection: AmqpConnectionDetails
+   QueueSettings: QueueEnvConfig
+   StreamRestartSettings: Akka.Streams.RestartSettings
+   sendToShardRegion: GuaranteedDelivery.Message<'Msg> -> 'Response Async
+}
+
+/// Consume messages off RabbitMq and send them to a
+/// a provided Akka cluster shard region.
+/// Messages by a given EntityId are processed sequentially
+/// while parallel processing messages to different entities.
+let consumerShardRegionForwarder<'Msg, 'Response>
+   (opts: ClusterShardingQueueConsumerOptions<'Msg, 'Response>)
+   =
+   let maxParallel = opts.QueueSettings.MaxParallelism
+   let name = opts.QueueSettings.Name
+
+   let startStream ctx =
+      let logError = logError ctx
+
+      let source =
+         let srcSettings = createSourceSettings name opts.QueueConnection
+
+         let src =
+            AmqpSource.CommittableSource(srcSettings, bufferSize = maxParallel)
+
+         Akka.Streams.Dsl.RestartSource.WithBackoff(
+            (fun () -> src),
+            opts.StreamRestartSettings
+         )
+
+      let sink =
+         Sink.onComplete (function
+            | None ->
+               logWarning ctx $"Rabbit Consumer Stream Completed ({name})"
+            | Some err ->
+               logError
+                  $"Rabbit Consumer Stream Completed with Error ({name}): {err}")
+
+      let materializer =
+         let settings =
+            Akka.Streams.ActorMaterializerSettings
+               .Create(ctx.System)
+               .WithSupervisionStrategy(fun e ->
+                  logError e.Message
+                  Akka.Streams.Supervision.Directive.Restart)
+
+         ctx.System.Materializer settings
+
+      source
+      |> Source.asyncMap
+         maxParallel
+         (fun (committable: CommittableIncomingMessage) -> async {
+            match
+               deserializeFromQueue<GuaranteedDelivery.Message<'Msg>>
+                  ctx.System
+                  committable
+            with
+            | Error e ->
+               logError $"Deserialization Broken ({name}): {e}"
+               do! committable.Nack() |> Async.AwaitTask
+               return None
+            | Ok msg -> return Some(committable, msg)
+         })
+      |> Source.choose id
+      |> Source.groupedWithin maxParallel (TimeSpan.FromMilliseconds 500.)
+      // Group messages by Entity while preserving queueing order.
+      |> Source.map (fun items ->
+         items
+         |> Seq.sortBy (snd >> _.Timestamp)
+         |> Seq.groupBy (snd >> _.EntityId))
+      |> Source.collect id
+      // - Parallel processing of messages to different entities
+      // - Sequential processing of messages pertaining to a given entity
+      |> Source.asyncMap maxParallel (fun (_, messagesPerEntity) -> async {
+         for committable, msg in messagesPerEntity do
+            try
+               let! _ = opts.sendToShardRegion msg
+               do! committable.Ack() |> Async.AwaitTask
+            with err ->
+               logError $"Failed forwarding to shard region: {err}"
+               do! committable.Nack() |> Async.AwaitTask
+
+         return Akka.NotUsed.Instance
+      })
+      |> Source.runWith materializer sink
+
+   let rec loop (ctx: Actor<obj>) = actor {
+      let! msg = ctx.Receive()
+
+      match msg with
+      | LifecycleEvent e ->
+         match e with
+         | PreStart ->
+            logInfo
+               ctx
+               $"({name}) Init rabbit consumer stream with buffer size {maxParallel}"
+
+            startStream ctx
+
+            return ignored ()
+         | _ -> return ignored ()
+      | msg ->
+         logError ctx $"Unknown Message ({name}): {msg}"
+         return unhandled ()
+   }
+
+   props loop

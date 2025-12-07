@@ -231,41 +231,6 @@ let private renderTransactionHistory
                   | EmployeeEvent.PurchasePending e ->
                      Html.p
                         $"Reserved {Money.format e.Data.Info.Amount} from card"
-                  | EmployeeEvent.PurchaseProgress e ->
-                     let status = e.Data.Info.Status
-
-                     for e in e.Data.Info.Events do
-                        let amt = Money.format e.Money.Amount
-
-                        Html.p (
-                           match e.Type with
-                           | PurchaseEventType.Auth ->
-                              $"Authorization of {amt} confirmed by card network"
-                           | PurchaseEventType.FinancialAuth ->
-                              let status =
-                                 match status with
-                                 | PurchaseStatus.Declined -> "Declined"
-                                 | _ -> "Approved"
-
-                              $"{status} by card network"
-                           | PurchaseEventType.AuthAdvice ->
-                              $"Auth Advice {amt} received from card network"
-                           | PurchaseEventType.Clearing ->
-                              let descriptor =
-                                 match e.Money.Flow with
-                                 | MoneyFlow.Out -> "Clearing"
-                                 | MoneyFlow.In -> "Decline"
-
-                              $"{descriptor} of {amt} confirmed by card network"
-                           | PurchaseEventType.Return ->
-                              $"Return of {amt} confirmed by card network"
-                           | PurchaseEventType.ReturnReversal ->
-                              $"Return reversal of {amt} confirmed by card network"
-                           | PurchaseEventType.AuthExpiry ->
-                              $"{amt} Auth Expiry received from card network"
-                           | PurchaseEventType.AuthReversal ->
-                              $"{amt} Auth Reversal received from card network"
-                        )
                   | EmployeeEvent.PurchaseSettled e ->
                      let cleared = e.Data.Clearing.ClearedAmount
 

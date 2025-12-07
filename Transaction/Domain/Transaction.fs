@@ -142,20 +142,6 @@ let transactionInfoFromHistory
             TransactionStatus.InProgress,
             e.Data.Info.Amount
          )
-      | EmployeeEvent.PurchaseProgress e ->
-         let info = e.Data.Info
-
-         let amount, status =
-            match info.Status with
-            | PurchaseStatus.Pending ->
-               info.Amounts.Hold.Amount, TransactionStatus.InProgress
-            | PurchaseStatus.Settled ->
-               info.Amounts.Settlement.Amount, TransactionStatus.Complete
-            | PurchaseStatus.Declined
-            | PurchaseStatus.Expired
-            | PurchaseStatus.Voided -> 0m, TransactionStatus.Failed
-
-         Some(TransactionType.Purchase, status, amount)
       | EmployeeEvent.PurchaseSettled e ->
          Some(
             TransactionType.Purchase,

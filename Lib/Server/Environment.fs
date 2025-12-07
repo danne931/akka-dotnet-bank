@@ -185,11 +185,14 @@ type private BankConfigInput = {
    AccountEventReadModelPersistenceBackoffRestart:
       StreamBackoffRestartSettingsInput
    BillingStatementPersistenceChunking: StreamChunkingInput
-   BillingStatementPersistenceBackoffRestart: StreamBackoffRestartSettingsInput
    CircuitBreakerActorSupervisor: BackoffSupervisorInput
    QueueConsumerStreamBackoffRestart: StreamBackoffRestartSettingsInput
    SagaPassivateIdleEntityAfter: TimeSpan option
    SagaWakeFromSleepBurstLimit: int option
+   SagaQueue: {|
+      Name: string option
+      MaxParallelism: int option
+   |}
 }
 
 type BankConfig = {
@@ -208,14 +211,12 @@ type BankConfig = {
    AccountDeleteThrottle: StreamThrottleEnvConfig
    AccountEventProjectionChunking: StreamChunkingEnvConfig
    AccountEventReadModelPersistenceBackoffRestart: Akka.Streams.RestartSettings
-   AccountEventReadModelRetryPersistenceAfter: TimeSpan
    BillingStatementPersistenceChunking: StreamChunkingEnvConfig
-   BillingStatementPersistenceBackoffRestart: Akka.Streams.RestartSettings
-   BillingStatementRetryPersistenceAfter: TimeSpan
    CircuitBreakerActorSupervisor: BackoffSupervisorEnvConfig
    QueueConsumerStreamBackoffRestart: Akka.Streams.RestartSettings
    SagaPassivateIdleEntityAfter: TimeSpan
    SagaWakeFromSleepBurstLimit: int
+   SagaQueue: QueueEnvConfig
 }
 
 let config =
@@ -285,7 +286,7 @@ let config =
          AccountEventProjectionChunking = {
             Size =
                input.AccountEventProjectionChunking.Size
-               |> Option.defaultValue 5000
+               |> Option.defaultValue 500
             Duration =
                input.AccountEventProjectionChunking.Seconds
                |> Option.defaultValue 5.
@@ -294,7 +295,6 @@ let config =
          AccountEventReadModelPersistenceBackoffRestart =
             streamBackoffRestartSettingsFromInput
                input.AccountEventReadModelPersistenceBackoffRestart
-         AccountEventReadModelRetryPersistenceAfter = TimeSpan.FromSeconds 7.
          BillingStatementPersistenceChunking = {
             Size =
                input.BillingStatementPersistenceChunking.Size
@@ -304,10 +304,6 @@ let config =
                |> Option.defaultValue 5.
                |> TimeSpan.FromSeconds
          }
-         BillingStatementPersistenceBackoffRestart =
-            streamBackoffRestartSettingsFromInput
-               input.BillingStatementPersistenceBackoffRestart
-         BillingStatementRetryPersistenceAfter = TimeSpan.FromSeconds 7.
          CircuitBreakerActorSupervisor =
             backoffSupervisorOptionsFromInput
                input.CircuitBreakerActorSupervisor
@@ -320,6 +316,11 @@ let config =
             |> Option.defaultValue (TimeSpan.FromMinutes 2.)
          SagaWakeFromSleepBurstLimit =
             input.SagaWakeFromSleepBurstLimit |> Option.defaultValue 50
+         SagaQueue = {
+            Name = input.SagaQueue.Name |> Option.defaultValue "saga"
+            MaxParallelism =
+               input.SagaQueue.MaxParallelism |> Option.defaultValue 70
+         }
       }
    | Error err ->
       match err with

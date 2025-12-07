@@ -3,7 +3,6 @@ module SagaActor
 
 open Akka.Actor
 open Akka.Persistence
-open Akka.Delivery
 open Akkling
 open Akkling.Persistence
 open Akkling.Cluster.Sharding
@@ -28,14 +27,6 @@ type SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga> = {
 let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
    (persistenceId: string)
    (sagaPassivateIdleEntityAfter: TimeSpan)
-   (guaranteedDeliveryConsumerControllerRef:
-      Option<
-         IActorRef<
-            ConsumerController.IConsumerCommand<
-               SagaMessage<'SagaStartEvent, 'SagaEvent>
-             >
-          >
-       >)
    (sagaHandler: SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent>)
    =
    let persistableStartEvent =
@@ -93,18 +84,26 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                (SagaMessage<'SagaStartEvent, 'SagaEvent>.Sleep reason)
             |> ignore
 
-      let handleSagaProgression (state: 'Saga option) msg envelope =
+      let handleSagaProgression
+         (state: 'Saga option)
+         msg
+         (sender: IActorRef option)
+         =
+         let ack (response: SagaDeliveryResponse) =
+            sender |> Option.iter _.Tell(response)
+
          let withAck persistentEffect =
             persistentEffect
-            |> Effects.andThen (fun _ ->
-               envelope |> Option.iter GuaranteedDelivery.ack)
+            |> Effects.andThen (fun _ -> ack SagaDeliveryResponse.Persisted)
             :> Effect<_>
 
          match msg with
          | SagaMessage.Start startEvent ->
             match state with
             | Some _ ->
-               logWarning SagaStateTransitionError.HasAlreadyStarted
+               let err = SagaStateTransitionError.HasAlreadyStarted
+               logWarning err
+               ack (SagaDeliveryResponse.Ignored err)
                ignored ()
             | None ->
                match
@@ -116,12 +115,15 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                   logWarning
                      $"Will not persist saga start event due to {err} {startEvent}"
 
+                  ack (SagaDeliveryResponse.Ignored err)
                   ignored ()
                | Ok _ -> Persist(persistableStartEvent startEvent) |> withAck
          | SagaMessage.Event evt ->
             match state with
             | None ->
-               logWarning $"{SagaStateTransitionError.HasNotStarted} {evt}"
+               let err = SagaStateTransitionError.HasNotStarted
+               logWarning $"{err} {evt}"
+               ack (SagaDeliveryResponse.Ignored err)
                ignored ()
             | Some currentState ->
                match
@@ -132,6 +134,7 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
                with
                | Error err ->
                   logWarning $"Will not persist saga event due to {err} {evt}"
+                  ack (SagaDeliveryResponse.Ignored err)
                   ignored ()
                | Ok _ -> Persist(persistableEvent evt) |> withAck
          | msg ->
@@ -172,14 +175,18 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
 
                return! loop (Some updatedState)
          | :? SnapshotOffer as o -> return! loop (unbox o.Snapshot)
-         | :? ConsumerController.Delivery<
+         | :? GuaranteedDelivery.Message<
             SagaMessage<'SagaStartEvent, 'SagaEvent>
             > as envelope ->
-            return handleSagaProgression state envelope.Message (Some envelope)
+            return
+               handleSagaProgression
+                  state
+                  envelope.Message
+                  (Some(untyped (ctx.Sender())))
          // Some messages are sent through traditional AtMostOnceDelivery via
-         // a reference to the cluster sharded entity ref rather than Akka.Delivery
+         // a reference to the cluster sharded entity ref rather than RabbitMQ
          // AtLeastOnceDelivery producer ref so will not hit the
-         // ConsumerController.Delivery match case above
+         // GuaranteedDelivery.Message match case above
          | :? SagaMessage<'SagaStartEvent, 'SagaEvent> as msg ->
             match msg with
             | SagaMessage.Start _
@@ -270,20 +277,6 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
             PersistentActorEventHandler.handleEvent
                {
                   PersistentActorEventHandler.init with
-                     LifecyclePreStart =
-                        fun _ ->
-                           let startConsumerCtrlMsg =
-                              new ConsumerController.Start<
-                                 SagaMessage<'SagaStartEvent, 'SagaEvent>
-                               >(
-                                 untyped ctx.Self
-                              )
-
-                           guaranteedDeliveryConsumerControllerRef
-                           |> Option.iter (fun aref ->
-                              aref <! startConsumerCtrlMsg)
-
-                           ignored ()
                      LifecyclePostStop =
                         fun _ ->
                            logDebug "SAGA POSTSTOP"
@@ -303,18 +296,6 @@ let actorProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
 let initProps<'Saga, 'SagaStartEvent, 'SagaEvent when 'Saga :> ISaga>
    (sagaPassivateIdleEntityAfter: TimeSpan)
    (persistenceId: string)
-   (guaranteedDeliveryConsumerControllerRef:
-      Option<
-         IActorRef<
-            ConsumerController.IConsumerCommand<
-               SagaMessage<'SagaStartEvent, 'SagaEvent>
-             >
-          >
-       >)
    (sagaHandler: SagaHandler<'Saga, 'SagaStartEvent, 'SagaEvent>)
    =
-   actorProps
-      persistenceId
-      sagaPassivateIdleEntityAfter
-      guaranteedDeliveryConsumerControllerRef
-      sagaHandler
+   actorProps persistenceId sagaPassivateIdleEntityAfter sagaHandler

@@ -31,7 +31,7 @@ export const initContainers = {
     command: [
       'sh',
       '-c',
-      `until nc -z ${pgConfig.k8ResourceName}-postgresql.${defaultNamespace}.svc.cluster.local ${ports.postgres};` +
+      `until nc -z ${pgConfig.k8ResourceName}-postgres.${defaultNamespace}.svc.cluster.local ${ports.postgres};` +
       'do echo "Waiting for postgres..."; sleep 3; done;\n'
     ],
     image: 'busybox:1.28',
@@ -61,7 +61,7 @@ export const initContainers = {
     command: [
       'sh',
       '-c',
-      `until psql --host ${pgConfig.k8ResourceName}-postgresql.${defaultNamespace}.svc.cluster.local` +
+      `until psql --host ${pgConfig.k8ResourceName}-postgres.${defaultNamespace}.svc.cluster.local` +
       ` -d ${pgConfig.database} -U ${pgConfig.user} -p ${ports.postgres} -c "select 1 from balance_history";` +
       ' do echo waiting for data to be seeded; sleep 3; done\n'
     ],
@@ -105,11 +105,11 @@ export const initBankEnvConfigMap = (
 
         ConnectionStrings__Postgres: pgConfig.password.apply(
           (pwd) =>
-            `postgres://${pgConfig.user}:${pwd}@${pgConfig.k8ResourceName}-postgresql.${defaultNamespace}.svc.cluster.local/${pgConfig.database}`
+            `postgres://${pgConfig.user}:${pwd}@${pgConfig.k8ResourceName}-postgres.${defaultNamespace}.svc.cluster.local/${pgConfig.database}`
         ),
         ConnectionStrings__PostgresAdoFormat: pgConfig.password.apply(
           (pwd) =>
-            `Server=${pgConfig.k8ResourceName}-postgresql.${defaultNamespace}.svc.cluster.local;Database=${pgConfig.database};Uid=${pgConfig.user};Pwd=${pwd}`
+            `Server=${pgConfig.k8ResourceName}-postgres.${defaultNamespace}.svc.cluster.local;Database=${pgConfig.database};Uid=${pgConfig.user};Pwd=${pwd}`
         ),
 
         QueueConnection__Host: `${rmqConfig.k8ResourceName}.${defaultNamespace}.svc.cluster.local`,

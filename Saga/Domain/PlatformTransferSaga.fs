@@ -34,7 +34,8 @@ type PlatformTransferSagaEvent =
    | SupportTeamResolvedPartnerBankSync
    | SenderReleasedReservedFunds
    | RecipientDepositUndo
-   | TransferSettled
+   | TransferSettled of Bank.Payment.Domain.PaymentFulfillment option
+   | AckPaymentFulfillment
    | EvaluateRemainingWork
    | ResetInProgressActivityAttempts
 
@@ -45,6 +46,7 @@ type Activity =
    | DepositToRecipientAccount
    | SyncToPartnerBank
    | SettleTransfer
+   | FulfillPayment
    | SendTransferNotification
    | SendTransferDepositNotification
    | ReleaseSenderFunds
@@ -67,8 +69,9 @@ type Activity =
          | ReserveSenderFunds
          | DepositToRecipientAccount
          | SettleTransfer
+         | FulfillPayment
          | ReleaseSenderFunds
-         | UndoRecipientDeposit -> Some(TimeSpan.FromSeconds 5.)
+         | UndoRecipientDeposit -> Some(TimeSpan.FromMinutes 1.)
          | WaitForScheduledTransferActivation time -> Some time
          | WaitForSupportTeamToResolvePartnerBankSync -> None
 
@@ -124,6 +127,16 @@ type PlatformTransferSaga = {
    member x.TransferDepositNotificationSent =
       x.LifeCycle.Completed
       |> List.exists _.Activity.IsSendTransferDepositNotification
+
+   member x.PaymentFulfilled =
+      x.LifeCycle.Completed |> List.exists _.Activity.IsFulfillPayment
+
+   member x.ClosingConcurrentActivitiesFinished =
+      x.TransferNotificationSent
+      && x.TransferDepositNotificationSent
+      && match x.TransferInfo.FromPaymentRequest with
+         | None -> true
+         | Some _ -> x.PaymentFulfilled
 
    member x.RequiresReleaseSenderFunds =
       x.LifeCycle.InProgress |> List.exists _.Activity.IsReleaseSenderFunds

@@ -105,6 +105,4 @@ type BillingCycleMessage =
    | BillingCycleFinished
 
 [<RequireQualifiedAccess>]
-type BillingStatementMessage =
-   | BulkPersist of BillingPersistable
-   | GetFailedWrites
+type BillingStatementMessage = BulkPersist of BillingPersistable

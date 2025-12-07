@@ -55,8 +55,6 @@ type CardLinked = {
 
 type CardPurchasePending = { Info: PurchaseInfo }
 
-type CardIssuerUpdatedPurchaseProgress = { Info: CardIssuerPurchaseProgress }
-
 type CardPurchaseSettled = {
    Info: PurchaseInfo
    Clearing: PurchaseClearing

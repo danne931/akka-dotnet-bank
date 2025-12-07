@@ -49,6 +49,5 @@ type PurchaseInfo = {
 
 type Purchase = {
    Info: PurchaseInfo
-   Events: PurchaseEvent list
    Status: PurchaseStatus
 }

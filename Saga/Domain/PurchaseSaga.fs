@@ -41,8 +41,6 @@ type PurchaseSagaEvent =
 
 [<RequireQualifiedAccess; CustomEquality; NoComparison>]
 type Activity =
-   | ReserveEmployeeCardFunds
-   | ReserveAccountFunds
    | ReserveEmployeeCardFundsBypassingAuth
    | ReserveAccountFundsBypassingAuth
    | BufferCardIssuerPurchaseProgress of CardIssuerPurchaseProgress
@@ -56,24 +54,20 @@ type Activity =
    interface IActivity with
       member x.MaxAttempts =
          match x with
-         | WaitForCardNetworkResolution
-         | ReserveEmployeeCardFunds
-         | ReserveAccountFunds -> 1
+         | WaitForCardNetworkResolution -> 1
          | _ -> 3
 
       member x.InactivityTimeout =
          match x with
          | WaitForCardNetworkResolution -> None
+         | BufferCardIssuerPurchaseProgress _ -> Some(TimeSpan.FromMinutes 3.)
          | ReserveEmployeeCardFundsBypassingAuth
          | ReserveAccountFundsBypassingAuth
-         | BufferCardIssuerPurchaseProgress _ -> Some(TimeSpan.FromMinutes 1.)
-         | SendPurchaseNotification -> Some(TimeSpan.FromMinutes 4.)
-         | ReserveEmployeeCardFunds
-         | ReserveAccountFunds
+         | SendPurchaseNotification
          | AcquireCardFailureAcknowledgement
          | AcquireAccountFailureAcknowledgement
          | SettlePurchaseWithAccount _
-         | SettlePurchaseWithCard _ -> Some(TimeSpan.FromSeconds 4.)
+         | SettlePurchaseWithCard _ -> Some(TimeSpan.FromMinutes 1.)
 
    override x.Equals compareTo =
       match compareTo with
@@ -112,14 +106,12 @@ type PurchaseSaga = {
 } with
 
    member x.ReservedEmployeeCardFunds =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsReserveEmployeeCardFunds
-      || x.LifeCycle.Completed
-         |> List.exists _.Activity.IsReserveEmployeeCardFundsBypassingAuth
+      x.LifeCycle.Completed
+      |> List.exists _.Activity.IsReserveEmployeeCardFundsBypassingAuth
 
    member x.ReservedAccountFunds =
-      x.LifeCycle.Completed |> List.exists _.Activity.IsReserveAccountFunds
-      || x.LifeCycle.Completed
-         |> List.exists _.Activity.IsReserveAccountFundsBypassingAuth
+      x.LifeCycle.Completed
+      |> List.exists _.Activity.IsReserveAccountFundsBypassingAuth
 
    member x.ReservedFunds =
       x.ReservedAccountFunds && x.ReservedEmployeeCardFunds

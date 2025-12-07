@@ -13,7 +13,6 @@ type EmployeeCommand =
    | CreateCard of CreateCardCommand
    | LinkCard of LinkCardCommand
    | PurchaseIntent of PurchaseIntentCommand
-   | PurchaseProgress of PurchaseProgressCommand
    | SettlePurchase of SettlePurchaseWithCardCommand
    | FailPurchase of FailPurchaseCommand
    | RefundPurchase of RefundPurchaseCommand
@@ -35,7 +34,6 @@ type EmployeeCommand =
       | CreateCard cmd -> Command.envelope cmd
       | LinkCard cmd -> Command.envelope cmd
       | PurchaseIntent cmd -> Command.envelope cmd
-      | PurchaseProgress cmd -> Command.envelope cmd
       | SettlePurchase cmd -> Command.envelope cmd
       | FailPurchase cmd -> Command.envelope cmd
       | RefundPurchase cmd -> Command.envelope cmd
@@ -56,7 +54,6 @@ type EmployeeEvent =
    | CreatedCard of BankEvent<CreatedCard>
    | CardLinked of BankEvent<CardLinked>
    | PurchasePending of BankEvent<CardPurchasePending>
-   | PurchaseProgress of BankEvent<CardIssuerUpdatedPurchaseProgress>
    | PurchaseSettled of BankEvent<CardPurchaseSettled>
    | PurchaseFailed of BankEvent<CardPurchaseFailed>
    | PurchaseRefunded of BankEvent<CardPurchaseRefunded>
@@ -92,8 +89,6 @@ module EmployeeEnvelope =
       | :? BankEvent<CreatedCard> as evt -> CreatedCard evt
       | :? BankEvent<CardLinked> as evt -> CardLinked evt
       | :? BankEvent<CardPurchasePending> as evt -> PurchasePending evt
-      | :? BankEvent<CardIssuerUpdatedPurchaseProgress> as evt ->
-         PurchaseProgress evt
       | :? BankEvent<CardPurchaseSettled> as evt -> PurchaseSettled evt
       | :? BankEvent<CardPurchaseFailed> as evt -> PurchaseFailed evt
       | :? BankEvent<CardPurchaseRefunded> as evt -> PurchaseRefunded evt
@@ -118,7 +113,6 @@ module EmployeeEnvelope =
       | CreatedCard evt -> wrap evt, get evt
       | CardLinked evt -> wrap evt, get evt
       | PurchasePending evt -> wrap evt, get evt
-      | PurchaseProgress evt -> wrap evt, get evt
       | PurchaseSettled evt -> wrap evt, get evt
       | PurchaseFailed evt -> wrap evt, get evt
       | PurchaseRefunded evt -> wrap evt, get evt
@@ -141,6 +135,7 @@ type EmployeeMessage =
    | PurchaseProgress of CardIssuerPurchaseProgress * CardId
    | Delete
    | PruneIdempotencyChecker
+   | PruneOutbox
 
 type Employee = {
    EmployeeId: EmployeeId
@@ -186,6 +181,42 @@ type Employee = {
       AuthProviderUserId = None
    }
 
+/// If the employee actor receives a message with an ID equivalent
+/// to an event we already persisted then we ignore it.  This ignores
+/// messages that may be duplicated due to AtLeastOnceDelivery.
+/// However, we need to have slightly different behavior if the
+/// message comes from a saga actor since it has retry capabilities.
+/// If the saga actor has an in-progress activity which has reached its
+/// InactivityTimeout (it did not complete within the expected time),
+/// then it will resend the message to the employee actor using
+/// the same ID. So, in that case the saga actor wants to receive an
+/// ACK that the employee actor indeed processed the message so it can
+/// complete it's activity.
+/// Scenario:
+///    1. Employee event persisted
+///    2. message sent from employee actor to saga actor
+///    3. message lost in translation instead of delivered
+///    (probably will be a rare situation since I am delivering most
+///     messages to saga actors via RabbitMQ but better safe than sorry)
+/// Reconciliation:
+///    1. saga actor receives EvaluateRemainingWork message a few
+///       seconds/minutes into the future due to having an in-progress activity
+///       with an expired InactivityTimeout
+///    2. saga actor reattempts delivery of the message to the employee actor
+///    3. employee actor receives message and checks Outbox to see
+///       if it has already associated an outbox message with the same ID
+///    4. since an outgoing saga message exists in the Outbox, it will
+///       resend that saga message
+///    5. saga actor will receive the message, complete the activity, and resume
+///       processing next steps
+type EmployeeOutboxMessage =
+   // NOTE:
+   // AppSaga.AppSagaMessage in Saga/Domain directory depends
+   // on Employee/Domain directory so can not reference it here.
+   // Instead will use obj here and interpret it in the employee actor.
+   // Good enough for now.
+   | Saga of obj
+
 type EmployeeSnapshot = {
    Info: Employee
    Events: EmployeeEvent list
@@ -193,6 +224,7 @@ type EmployeeSnapshot = {
    PendingPurchaseDeductions: Map<CardId, PendingFunds>
    PendingPurchases: Map<CardIssuerTransactionId, Purchase>
    ProcessedCommands: Map<EventId, DateTime>
+   Outbox: Map<EventId, DateTime * EmployeeOutboxMessage>
 } with
 
    static member Empty = {
@@ -202,6 +234,7 @@ type EmployeeSnapshot = {
       PendingPurchaseDeductions = Map.empty
       PendingPurchases = Map.empty
       ProcessedCommands = Map.empty
+      Outbox = Map.empty
    }
 
 type CardWithMetrics = {

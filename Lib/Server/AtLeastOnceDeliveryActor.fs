@@ -8,7 +8,11 @@ open Akka.Cluster.Sharding.Delivery
 open Akka.Delivery
 open Akkling
 
-type Message<'Msg> = { EntityId: Guid; Message: 'Msg }
+type Message<'Msg> = {
+   EntityId: Guid
+   Message: 'Msg
+   Timestamp: DateTime
+}
 
 type ClusterShardingProducerActor<'Msg>() as x =
    inherit UntypedActor()
@@ -96,6 +100,7 @@ let consumer<'Msg> (system: ActorSystem) (fac: IActorRef -> Props) : Props =
 let message (entityId: Guid) (msg: 'Msg) : Message<'Msg> = {
    EntityId = entityId
    Message = msg
+   Timestamp = DateTime.UtcNow
 }
 
 /// Notify Akka Guaranteed Delivery Controller of successful

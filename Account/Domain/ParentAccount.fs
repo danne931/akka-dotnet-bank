@@ -227,8 +227,8 @@ let applyEvent (state: ParentAccountSnapshot) (evt: AccountEvent) =
       updated with
          Events = updatedEvents
          ProcessedCommands =
-            let _, envelope = AccountEnvelope.unwrap evt
-            state.ProcessedCommands |> Map.add envelope.Id envelope.Timestamp
+            let _, env = AccountEnvelope.unwrap evt
+            state.ProcessedCommands |> Map.add env.Id env.Timestamp
    }
 
 let private virtualAccountTransition

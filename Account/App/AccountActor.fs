@@ -30,6 +30,9 @@ open PaymentRequestSaga
 open BillingSaga
 open BankActorRegistry
 
+/// Entries older than the cutoff will be pruned.
+type LookbackHours = { Outbox: int; ProcessedCommands: int }
+
 // Account events with an in/out money flow can produce an
 // automatic transfer.  Automated transfer account events have
 // money flow but they can not generate an auto transfer.
@@ -65,7 +68,7 @@ let private signalRBroadcast broadcaster state evt =
          })
 
 let private onValidationError
-   (registry: #ISagaActor)
+   (registry: #ISagaGuaranteedDeliveryActor)
    (broadcaster: SignalRBroadcast)
    mailbox
    (cmd: AccountCommand)
@@ -79,6 +82,8 @@ let private onValidationError
    let corrId = cmd.Envelope.CorrelationId
 
    broadcaster.accountEventError orgId cmd.AccountId corrId err
+
+   let sagaRef = registry.SagaGuaranteedDeliveryActor()
 
    match cmd with
    | AccountCommand.Debit cmd -> option {
@@ -97,18 +102,19 @@ let private onValidationError
             )
          | _ -> None
 
-      let msg =
-         PurchaseFailReason.Account reason
-         |> PurchaseSagaEvent.PurchaseRejected
-         |> AppSaga.Message.purchase orgId corrId
-
-      registry.SagaActor corrId <! msg
-
       if
          not cmd.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth
       then
          mailbox.Sender()
          <! PurchaseAuthorizationStatus.fromAccountFailReason reason
+
+      let msg =
+         PurchaseFailReason.Account reason
+         |> PurchaseSagaEvent.PurchaseRejected
+         |> AppSaga.Message.purchase orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
+
+      sagaRef <! msg
      }
    | AccountCommand.DomesticTransfer cmd when cmd.Data.OriginatedFromSchedule -> option {
       let! reason =
@@ -123,8 +129,9 @@ let private onValidationError
       let msg =
          DomesticTransferSagaEvent.SenderUnableToReserveFunds reason
          |> AppSaga.Message.domesticTransfer orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
 
-      registry.SagaActor corrId <! msg
+      sagaRef <! msg
      }
    | AccountCommand.InternalTransferBetweenOrgs cmd when
       cmd.Data.OriginatedFromSchedule
@@ -143,8 +150,9 @@ let private onValidationError
            let msg =
               PlatformTransferSagaEvent.SenderUnableToReserveFunds reason
               |> AppSaga.Message.platformTransfer orgId corrId
+              |> GuaranteedDelivery.message corrId.Value
 
-           registry.SagaActor corrId <! msg
+           sagaRef <! msg
 
            let! paymentId = cmd.Data.OriginatedFromPaymentRequest
            let corrId = paymentId.AsCorrelationId
@@ -155,16 +163,18 @@ let private onValidationError
                  PaymentFailReason.AccountClosed
               )
               |> AppSaga.Message.paymentRequest orgId corrId
+              |> GuaranteedDelivery.message corrId.Value
 
-           registry.SagaActor corrId <! msg
+           sagaRef <! msg
         }
    | AccountCommand.DepositTransferBetweenOrgs cmd -> option {
       let msg =
          InternalTransferFailReason.AccountNotActive
          |> PlatformTransferSagaEvent.RecipientUnableToDepositFunds
          |> AppSaga.Message.platformTransfer orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
 
-      registry.SagaActor corrId <! msg
+      sagaRef <! msg
 
       let! paymentId = cmd.Data.BaseInfo.FromPaymentRequest
       let corrId = paymentId.AsCorrelationId
@@ -175,42 +185,31 @@ let private onValidationError
             PaymentFailReason.AccountClosed
          )
          |> AppSaga.Message.paymentRequest orgId corrId
+         |> GuaranteedDelivery.message corrId.Value
 
-      registry.SagaActor corrId <! msg
+      sagaRef <! msg
      }
    | _ -> None
    |> ignore
 
-let notifySaga
-   (registry: #IEmailActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
-   (getRetryableTransfers:
-      CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
-   (mailbox: Eventsourced<obj>)
+let private computeOutboxMessage
    (state: ParentAccountSnapshot)
    (evt: AccountEvent)
+   : AccountOutboxMessage option
    =
    match evt with
    | AccountEvent.InitializedPrimaryCheckingAccount e ->
       let msg =
-         OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount
-         |> AppSaga.Message.orgOnboard e.OrgId e.CorrelationId
-
-      registry.SagaActor e.CorrelationId <! msg
-   | AccountEvent.CreatedVirtualAccount e ->
-      let msg =
-         EmailMessage.create
-            state.OrgId
+         AppSaga.Message.orgOnboard
+            e.OrgId
             e.CorrelationId
-            (EmailInfo.AccountOpen e.Data.Name)
+            OrgOnboardingSagaEvent.InitializedPrimaryVirtualAccount
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.EmailActor() <! msg
-   | AccountEvent.AccountClosed _ ->
-      (*
-      getAccountClosureRef mailbox.System
-      <! AccountClosureMessage.Register account
-      *)
-      ()
-   | AccountEvent.DebitPending e ->
+      Some(AccountOutboxMessage.Saga msg)
+   | AccountEvent.DebitPending e when
+      e.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth
+      ->
       let msg =
          AppSaga.Message.purchase
             e.OrgId
@@ -218,114 +217,109 @@ let notifySaga
             PurchaseSagaEvent.AccountReservedFunds
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
-
-      if not e.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth then
-         mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.DebitSettled e ->
       let msg =
          PurchaseSagaEvent.PurchaseSettledWithAccount e.Data.Clearing
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.DebitFailed e ->
       let msg =
          PurchaseSagaEvent.PurchaseFailureAcknowledgedByAccount
          |> AppSaga.Message.purchase e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.MaintenanceFeeDebited e ->
       let msg =
          BillingSagaEvent.MaintenanceFeeProcessed
          |> AppSaga.Message.billing e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.MaintenanceFeeSkipped e ->
       let msg =
          BillingSagaEvent.MaintenanceFeeProcessed
          |> AppSaga.Message.billing e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.PaymentRequested e ->
       let msg =
          PaymentRequestSagaStartEvent.PaymentRequested e
          |> AppSaga.Message.paymentRequestStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.PaymentRequestDeclined e ->
       let msg =
          PaymentRequestSagaEvent.PaymentRequestDeclined
          |> AppSaga.Message.paymentRequest e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.PaymentRequestCancelled e ->
       let msg =
          PaymentRequestSagaEvent.PaymentRequestCancelled
          |> AppSaga.Message.paymentRequest e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.InternalTransferBetweenOrgsPending e ->
       if e.Data.FromSchedule then
          let msg =
             state.PartnerBankLink
             |> PlatformTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+            |> GuaranteedDelivery.message e.CorrelationId.Value
 
-         registry.SagaActor e.CorrelationId <! msg
+         Some(AccountOutboxMessage.Saga msg)
       else
          let msg =
-            PlatformTransferSagaStartEvent.SenderReservedFunds(
-               e,
-               state.PartnerBankLink
-            )
+            (e, state.PartnerBankLink)
+            |> PlatformTransferSagaStartEvent.SenderReservedFunds
             |> AppSaga.Message.platformTransferStart e.OrgId e.CorrelationId
 
-         registry.SagaGuaranteedDeliveryActor() <! msg
+         Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.InternalTransferBetweenOrgsScheduled e ->
       let msg =
          PlatformTransferSagaStartEvent.ScheduleTransferRequest e
          |> AppSaga.Message.platformTransferStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.InternalTransferBetweenOrgsDeposited e ->
       let msg =
          state.PartnerBankLink
          |> PlatformTransferSagaEvent.RecipientDepositedFunds
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      Some(AccountOutboxMessage.Saga msg)
+   | AccountEvent.InternalTransferBetweenOrgsSettled e ->
+      let info = e.Data.BaseInfo
+
+      let paymentFulfillment =
+         info.FromPaymentRequest
+         |> Option.map (fun payId -> {
+            PaymentRequestId = payId
+            TransferId = info.TransferId
+            FulfilledAt = e.Timestamp
+         })
+
+      let msg =
+         PlatformTransferSagaEvent.TransferSettled paymentFulfillment
+         |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
+
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.InternalTransferBetweenOrgsFailed e ->
       let msg =
          PlatformTransferSagaEvent.SenderReleasedReservedFunds
          |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
-
-      registry.SagaActor e.CorrelationId <! msg
-   | AccountEvent.InternalTransferBetweenOrgsSettled e ->
-      let info = e.Data.BaseInfo
-
-      let msg =
-         PlatformTransferSagaEvent.TransferSettled
-         |> AppSaga.Message.platformTransfer e.OrgId e.CorrelationId
          |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
-
-      match info.FromPaymentRequest with
-      | Some paymentRequestId ->
-         let corrId = paymentRequestId.AsCorrelationId
-
-         let msg =
-            PaymentRequestSagaEvent.PaymentFulfilled {
-               TransferId = info.TransferId
-               FulfilledAt = e.Timestamp
-            }
-            |> AppSaga.Message.paymentRequest info.Recipient.OrgId corrId
-            |> GuaranteedDelivery.message corrId.Value
-
-         registry.SagaGuaranteedDeliveryActor() <! msg
-      | None -> ()
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.DomesticTransferScheduled e ->
       let msg =
          DomesticTransferSagaStartEvent.ScheduleTransferRequest(
@@ -334,46 +328,92 @@ let notifySaga
          )
          |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
-      registry.SagaGuaranteedDeliveryActor() <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.DomesticTransferPending e ->
       if e.Data.FromSchedule then
          let msg =
             DomesticTransferSagaEvent.SenderReservedFunds
             |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
+            |> GuaranteedDelivery.message e.CorrelationId.Value
 
-         registry.SagaActor e.CorrelationId <! msg
+         Some(AccountOutboxMessage.Saga msg)
       else
          let msg =
-            DomesticTransferSagaStartEvent.SenderReservedFunds(
-               e,
-               state.PartnerBankLink
-            )
+            (e, state.PartnerBankLink)
+            |> DomesticTransferSagaStartEvent.SenderReservedFunds
             |> AppSaga.Message.domesticTransferStart e.OrgId e.CorrelationId
 
-         registry.SagaGuaranteedDeliveryActor() <! msg
+         Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.DomesticTransferFailed e ->
       let msg =
          DomesticTransferSagaEvent.SenderReleasedReservedFunds
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      Some(AccountOutboxMessage.Saga msg)
    | AccountEvent.DomesticTransferSettled e ->
       let msg =
          DomesticTransferSagaEvent.SenderDeductedFunds
          |> AppSaga.Message.domesticTransfer e.OrgId e.CorrelationId
+         |> GuaranteedDelivery.message e.CorrelationId.Value
 
-      registry.SagaActor e.CorrelationId <! msg
+      Some(AccountOutboxMessage.Saga msg)
+   | _ -> None
+
+let private applyComputedOutboxToState
+   (state: ParentAccountSnapshot)
+   (evt: AccountEvent)
+   =
+   let computed = computeOutboxMessage state evt
+   let _, envelope = AccountEnvelope.unwrap evt
+
+   match computed with
+   | Some msg -> {
+      state with
+         Outbox = state.Outbox |> Map.add envelope.Id (envelope.Timestamp, msg)
+     }
+   | None -> state
+
+let private forwardMessagesAfterEventPersistence
+   (registry: #IEmailActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
+   (getRetryableTransfers:
+      CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
+   (mailbox: Eventsourced<obj>)
+   (state: ParentAccountSnapshot)
+   (evt: AccountEvent)
+   =
+   let _, envelope = AccountEnvelope.unwrap evt
+
+   match evt with
+   | AccountEvent.CreatedVirtualAccount e ->
+      let msg =
+         EmailMessage.create
+            state.OrgId
+            e.CorrelationId
+            (EmailInfo.AccountOpen e.Data.Name)
+
+      registry.EmailActor() <! msg
    | AccountEvent.ParentAccount(ParentAccountEvent.EditedCounterparty e) ->
-      // Retries domestic transfers which failed due to the mock partner bank
-      // regarding the Recipient of the Transfer as having
-      // invalid account info.
       let retryable =
          getRetryableTransfers e.Data.Counterparty.CounterpartyId
          |> Async.AwaitTask
          |> Async.map AccountMessage.DomesticTransfersRetryableUponRecipientEdit
 
       retype mailbox.Self <!| retryable
-   | _ -> ()
+   | AccountEvent.DebitPending e when
+      not e.Data.EmployeePurchaseReference.PurchaseAuthType.IsBypassAuth
+      ->
+      mailbox.Sender() <! PurchaseAuthorizationStatus.Approved
+   | _ ->
+      match computeOutboxMessage state evt with
+      | Some(AccountOutboxMessage.Saga sagaMsg) ->
+         match sagaMsg with
+         | :? AppSaga.AppSagaMessage as msg ->
+            registry.SagaActor envelope.CorrelationId <! msg
+         | :? GuaranteedDelivery.Message<AppSaga.AppSagaMessage> as msg ->
+            registry.SagaGuaranteedDeliveryActor() <! msg
+         | msg -> logError mailbox $"Unknown outbox message {msg}"
+      | _ -> ()
 
 let persistInternalTransferWithinOrgEvent
    (logError: string -> unit)
@@ -449,8 +489,10 @@ let persistEvent
       confirmPersistAll (evt :: autoTransferEvts)
 
 let actorProps
-   (registry: #IBillingStatementActor)
+   (registry:
+      #IBillingStatementActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
    (broadcaster: SignalRBroadcast)
+   (lookbackHours: LookbackHours)
    (getDomesticTransfersRetryableUponRecipientEdit:
       CounterpartyId -> Task<Result<DomesticTransfer list option, Err>>)
    (onLifeCycleEvent: Eventsourced<obj> -> obj -> Effect<obj>)
@@ -471,13 +513,14 @@ let actorProps
 
             signalRBroadcast broadcaster state evt
 
-            notifySaga
+            forwardMessagesAfterEventPersistence
                registry
                getDomesticTransfersRetryableUponRecipientEdit
                mailbox
                state
                evt
 
+            let state = applyComputedOutboxToState state evt
             return! loop <| Some state
          | :? SnapshotOffer as o -> return! loop <| Some(unbox o.Snapshot)
          | :? ConsumerController.Delivery<AccountMessage> as msg ->
@@ -505,17 +548,55 @@ let actorProps
             match envelope.Message with
             | :? AccountMessage as msg ->
                match msg with
+               // Redeliver messages in outbox to saga actor.
+               // See AccountOutbox type for more information.
+               | AccountMessage.StateChange cmd when
+                  state.Outbox.ContainsKey cmd.Envelope.Id
+                  ->
+                  let corrId = cmd.Envelope.CorrelationId
+
+                  match state.Outbox |> Map.tryFind cmd.Envelope.Id with
+                  | Some(timestamp, AccountOutboxMessage.Saga msg) ->
+                     let logOutboxRedeliver () =
+                        logWarning
+                           mailbox
+                           $"Associated message exists in outbox {msg} {timestamp}"
+
+                     match msg with
+                     | :? AppSaga.AppSagaMessage as msg ->
+                        logOutboxRedeliver ()
+
+                        registry.SagaActor corrId
+                        <! AppSaga.Message.redelivered msg
+
+                        return ignored ()
+                     | :? GuaranteedDelivery.Message<AppSaga.AppSagaMessage> as msg ->
+                        logOutboxRedeliver ()
+
+                        let msg =
+                           AppSaga.Message.guaranteedDelivery
+                              corrId
+                              (AppSaga.Message.redelivered msg.Message)
+
+                        registry.SagaGuaranteedDeliveryActor() <! msg
+                        return ignored ()
+                     | other ->
+                        logError
+                           $"Unknown message in outbox {other} {timestamp}"
+                  | None -> return ignored ()
                // Handle potential for receiving the same command multiple times.
                | AccountMessage.StateChange cmd when
                   state.ProcessedCommands.ContainsKey cmd.Envelope.Id
                   ->
-                  logDebug mailbox $"Received duplicate command {cmd}"
+                  logWarning mailbox $"Received duplicate command {cmd}"
                   return ignored ()
                | AccountMessage.StateChange cmd ->
                   let validation = ParentAccount.stateTransition state cmd
 
                   match validation with
-                  | Error err -> onValidationError cmd err
+                  | Error err ->
+                     onValidationError cmd err
+                     return ignored ()
                   | Ok(InternalTransferWithinOrgDeducted transfer, state) ->
                      return!
                         persistInternalTransferWithinOrgEvent
@@ -554,8 +635,9 @@ let actorProps
                         PrimaryCheckingAccountId = state.PrimaryVirtualAccountId
                      }
                      |> AppSaga.Message.billing state.OrgId corrId
+                     |> GuaranteedDelivery.message corrId.Value
 
-                  registry.SagaActor corrId <! msg
+                  registry.SagaGuaranteedDeliveryActor() <! msg
 
                   let billing = {
                      OrgId = state.OrgId
@@ -614,8 +696,9 @@ let actorProps
                            transfer.Originator.OrgId
                            corrId
                            evt
+                        |> GuaranteedDelivery.message corrId.Value
 
-                     registry.SagaActor corrId <! msg
+                     registry.SagaGuaranteedDeliveryActor() <! msg
 
                return ignored ()
             (*
@@ -631,7 +714,9 @@ let actorProps
             | AccountMessage.StateChange(AccountCommand.Debit _ as cmd) ->
                match ParentAccount.stateTransition state cmd with
                | Ok(evt, _) -> return! Persist evt
-               | Error err -> onValidationError cmd err
+               | Error err ->
+                  onValidationError cmd err
+                  return ignored ()
             // Some messages are sent through traditional AtMostOnceDelivery via
             // a reference to the cluster sharded entity ref rather than Akka.Delivery
             // AtLeastOnceDelivery producer ref so will not hit the
@@ -642,22 +727,38 @@ let actorProps
                mailbox.Parent() <! msg
                return ignored ()
             | AccountMessage.PruneIdempotencyChecker ->
-               // Keep last 24 hours of processed commands
+               let cutoff =
+                  DateTime.UtcNow.AddHours -lookbackHours.ProcessedCommands
+
                let stateOpt =
                   stateOpt
                   |> Option.map (fun state -> {
                      state with
                         ProcessedCommands =
                            state.ProcessedCommands
-                           |> Map.filter (fun _ date ->
-                              date > DateTime.UtcNow.AddHours(-24))
+                           |> Map.filter (fun _ date -> date > cutoff)
+                  })
+
+               return! loop stateOpt
+            | AccountMessage.PruneOutbox ->
+               let cutoff = DateTime.UtcNow.AddHours -lookbackHours.Outbox
+
+               let stateOpt =
+                  stateOpt
+                  |> Option.map (fun state -> {
+                     state with
+                        Outbox =
+                           state.Outbox
+                           |> Map.filter (fun _ (date, _) -> date > cutoff)
                   })
 
                return! loop stateOpt
             | _ -> return unhandled ()
          // Event replay on actor start
          | :? AccountEvent as e when mailbox.IsRecovering() ->
-            return! loop <| Some(ParentAccount.applyEvent state e)
+            let state = ParentAccount.applyEvent state e
+            let state = applyComputedOutboxToState state e
+            return! loop (Some state)
          | msg -> return onLifeCycleEvent mailbox msg
       }
 
@@ -702,6 +803,13 @@ let private handleLifeCycleEvent
                      AccountMessage.PruneIdempotencyChecker
                   |> ignore
 
+                  mailbox.ScheduleRepeatedly
+                     TimeSpan.Zero
+                     (TimeSpan.FromHours 4)
+                     mailbox.Self
+                     AccountMessage.PruneOutbox
+                  |> ignore
+
                   ignored ()
       }
       mailbox
@@ -717,10 +825,13 @@ let initProps
    (guaranteedDeliveryConsumerControllerRef:
       IActorRef<ConsumerController.IConsumerCommand<AccountMessage>>)
    =
+   let lookbackHours = { Outbox = 24; ProcessedCommands = 24 }
+
    let childProps =
       actorProps
          registry
          broadcaster
+         lookbackHours
          getDomesticTransfersRetryableUponRecipientEdit
          (handleLifeCycleEvent guaranteedDeliveryConsumerControllerRef)
 

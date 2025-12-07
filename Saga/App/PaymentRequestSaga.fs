@@ -363,7 +363,7 @@ type OperationEnv = {
 
 let onEventPersisted
    (broadcaster: SignalRBroadcast.SignalRBroadcast)
-   (registry: #IEmailActor & #IAccountActor)
+   (registry: #IEmailActor & #IAccountActor & #ISagaGuaranteedDeliveryActor)
    (operationEnv: OperationEnv)
    (previousState: PaymentRequestSaga)
    (state: PaymentRequestSaga)
@@ -397,9 +397,21 @@ let onEventPersisted
    | Event.PaymentRequestCancelled -> ()
    | Event.PaymentRequestDeclined ->
       notifyPayeeOfPaymentDecline payment emailRef
-   | Event.PaymentFulfilled _ ->
+   | Event.PaymentFulfilled fulfillment ->
       state.NextRecurringPaymentDueDate
       |> Option.iter scheduleNextRecurringPayment
+
+      match payment with
+      | Platform pay ->
+         let corrId = fulfillment.TransferId.AsCorrelationId
+
+         let msg =
+            PlatformTransferSaga.PlatformTransferSagaEvent.AckPaymentFulfillment
+            |> AppSaga.Message.platformTransfer pay.Payer.OrgId corrId
+            |> GuaranteedDelivery.message corrId.Value
+
+         registry.SagaGuaranteedDeliveryActor() <! msg
+      | _ -> ()
    | Event.PaymentSagaStartedForNextRecurringPayment
    | Event.PaymentFailed _
    | Event.ResetInProgressActivityAttempts
