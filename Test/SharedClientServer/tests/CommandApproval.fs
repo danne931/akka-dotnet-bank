@@ -605,7 +605,7 @@ let tests =
          let existingRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
                ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
@@ -617,7 +617,7 @@ let tests =
          let newRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria = ApprovalCriteria.AmountDailyLimit 60m
             Approvers = [ CommandApprover.AnyAdmin ]
          }
@@ -724,7 +724,7 @@ let tests =
          let existingRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria = ApprovalCriteria.AmountDailyLimit 60m
             Approvers = [ CommandApprover.AnyAdmin ]
          }
@@ -732,7 +732,7 @@ let tests =
          let newRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
                ApprovalCriteria.AmountPerCommand {
                   LowerBound = None
@@ -919,7 +919,6 @@ let tests =
          let cmdTypes = [
             Stub.commandTypes.InternalTransfer
             Stub.commandTypes.DomesticTransfer
-            Stub.commandTypes.Payment
          ]
 
          for cmdType in cmdTypes do
@@ -956,7 +955,7 @@ let tests =
                      | ApprovableCommandType.ApprovableAmountBased InternalTransferBetweenOrgsCommandType ->
                         Stub.commandTypes.DomesticTransfer
                      | ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType ->
-                        Stub.commandTypes.Payment
+                        Stub.commandTypes.InternalTransfer
                      | _ -> Stub.commandTypes.InternalTransfer
             }
 
@@ -976,7 +975,6 @@ let tests =
          let cmdTypes = [
             Stub.commandTypes.InternalTransfer
             Stub.commandTypes.DomesticTransfer
-            Stub.commandTypes.Payment
          ]
 
          for cmdType in cmdTypes do
@@ -1021,7 +1019,7 @@ let tests =
                      | ApprovableCommandType.ApprovableAmountBased InternalTransferBetweenOrgsCommandType ->
                         Stub.commandTypes.DomesticTransfer
                      | ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType ->
-                        Stub.commandTypes.Payment
+                        Stub.commandTypes.InternalTransfer
                      | _ -> Stub.commandTypes.InternalTransfer
             }
 
@@ -1880,8 +1878,6 @@ let tests =
             Stub.commandTypes.DomesticTransfer,
             ApprovalCriteria.AmountDailyLimit 10m
 
-            Stub.commandTypes.Payment, ApprovalCriteria.AmountDailyLimit 10m
-
             Stub.commandTypes.InternalTransfer,
             ApprovalCriteria.AmountDailyLimit 10m
          ]
@@ -1944,7 +1940,6 @@ let tests =
          let commandTypes = [
             Stub.commandTypes.DomesticTransfer
             Stub.commandTypes.InternalTransfer
-            Stub.commandTypes.Payment
          ]
 
          let conflictingCriteria = [
@@ -2058,7 +2053,6 @@ let tests =
          let commandTypes = [
             Stub.commandTypes.DomesticTransfer
             Stub.commandTypes.InternalTransfer
-            Stub.commandTypes.Payment
          ]
 
          let criteria = [
@@ -2653,10 +2647,10 @@ let tests =
             EmployeeId = Guid.NewGuid() |> EmployeeId
          }
 
-         let existingPaymentRule = {
+         let existingTransferRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
                ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 10m
@@ -2665,17 +2659,17 @@ let tests =
             Approvers = [ CommandApprover.AnyAdmin ]
          }
 
-         let cmdToAddPaymentRule =
+         let cmdToAddTransferRule =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
                {
                   Id = InitiatedById admin.EmployeeId
                   Name = admin.EmployeeName
                }
-               existingPaymentRule
+               existingTransferRule
             |> OrgCommand.ConfigureApprovalRule
 
-         let res = update Stub.orgStateWithEvents cmdToAddPaymentRule
+         let res = update Stub.orgStateWithEvents cmdToAddTransferRule
          let _, org = Expect.wantOk res ""
 
          let ruleIdForManagingApproval = Stub.ruleId ()
@@ -2704,10 +2698,10 @@ let tests =
          let res = update org cmdToMakeManagingRulesRequireDualAdminApproval
          let _, org = Expect.wantOk res ""
 
-         let conflictingPaymentRule = {
+         let conflictingRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria =
                ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 19m
@@ -2732,7 +2726,7 @@ let tests =
                   RequesterIsConfiguredAsAnApprover = true
                   Command =
                      ManageApprovalRuleInput.CreateOrEdit(
-                        conflictingPaymentRule,
+                        conflictingRule,
                         initiator
                      )
                      |> ManageApprovalRuleCommand.create
@@ -2762,10 +2756,10 @@ let tests =
             EmployeeId = Guid.NewGuid() |> EmployeeId
          }
 
-         let existingPaymentRule = {
+         let existingTransferRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.InternalTransfer
             Criteria =
                ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 10m
@@ -2774,17 +2768,17 @@ let tests =
             Approvers = [ CommandApprover.AnyAdmin ]
          }
 
-         let cmdToAddPaymentRule =
+         let cmdToAddTransferRule =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
                {
                   Id = InitiatedById admin.EmployeeId
                   Name = admin.EmployeeName
                }
-               existingPaymentRule
+               existingTransferRule
             |> OrgCommand.ConfigureApprovalRule
 
-         let res = update Stub.orgStateWithEvents cmdToAddPaymentRule
+         let res = update Stub.orgStateWithEvents cmdToAddTransferRule
          let _, org = Expect.wantOk res ""
 
          let ruleIdForManagingApproval = Stub.ruleId ()
@@ -2816,7 +2810,7 @@ let tests =
          let ruleWithAmountGap = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.InternalTransfer
             Criteria =
                ApprovalCriteria.AmountPerCommand {
                   LowerBound = Some 25m
@@ -2872,25 +2866,25 @@ let tests =
             EmployeeId = Guid.NewGuid() |> EmployeeId
          }
 
-         let existingPaymentRule = {
+         let existingRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria = ApprovalCriteria.AmountDailyLimit 100m
             Approvers = [ CommandApprover.AnyAdmin ]
          }
 
-         let cmdToAddPaymentRule =
+         let cmdToAddTransferRule =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
                {
                   Id = InitiatedById admin.EmployeeId
                   Name = admin.EmployeeName
                }
-               existingPaymentRule
+               existingRule
             |> OrgCommand.ConfigureApprovalRule
 
-         let res = update Stub.orgStateWithEvents cmdToAddPaymentRule
+         let res = update Stub.orgStateWithEvents cmdToAddTransferRule
          let _, org = Expect.wantOk res ""
 
          let ruleIdForManagingApproval = Stub.ruleId ()
@@ -2922,7 +2916,7 @@ let tests =
          let duplicateCommandTypeRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria = ApprovalCriteria.AmountDailyLimit 10m
             Approvers = [ CommandApprover.AnyAdmin ]
          }
@@ -2974,25 +2968,25 @@ let tests =
             EmployeeId = Guid.NewGuid() |> EmployeeId
          }
 
-         let existingPaymentRule = {
+         let existingRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria = ApprovalCriteria.AmountDailyLimit 100m
             Approvers = [ CommandApprover.AnyAdmin ]
          }
 
-         let cmdToAddPaymentRule =
+         let cmdToAddTransferRule =
             ConfigureApprovalRuleCommand.create
                Stub.orgId
                {
                   Id = InitiatedById admin.EmployeeId
                   Name = admin.EmployeeName
                }
-               existingPaymentRule
+               existingRule
             |> OrgCommand.ConfigureApprovalRule
 
-         let res = update Stub.orgStateWithEvents cmdToAddPaymentRule
+         let res = update Stub.orgStateWithEvents cmdToAddTransferRule
          let _, org = Expect.wantOk res ""
 
          let ruleIdForManagingApproval = Stub.ruleId ()
@@ -3024,7 +3018,7 @@ let tests =
          let duplicateCommandTypeRule = {
             RuleId = Stub.ruleId ()
             OrgId = Stub.orgId
-            CommandType = Stub.commandTypes.Payment
+            CommandType = Stub.commandTypes.DomesticTransfer
             Criteria = ApprovalCriteria.AmountDailyLimit 10m
             Approvers = [ CommandApprover.AnyAdmin ]
          }

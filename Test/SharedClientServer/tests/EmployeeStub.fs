@@ -5,9 +5,13 @@ open System
 
 open Lib.SharedTypes
 open Bank.Employee.Domain
+open Bank.Purchase.Domain
+open Email
 
+let parentAccountId = Guid.NewGuid() |> ParentAccountId
 let accountId = Guid.NewGuid() |> AccountId
-let accountNumber = AccountNumber.generate () |> int64 |> AccountNumber
+
+let accountNumber = AccountNumber.generate ()
 let employeeId = Guid.NewGuid() |> EmployeeId
 let orgId = Guid.NewGuid() |> OrgId
 let compositeId = employeeId, orgId
@@ -23,13 +27,24 @@ let initiator = {
 let purchaseInfo: PurchaseInfo = {
    CardId = cardId
    AccountId = accountId
+   OrgId = orgId
+   ParentAccountId = parentAccountId
+   EmployeeId = employeeId
    InitiatedBy = initiator
    CorrelationId = correlationId
+   EmployeeName = "Dan Eis"
+   EmployeeEmail = Email.deserialize "jellyfish@gmail.com"
    CardNumberLast4 = cardNumberLast4
    Date = DateTime.UtcNow
    Amount = 10m
-   Merchant = "Groceries"
+   Merchant = NonEmptyString.deserializeUnsafe "Groceries"
+   CurrencyMerchant = Currency.USD
+   CurrencyCardHolder = Currency.USD
    Reference = None
+   CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
+   CardIssuerTransactionId = Guid.NewGuid() |> CardIssuerTransactionId
+   CardNickname = Some "Travel"
+   AuthorizationType = PurchaseAuthType.Debit
 }
 
 let command =
@@ -43,9 +58,10 @@ let command =
             Email = "smartfish@gmail.com"
             FirstName = "Smart"
             LastName = "Fish"
+            ParentAccountId = parentAccountId
             EmployeeId = Guid.NewGuid() |> EmployeeId
          }
-      createEmployee = {
+      createEmployee =
          CreateEmployeeCommand.create initiator {
             OrgId = orgId
             OrgRequiresEmployeeInviteApproval = None
@@ -53,20 +69,21 @@ let command =
             FirstName = "Dan"
             LastName = "Eis"
             Email = "jellyfish@gmail.com"
+            ParentAccountId = parentAccountId
             CardInfo = None
-         } with
-            EntityId = EmployeeId.toEntityId employeeId
-      }
+         }
       confirmInvite =
-         ConfirmInvitationCommand.create initiator orgId {
+         ConfirmInvitationCommand.create initiator orgId correlationId {
             AuthProviderUserId = Guid.NewGuid()
             Email = Email.deserialize "jellyfish@gmail.com"
             Reference = None
          }
       refreshInviteToken =
-         RefreshInvitationTokenCommand.create compositeId initiator {
-            Reason = None
-         }
+         RefreshInvitationTokenCommand.create
+            compositeId
+            initiator
+            correlationId
+            { Reason = None }
       updateRoleWithSupplementaryCardInfo =
          UpdateRoleCommand.create compositeId initiator {
             EmployeeName = "Dan Eis"
@@ -77,6 +94,7 @@ let command =
                   DailyPurchaseLimit = 1300m
                   MonthlyPurchaseLimit = 13_000m
                   LinkedAccountId = accountId
+                  CardType = CardType.Debit
                }
          }
       createCard =
@@ -92,39 +110,54 @@ let command =
             OrgId = orgId
             EmployeeId = employeeId
             CardId = cardId
+            OriginatedFromEmployeeOnboarding = None
+         }
+      linkCard =
+         LinkCardCommand.create {
+            Link = {
+               CardId = cardId
+               CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
+               CardIssuerName = CardIssuerName.Lithic
+            }
+            CardNumberLast4 = cardNumberLast4
+            OrgId = orgId
+            EmployeeId = employeeId
+            InitiatedBy = initiator
+            CorrelationId = correlationId
          }
       debit =
-         fun amount -> {
-            PurchasePendingCommand.create initiator orgId {
-               CardId = purchaseInfo.CardId
-               CardNumberLast4 = purchaseInfo.CardNumberLast4
-               AccountId = purchaseInfo.AccountId
-               Date = purchaseInfo.Date
-               Amount = amount
-               Merchant = purchaseInfo.Merchant
-               Reference = purchaseInfo.Reference
-            } with
-               CorrelationId = correlationId
-         }
+         fun amount ->
+            PurchaseIntentCommand.create { purchaseInfo with Amount = amount }
       approveDebit =
-         AccountConfirmsPurchaseCommand.create compositeId {
+         SettlePurchaseWithCardCommand.create {
             Info = purchaseInfo
+            Clearing = {
+               PurchaseClearedId = Guid.NewGuid() |> PurchaseClearedId
+               ClearedAmount = {
+                  Amount = purchaseInfo.Amount
+                  Flow = MoneyFlow.Out
+               }
+            }
          }
       limitDailyDebits =
          fun amount ->
-            LimitDailyDebitsCommand.create compositeId initiator {
-               PriorLimit = dailyPurchaseLimit
-               DebitLimit = amount
+            ConfigureRollingPurchaseLimitCommand.create compositeId initiator {
                CardId = cardId
                CardNumberLast4 = cardNumberLast4
+               PriorDailyLimit = dailyPurchaseLimit
+               PriorMonthlyLimit = monthlyPurchaseLimit
+               DailyLimit = amount
+               MonthlyLimit = monthlyPurchaseLimit
             }
       limitMonthlyDebits =
          fun amount ->
-            LimitMonthlyDebitsCommand.create compositeId initiator {
-               PriorLimit = monthlyPurchaseLimit
-               DebitLimit = amount
+            ConfigureRollingPurchaseLimitCommand.create compositeId initiator {
                CardId = cardId
                CardNumberLast4 = cardNumberLast4
+               PriorDailyLimit = dailyPurchaseLimit
+               PriorMonthlyLimit = monthlyPurchaseLimit
+               DailyLimit = dailyPurchaseLimit
+               MonthlyLimit = amount
             }
       lockCard =
          LockCardCommand.create compositeId initiator {
@@ -148,11 +181,13 @@ let initCommands: EmployeeCommand list = [
    EmployeeCommand.CreateEmployee command.createEmployee
    EmployeeCommand.ConfirmInvitation command.confirmInvite
    EmployeeCommand.CreateCard command.createCard
+   EmployeeCommand.LinkCard command.linkCard
 ]
 
 type EventIndex = {
    employeeCreated: BankEvent<CreatedEmployee>
    cardCreated: BankEvent<CreatedCard>
+   cardLinked: BankEvent<CardLinked>
 }
 
 let event: EventIndex = {
@@ -166,13 +201,18 @@ let event: EventIndex = {
       |> CreateCardCommand.toEvent
       |> Result.toValueOption
       |> _.Value
+   cardLinked =
+      command.linkCard
+      |> LinkCardCommand.toEvent
+      |> Result.toValueOption
+      |> _.Value
 }
 
 let employeeState =
    let e = event.employeeCreated
 
    {
-      Employee.empty with
+      Employee.Empty with
          EmployeeId = EmployeeId.fromEntityId e.EntityId
          OrgId = e.OrgId
          FirstName = e.Data.FirstName
@@ -182,7 +222,11 @@ let employeeState =
          Status = EmployeeStatus.Active
          Cards =
             Map [
-               event.cardCreated.Data.Card.CardId, event.cardCreated.Data.Card
+               event.cardCreated.Data.Card.CardId,
+               {
+                  event.cardCreated.Data.Card with
+                     Status = CardStatus.Active
+               }
             ]
    }
 
@@ -191,5 +235,11 @@ let employeeStateWithEvents: EmployeeSnapshot = {
    Events = [
       EmployeeEnvelope.wrap event.employeeCreated
       EmployeeEnvelope.wrap event.cardCreated
+      EmployeeEnvelope.wrap event.cardLinked
    ]
+   CardIssuerLinks = Map.empty
+   PendingPurchaseDeductions = Map.empty
+   PendingPurchases = Map.empty
+   ProcessedCommands = Map.empty
+   Outbox = Map.empty
 }

@@ -24,7 +24,7 @@ let tests =
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          let command = Stub.command.debit 9.31m
-         let res = update state (EmployeeCommand.PurchasePending command)
+         let res = update state (EmployeeCommand.PurchaseIntent command)
          let err = Expect.wantError res "should be Result.Error"
 
          Expect.equal
@@ -40,15 +40,14 @@ let tests =
                (fun acc amount ->
                   let state, total = acc
                   let cmd = Stub.command.debit amount
-                  let res = update state (EmployeeCommand.PurchasePending cmd)
+                  let res = update state (EmployeeCommand.PurchaseIntent cmd)
                   let _, state = Expect.wantOk res "should be Result.Ok"
 
                   // Mock the approval sent from the account actor
                   let cmd = Stub.command.approveDebit
                   let cmd = { cmd with Data.Info.Amount = amount }
 
-                  let res =
-                     update state (EmployeeCommand.AccountConfirmsPurchase cmd)
+                  let res = update state (EmployeeCommand.SettlePurchase cmd)
 
                   let _, state = Expect.wantOk res "should be Result.Ok"
 
@@ -59,13 +58,16 @@ let tests =
          let state, debitTotal = updates
 
          Expect.equal
-            (Employee.dailyPurchaseAccrued state.Events Stub.cardId)
+            (Employee.dailyPurchaseAccrued
+               state.Events
+               state.PendingPurchaseDeductions
+               Stub.cardId)
             debitTotal
             "DailyDebitAccrued should accrue debits for the day"
 
          let command = Stub.command.debit 10m
 
-         let res = update state (EmployeeCommand.PurchasePending command)
+         let res = update state (EmployeeCommand.PurchaseIntent command)
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          // Mock the approval sent from the account actor
@@ -77,18 +79,26 @@ let tests =
                Data.Info.Date = DateTime.UtcNow.AddDays(-1)
          }
 
-         let res = update state (EmployeeCommand.AccountConfirmsPurchase cmd)
+         let res = update state (EmployeeCommand.SettlePurchase cmd)
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          Expect.equal
-            (Employee.dailyPurchaseAccrued state.Events Stub.cardId)
+            (Employee.dailyPurchaseAccrued
+               state.Events
+               state.PendingPurchaseDeductions
+               Stub.cardId)
             debitTotal
             "DailyDebitAccrued should not accrue debits older than a day"
       }
 
       test "Setting a daily purchase limit" {
          let command = Stub.command.limitDailyDebits 100m
-         let res = update initState (EmployeeCommand.LimitDailyDebits command)
+
+         let res =
+            update
+               initState
+               (EmployeeCommand.ConfigureRollingPurchaseLimit command)
+
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          Expect.equal
@@ -98,7 +108,7 @@ let tests =
 
          let purchaseAmt = 99m
          let command = Stub.command.debit purchaseAmt
-         let res = update state (EmployeeCommand.PurchasePending command)
+         let res = update state (EmployeeCommand.PurchaseIntent command)
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          // Mock the approval sent from the account actor
@@ -109,16 +119,19 @@ let tests =
                Data.Info.Amount = purchaseAmt
          }
 
-         let res = update state (EmployeeCommand.AccountConfirmsPurchase cmd)
+         let res = update state (EmployeeCommand.SettlePurchase cmd)
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          Expect.equal
-            (Employee.dailyPurchaseAccrued state.Events command.Data.CardId)
+            (Employee.dailyPurchaseAccrued
+               state.Events
+               state.PendingPurchaseDeductions
+               command.Data.CardId)
             purchaseAmt
             "Daily purchase should be accrued if under daily limit"
 
          let command = Stub.command.debit 2m
-         let res = update state (EmployeeCommand.PurchasePending command)
+         let res = update state (EmployeeCommand.PurchaseIntent command)
          let err = Expect.wantError res "should be Result.Error"
 
          Expect.stringContains
@@ -138,7 +151,7 @@ let tests =
                (fun acc amount ->
                   let state, total = acc
                   let cmd = Stub.command.debit amount
-                  let res = update state (EmployeeCommand.PurchasePending cmd)
+                  let res = update state (EmployeeCommand.PurchaseIntent cmd)
                   let _, state = Expect.wantOk res "should be Result.Ok"
 
                   // Mock the approval sent from the account actor
@@ -150,8 +163,7 @@ let tests =
                         Data.Info.Date = firstOfMonth
                   }
 
-                  let res =
-                     update state (EmployeeCommand.AccountConfirmsPurchase cmd)
+                  let res = update state (EmployeeCommand.SettlePurchase cmd)
 
                   let _, state = Expect.wantOk res "should be Result.Ok"
 
@@ -162,12 +174,15 @@ let tests =
          let state, debitTotal = updates
 
          Expect.equal
-            (Employee.monthlyPurchaseAccrued state.Events Stub.cardId)
+            (Employee.monthlyPurchaseAccrued
+               state.Events
+               state.PendingPurchaseDeductions
+               Stub.cardId)
             debitTotal
             "MonthlyDebitAccrued should accrue debits for the month"
 
          let cmd = Stub.command.debit 10m
-         let res = update state (EmployeeCommand.PurchasePending cmd)
+         let res = update state (EmployeeCommand.PurchaseIntent cmd)
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          // Mock the approval sent from the account actor
@@ -179,18 +194,26 @@ let tests =
                Data.Info.Date = firstOfMonth.AddDays(-1)
          }
 
-         let res = update state (EmployeeCommand.AccountConfirmsPurchase cmd)
+         let res = update state (EmployeeCommand.SettlePurchase cmd)
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          Expect.equal
-            (Employee.monthlyPurchaseAccrued state.Events Stub.cardId)
+            (Employee.monthlyPurchaseAccrued
+               state.Events
+               state.PendingPurchaseDeductions
+               Stub.cardId)
             debitTotal
             "MonthlyDebitAccrued should not accrue debits older than a day"
       }
 
       test "Setting a monthly purchase limit" {
          let command = Stub.command.limitMonthlyDebits 100m
-         let res = update initState (EmployeeCommand.LimitMonthlyDebits command)
+
+         let res =
+            update
+               initState
+               (EmployeeCommand.ConfigureRollingPurchaseLimit command)
+
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          Expect.equal
@@ -200,7 +223,7 @@ let tests =
 
          let purchaseAmt = 99m
          let command = Stub.command.debit purchaseAmt
-         let res = update state (EmployeeCommand.PurchasePending command)
+         let res = update state (EmployeeCommand.PurchaseIntent command)
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          // Mock the approval sent from the account actor
@@ -211,16 +234,19 @@ let tests =
                Data.Info.Amount = purchaseAmt
          }
 
-         let res = update state (EmployeeCommand.AccountConfirmsPurchase cmd)
+         let res = update state (EmployeeCommand.SettlePurchase cmd)
          let _, state = Expect.wantOk res "should be Result.Ok"
 
          Expect.equal
-            (Employee.monthlyPurchaseAccrued state.Events command.Data.CardId)
+            (Employee.monthlyPurchaseAccrued
+               state.Events
+               state.PendingPurchaseDeductions
+               command.Data.CardId)
             purchaseAmt
             "Monthly purchase should be accrued if under monthly limit"
 
          let command = Stub.command.debit 2m
-         let res = update state (EmployeeCommand.PurchasePending command)
+         let res = update state (EmployeeCommand.PurchaseIntent command)
          let err = Expect.wantError res "should be Result.Error"
 
          Expect.stringContains

@@ -6,12 +6,15 @@ open System
 open Lib.SharedTypes
 open Bank.Account.Domain
 open Bank.Transfer.Domain
+open Bank.Purchase.Domain
 open BillingStatement
 
 let accountId = Guid.NewGuid() |> AccountId
-let accountNumber = AccountNumber.generate () |> int64 |> AccountNumber
+let parentAccountId = Guid.NewGuid() |> ParentAccountId
+let accountNumber = AccountNumber.generate ()
 let orgId = Guid.NewGuid() |> OrgId
 let compositeId = accountId, orgId
+let parentCompositeId = parentAccountId, orgId
 let correlationId = Guid.NewGuid() |> CorrelationId
 
 let initiator: Initiator = {
@@ -22,139 +25,142 @@ let initiator: Initiator = {
 let internalRecipient: InternalTransferRecipient = {
    Name = "Savings"
    AccountId = Guid.NewGuid() |> AccountId
+   ParentAccountId = parentAccountId
    OrgId = orgId
 }
 
 let internalSender: InternalTransferSender = {
    Name = "Operations"
    AccountId = accountId
+   ParentAccountId = parentAccountId
    OrgId = orgId
 }
 
 let internalTransferWithinOrgBaseInfo = {
    Sender = internalSender
    InitiatedBy = initiator
-   TransferId = correlationId |> CorrelationId.get |> TransferId
+   TransferId = TransferId correlationId.Value
    Recipient = internalRecipient
    Amount = 33m
    ScheduledDate = DateTime.UtcNow
+   Memo = None
 }
 
 let internalTransferBetweenOrgsBaseInfo = {
    Sender = internalSender
    InitiatedBy = initiator
-   TransferId = correlationId |> CorrelationId.get |> TransferId
+   TransferId = TransferId correlationId.Value
    Recipient = {
       Name = "Linear"
       AccountId = Guid.NewGuid() |> AccountId
+      ParentAccountId = Guid.NewGuid() |> ParentAccountId
       OrgId = Guid.NewGuid() |> OrgId
    }
    Amount = 100m
    ScheduledDate = DateTime.UtcNow
+   FromPaymentRequest = None
+   Memo = None
 }
 
-let domesticSender: DomesticTransferSender = {
+let domesticOriginator: DomesticTransferOriginatorReference = {
    Name = "Operations"
-   AccountNumber = AccountNumber <| Int64.Parse "987654321123456"
-   RoutingNumber = RoutingNumber 123456789
    OrgId = orgId
+   ParentAccountId = parentAccountId
    AccountId = accountId
 }
 
 let command = {|
    createAccount =
-      CreateAccountCommand.create {
+      CreateVirtualAccountCommand.create {
          Name = "Operations"
          Currency = Currency.VND
          AccountId = accountId
          AccountNumber = string accountNumber
          Depository = AccountDepository.Checking
+         ParentAccountId = parentAccountId
          OrgId = orgId
          InitiatedBy = initiator
       }
    closeAccount =
-      CloseAccountCommand.create compositeId initiator { Reference = None }
+      CloseAccountCommand.create parentCompositeId initiator {
+         AccountId = accountId
+         Reference = None
+      }
    debit =
       fun amount ->
-         DebitCommand.create compositeId correlationId initiator {
+         DebitCommand.create parentCompositeId correlationId initiator {
+            AccountId = accountId
             Date = DateTime.UtcNow
             Amount = amount
-            Merchant = "Groceries"
+            Merchant = NonEmptyString.deserializeUnsafe "Groceries"
             Reference = None
             EmployeePurchaseReference = {
                EmployeeName = "Dan Eis"
                EmployeeCardNumberLast4 = EmployeeStub.cardNumberLast4
                EmployeeId = EmployeeStub.employeeId
                CardId = EmployeeStub.cardId
+               CardNickname = None
+               CardIssuerTransactionId =
+                  Guid.NewGuid() |> CardIssuerTransactionId
+               PurchaseAuthType = PurchaseAuthType.Debit
             }
          }
    depositCash =
       fun amount ->
-         DepositCashCommand.create compositeId initiator {
+         DepositCashCommand.create parentCompositeId initiator {
+            AccountId = accountId
             Amount = amount
             Origin = None
          }
    domesticTransfer =
       fun amount ->
-         DomesticTransferCommand.create compositeId correlationId initiator {
-            Sender = domesticSender
-            Recipient = OrganizationStub.domesticRecipient
+         DomesticTransferCommand.create correlationId initiator {
+            Originator = domesticOriginator
+            Counterparty = OrganizationStub.domesticRecipient
             Amount = amount
+            MoneyFlow = MoneyFlow.Out
             Memo = None
             ScheduledDateSeedOverride = None
+            OriginatedFromSchedule = false
          }
    internalTransfer =
       fun amount ->
-         let transferCmd =
-            InternalTransferWithinOrgCommand.create compositeId initiator {
+         let cmd =
+            InternalTransferWithinOrgCommand.create initiator {
                Recipient = internalRecipient
                Sender = internalSender
                Amount = amount
                Memo = None
                ScheduledDateSeedOverride = None
+               OriginatedFromSchedule = false
             }
 
          {
-            transferCmd with
+            cmd with
                CorrelationId = correlationId
          }
-   completeInternalTransfer =
-      CompleteInternalTransferWithinOrgCommand.create
-         compositeId
-         correlationId
-         initiator
-         {
-            BaseInfo = internalTransferWithinOrgBaseInfo
-         }
-   failInternalTransfer =
+   internalTransferBetweenOrgs =
       fun amount ->
-         FailInternalTransferWithinOrgCommand.create
-            compositeId
-            correlationId
-            initiator
-            {
-               BaseInfo = {
-                  internalTransferWithinOrgBaseInfo with
-                     Amount = amount
-               }
-               Reason = InternalTransferFailReason.AccountClosed
-            }
+         InternalTransferBetweenOrgsCommand.create initiator {
+            Amount = amount
+            Sender = internalTransferBetweenOrgsBaseInfo.Sender
+            Recipient = internalTransferBetweenOrgsBaseInfo.Recipient
+            Memo = None
+            OriginatedFromSchedule = false
+            OriginatedFromPaymentRequest = None
+            ScheduledDateSeedOverride = None
+         }
    depositTransfer =
       fun amount ->
-         DepositInternalTransferWithinOrgCommand.create
-            compositeId
-            correlationId
-            initiator
-            {
-               BaseInfo = {
-                  internalTransferWithinOrgBaseInfo with
-                     Amount = amount
-               }
+         DepositInternalTransferWithinOrgCommand.create correlationId initiator {
+            BaseInfo = {
+               internalTransferWithinOrgBaseInfo with
+                  Amount = amount
             }
+         }
    depositTransferBetweenOrgs =
       fun amount ->
          DepositInternalTransferBetweenOrgsCommand.create
-            compositeId
             correlationId
             initiator
             {
@@ -163,31 +169,38 @@ let command = {|
                      Amount = amount
                }
             }
-   maintenanceFee = MaintenanceFeeCommand.create compositeId
+   maintenanceFee =
+      fun billingDate ->
+         MaintenanceFeeCommand.create
+            (accountId, parentAccountId, orgId)
+            correlationId
+            billingDate
    skipMaintenanceFee =
-      SkipMaintenanceFeeCommand.create compositeId {
-         Reason = {
-            DailyBalanceThreshold = true
-            QualifyingDepositFound = false
-         }
-      }
+      fun billingDate ->
+         SkipMaintenanceFeeCommand.create
+            (accountId, parentAccountId, orgId)
+            correlationId
+            {
+               QualifyingDepositFound = false
+               DailyBalanceThreshold = true
+            }
+            billingDate
 |}
 
 type EventIndex = {
-   createdAccount: BankEvent<CreatedAccount>
+   createdAccount: BankEvent<CreatedVirtualAccount>
    depositedCash: BankEvent<DepositedCash>
-   debitedAccount: BankEvent<DebitedAccount>
+   debitedAccount: BankEvent<DebitPending>
    maintenanceFeeDebited: BankEvent<MaintenanceFeeDebited>
-   internalTransferPending: BankEvent<InternalTransferWithinOrgPending>
+   internalTransferPending: BankEvent<InternalTransferWithinOrgDeducted>
    domesticTransferPending: BankEvent<DomesticTransferPending>
-   internalTransferFailed: BankEvent<InternalTransferWithinOrgFailed>
    transferDeposited: BankEvent<InternalTransferWithinOrgDeposited>
 }
 
 let event: EventIndex = {
    createdAccount =
       command.createAccount
-      |> CreateAccountCommand.toEvent
+      |> CreateVirtualAccountCommand.toEvent
       |> Result.toValueOption
       |> _.Value
    depositedCash =
@@ -201,7 +214,7 @@ let event: EventIndex = {
       |> Result.toValueOption
       |> _.Value
    maintenanceFeeDebited =
-      command.maintenanceFee
+      command.maintenanceFee DateTime.UtcNow
       |> MaintenanceFeeCommand.toEvent
       |> Result.toValueOption
       |> _.Value
@@ -215,11 +228,6 @@ let event: EventIndex = {
       |> DomesticTransferCommand.toEvent
       |> Result.toValueOption
       |> _.Value
-   internalTransferFailed =
-      command.failInternalTransfer 20m
-      |> FailInternalTransferWithinOrgCommand.toEvent
-      |> Result.toValueOption
-      |> _.Value
    transferDeposited =
       command.depositTransfer 100m
       |> DepositInternalTransferWithinOrgCommand.toEvent
@@ -228,22 +236,22 @@ let event: EventIndex = {
 }
 
 let commands: AccountCommand list = [
-   AccountCommand.CreateAccount command.createAccount
+   AccountCommand.CreateVirtualAccount command.createAccount
 
    AccountCommand.DepositCash
    <| command.depositCash event.depositedCash.Data.Amount
 
    AccountCommand.Debit <| command.debit event.debitedAccount.Data.Amount
 
-   AccountCommand.MaintenanceFee command.maintenanceFee
+   AccountCommand.MaintenanceFee(command.maintenanceFee DateTime.UtcNow)
 
    AccountCommand.InternalTransfer
    <| command.internalTransfer
          event.internalTransferPending.Data.BaseInfo.Amount
 
-   AccountCommand.FailInternalTransfer
-   <| command.failInternalTransfer
-         event.internalTransferFailed.Data.BaseInfo.Amount
+   AccountCommand.InternalTransferBetweenOrgs
+   <| command.internalTransferBetweenOrgs
+         event.internalTransferPending.Data.BaseInfo.Amount
 ]
 
 let accountEvents = [
@@ -252,22 +260,40 @@ let accountEvents = [
    AccountEnvelope.wrap event.debitedAccount
    AccountEnvelope.wrap event.maintenanceFeeDebited
    AccountEnvelope.wrap event.internalTransferPending
-   AccountEnvelope.wrap event.internalTransferFailed
 ]
 
 let accountState = {
    Account.empty with
-      AccountId = command.createAccount.Data.AccountId
-      OrgId = command.createAccount.OrgId
+      AccountId = accountId
+      ParentAccountId = parentAccountId
+      OrgId = orgId
       AccountNumber = accountNumber
       Name = command.createAccount.Data.Name
       Status = AccountStatus.Active
       Balance = 300m
 }
 
-let accountStateWithEvents: AccountSnapshot = {
-   AccountSnapshot.empty with
-      Info = accountState
+let internalRecipientAccount = {
+   Account.empty with
+      AccountId = internalRecipient.AccountId
+      ParentAccountId = parentAccountId
+      OrgId = orgId
+      AccountNumber = AccountNumber.generate ()
+      Name = internalRecipient.Name
+      Status = AccountStatus.Active
+      Balance = 1000m
+}
+
+let accountStateWithEvents: ParentAccountSnapshot = {
+   ParentAccountSnapshot.empty with
+      Status = ParentAccountStatus.Active
+      ParentAccountId = parentAccountId
+      OrgId = orgId
+      VirtualAccounts =
+         Map [
+            accountId, accountState
+            internalRecipient.AccountId, internalRecipientAccount
+         ]
       Events = [
          AccountEnvelope.wrap event.createdAccount
          AccountEnvelope.wrap event.depositedCash
@@ -277,21 +303,25 @@ let accountStateWithEvents: AccountSnapshot = {
 let accountStateAfterCreate = {
    Account.empty with
       AccountId = command.createAccount.Data.AccountId
+      ParentAccountId = parentAccountId
       OrgId = command.createAccount.OrgId
       AccountNumber = accountNumber
       Name = command.createAccount.Data.Name
       Status = AccountStatus.Active
       Balance = 0m
       Currency = command.createAccount.Data.Currency
-      MaintenanceFeeCriteria = {
-         QualifyingDepositFound = false
-         DailyBalanceThreshold = false
-      }
 }
 
-let accountStateAfterCreateWithEvents: AccountSnapshot = {
-   AccountSnapshot.empty with
-      Info = accountStateAfterCreate
+let accountStateAfterCreateWithEvents: ParentAccountSnapshot = {
+   ParentAccountSnapshot.empty with
+      Status = ParentAccountStatus.Active
+      ParentAccountId = parentAccountId
+      OrgId = orgId
+      VirtualAccounts =
+         Map [
+            accountId, accountStateAfterCreate
+            internalRecipient.AccountId, internalRecipientAccount
+         ]
       Events = [ AccountEnvelope.wrap event.createdAccount ]
 }
 
@@ -302,18 +332,8 @@ let billingPeriod: BillingPeriod =
 let createBillingTxn = BillingTransaction.create billingPeriod
 
 let billingTransactions: BillingTransaction list = [
-   event.createdAccount
-   |> AccountEvent.CreatedAccount
-   |> createBillingTxn
-   |> _.Value
-
    event.depositedCash
    |> AccountEvent.DepositedCash
-   |> createBillingTxn
-   |> _.Value
-
-   event.debitedAccount
-   |> AccountEvent.DebitedAccount
    |> createBillingTxn
    |> _.Value
 
@@ -323,12 +343,97 @@ let billingTransactions: BillingTransaction list = [
    |> _.Value
 
    event.internalTransferPending
-   |> AccountEvent.InternalTransferWithinOrgPending
-   |> createBillingTxn
-   |> _.Value
-
-   event.internalTransferFailed
-   |> AccountEvent.InternalTransferWithinOrgFailed
+   |> AccountEvent.InternalTransferWithinOrgDeducted
    |> createBillingTxn
    |> _.Value
 ]
+
+let settleDebitFromPending (evt: BankEvent<DebitPending>) =
+   let debit = evt.Data
+
+   let purchaseInfo = {
+      OrgId = evt.OrgId
+      ParentAccountId = ParentAccountId.fromEntityId evt.EntityId
+      AccountId = debit.AccountId
+      EmployeeId = debit.EmployeePurchaseReference.EmployeeId
+      CardId = debit.EmployeePurchaseReference.CardId
+      InitiatedBy = evt.InitiatedBy
+      CorrelationId = evt.CorrelationId
+      EmployeeName = debit.EmployeePurchaseReference.EmployeeName
+      EmployeeEmail = Email.Email.deserialize "test@example.com"
+      CardNumberLast4 = debit.EmployeePurchaseReference.EmployeeCardNumberLast4
+      Date = debit.Date
+      Amount = debit.Amount
+      Merchant = debit.Merchant
+      CurrencyMerchant = Currency.USD
+      CurrencyCardHolder = Currency.USD
+      Reference = debit.Reference
+      CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
+      CardIssuerTransactionId =
+         debit.EmployeePurchaseReference.CardIssuerTransactionId
+      CardNickname = debit.EmployeePurchaseReference.CardNickname
+      AuthorizationType = debit.EmployeePurchaseReference.PurchaseAuthType
+   }
+
+   let clearing = {
+      PurchaseClearedId = Guid.NewGuid() |> PurchaseClearedId
+      ClearedAmount = {
+         Amount = debit.Amount
+         Flow = MoneyFlow.Out
+      }
+   }
+
+   SettleDebitCommand.create purchaseInfo clearing
+
+let settlePlatformTransfer
+   (evt: BankEvent<InternalTransferBetweenOrgsPending>)
+   =
+   SettleInternalTransferBetweenOrgsCommand.create
+      evt.CorrelationId
+      evt.InitiatedBy
+      {
+         BaseInfo = evt.Data.BaseInfo
+         SettlementId = SettlementId(Guid.NewGuid())
+      }
+
+let failInternalTransferBetweenOrgs
+   (evt: BankEvent<InternalTransferBetweenOrgsPending>)
+   =
+   FailInternalTransferBetweenOrgsCommand.create
+      evt.CorrelationId
+      evt.InitiatedBy
+      {
+         BaseInfo = evt.Data.BaseInfo
+         Reason = InternalTransferFailReason.InsufficientFunds
+      }
+
+let refundDebitFromSettled (evt: BankEvent<DebitSettled>) =
+   let debit = evt.Data
+
+   let purchaseInfo = {
+      OrgId = evt.OrgId
+      ParentAccountId = ParentAccountId.fromEntityId evt.EntityId
+      AccountId = debit.AccountId
+      EmployeeId = debit.EmployeePurchaseReference.EmployeeId
+      CardId = debit.EmployeePurchaseReference.CardId
+      InitiatedBy = evt.InitiatedBy
+      CorrelationId = evt.CorrelationId
+      EmployeeName = debit.EmployeePurchaseReference.EmployeeName
+      EmployeeEmail = Email.Email.deserialize "test@example.com"
+      CardNumberLast4 = debit.EmployeePurchaseReference.EmployeeCardNumberLast4
+      Date = DateTime.UtcNow
+      Amount = debit.Amount
+      Merchant = debit.Merchant
+      CurrencyMerchant = Currency.USD
+      CurrencyCardHolder = Currency.USD
+      Reference = None
+      CardIssuerCardId = Guid.NewGuid() |> CardIssuerCardId
+      CardIssuerTransactionId =
+         debit.EmployeePurchaseReference.CardIssuerTransactionId
+      CardNickname = debit.EmployeePurchaseReference.CardNickname
+      AuthorizationType = debit.EmployeePurchaseReference.PurchaseAuthType
+   }
+
+   RefundDebitCommand.fromPurchase
+      purchaseInfo
+      (PurchaseRefundReason.UserRequested "Test refund")

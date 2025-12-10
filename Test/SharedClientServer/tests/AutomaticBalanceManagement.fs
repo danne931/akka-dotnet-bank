@@ -14,6 +14,7 @@ open Lib.SharedTypes
 
 module Stub =
    let orgId = Guid.NewGuid() |> OrgId
+   let parentAccountId = Guid.NewGuid() |> ParentAccountId
 
    let accountA = Guid.NewGuid() |> AccountId
    let accountB = Guid.NewGuid() |> AccountId
@@ -24,12 +25,14 @@ module Stub =
    let sender: InternalTransferSender = {
       Name = "Operations"
       AccountId = accountA
+      ParentAccountId = parentAccountId
       OrgId = orgId
    }
 
    let recipient: InternalTransferRecipient = {
       Name = "Savings"
       AccountId = accountB
+      ParentAccountId = parentAccountId
       OrgId = orgId
    }
 
@@ -43,11 +46,13 @@ module Stub =
       TargetAccount = {
          Name = "Operations"
          AccountId = accountA
+         ParentAccountId = parentAccountId
          OrgId = orgId
       }
       ManagingPartnerAccount = {
          Name = "Savings"
          AccountId = accountB
+         ParentAccountId = parentAccountId
          OrgId = orgId
       }
       TargetAccountBalance =
@@ -74,11 +79,13 @@ module Stub =
          TargetAccount = {
             Name = "Operations"
             AccountId = accountIdA
+            ParentAccountId = parentAccountId
             OrgId = orgId
          }
          ManagingPartnerAccount = {
             Name = "Savings"
             AccountId = accountIdB
+            ParentAccountId = parentAccountId
             OrgId = orgId
          }
          TargetAccountBalance =
@@ -301,7 +308,7 @@ let tests =
       test "Target balance rule no transfer if target balance met" {
          let rule = Stub.targetBalanceRule
 
-         let balance = PositiveAmount.get rule.TargetAccountBalance
+         let balance = rule.TargetAccountBalance.Value
          let compute = TargetBalanceRule.computeTransfer rule balance
          Expect.isNone compute "no computed transfer if target balance"
 
@@ -317,7 +324,7 @@ let tests =
 
       test "Target balance rule no transfer if target balance range met" {
          let rule = Stub.targetBalanceRule
-         let balance = PositiveAmount.get rule.TargetAccountBalance
+         let balance = rule.TargetAccountBalance.Value
 
          let rule = {
             rule with

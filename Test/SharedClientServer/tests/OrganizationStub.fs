@@ -8,6 +8,7 @@ open Bank.Org.Domain
 open Bank.Employee.Domain
 open Bank.Transfer.Domain
 open CommandApproval
+open Email
 
 let orgId = Guid.NewGuid() |> OrgId
 let ruleId () = Guid.NewGuid() |> CommandApprovalRuleId
@@ -20,18 +21,20 @@ let initiator = {
 let progressId () =
    Guid.NewGuid() |> CorrelationId |> CommandApprovalProgressId
 
-let domesticRecipient: DomesticTransferRecipient = {
-   SenderOrgId = orgId
+let domesticRecipient: Counterparty = {
+   Kind = CounterpartyType.TradingPartner
+   OrgId = orgId
    LastName = "fish"
    FirstName = "big"
    Nickname = None
    AccountNumber = AccountNumber <| Int64.Parse "123456789123456"
-   RoutingNumber = RoutingNumber 123456789
-   Status = RecipientRegistrationStatus.Confirmed
-   RecipientAccountId = Guid.NewGuid() |> AccountId
-   Depository = DomesticRecipientAccountDepository.Checking
+   RoutingNumber = RoutingNumber "123456789"
+   CounterpartyId = Guid.NewGuid() |> CounterpartyId
+   PartnerBankCounterpartyId = PartnerBankCounterpartyId "123456789"
+   Depository = CounterpartyAccountDepository.Checking
    PaymentNetwork = PaymentNetwork.ACH
    CreatedAt = DateTime.UtcNow
+   Address = Address.empty
 }
 
 let command = {|
@@ -54,20 +57,36 @@ let command = {|
       |> InviteEmployee
       |> ApprovableCommand.PerCommand
    createOrg =
-      CreateOrgCommand.create {
+      SubmitOrgOnboardingApplicationCommand.create {
          OrgId = orgId
-         Name = "new org"
+         AdminTeamEmail = Email.deserialize "test-org@test-org.com"
+         ParentAccountId = Guid.NewGuid() |> ParentAccountId
+         BusinessDetails = {
+            BusinessName = "new org"
+            EmployerIdentificationNumber = "123456789"
+            Address = Address.empty
+            LegalType = BusinessType.LimitedPartnership
+            Description = "new org"
+            Website = None
+         }
          InitiatedBy = initiator
       }
    registerDomesticRecipient =
-      RegisterDomesticTransferRecipientCommand.create orgId initiator {
-         AccountId = Guid.NewGuid() |> AccountId
+      RegisterCounterpartyCommand.create initiator {
+         CounterpartyId = Guid.NewGuid() |> CounterpartyId
+         PartnerBankCounterpartyId = PartnerBankCounterpartyId "123456789"
+         Kind = CounterpartyType.TradingPartner
          FirstName = domesticRecipient.FirstName
          LastName = domesticRecipient.LastName
          AccountNumber = string domesticRecipient.AccountNumber
          RoutingNumber = string domesticRecipient.RoutingNumber
-         Depository = DomesticRecipientAccountDepository.Checking
+         Depository = CounterpartyAccountDepository.Checking
          PaymentNetwork = PaymentNetwork.ACH
+         Address = Address.empty
+         Sender = {|
+            OrgId = orgId
+            ParentAccountId = Guid.NewGuid() |> ParentAccountId
+         |}
       }
 |}
 
@@ -88,7 +107,6 @@ let progress (cmd: ApprovableCommand) : CommandApprovalProgress.T = {
 }
 
 let accrual: CommandApprovalDailyAccrual = {
-   PaymentsPaid = 0m
    DomesticTransfer = 0m
    InternalTransferBetweenOrgs = 0m
 }
@@ -103,7 +121,13 @@ let orgStateWithEvents: OrgSnapshot = {
       }
       CommandApprovalRules = Map.empty
       CommandApprovalProgress = Map.empty
-      DomesticTransferRecipients = Map.empty
+      AdminTeamEmail = Email.empty
+      EmployerIdentificationNumber = ""
+      Address = Address.empty
+      BusinessType = BusinessType.LimitedPartnership
+      Description = ""
+      Website = None
+      ParentAccountId = Guid.NewGuid() |> ParentAccountId
    }
    Events = []
    AccrualMetrics = Map.empty
@@ -116,9 +140,6 @@ let commandTypes = {|
       ApprovableCommandType.ApprovablePerCommand UpdateEmployeeRoleCommandType
    DomesticTransfer =
       ApprovableCommandType.ApprovableAmountBased DomesticTransferCommandType
-   Payment =
-      ApprovableCommandType.ApprovableAmountBased
-         FulfillPlatformPaymentCommandType
    InternalTransfer =
       ApprovableCommandType.ApprovableAmountBased
          InternalTransferBetweenOrgsCommandType
