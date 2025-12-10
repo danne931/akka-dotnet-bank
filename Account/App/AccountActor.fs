@@ -33,16 +33,20 @@ open BankActorRegistry
 /// Entries older than the cutoff will be pruned.
 type LookbackHours = { Outbox: int; ProcessedCommands: int }
 
-// Account events with an in/out money flow can produce an
-// automatic transfer.  Automated transfer account events have
-// money flow but they can not generate an auto transfer.
+// Account events indicating a settled txn with an in/out money flow
+// can produce an automatic transfer.
+// Automated transfers have money flow but they can
+// not generate an auto transfer.
 let private canProduceAutoTransfer =
    function
-   | AccountEvent.InternalAutomatedTransferDeducted _
-   | AccountEvent.InternalAutomatedTransferDeposited _ -> false
-   | e ->
-      let _, flow, _ = AccountEvent.moneyTransaction e
-      flow.IsSome
+   | AccountEvent.DepositedCash _
+   | AccountEvent.DebitRefunded _
+   | AccountEvent.DebitSettled _
+   | AccountEvent.InternalTransferBetweenOrgsDeposited _
+   | AccountEvent.InternalTransferBetweenOrgsSettled _
+   | AccountEvent.DomesticTransferSettled _
+   | AccountEvent.MaintenanceFeeDebited _ -> true
+   | _ -> false
 
 let private signalRBroadcast broadcaster state evt =
    match evt with
@@ -427,6 +431,18 @@ let persistInternalTransferWithinOrgEvent
       |> AccountCommand.DepositTransferWithinOrg
       |> ParentAccount.stateTransition state
 
+   let autoSenderTransitions state =
+      ParentAccount.computeAutoTransferStateTransitions
+         Frequency.PerTransaction
+         transfer.Data.BaseInfo.Sender.AccountId
+         state
+
+   let autoRecipientTransitions state =
+      ParentAccount.computeAutoTransferStateTransitions
+         Frequency.PerTransaction
+         transfer.Data.BaseInfo.Recipient.AccountId
+         state
+
    match correspondingTransferDeposit with
    | Error err ->
       logError
@@ -436,18 +452,23 @@ let persistInternalTransferWithinOrgEvent
       ignored ()
    | Ok(transferDepositEvt, state) ->
       let autoTransferStateTransitions =
-         ParentAccount.computeAutoTransferStateTransitions
-            Frequency.PerTransaction
-            transfer.Data.BaseInfo.Sender.AccountId
-            state
+         autoSenderTransitions state
+         |> Option.map (function
+            | Error e -> Error e
+            | Ok(state, evts) ->
+               let senderTransitions =
+                  ParentAccount.computeAutoTransferStateTransitions
+                     Frequency.PerTransaction
+                     transfer.Data.BaseInfo.Recipient.AccountId
+                     state
+
+               senderTransitions
+               |> Option.sequenceResult
+               |> Result.map (function
+                  | None -> state, evts
+                  | Some(state, evts2) -> state, evts @ evts2))
+         |> Option.orElse (autoRecipientTransitions state)
          |> Option.sequenceResult
-         |> ResultOption.bind (fun (state, evts) ->
-            ParentAccount.computeAutoTransferStateTransitions
-               Frequency.PerTransaction
-               transfer.Data.BaseInfo.Recipient.AccountId
-               state
-            |> Option.sequenceResult
-            |> ResultOption.map (fun (state, evts2) -> state, evts @ evts2))
 
       let toConfirm = AccountEvent.InternalTransferWithinOrgDeducted transfer
 
