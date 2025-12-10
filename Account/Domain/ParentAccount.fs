@@ -3,6 +3,7 @@ module ParentAccount
 
 open System
 open Validus
+open FsToolkit.ErrorHandling
 
 open Bank.Account.Domain
 open Bank.Transfer.Domain
@@ -393,66 +394,155 @@ let stateTransition
       validateParentAccountActive state
       |> Result.bind (virtualAccountTransition account command)
 
-/// Compute auto transfer events and updated Parent Account or return a
-/// violating auto transfer command with error causing state transition fail.
-let computeAutoTransferStateTransitions
-   (frequency: AutomaticTransfer.Frequency)
-   (accountId: AccountId)
-   (parentAccount: ParentAccountSnapshot)
-   : Result<ParentAccountSnapshot * AccountEvent list, AccountCommand * Err> option
-   =
-   parentAccount.VirtualAccounts.TryFind accountId
-   |> Option.bind (fun account ->
-      let transfers =
-         match frequency with
-         | Frequency.PerTransaction -> account.AutoTransfersPerTransaction
-         | Frequency.Schedule CronSchedule.Daily -> account.AutoTransfersDaily
-         | Frequency.Schedule CronSchedule.TwiceMonthly ->
-            account.AutoTransfersTwiceMonthly
+module AutoTransferStateTransition =
+   /// Compute auto transfer events and updated Parent Account or return
+   /// error causing state transition fail.
+   let compute
+      (frequency: AutomaticTransfer.Frequency)
+      (accountId: AccountId)
+      (parentAccount: ParentAccountSnapshot)
+      : Result<AccountEvent list * ParentAccountSnapshot, Err> option
+      =
+      parentAccount.VirtualAccounts.TryFind accountId
+      |> Option.bind (fun account ->
+         let transfers =
+            match frequency with
+            | Frequency.PerTransaction -> account.AutoTransfersPerTransaction
+            | Frequency.Schedule CronSchedule.Daily ->
+               account.AutoTransfersDaily
+            | Frequency.Schedule CronSchedule.TwiceMonthly ->
+               account.AutoTransfersTwiceMonthly
 
-      let transferOutCommands =
-         transfers |> List.map InternalAutoTransferCommand.create
+         let transferOutCommands =
+            transfers |> List.map InternalAutoTransferCommand.create
 
-      let transferDepositCommands =
-         transferOutCommands
-         |> List.map (fun transferCmd ->
-            let info = transferCmd.Data.Transfer
+         let transferDepositCommands =
+            transferOutCommands
+            |> List.map (fun transferCmd ->
+               let info = transferCmd.Data.Transfer
 
-            DepositInternalAutoTransferCommand.create
-               transferCmd.CorrelationId
-               transferCmd.InitiatedBy
-               {
-                  BaseInfo = {
-                     TransferId = TransferId transferCmd.CorrelationId.Value
-                     InitiatedBy = transferCmd.InitiatedBy
-                     Sender = info.Sender
-                     Recipient = info.Recipient
-                     Amount = info.Amount.Value
-                     ScheduledDate = transferCmd.Timestamp
-                     Memo = None
+               DepositInternalAutoTransferCommand.create
+                  transferCmd.CorrelationId
+                  transferCmd.InitiatedBy
+                  {
+                     BaseInfo = {
+                        TransferId =
+                           TransferId transferCmd.CorrelationId.Value
+                        InitiatedBy = transferCmd.InitiatedBy
+                        Sender = info.Sender
+                        Recipient = info.Recipient
+                        Amount = info.Amount.Value
+                        ScheduledDate = transferCmd.Timestamp
+                        Memo = None
+                     }
+                     Rule = transferCmd.Data.Rule
                   }
-                  Rule = transferCmd.Data.Rule
-               }
-            |> AccountCommand.DepositInternalAutoTransfer)
+               |> AccountCommand.DepositInternalAutoTransfer)
 
-      let transferCommands =
-         (transferOutCommands |> List.map AccountCommand.InternalAutoTransfer)
-         @ transferDepositCommands
+         let transferCommands =
+            (transferOutCommands
+             |> List.map AccountCommand.InternalAutoTransfer)
+            @ transferDepositCommands
 
-      if transferCommands.IsEmpty then
-         None
-      else
-         let validations =
-            List.fold
-               (fun acc cmd ->
-                  match acc with
-                  | Ok(accountState, events) ->
-                     stateTransition accountState cmd
-                     |> Result.map (fun (evt, newState) ->
-                        newState, evt :: events)
-                     |> Result.mapError (fun err -> cmd, err)
-                  | Error err -> Error err)
-               (Ok(parentAccount, []))
-               transferCommands
+         if transferCommands.IsEmpty then
+            None
+         else
+            let validations =
+               List.fold
+                  (fun acc cmd ->
+                     match acc with
+                     | Ok(events, accountState) ->
+                        stateTransition accountState cmd
+                        |> Result.map (fun (evt, newState) ->
+                           evt :: events, newState)
+                     | Error err -> Error err)
+                  (Ok([], parentAccount))
+                  transferCommands
 
-         Some validations)
+            Some validations)
+
+   // May return (Deducted, Deposited) and some combination of
+   // Deduct/Deposit auto transfer events based on if auto
+   // transfer events are produced from inc/dec of the sender/recipient.
+   let computeForInternalTransferWithinOrg
+      (deduction: BankEvent<InternalTransferWithinOrgDeducted>)
+      (state: ParentAccountSnapshot)
+      : Result<AccountEvent list * ParentAccountSnapshot, Err>
+      =
+      let correspondingTransferDeposit =
+         deduction
+         |> DepositInternalTransferWithinOrgCommand.fromDeduction
+         |> AccountCommand.DepositTransferWithinOrg
+         |> stateTransition state
+
+      let transfer = deduction.Data.BaseInfo
+
+      let autoSenderTransitions state =
+         compute Frequency.PerTransaction transfer.Sender.AccountId state
+
+      let autoRecipientTransitions state =
+         compute Frequency.PerTransaction transfer.Recipient.AccountId state
+
+      correspondingTransferDeposit
+      |> Result.map (fun (deposit, state) ->
+         let autoTransferStateTransitions =
+            autoSenderTransitions state
+            |> Option.map (function
+               | Error e -> Error e
+               | Ok(evts, state) ->
+                  autoSenderTransitions state
+                  |> Option.sequenceResult
+                  |> Result.map (function
+                     | None -> evts, state
+                     | Some(evts2, state) -> evts @ evts2, state))
+            |> Option.orElse (autoRecipientTransitions state)
+            |> Option.sequenceResult
+
+         let evts = [
+            AccountEvent.InternalTransferWithinOrgDeducted deduction
+            deposit
+         ]
+
+         let withoutAutoTransitions = evts, state
+
+         match autoTransferStateTransitions with
+         | Error _ -> withoutAutoTransitions
+         | Ok None -> withoutAutoTransitions
+         | Ok(Some(autoTransferEvts, state)) -> evts @ autoTransferEvts, state)
+
+   // Account events indicating a settled txn with an in/out money flow
+   // can produce an automatic transfer.
+   // Automated transfers have money flow but they can not generate
+   // an auto transfer.
+   let private eventProducesAutoTransfer =
+      function
+      | AccountEvent.DepositedCash _
+      | AccountEvent.DebitRefunded _
+      | AccountEvent.DebitSettled _
+      // AccountEvent.InternalTransferWithinOrgDeducted, Deposited handled
+      // separately with computeForInternalTransferWithinOrg function.
+      | AccountEvent.InternalTransferBetweenOrgsDeposited _
+      | AccountEvent.InternalTransferBetweenOrgsSettled _
+      | AccountEvent.DomesticTransferSettled _
+      | AccountEvent.MaintenanceFeeDebited _ -> true
+      | _ -> false
+
+   /// Returns accumulated state, the originating event, and
+   /// any subsequent events such as auto transfers to be persisted.
+   let transition
+      (state: ParentAccountSnapshot)
+      (evt: AccountEvent)
+      : Result<AccountEvent list * ParentAccountSnapshot, Err>
+      =
+      match evt with
+      | AccountEvent.InternalTransferWithinOrgDeducted e ->
+         computeForInternalTransferWithinOrg e state
+      | _ ->
+         if eventProducesAutoTransfer evt then
+            compute Frequency.PerTransaction evt.AccountId state
+            |> Option.sequenceResult
+            |> Result.map (function
+               | None -> [ evt ], state
+               | Some(autoTransferEvts, state) -> evt :: autoTransferEvts, state)
+         else
+            Ok([ evt ], state)

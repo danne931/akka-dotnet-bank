@@ -171,6 +171,9 @@ let update msg state =
 
       let state = updateState state transform
 
+      // FIX:
+      // OrgMetrics is displaying balance with an auto transfer amount
+      // added to it when a real time event arrives.
       let internalTransferTransform state =
          let recipientBalanceUpdate recipientId transferAmount =
             state.AccountProfiles

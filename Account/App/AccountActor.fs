@@ -19,7 +19,6 @@ open Bank.Transfer.Domain
 open Bank.Payment.Domain
 open Bank.Purchase.Domain
 open BillingStatement
-open AutomaticTransfer
 open SignalRBroadcast
 open EmailMessage
 open OrgOnboardingSaga
@@ -32,21 +31,6 @@ open BankActorRegistry
 
 /// Entries older than the cutoff will be pruned.
 type LookbackHours = { Outbox: int; ProcessedCommands: int }
-
-// Account events indicating a settled txn with an in/out money flow
-// can produce an automatic transfer.
-// Automated transfers have money flow but they can
-// not generate an auto transfer.
-let private canProduceAutoTransfer =
-   function
-   | AccountEvent.DepositedCash _
-   | AccountEvent.DebitRefunded _
-   | AccountEvent.DebitSettled _
-   | AccountEvent.InternalTransferBetweenOrgsDeposited _
-   | AccountEvent.InternalTransferBetweenOrgsSettled _
-   | AccountEvent.DomesticTransferSettled _
-   | AccountEvent.MaintenanceFeeDebited _ -> true
-   | _ -> false
 
 let private signalRBroadcast broadcaster state evt =
    match evt with
@@ -419,96 +403,6 @@ let private forwardMessagesAfterEventPersistence
          | msg -> logError mailbox $"Unknown outbox message {msg}"
       | _ -> ()
 
-let persistInternalTransferWithinOrgEvent
-   (logError: string -> unit)
-   (confirmPersistAll: AccountEvent seq -> PersistentEffect<obj>)
-   (transfer: BankEvent<InternalTransferWithinOrgDeducted>)
-   (state: ParentAccountSnapshot)
-   : Effect<obj>
-   =
-   let correspondingTransferDeposit =
-      DepositInternalTransferWithinOrgCommand.fromPending transfer
-      |> AccountCommand.DepositTransferWithinOrg
-      |> ParentAccount.stateTransition state
-
-   let autoSenderTransitions state =
-      ParentAccount.computeAutoTransferStateTransitions
-         Frequency.PerTransaction
-         transfer.Data.BaseInfo.Sender.AccountId
-         state
-
-   let autoRecipientTransitions state =
-      ParentAccount.computeAutoTransferStateTransitions
-         Frequency.PerTransaction
-         transfer.Data.BaseInfo.Recipient.AccountId
-         state
-
-   match correspondingTransferDeposit with
-   | Error err ->
-      logError
-         $"Not able to deposit transfer into recipient account.
-         Will not deduct transfer from sender account. {err}"
-
-      ignored ()
-   | Ok(transferDepositEvt, state) ->
-      let autoTransferStateTransitions =
-         autoSenderTransitions state
-         |> Option.map (function
-            | Error e -> Error e
-            | Ok(state, evts) ->
-               let senderTransitions =
-                  ParentAccount.computeAutoTransferStateTransitions
-                     Frequency.PerTransaction
-                     transfer.Data.BaseInfo.Recipient.AccountId
-                     state
-
-               senderTransitions
-               |> Option.sequenceResult
-               |> Result.map (function
-                  | None -> state, evts
-                  | Some(state, evts2) -> state, evts @ evts2))
-         |> Option.orElse (autoRecipientTransitions state)
-         |> Option.sequenceResult
-
-      let toConfirm = AccountEvent.InternalTransferWithinOrgDeducted transfer
-
-      match autoTransferStateTransitions with
-      | Ok None -> confirmPersistAll [ toConfirm; transferDepositEvt ]
-      | Error(_, err) ->
-         logError
-            $"Will not persist auto transfers due to state transition error: {err}"
-
-         confirmPersistAll [ toConfirm; transferDepositEvt ]
-      | Ok(Some(_, autoTransferEvts)) ->
-         let evts = [ toConfirm; transferDepositEvt ] @ autoTransferEvts
-         confirmPersistAll evts
-
-let persistEvent
-   (logError: string -> unit)
-   (confirmPersistAll: AccountEvent seq -> PersistentEffect<obj>)
-   (evt: AccountEvent)
-   (state: ParentAccountSnapshot)
-   : PersistentEffect<obj>
-   =
-   let autoTransferStateTransitions =
-      if canProduceAutoTransfer evt then
-         ParentAccount.computeAutoTransferStateTransitions
-            Frequency.PerTransaction
-            evt.AccountId
-            state
-      else
-         None
-
-   match autoTransferStateTransitions with
-   | None -> confirmPersistAll [ evt ]
-   | Some(Error(_, err)) ->
-      logError
-         $"Will not persist auto transfers due to state transition error: {err}"
-
-      confirmPersistAll [ evt ]
-   | Some(Ok(_, autoTransferEvts)) ->
-      confirmPersistAll (evt :: autoTransferEvts)
-
 let actorProps
    (registry:
       #IBillingStatementActor & #ISagaActor & #ISagaGuaranteedDeliveryActor)
@@ -618,15 +512,20 @@ let actorProps
                   | Error err ->
                      onValidationError cmd err
                      return ignored ()
-                  | Ok(InternalTransferWithinOrgDeducted transfer, state) ->
-                     return!
-                        persistInternalTransferWithinOrgEvent
-                           logError
-                           confirmPersistAll
-                           transfer
-                           state
                   | Ok(evt, state) ->
-                     return! persistEvent logError confirmPersistAll evt state
+                     let transition =
+                        ParentAccount.AutoTransferStateTransition.transition
+                           state
+                           evt
+
+                     return!
+                        match transition with
+                        | Error err ->
+                           logError
+                              $"Will not persist auto transfers due to state transition error: {err}"
+
+                           confirmPersistAll [ evt ]
+                        | Ok(evts, _) -> confirmPersistAll evts
                | msg -> return unhandledMsg msg
             | msg -> return unhandledMsg msg
          | :? AccountMessage as msg ->
@@ -678,7 +577,7 @@ let actorProps
                   <! BillingStatementMessage.BulkPersist billing
             | AccountMessage.AutoTransferCompute(frequency, accountId) ->
                let autoTransfers =
-                  ParentAccount.computeAutoTransferStateTransitions
+                  ParentAccount.AutoTransferStateTransition.compute
                      frequency
                      accountId
                      state
@@ -688,10 +587,10 @@ let actorProps
                   logDebug
                      mailbox
                      $"Received AutoTransferCompute {frequency} {accountId} but nothing computed."
-               | Some(Error(_, err)) ->
+               | Some(Error err) ->
                   logError
                      $"Will not persist auto transfers due to state transition error: {err}"
-               | Some(Ok(_, autoTransferEvts)) ->
+               | Some(Ok(autoTransferEvts, _)) ->
                   let evts = List.map box autoTransferEvts
                   return! PersistAll evts
             | AccountMessage.DomesticTransfersRetryableUponRecipientEdit res ->

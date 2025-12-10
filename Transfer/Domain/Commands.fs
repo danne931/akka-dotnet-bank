@@ -75,7 +75,7 @@ module DepositInternalTransferWithinOrgCommand =
          initiatedBy
          data
 
-   let fromPending
+   let fromDeduction
       (evt: BankEvent<InternalTransferWithinOrgDeducted>)
       : DepositInternalTransferWithinOrgCommand
       =

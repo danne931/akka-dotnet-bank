@@ -17,8 +17,8 @@ open Globbing.Operators
 
 let projects = !!"**/*Web.fsproj" ++ "**/*.Service.fsproj"
 let appEntryDir = "./Web"
-let serverTestDir = "./Test"
-let sharedClientServerTestDir = "./Test.SharedClientServer/tests"
+let serverTestDir = "./Test/Server"
+let sharedClientServerTestDir = "./Test/SharedClientServer/tests"
 
 type ImageName = string
 type DirectoryName = string
