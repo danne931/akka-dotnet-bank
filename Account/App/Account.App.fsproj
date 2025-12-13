@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="AccountReadModelSyncActor.fs" />
-    <Compile Include="AccountClosureActor.fs" />
     <Compile Include="AccountActor.fs" />
     <Compile Include="AccountApi.fs" />
     <Compile Include="AccountSeederActor.fs" />

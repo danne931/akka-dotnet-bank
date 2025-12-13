@@ -621,16 +621,6 @@ let actorProps
                      registry.SagaGuaranteedDeliveryActor() <! msg
 
                return ignored ()
-            (*
-            | AccountMessage.Delete ->
-               let state =
-                  Some {
-                     state with
-                        Info.Status = AccountStatus.ReadyForDelete
-                  }
-
-               return! loop state <@> DeleteMessages Int64.MaxValue
-            *)
             | AccountMessage.StateChange(AccountCommand.Debit _ as cmd) ->
                match ParentAccount.stateTransition state cmd with
                | Ok(evt, _) -> return! Persist evt

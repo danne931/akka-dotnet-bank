@@ -58,8 +58,6 @@ module ActorMarker =
    /// Enqueues email messages into RabbitMq
    type EmailProducer() = class end
 
-   type AccountClosure() = class end
-
    /// Singleton consumes domestic transfer messages off RabbitMq
    type DomesticTransfer() = class end
 
@@ -128,9 +126,6 @@ type IAccountActor =
 type IAccountGuaranteedDeliveryActor =
    abstract AccountGuaranteedDeliveryActor:
       unit -> IActorRef<GuaranteedDelivery.Message<AccountMessage>>
-
-type IAccountClosureActor =
-   abstract AccountClosureActor: unit -> IActorRef<AccountClosureMessage>
 
 /// Send a message to a cluster sharded saga actor with AtMostOnceDelivery
 type ISagaActor =
@@ -208,10 +203,6 @@ type BankActorRegistry(system: ActorSystem) =
    interface IAccountGuaranteedDeliveryActor with
       member _.AccountGuaranteedDeliveryActor() =
          registry.Get<ActorMarker.AccountGuaranteedDeliveryProducer>() |> typed
-
-   interface IAccountClosureActor with
-      member _.AccountClosureActor() =
-         registry.Get<ActorMarker.AccountClosure>() |> typed
 
    interface ISagaActor with
       member _.SagaActor corrId =

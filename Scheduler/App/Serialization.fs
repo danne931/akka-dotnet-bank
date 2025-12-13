@@ -54,11 +54,6 @@ type private QuartzScheduledTransfersLowBalanceMessageEnvelope = {
    Message: ScheduledTransfersLowBalanceMessage
 }
 
-type private QuartzAccountClosureMessageEnvelope = {
-   Manifest: string
-   Message: AccountClosureMessage
-}
-
 type private SchedulingActorMessageEnvelope = {
    Manifest: string
    Message: SchedulerMessage
@@ -103,14 +98,6 @@ type QuartzSerializer(system: ExtendedActorSystem) =
             raise <| SerializationException()
 
       match deserialized.Manifest with
-      | "AccountClosureActorMessage" ->
-         let deseri =
-            JsonSerializer.Deserialize<QuartzAccountClosureMessageEnvelope>(
-               bytes,
-               Serialization.jsonOptions
-            )
-
-         deseri.Message
       | "BillingCycleActorMessage" ->
          let deseri =
             JsonSerializer.Deserialize<QuartzBillingMessageEnvelope>(

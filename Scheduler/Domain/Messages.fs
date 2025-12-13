@@ -10,9 +10,7 @@ open Lib.SharedTypes
 type QuartzMessageEnvelope = { Manifest: string; Message: obj }
 
 type SchedulerMessage =
-   | AccountClosureCronJobSchedule
    | BillingCycleCronJobSchedule
-   | DeleteAccountsJobSchedule of AccountId list
    | BalanceHistoryCronJobSchedule
    | TriggerBalanceHistoryCronJob
    | BalanceManagementCronJobSchedule

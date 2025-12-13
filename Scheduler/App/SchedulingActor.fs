@@ -6,7 +6,6 @@ open Akka.Quartz.Actor.Commands
 open Akkling
 open Quartz
 
-open Bank.Account.Domain
 open BillingStatement
 open ActorUtil
 open Lib.Postgres
@@ -19,24 +18,6 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
       let! msg = ctx.Receive()
 
       match msg with
-      | AccountClosureCronJobSchedule ->
-         logInfo $"Scheduling account closure checker"
-
-         let trigger = AccountClosureTriggers.scheduleNightlyCheck logInfo
-         let path = ActorMetadata.accountClosure.ProxyPath
-
-         let job =
-            CreatePersistentJob(
-               path,
-               {
-                  Manifest = "AccountClosureActorMessage"
-                  Message = AccountClosureMessage.ScheduleDeleteAll
-               },
-               trigger
-            )
-
-         quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
-         return ignored ()
       | BillingCycleCronJobSchedule ->
          logInfo $"Scheduling billing cycle"
 
@@ -90,24 +71,6 @@ let actorProps (quartzPersistentActorRef: IActorRef) =
          quartzPersistentActorRef.Tell(dailyJob, ActorRefs.Nobody)
          quartzPersistentActorRef.Tell(twiceMonthlyJob, ActorRefs.Nobody)
 
-         return ignored ()
-      | DeleteAccountsJobSchedule accountIds ->
-         logInfo $"Scheduling deletion of accounts {accountIds}"
-
-         let trigger = AccountClosureTriggers.deleteAccounts logInfo
-         let path = ActorMetadata.accountClosure.ProxyPath
-
-         let job =
-            CreatePersistentJob(
-               path,
-               {
-                  Manifest = "AccountClosureActorMessage"
-                  Message = AccountClosureMessage.DeleteAll accountIds
-               },
-               trigger
-            )
-
-         quartzPersistentActorRef.Tell(job, ActorRefs.Nobody)
          return ignored ()
       | SagaAlarmClockCronJobSchedule ->
          logInfo $"Scheduling saga alarm clock."

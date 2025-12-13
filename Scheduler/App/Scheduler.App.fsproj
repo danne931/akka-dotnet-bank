@@ -2,7 +2,6 @@
   <ItemGroup>
     <Compile Include="Environment.fs" />
     <Compile Include="BalanceHistoryTriggers.fs" />
-    <Compile Include="AccountClosureTriggers.fs" />
     <Compile Include="BillingCycleTriggers.fs" />
     <Compile Include="BalanceManagementTriggers.fs" />
     <Compile Include="SchedulingActor.fs" />

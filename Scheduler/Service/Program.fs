@@ -8,7 +8,6 @@ open Quartz
 
 open Bank.Infrastructure
 open Scheduler.Infrastructure
-open Bank.Account.Domain
 open BillingStatement
 open ActorUtil
 open Bank.Scheduler
@@ -97,7 +96,6 @@ builder.Services.AddAkka(
             [
                typedefof<SchedulerMessage>
                typedefof<BillingCycleMessage>
-               typedefof<AccountClosureMessage>
                typedefof<TransferMessages.AutoTransferMessage>
                typedefof<TransferMessages.ScheduledTransfersLowBalanceMessage>
                typedefof<AppSaga.SagaAlarmClockMessage>
@@ -127,10 +125,6 @@ builder.Services.AddAkka(
             ClusterMetadata.accountShardRegion.name,
             ClusterMetadata.roles.account,
             ClusterMetadata.accountShardRegion.messageExtractor
-         )
-         .WithSingletonProxy<ActorMarker.AccountClosure>(
-            ActorMetadata.accountClosure.Name,
-            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
          .WithSingletonProxy<ActorMarker.BillingCycle>(
             ActorMetadata.billingCycle.Name,
@@ -171,9 +165,6 @@ builder.Services.AddAkka(
                let schedulingActor = registry.SchedulerActor()
 
                schedulingActor <! SchedulerMessage.BillingCycleCronJobSchedule
-
-               schedulingActor
-               <! SchedulerMessage.AccountClosureCronJobSchedule
 
                schedulingActor
                <! SchedulerMessage.BalanceHistoryCronJobSchedule

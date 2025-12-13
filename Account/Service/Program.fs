@@ -319,17 +319,6 @@ builder.Services.AddAkka(
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMarker.AccountClosure>(
-            ActorMetadata.accountClosure.Name,
-            (fun system _ _ ->
-               let typedProps =
-                  AccountClosureActor.initProps
-                     (getActorRegistry provider)
-                     Env.config.AccountDeleteThrottle
-
-               typedProps.ToProps()),
-            ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
-         )
          .WithSingleton<ActorMarker.OrgReadModelSync>(
             ActorMetadata.orgReadModelSync.Name,
             (fun _ _ _ ->

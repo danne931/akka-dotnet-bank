@@ -613,16 +613,8 @@ type AccountMessage =
    | ProcessBillingStatement of CorrelationId * BillingPeriod
    | DomesticTransfersRetryableUponRecipientEdit of
       Result<DomesticTransfer list option, Err>
-   | Delete
    | PruneIdempotencyChecker
    | PruneOutbox
-
-[<RequireQualifiedAccess>]
-type AccountClosureMessage =
-   | Register of Account
-   | ScheduleDeleteAll
-   | DeleteAll of AccountId list
-   | GetRegisteredAccounts
 
 [<RequireQualifiedAccess>]
 type AccountSeederMessage =

@@ -197,11 +197,6 @@ module ActorMetadata =
 
    let account = { Name = "account"; Route = "account" }
 
-   let accountClosure = {
-      Name = "account-closure"
-      Route = "account-closure"
-   }
-
    let accountReadModelSync = {
       Name = "account-read-model-sync"
       Route = "account-read-model-sync"

@@ -187,13 +187,10 @@ type BankSerializer(system: ExtendedActorSystem) =
          "AccountLoadTestMessage"
       | :? AccountSeederMessage -> "AccountSeederMessage"
       | :? SchedulerMessage -> "SchedulerMessage"
-      | :? AccountClosureMessage -> "AccountClosureActorMessage"
       | :? List<AccountEvent> -> "AccountEventList"
       | :? ParentAccountSnapshot -> "ParentAccountSnapshot"
       | :? Option<ParentAccountSnapshot> -> "ParentAccountSnapshotOption"
       | :? Option<Account> -> "AccountOption"
-      | :? List<Account> -> "AccountList"
-      | :? Map<AccountId, Account> -> "AccountMap"
       | :? AccountEvent -> "AccountEvent"
       | :? AccountMessage -> "AccountMessage"
       | :? SignalRActor.Msg -> "SignalRMessage"
@@ -256,9 +253,6 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? BillingCycleMessage
       // Messages from SchedulingActor to AutomaticTransferSchedulingActor
       | :? AutoTransferMessage
-      // Messages from sharded account nodes to AccountClosureActor cluster
-      // singleton. Also for messages from SchedulingActor to Account Closure Proxy
-      | :? AccountClosureMessage
       // AccountMessage.GetEvents response serialized for message sent
       // from account cluster nodes to Web node.
       | :? List<AccountEvent>
@@ -266,8 +260,6 @@ type BankSerializer(system: ExtendedActorSystem) =
       // account cluster nodes to AccountReadModelSync or Web node diagnostic route.
       | :? Option<ParentAccountSnapshot>
       | :? Option<Account>
-      // AccountClosureActor persistence snapshot.
-      | :? Map<AccountId, Account>
       | :? List<Account>
       | :? CircuitBreakerState
       // Messages sent over DistributedPubSub to CircuitBreakerActor.
@@ -386,8 +378,6 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "ParentAccountSnapshotOption" ->
             typeof<Option<ParentAccountSnapshot>>
          | "AccountOption" -> typeof<Account option>
-         | "AccountMap" -> typeof<Map<AccountId, Account>>
-         | "AccountList" -> typeof<Account list>
          | "AccountEvent" -> typeof<AccountEvent>
          | "AccountEventList" -> typeof<AccountEvent list>
          | "AccountMessage" -> typeof<AccountMessage>
@@ -413,7 +403,6 @@ type BankSerializer(system: ExtendedActorSystem) =
          | "CircuitBreakerActorState" -> typeof<CircuitBreakerState>
          | "BillingCycleActorMessage" -> typeof<BillingCycleMessage>
          | "AutomaticTransferActorMessage" -> typeof<AutoTransferMessage>
-         | "AccountClosureActorMessage" -> typeof<AccountClosureMessage>
          | "SchedulerMessage" -> typeof<SchedulerMessage>
          | "AccountSeederMessage" -> typeof<AccountSeederMessage>
          | "EmailMessage+EmailMessage, Notifications.Domain"
