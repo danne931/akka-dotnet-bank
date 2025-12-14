@@ -43,8 +43,6 @@ module ActorMarker =
 
    type CircuitBreaker() = class end
 
-   type AccountLoadTest() = class end
-
    type Auditor() = class end
 
    type AccountSeeder() = class end

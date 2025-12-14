@@ -9,7 +9,6 @@ open Lib.CircuitBreaker
 open Bank.Account.Domain
 open SignalRBroadcast
 open ActorUtil
-open AccountLoadTestTypes
 open BankActorRegistry
 
 let init
@@ -20,9 +19,6 @@ let init
    let pubSub = PubSub.get system
    let signalRPath = ActorMetadata.signalR.Path.ToStringWithoutAddress()
    let sendToSignalR = PubSub.sendPointToPoint pubSub signalRPath
-
-   let loadTestPath =
-      ActorMetadata.accountLoadTest.SingletonPath.ToStringWithoutAddress()
 
    let sendError = SignalRActor.Msg.Error >> sendToSignalR
 
@@ -46,18 +42,6 @@ let init
                }
 
             sendToSignalR msg
-
-            if Env.allowLiveLoadTest then
-               let msg =
-                  AccountLoadTestMessage.AccountEventPersisted {
-                     AccountId = account.AccountId
-                     OrgId = account.OrgId
-                     Event = event
-                     AccountBalance = account.Balance
-                  }
-
-               PubSub.sendPointToPoint pubSub loadTestPath msg
-
       employeeEventPersisted =
          fun event employee ->
             let msg =

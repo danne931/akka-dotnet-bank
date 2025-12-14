@@ -4,7 +4,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="AccountLoadTestActor.fs" />
     <Compile Include="UserSessionRoutes.fs" />
     <Compile Include="DiagnosticRoutes.fs" />
     <Compile Include="Program.fs" />

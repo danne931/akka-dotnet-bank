@@ -274,11 +274,6 @@ module ActorMetadata =
       Route = "account-seeder"
    }
 
-   let accountLoadTest = {
-      Name = "account-load-test"
-      Route = "account-load-test"
-   }
-
    let signalR = {
       Name = "signal-r"
       Route = "signal-r"

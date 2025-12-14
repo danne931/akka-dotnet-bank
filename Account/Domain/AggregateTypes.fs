@@ -621,24 +621,3 @@ type AccountSeederMessage =
    | SeedAccounts
    | VerifyAccountsCreated
    | OverwriteDomesticTransferTimestamps
-
-module AccountLoadTestTypes =
-   type ProgressCheck = {
-      RemainingAccountTests: int
-      NumberOfProgressChecks: int
-   }
-
-   type LoadTestEventPersisted = {
-      OrgId: OrgId
-      AccountId: AccountId
-      AccountBalance: decimal
-      Event: AccountEvent
-   }
-
-   type AccountLoadTestMessage =
-      | StartLoadTest
-      | CheckProgress of ProgressCheck
-      | Finish
-      | Teardown
-      | Lookup
-      | AccountEventPersisted of LoadTestEventPersisted

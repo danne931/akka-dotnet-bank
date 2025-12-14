@@ -183,8 +183,6 @@ type BankSerializer(system: ExtendedActorSystem) =
       | :? SagaDeliveryResponse -> "SagaDeliveryResponse"
       | :? ScheduledTransfersLowBalanceMessage ->
          "ScheduledTransfersLowBalanceMessage"
-      | :? AccountLoadTestTypes.AccountLoadTestMessage ->
-         "AccountLoadTestMessage"
       | :? AccountSeederMessage -> "AccountSeederMessage"
       | :? SchedulerMessage -> "SchedulerMessage"
       | :? List<AccountEvent> -> "AccountEventList"
@@ -240,9 +238,6 @@ type BankSerializer(system: ExtendedActorSystem) =
       // to ensure failed Persist calls are retried & messages received
       // during backoff period are not lost.
       | :? ConfirmableMessageEnvelope
-      // AccountEventPersisted messages sent over DistributedPubSub
-      // from Account nodes to AccountLoadTestActor on Web node.
-      | :? AccountLoadTestTypes.AccountLoadTestMessage
       // ReadModelSyncActor projection offset snapshot
       | :? Lib.ReadModelSyncActor.State
       // Messages from account nodes to AccountSeederActor cluster singleton
@@ -350,8 +345,6 @@ type BankSerializer(system: ExtendedActorSystem) =
       let deserializeToType =
          match manifest with
          | "ConfirmableMessageEnvelope" -> typeof<ConfirmableMessageEnvelope>
-         | "AccountLoadTestMessage" ->
-            typeof<AccountLoadTestTypes.AccountLoadTestMessage>
          | "ReadModelSyncState" -> typeof<Lib.ReadModelSyncActor.State>
          | "CommandApprovalDailyAccrual" -> typeof<CommandApprovalDailyAccrual>
          | "CachedOrgSettings" -> typeof<CachedOrgSettings>

@@ -117,14 +117,6 @@ builder.Services.AddAkka(
             ActorMetadata.emailProxy.Name,
             ClusterSingletonOptions(Role = ClusterMetadata.roles.account)
          )
-         .WithSingleton<ActorMarker.AccountLoadTest>(
-            ActorMetadata.accountLoadTest.Name,
-            (fun _ _ _ ->
-               let registry = provider.GetRequiredService<BankActorRegistry>()
-               let typedProps = AccountLoadTestActor.actorProps registry
-               typedProps.ToProps()),
-            ClusterSingletonOptions(Role = ClusterMetadata.roles.web)
-         )
          .WithActors(fun system registry ->
             registry.Register<ActorMarker.OrgGuaranteedDeliveryProducer>(
                GuaranteedDelivery.producer<OrgMessage> {
