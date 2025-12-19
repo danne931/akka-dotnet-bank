@@ -101,6 +101,8 @@ module PaymentPath =
    let RequestPayment = Base + "/request"
    let CancelPayment = Base + "/cancel"
    let DeclinePayment = Base + "/decline"
+   let UploadInvoice = Base + "/upload-invoice/{orgId}"
+   let uploadInvoice (orgId: OrgId) = Base + $"/upload-invoice/{orgId}"
 
 module TransactionPath =
    let Base = $"{API}/transactions"

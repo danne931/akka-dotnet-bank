@@ -289,6 +289,11 @@ module ActorMetadata =
       Route = "circuit-breaker"
    }
 
+   let invoiceParser = {
+      Name = "invoice-parser"
+      Route = "invoice-parser"
+   }
+
 let readJournal (system: ActorSystem) : SqlReadJournal =
    PersistenceQuery
       .Get(system)

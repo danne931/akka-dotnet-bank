@@ -1,16 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="Environment.fs" />
+    <Compile Include="InvoiceParserActor.fs" />
+    <Compile Include="InvoiceApi.fs" />
     <Compile Include="Api.fs" />
     <Compile Include="Routes.fs" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.AI.DocumentIntelligence" />
+    <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="MagicBytesValidator" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../Database/Database.fsproj" />
     <ProjectReference Include="../../Lib/CrossCutting/Lib.CrossCutting.fsproj" />
+    <ProjectReference Include="../../SignalR/Domain/SignalR.Domain.fsproj" />
     <ProjectReference Include="../Domain/Payment.Domain.fsproj" />
   </ItemGroup>
 </Project>

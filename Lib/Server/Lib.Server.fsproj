@@ -7,6 +7,7 @@
     <Compile Include="Constants.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Environment.fs" />
+    <Compile Include="BlobStorage.fs" />
     <Compile Include="Routes.fs" />
     <Compile Include="TCP.fs" />
     <Compile Include="Postgres.fs" />
@@ -28,6 +29,7 @@
     <PackageReference Include="Akka.Streams.Amqp.RabbitMq" />
     <PackageReference Include="Akkling" />
     <PackageReference Include="Akkling.Cluster.Sharding" />
+    <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="FsConfig" />
     <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
     <PackageReference Include="Npgsql.FSharp" />

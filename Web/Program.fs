@@ -17,10 +17,12 @@ open Bank.UserSession.Middleware
 open Bank.Org.Domain
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Payment
 open Bank.Hubs
 open ActorUtil
 open Lib.CircuitBreaker
 open BankActorRegistry
+open SignalRBroadcast
 
 let builder = Env.builder
 
@@ -29,6 +31,12 @@ LogInfra.start builder |> ignore
 builder.Services.AddSingleton<BankActorRegistry>(fun provider ->
    let system = provider.GetRequiredService<ActorSystem>()
    BankActorRegistry system)
+|> ignore
+
+builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
+   let system = provider.GetRequiredService<ActorSystem>()
+   let registry = provider.GetRequiredService<BankActorRegistry>()
+   SignalRBroadcaster.init system registry)
 |> ignore
 
 // Endpoint serialization
@@ -145,6 +153,27 @@ builder.Services.AddAkka(
                |> untyped
             )
 
+            let invoiceProcessorActor =
+               InvoiceApi.Parser.getClient ()
+               |> Option.map (fun client ->
+                  spawn system ActorMetadata.invoiceParser.Name
+                  <| InvoiceParserActor.actorProps
+                     (provider.GetRequiredService<SignalRBroadcast>())
+                     (InvoiceApi.Parser.parseInvoice client)
+                     {
+                        create = InvoiceApi.createDraft
+                        parseCompleted = InvoiceApi.markDraftAsParsed
+                        parseFailed = InvoiceApi.markDraftAsFailed
+                     })
+
+            match invoiceProcessorActor with
+            | Some actor ->
+               registry.Register<ActorMarker.InvoiceParser>(untyped actor)
+            | None ->
+               SystemLog.warning
+                  system
+                  "Not configured to upload invoices for parsing."
+
             SignalRActor.start system signalRHub |> ignore)
       |> ignore
 
@@ -201,6 +230,7 @@ Bank.Routes.Transfer.start
    PartnerBankServiceActor.createCounterParty
 
 Bank.Routes.PaymentRequest.start app Bank.Account.Api.processCommand
+
 Bank.Routes.Account.start app
 Bank.Routes.Diagnostic.start app
 Bank.Routes.Transaction.start app

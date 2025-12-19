@@ -33,6 +33,8 @@
     <PackageVersion Include="Akkling.Cluster.Sharding" Version="$(AkklingVersion)" />
     <PackageVersion Include="Akkling.Persistence" Version="$(AkklingVersion)" />
     <PackageVersion Include="Akkling.TestKit" Version="$(AkklingVersion)" />
+    <PackageVersion Include="Azure.AI.DocumentIntelligence" Version="1.0.0" />
+    <PackageVersion Include="Azure.Storage.Blobs" Version="12.26.0" />
     <PackageVersion Include="Elmish.SweetAlert" Version="3.4.0" />
     <PackageVersion Include="Fable.FontAwesome" Version="$(FontAwesomeVersion)" />
     <PackageVersion Include="Fable.FontAwesome.Free" Version="$(FontAwesomeVersion)" />
@@ -45,6 +47,7 @@
     <PackageVersion Include="FSharp.Control.TaskSeq" Version="0.4.0" />
     <PackageVersion Include="FSharp.SystemTextJson" Version="1.3.13" />
     <PackageVersion Include="FsToolkit.ErrorHandling.TaskResult" Version="4.18.0" />
+    <PackageVersion Include="MagicBytesValidator" Version="2.1.6" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="9.0.1" />
     <PackageVersion Include="Nanoid" Version="3.1.0" />
     <PackageVersion Include="Npgsql.FSharp" Version="8.0.0" />

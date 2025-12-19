@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS transfer_domestic;
 DROP TABLE IF EXISTS transfer;
 DROP TABLE IF EXISTS counterparty;
 DROP TABLE IF EXISTS recurring_payment_schedule;
+DROP TABLE IF EXISTS invoice_draft;
 DROP TABLE IF EXISTS invoice;
 DROP TABLE IF EXISTS merchant;
 DROP TABLE IF EXISTS saga;
@@ -78,6 +79,7 @@ DROP TYPE IF EXISTS recurrence_termination_type;
 DROP TYPE IF EXISTS saga_type;
 DROP TYPE IF EXISTS saga_status;
 DROP TYPE IF EXISTS counterparty_type;
+DROP TYPE IF EXISTS invoice_draft_status;
 
 -- Drop Akka event sourcing tables.
 -- These tables are initiated in Infrastructure/Akka.fs.
@@ -340,16 +342,33 @@ SELECT prevent_update('billing_statement');
 CREATE INDEX billing_statement_org_id_idx ON billing_statement(org_id);
 CREATE INDEX billing_statement_account_id_idx ON billing_statement(account_id);
 
+CREATE TYPE invoice_draft_status AS ENUM ('Parsing', 'Parsed', 'ParseFailed');
+
+CREATE TABLE invoice_draft (
+   parsed_data JSONB,
+   status invoice_draft_status NOT NULL,
+   status_detail JSONB NOT NULL,
+   blob_url TEXT NOT NULL,
+   invoice_draft_id UUID PRIMARY KEY,
+   org_id UUID NOT NULL REFERENCES organization
+);
+
+SELECT add_created_at_column('invoice_draft');
+SELECT add_updated_at_column_and_trigger('invoice_draft');
+CREATE INDEX invoice_draft_org_id_idx ON invoice_draft(org_id);
+
 CREATE TABLE invoice (
    invoice_id UUID PRIMARY KEY,
    line_items JSONB NOT NULL,
    tax_percent NUMERIC(4,2) NOT NULL,
    subtotal MONEY NOT NULL,
-   total MONEY NOT NULL
+   total MONEY NOT NULL,
+   org_id UUID NOT NULL REFERENCES organization
 );
 
 SELECT add_created_at_column('invoice');
 SELECT add_updated_at_column_and_trigger('invoice');
+CREATE INDEX invoice_org_id_idx ON invoice(org_id);
 
 CREATE TYPE recurrence_termination_type AS ENUM ('EndDate', 'MaxPayments', 'Never');
 

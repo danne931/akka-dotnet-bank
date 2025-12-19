@@ -6,7 +6,6 @@ open Akka.Actor
 open System
 
 open Lib.CircuitBreaker
-open Bank.Account.Domain
 open SignalRBroadcast
 open ActorUtil
 open BankActorRegistry
@@ -104,6 +103,18 @@ let init
                SignalRActor.Msg.SagaUpdated {
                   Date = DateTime.UtcNow
                   Saga = saga
+                  OrgId = orgId
+               }
+
+            sendToSignalR msg
+
+      invoiceParsed =
+         fun orgId draftId parsedData ->
+            let msg =
+               SignalRActor.Msg.InvoiceParsed {
+                  Date = DateTime.UtcNow
+                  DraftId = draftId
+                  ParsedData = parsedData
                   OrgId = orgId
                }
 

@@ -19,6 +19,7 @@
     <Compile Include="TransferSqlMapper.fs" />
     <Compile Include="RecurringPaymentScheduleSqlMapper.fs" />
     <Compile Include="InvoiceSqlMapper.fs" />
+    <Compile Include="InvoiceDraftSqlMapper.fs" />
     <Compile Include="CommandApprovalRuleSqlMapper.fs" />
     <Compile Include="CommandApprovalProgressSqlMapper.fs" />
     <Compile Include="SagaSqlMapper.fs" />
@@ -32,6 +33,7 @@
     <ProjectReference Include="../Org/Domain/Org.Domain.fsproj" />
     <ProjectReference Include="../Transaction/Domain/Transaction.Domain.fsproj" />
     <ProjectReference Include="../Saga/Domain/Saga.Domain.fsproj" />
+    <ProjectReference Include="../Payment/Domain/Payment.Domain.fsproj" />
     <ProjectReference Include="../PartnerBank/Domain/PartnerBank.Domain.fsproj" />
   </ItemGroup>
 </Project>

@@ -47,6 +47,8 @@ module ActorMarker =
 
    type AccountSeeder() = class end
 
+   type InvoiceParser() = class end
+
    /// Singleton Proxy to forward emails from web node
    type EmailProxy() = class end
 

@@ -74,6 +74,16 @@ type ClusterStartupMethod =
    | DiscoveryConfig of ClusterDiscoveryStartup
    | DiscoveryKubernetes of ClusterDiscoveryKubernetesStartup
 
+type AzureBlobStorage = {
+   ConnectionString: string
+   ContainerName: string
+}
+
+type AzureDocumentIntelligence = {
+   Endpoint: string option
+   ApiKey: string option
+}
+
 type BackoffSupervisorInput = {
    MinBackoffSeconds: float option
    MaxBackoffSeconds: float option
@@ -193,6 +203,10 @@ type private BankConfigInput = {
       Name: string option
       MaxParallelism: int option
    |}
+   AzureBlobStorageConnectionString: string option
+   AzureBlobContainerName: string option
+   AzureDocumentIntelligenceEndpoint: string option
+   AzureDocumentIntelligenceApiKey: string option
 }
 
 type BankConfig = {
@@ -217,11 +231,41 @@ type BankConfig = {
    SagaPassivateIdleEntityAfter: TimeSpan
    SagaWakeFromSleepBurstLimit: int
    SagaQueue: QueueEnvConfig
+   AzureBlobStorage: AzureBlobStorage
+   AzureDocumentIntelligence: AzureDocumentIntelligence
 }
+
+let private errorMessage missing =
+   $"""
+   ========================================================
+
+     Missing {missing} configuration setting(s)
+
+   ========================================================
+   """
+
+let private throwInProductionIfMissingEnvVars (input: BankConfigInput) =
+   let missing =
+      [
+         "AzureBlobStorageConnectionString",
+         Option.isNone input.AzureBlobStorageConnectionString
+         "AzureDocumentIntelligenceEndpoint",
+         Option.isNone input.AzureDocumentIntelligenceEndpoint
+         "AzureDocumentIntelligenceApiKey",
+         Option.isNone input.AzureDocumentIntelligenceApiKey
+      ]
+      |> List.fold (fun acc (key, isNone) -> if isNone then key :: acc else acc) []
+
+   if not missing.IsEmpty then
+      let errMsg = errorMessage missing
+
+      if isProd then failwith errMsg else printfn "%A" errMsg
 
 let config =
    match AppConfig(builder.Configuration).Get<BankConfigInput>() with
    | Ok input ->
+      throwInProductionIfMissingEnvVars input
+
       let clusterStartupMethod =
          match input.ClusterStartupMethod with
          | "Discovery" ->
@@ -320,6 +364,18 @@ let config =
             Name = input.SagaQueue.Name |> Option.defaultValue "saga"
             MaxParallelism =
                input.SagaQueue.MaxParallelism |> Option.defaultValue 70
+         }
+         AzureBlobStorage = {
+            ConnectionString =
+               input.AzureBlobStorageConnectionString
+               |> Option.defaultValue "UseDevelopmentStorage=true"
+            ContainerName =
+               input.AzureBlobContainerName
+               |> Option.defaultValue "phoenix-blobs"
+         }
+         AzureDocumentIntelligence = {
+            Endpoint = input.AzureDocumentIntelligenceEndpoint
+            ApiKey = input.AzureDocumentIntelligenceApiKey
          }
       }
    | Error err ->

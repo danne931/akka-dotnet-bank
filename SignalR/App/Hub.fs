@@ -11,6 +11,7 @@ type IBankClient =
    abstract member EventProcessingError: string -> Task
    abstract member CircuitBreakerMessage: string -> Task
    abstract member SagaUpdated: string -> Task
+   abstract member InvoiceParsed: string -> Task
 
 type BankHub() =
    inherit Hub<IBankClient>()

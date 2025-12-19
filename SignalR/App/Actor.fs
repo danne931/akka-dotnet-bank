@@ -23,6 +23,7 @@ type Msg =
    | Error of EventProcessingError
    | CircuitBreaker of CircuitBreakerEvent
    | SagaUpdated of SagaUpdated
+   | InvoiceParsed of InvoiceParsed
 
 let actorProps (hub: IHubContext<BankHub, IBankClient>) =
    let handler (ctx: Actor<_>) =
@@ -72,6 +73,11 @@ let actorProps (hub: IHubContext<BankHub, IBankClient>) =
             hub.Clients
                .Group(string msg.OrgId)
                .SagaUpdated(Serialization.serialize msg)
+            |> ignore
+         | Msg.InvoiceParsed msg ->
+            hub.Clients
+               .Group(string msg.OrgId)
+               .InvoiceParsed(Serialization.serialize msg)
             |> ignore
       }
 

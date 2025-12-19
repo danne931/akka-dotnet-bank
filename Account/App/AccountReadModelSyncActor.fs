@@ -908,6 +908,7 @@ let sqlParamReducer
          | Some invoice ->
             let invoiceParams = [
                "invoiceId", InvoiceSqlMapper.Writer.invoiceId invoice.Id
+               "orgId", InvoiceSqlMapper.Writer.orgId e.OrgId
                "lineItems", InvoiceSqlMapper.Writer.lineItems invoice.LineItems
                "taxPercent",
                InvoiceSqlMapper.Writer.taxPercent invoice.TaxPercent
@@ -1250,12 +1251,14 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       $"""
       INSERT into {InvoiceSqlMapper.table}
          ({InvoiceSqlMapper.Fields.invoiceId},
+          {InvoiceSqlMapper.Fields.orgId},
           {InvoiceSqlMapper.Fields.lineItems},
           {InvoiceSqlMapper.Fields.taxPercent},
           {InvoiceSqlMapper.Fields.subtotal},
           {InvoiceSqlMapper.Fields.total})
       VALUES
          (@invoiceId,
+          @orgId,
           @lineItems,
           @taxPercent,
           @subtotal,

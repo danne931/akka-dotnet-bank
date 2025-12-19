@@ -1,11 +1,13 @@
 module InvoiceSqlMapper
 
 open Bank.Payment.Domain
+open Lib.SharedTypes
 
 let table = "invoice"
 
 module Fields =
    let invoiceId = "invoice_id"
+   let orgId = "org_id"
    let lineItems = "line_items"
    let taxPercent = "tax_percent"
    let subtotal = "subtotal"
@@ -14,6 +16,8 @@ module Fields =
 module Reader =
    let invoiceId (read: RowReader) =
       Fields.invoiceId |> read.uuid |> InvoiceId
+
+   let orgId (read: RowReader) = Fields.orgId |> read.uuid |> OrgId
 
    let lineItems (read: RowReader) =
       Fields.lineItems
@@ -30,6 +34,7 @@ module Reader =
 
 module Writer =
    let invoiceId (InvoiceId id) = Sql.uuid id
+   let orgId (OrgId id) = Sql.uuid id
 
    let lineItems (items: InvoiceLineItem list) =
       items |> Serialization.serialize |> Sql.jsonb

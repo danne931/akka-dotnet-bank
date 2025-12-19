@@ -4,6 +4,7 @@ open System
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
+open Bank.Payment.Domain
 open Bank.Org.Domain
 open Lib.SharedTypes
 open Lib.CircuitBreaker
@@ -76,6 +77,13 @@ type SagaUpdated = {
    OrgId: OrgId
 }
 
+type InvoiceParsed = {
+   Date: DateTime
+   DraftId: InvoiceDraftId
+   ParsedData: ParsedInvoice
+   OrgId: OrgId
+}
+
 type SignalRBroadcast = {
    circuitBreaker: CircuitBreakerEvent -> unit
    parentAccountEventPersisted: ParentAccountEvent -> unit
@@ -86,4 +94,5 @@ type SignalRBroadcast = {
    orgEventPersisted: OrgEvent -> Org -> unit
    orgEventError: OrgId -> CorrelationId -> Err -> unit
    sagaUpdated: OrgId -> SagaDTO.SagaDTO -> unit
+   invoiceParsed: OrgId -> InvoiceDraftId -> ParsedInvoice -> unit
 }
