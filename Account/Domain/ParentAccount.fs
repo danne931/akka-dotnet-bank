@@ -458,6 +458,18 @@ module AutoTransferStateTransition =
                      | Error err -> Error err)
                   (Ok([], parentAccount))
                   transferCommands
+               // NOTE:
+               // Ensure auto-transfer events in intended order of
+               // transfer-out preceding transfer-in.
+
+               // This is necessary for AccountReadModelSyncActor to
+               // behave predictably. There is a sortByDescendingTimestamp
+               // within a batch but the chunking limit may result in a
+               // transfer-out & transfer-in in different batches.
+               // If they are in different batches and transfer-in was processed
+               // first, the postgres upsert will fail as it expects a
+               // transfer record which is only created during transfer-out evt.
+               |> Result.map (fun (evts, state) -> List.rev evts, state)
 
             Some validations)
 

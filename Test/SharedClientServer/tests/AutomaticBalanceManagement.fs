@@ -1155,4 +1155,55 @@ let tests =
          Expect.isTrue hasAutoDeduction "should include auto deduction event"
          Expect.isTrue hasAutoDeposit "should include auto deposit event"
       }
+
+      test
+         "compute ensures auto transfer deducted event precedes deposited event" {
+         let zeroBalanceConfig =
+            Stub.createZeroBalanceConfig Stub.accountA Stub.accountB
+
+         let account = {
+            Stub.accountState with
+               Balance = 500m
+               AutoTransferRule = Some zeroBalanceConfig
+         }
+
+         let recipientAccount = {
+            Account.empty with
+               AccountId = Stub.accountB
+               ParentAccountId = Stub.parentAccountId
+               OrgId = Stub.orgId
+               Status = AccountStatus.Active
+               Balance = 0m
+         }
+
+         let state = {
+            Stub.parentAccountState with
+               VirtualAccounts =
+                  Map [
+                     Stub.accountA, account
+                     Stub.accountB, recipientAccount
+                  ]
+         }
+
+         let res = compute Frequency.PerTransaction account.AccountId state
+
+         let res = Expect.wantSome res "should return Some"
+         let events, _ = Expect.wantOk res "should return Ok"
+
+         let deductedIndex =
+            events
+            |> List.findIndex (function
+               | AccountEvent.InternalAutomatedTransferDeducted _ -> true
+               | _ -> false)
+
+         let depositedIndex =
+            events
+            |> List.findIndex (function
+               | AccountEvent.InternalAutomatedTransferDeposited _ -> true
+               | _ -> false)
+
+         Expect.isTrue
+            (deductedIndex < depositedIndex)
+            "InternalAutomatedTransferDeducted should precede InternalAutomatedTransferDeposited in event order"
+      }
    ]
