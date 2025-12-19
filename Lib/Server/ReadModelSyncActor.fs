@@ -56,7 +56,7 @@ let initReadJournalSource
    (chunking: StreamChunkingEnvConfig)
    (restartSettings: Akka.Streams.RestartSettings)
    (eventJournalTag: string)
-   : Source<'TEvent list, Akka.NotUsed>
+   : Source<'TEvent list * Query.Sequence option, Akka.NotUsed>
    =
    let source =
       (readJournal mailbox.System).EventsByTag(eventJournalTag, state.Offset)
@@ -65,13 +65,12 @@ let initReadJournalSource
          let evts: 'TEvent list =
             evtSeq |> Seq.map (fun env -> unbox env.Event) |> List.ofSeq
 
-         let offset = (Seq.last evtSeq).Offset
+         let offset =
+            match (Seq.last evtSeq).Offset with
+            | :? Query.Sequence as offset -> Some offset
+            | _ -> None
 
-         match offset with
-         | :? Query.Sequence as offset -> mailbox.Self <! SaveOffset offset
-         | _ -> ()
-
-         evts)
+         evts, offset)
 
    RestartSource.WithBackoff((fun _ -> source), restartSettings)
 
@@ -85,18 +84,24 @@ let initSink mailbox name =
             mailbox
             $"Rabbit Consumer Stream Completed With Error ({name}): {err}")
 
-let bulkWriteFlow mailbox name persist =
+let bulkWriteFlow (mailbox: Eventsourced<obj>) name persist =
    Flow.id
-   |> Flow.taskMap 1 (fun (statements: 'T list) -> task {
-      let! res = persist statements
+   |> Flow.taskMap
+      1
+      (fun (statements: 'T list, offset: Query.Sequence option) -> task {
+         let! res = persist statements
 
-      return
-         match res with
-         | Ok res ->
-            logInfo mailbox $"Saved read models for journal {name} {res}"
-            statements
-         | Error e -> failwith $"Bulk insert failed for {name}: {e}"
-   })
+         return
+            match res with
+            | Ok res ->
+               logInfo mailbox $"Saved read models for journal {name} {res}"
+
+               offset
+               |> Option.iter (fun offset -> mailbox.Self <! SaveOffset offset)
+
+               statements
+            | Error e -> failwith $"Bulk insert failed for {name}: {e}"
+      })
 
 let startProjection<'TEvent>
    (conf: Config<'TEvent>)
@@ -118,13 +123,18 @@ let startProjection<'TEvent>
          conf.EventJournalTag
 
    let flow =
-      Flow.id<'TEvent list, 'TEvent list>
-      |> Flow.map (fun events ->
+      Flow.id<'TEvent list * Query.Sequence option, 'TEvent list>
+      |> Flow.map (fun (events, offsetOpt) ->
+         let offset =
+            offsetOpt
+            |> Option.map (fun o -> string o.Value)
+            |> Option.defaultValue ""
+
          logInfo
             mailbox
-            $"Will sync read models for {events.Length} events from journal {conf.EventJournalTag}"
+            $"Will sync read models for {events.Length} events from journal {conf.EventJournalTag} from offset {offset}"
 
-         events)
+         events, offsetOpt)
       |> Flow.via (
          bulkWriteFlow mailbox conf.EventJournalTag conf.UpsertReadModels
       )
@@ -169,8 +179,8 @@ let startProjectionWithAggregateLookup<'TAggregate, 'TEvent>
       >> conf.UpsertReadModels
 
    let flow =
-      Flow.id<'TEvent list, 'TAggregate * 'TEvent list>
-      |> Flow.asyncMap conf.Chunking.Size (fun events -> async {
+      Flow.id<'TEvent list * Query.Sequence option, 'TAggregate * 'TEvent list>
+      |> Flow.asyncMap conf.Chunking.Size (fun (events, offsetOpt) -> async {
          let distinctAggregateIds =
             events
             |> List.fold
@@ -189,7 +199,8 @@ let startProjectionWithAggregateLookup<'TAggregate, 'TEvent>
             |> Array.map getAggregate
 
          let! res = Task.WhenAll distinctAggregateIds |> Async.AwaitTask
-         return res |> Array.toList |> List.choose id
+         let aggAndEvents = res |> Array.toList |> List.choose id
+         return aggAndEvents, offsetOpt
       })
       |> Flow.via (bulkWriteFlow mailbox conf.EventJournalTag persist)
 
