@@ -5,6 +5,7 @@
     <Compile Include="Lib/Alerts.fs" />
     <Compile Include="Lib/Logger.fs" />
     <Compile Include="Lib/AsyncUtil.fs" />
+    <Compile Include="Lib/CSVDownload.fs" />
     <Compile Include="Lib/LeaderLine.fs" />
     <Compile Include="Lib/ElmishExtensions.fs" />
     <Compile Include="Lib/FelizExtensions.fs" />

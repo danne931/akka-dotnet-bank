@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.Builder
 open Bank.Employee.Domain
 open Bank.Org.Domain
 open Bank.Transaction.Api
+open Bank.Transaction.ExportApi
 open Bank.History.Api
 open RoutePaths
 open Lib.NetworkQuery
@@ -233,4 +234,38 @@ let start (app: WebApplication) =
          })
       )
       .RBAC(Permissions.ManageTransactionNotes)
+   |> ignore
+
+   app
+      .MapGet(
+         TransactionPath.ExportCsv,
+         Func<Guid, string, Task<IResult>>
+            (fun orgId ([<FromQuery>] transactionIds) -> task {
+               let txnIdsOpt =
+                  transactionIds
+                  |> Lib.NetworkQuery.listFromQueryString Guid.parseOptional
+                  |> Option.map (List.map (CorrelationId >> TransactionId))
+
+               match txnIdsOpt with
+               | None ->
+                  return
+                     Results.BadRequest(
+                        "Missing transactionIds query parameter"
+                     )
+               | Some txnIds ->
+                  let! transactions = getTransactionsByIds (OrgId orgId) txnIds
+
+                  match transactions with
+                  | Ok(Some txns) ->
+                     let csv = generateCsv txns
+                     let timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd")
+                     let filename = $"transactions_{timestamp}.csv"
+                     let bytes = Text.Encoding.UTF8.GetBytes(csv)
+
+                     return Results.File(bytes, "text/csv", filename)
+                  | Ok None -> return Results.NotFound("No transactions found")
+                  | Error err -> return Results.Problem(string err)
+            })
+      )
+      .RBAC(Permissions.GetTransactions)
    |> ignore

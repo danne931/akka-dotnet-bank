@@ -60,6 +60,7 @@ let navigation (view: AccountActionView option) =
 type State = {
    Query: TransactionQuery
    Pagination: Pagination.State<TransactionCursor, Transaction>
+   SelectedTransactions: Set<TransactionId>
 }
 
 type Msg =
@@ -73,7 +74,10 @@ type Msg =
    | CommandProcessedPendingApproval of
       commandName: string *
       redirect: AccountActionView option
-   | Cancel
+   | CloseActionForm
+   | ToggleTransactionSelection of TransactionId
+   | ClearCsvSelection
+   | DownloadCsv of AsyncOperationStatus<Result<unit, Err>>
 
 let init (txnQuery: TransactionQuery) () =
    let paginationState, cmd = Pagination.init<TransactionCursor, Transaction> ()
@@ -81,6 +85,7 @@ let init (txnQuery: TransactionQuery) () =
    {
       Query = txnQuery
       Pagination = paginationState
+      SelectedTransactions = Set.empty
    },
    Cmd.map PaginationMsg cmd
 
@@ -111,7 +116,7 @@ let handlePaginationMsg (state: State) (msg: Pagination.Msg<Transaction>) =
    },
    Cmd.map PaginationMsg paginationCmd
 
-let update msg state =
+let update (orgId: OrgId) msg state =
    match msg with
    | PaginationMsg msg -> handlePaginationMsg state msg
    | UpdateFilter filter ->
@@ -174,7 +179,44 @@ let update msg state =
          Alerts.toastSuccessCommand $"Submitted {commandName} for approval."
          Cmd.navigate (navigation redirectTo)
       ]
-   | Cancel -> state, Cmd.navigate (navigation None)
+   | ToggleTransactionSelection txnId ->
+      let selected =
+         if state.SelectedTransactions.Contains txnId then
+            state.SelectedTransactions.Remove txnId
+         else
+            state.SelectedTransactions.Add txnId
+
+      {
+         state with
+            SelectedTransactions = selected
+      },
+      Cmd.none
+   | ClearCsvSelection ->
+      {
+         state with
+            SelectedTransactions = Set.empty
+      },
+      Cmd.none
+   | DownloadCsv Started ->
+      let txnIds = Set.toList state.SelectedTransactions
+
+      let export = async {
+         let! res = TransactionService.exportTransactionsCsv orgId txnIds
+         return Msg.DownloadCsv(Finished res)
+      }
+
+      state, Cmd.fromAsync export
+   | DownloadCsv(Finished(Ok _)) ->
+      {
+         state with
+            SelectedTransactions = Set.empty
+      },
+      Cmd.none
+   | DownloadCsv(Finished(Error err)) ->
+      Log.error $"Error downloading CSV: {err}"
+
+      state, Alerts.toastCommand err
+   | CloseActionForm -> state, Cmd.navigate (navigation None)
 
 let renderPagination state dispatch =
    Pagination.render state.Pagination (PaginationMsg >> dispatch)
@@ -380,12 +422,14 @@ let renderControlPanel
 
 let renderTableRow
    (selectedTxnId: TransactionId option)
+   (selectedForExport: Set<TransactionId>)
    (txn: Transaction)
    (txnDisplay: TransactionUIFriendly)
    dispatch
    =
    Html.tr [
       attr.key (string txn.Id)
+      attr.classes [ "transaction-row" ]
 
       match txn.Status with
       | TransactionStatus.Complete -> ()
@@ -400,6 +444,18 @@ let renderTableRow
       attr.onClick (fun _ -> dispatch (Msg.ViewTransaction txn.Id))
 
       attr.children [
+         Html.td [
+            Html.input [
+               attr.type' "checkbox"
+               attr.isChecked (selectedForExport.Contains txn.Id)
+
+               attr.onClick (fun e ->
+                  e.stopPropagation ()
+                  dispatch (Msg.ToggleTransactionSelection txn.Id))
+               attr.readOnly true
+            ]
+         ]
+
          Html.th [ attr.scope "row" ]
 
          Html.td [
@@ -424,6 +480,7 @@ let renderTableRow
 let renderTable
    (txns: Transaction seq)
    (selectedTxnId: TransactionId option)
+   (selectedForExport: Set<TransactionId>)
    (displayTransaction: Transaction -> TransactionUIFriendly)
    dispatch
    =
@@ -433,6 +490,8 @@ let renderTable
       attr.children [
          Html.thead [
             Html.tr [
+               Html.th [ attr.scope "col"; attr.classes [ "checkbox-header" ] ]
+
                Html.th [ attr.scope "col" ]
 
                Html.th [ attr.scope "col"; attr.text "Amount" ]
@@ -449,6 +508,7 @@ let renderTable
             for txn in txns ->
                renderTableRow
                   selectedTxnId
+                  selectedForExport
                   txn
                   (displayTransaction txn)
                   dispatch
@@ -482,7 +542,7 @@ let renderForm session org (view: AccountActionView) dispatch =
    classyNode Html.article [ "form-wrapper" ] [
       Html.h6 view.Display
 
-      CloseButton.render (fun _ -> dispatch Msg.Cancel)
+      CloseButton.render (fun _ -> dispatch Msg.CloseActionForm)
 
       match view with
       | AccountActionView.Deposit ->
@@ -622,6 +682,31 @@ let transactions
    |> List.ofSeq
    |> List.sortByDescending _.Timestamp
 
+let renderBottomDrawer (selectedCount: int) dispatch =
+   if selectedCount > 0 then
+      let plural = if selectedCount > 1 then "s" else ""
+
+      classyNode Html.div [ "bottom-drawer" ] [
+         classyNode Html.div [ "bottom-drawer-content" ] [
+            Html.b $"{selectedCount} transaction{plural} selected"
+
+            classyNode Html.div [ "bottom-drawer-actions" ] [
+               Html.button [
+                  attr.classes [ "outline" ]
+                  attr.text "Clear Selection"
+                  attr.onClick (fun _ -> dispatch Msg.ClearCsvSelection)
+               ]
+
+               Html.button [
+                  attr.text "Download CSV"
+                  attr.onClick (fun _ -> dispatch (Msg.DownloadCsv Started))
+               ]
+            ]
+         ]
+      ]
+   else
+      Html.none
+
 [<ReactComponent>]
 let TransactionDashboardComponent
    (url: Routes.TransactionsUrl)
@@ -634,7 +719,8 @@ let TransactionDashboardComponent
          session.OrgId
          browserQuery
 
-   let state, dispatch = React.useElmish (init txnQuery, update, [||])
+   let state, dispatch =
+      React.useElmish (init txnQuery, update session.OrgId, [||])
 
    let orgCtx = React.useContext OrgProvider.context
    let orgDispatch = React.useContext OrgProvider.dispatchContext
@@ -727,6 +813,7 @@ let TransactionDashboardComponent
                         renderTable
                            txns
                            browserQuery.Transaction
+                           state.SelectedTransactions
                            (transactionUIFriendly merchants org)
                            dispatch
 
@@ -783,4 +870,6 @@ let TransactionDashboardComponent
             Html.footer [ Html.progress [] ]
          )
       | _ -> ()
+
+      renderBottomDrawer state.SelectedTransactions.Count dispatch
    ]

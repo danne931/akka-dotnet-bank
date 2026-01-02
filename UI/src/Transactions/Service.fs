@@ -3,6 +3,7 @@ module TransactionService
 
 open Fable.SimpleHttp
 open Feliz.Router
+open System
 
 open Bank.Org.Domain
 open UIDomain
@@ -252,3 +253,30 @@ let updateNote (txnId: TransactionId) (note: string) : Async<Result<int, Err>> =
    else
       return Serialization.deserialize<int> responseText
 }
+
+let exportTransactionsCsv
+   (orgId: OrgId)
+   (txnIds: TransactionId list)
+   : Async<Result<unit, Err>>
+   =
+   async {
+      let txnIds = Lib.NetworkQuery.listToQueryString txnIds
+
+      let basePath = TransactionPath.exportCsv orgId
+      let queryParams = Router.encodeQueryString [ "transactionIds", txnIds ]
+
+      let! (code, responseText) = Http.get (basePath + queryParams)
+
+      if code = 200 then
+         let timestamp = DateTime.Now.ToString("yyyy-MM-dd")
+         let filename = $"transactions_{timestamp}.csv"
+
+         CSVDownload.save {|
+            FileName = filename
+            Content = responseText
+         |}
+
+         return Ok()
+      else
+         return Error <| Err.InvalidStatusCodeError(serviceName, code)
+   }

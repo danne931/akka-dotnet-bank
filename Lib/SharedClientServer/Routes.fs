@@ -135,6 +135,9 @@ module TransactionPath =
    let Note = TransactionInfo + "/note"
    let note (txnId: TransactionId) = transactionInfo txnId + "/note"
 
+   let ExportCsv = Base + "/export/csv/{orgId}"
+   let exportCsv (orgId: OrgId) = $"{Base}/export/csv/{orgId}"
+
 module EmployeePath =
    let Base = $"{API}/employees"
    let Get = Base + "/{orgId}"

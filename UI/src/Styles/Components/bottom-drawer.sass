@@ -1,0 +1,32 @@
+.bottom-drawer
+  position: fixed
+  bottom: 0
+  left: 0
+  right: 0
+  z-index: 1000
+  animation: slideUp 0.3s ease-out
+
+  .bottom-drawer-content
+    background-color: var(--background-color)
+    border-top: 2px solid var(--primary)
+    padding: 1rem 2rem
+    display: flex
+    justify-content: space-between
+    align-items: center
+
+    b
+      color: var(--primary)
+
+    .bottom-drawer-actions
+      display: flex
+      gap: 1rem
+
+      button
+        margin: 0
+        width: auto
+
+@keyframes slideUp
+  from
+    transform: translateY(100%)
+  to
+    transform: translateY(0)

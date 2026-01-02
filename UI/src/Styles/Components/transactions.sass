@@ -48,3 +48,16 @@
 .system-op
   padding-left: 0.5rem
   padding-right: 0.5rem
+
+.transaction-row
+  input[type="checkbox"]
+    margin: 0
+    opacity: 0
+    transition: opacity 0.3s ease-in-out
+
+    &:checked
+      opacity: 1
+
+  // Make checkbox visible when hovering over txn row
+  &:hover input[type="checkbox"]
+    opacity: 1
