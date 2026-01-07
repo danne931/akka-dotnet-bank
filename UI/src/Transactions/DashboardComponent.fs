@@ -427,23 +427,27 @@ let renderTableRow
    (txnDisplay: TransactionUIFriendly)
    dispatch
    =
+   let classes cl = attr.classes ("transaction-row" :: cl)
+
    Html.tr [
       attr.key (string txn.Id)
-      attr.classes [ "transaction-row" ]
+      classes []
 
       match txn.Status with
       | TransactionStatus.Complete -> ()
       | TransactionStatus.Scheduled
-      | TransactionStatus.InProgress -> attr.classes [ "warning" ]
-      | TransactionStatus.Failed -> attr.classes [ "error" ]
+      | TransactionStatus.InProgress -> classes [ "warning" ]
+      | TransactionStatus.Failed -> classes [ "error" ]
 
       match selectedTxnId with
-      | Some txnId when txnId = txn.Id -> attr.classes [ "selected" ]
+      | Some txnId when txnId = txn.Id -> classes [ "selected" ]
       | _ -> ()
 
       attr.onClick (fun _ -> dispatch (Msg.ViewTransaction txn.Id))
 
       attr.children [
+         Html.th [ attr.scope "row"; attr.style [ style.padding 0 ] ]
+
          Html.td [
             Html.input [
                attr.type' "checkbox"
@@ -455,8 +459,6 @@ let renderTableRow
                attr.readOnly true
             ]
          ]
-
-         Html.th [ attr.scope "row" ]
 
          Html.td [
             attr.classes [
@@ -490,7 +492,11 @@ let renderTable
       attr.children [
          Html.thead [
             Html.tr [
-               Html.th [ attr.scope "col"; attr.classes [ "checkbox-header" ] ]
+               Html.th [
+                  attr.scope "col"
+                  attr.classes [ "checkbox-header" ]
+                  attr.style [ style.padding 0 ]
+               ]
 
                Html.th [ attr.scope "col" ]
 
