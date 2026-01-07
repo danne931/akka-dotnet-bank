@@ -69,6 +69,18 @@ module.exports = (env, argv) => {
           }
         }
       }
-    }
+    },
+
+    // TODO:
+    // I am receiving 'Compiled with problems: Deprecation The legacy JS API is deprecated and will be removed in Dart Sass 2.0.0.' 
+    // warnings while running app with webpack dev server via 'npm start'.  I converted the deprecated 'import' statements
+    // to 'use' but still have 1 remaining warning to track down.
+    // Will use 'ignoreWarnings' here to ignore it for now.
+    ignoreWarnings: [
+      {
+        module: /sass-loader/,
+        message: /The legacy JS API is deprecated/
+      }
+    ]
   }
 }
