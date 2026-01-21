@@ -21,7 +21,7 @@
    - Assign multiple approvers per rule (ex: Den Vau, Pop Pongkool, & Any Admin = 3 approvals required to submit an action associated with this rule)
 4. Payment requests between organizations on the platform or external entities
    - Optional recurring schedule (ex: due date every 3 months on the last Monday of the month until 4 payments made)
-   - Optional invoice line-item breakdown
+   - Azure Document Intelligence parses invoice PDF uploads and automatically populates form with line items
 5. Transfer money immediately or on a future date to other organizations on the platform or domestically (ex: ACH)
 6. Partner Bank
    - Create a legal entity for the business during onboarding
