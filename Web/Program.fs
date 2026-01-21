@@ -39,6 +39,14 @@ builder.Services.AddSingleton<SignalRBroadcast>(fun provider ->
    SignalRBroadcaster.init system registry)
 |> ignore
 
+builder.Services.AddSingleton<Azure.Storage.Blobs.BlobContainerClient>(fun _ ->
+   BlobStorage.getContainerClient ()
+   |> Async.AwaitTask
+   |> Async.RunSynchronously
+   |> Result.defaultWith (fun err ->
+      failwith $"Failed to initialize blob storage: {err}"))
+|> ignore
+
 // Endpoint serialization
 builder.Services.ConfigureHttpJsonOptions(fun opts ->
    JsonFSharpOptions

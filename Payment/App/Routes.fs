@@ -70,33 +70,39 @@ let start (app: WebApplication) processAccountCommand =
    app
       .MapPost(
          PaymentPath.UploadInvoice,
-         Func<ActorSystem, HttpRequest, Guid, Task<IResult>>
-            (fun sys request orgId ->
+         Func<
+            ActorSystem,
+            Azure.Storage.Blobs.BlobContainerClient,
+            HttpRequest,
+            Guid,
+            Task<IResult>
+          >
+            (fun sys containerClient request orgId ->
                let getFile () =
                   match request.Form.Files.Count with
                   | 0 -> Error "No file uploaded"
                   | _ -> Ok request.Form.Files[0]
 
                taskResult {
-                  let! file = getFile ()
+                  do! Task.FromResult(FileStorage.verifyParserConfigured ())
 
-                  let! containerClient = BlobStorage.getContainerClient ()
+                  let! file = getFile ()
 
                   let orgId = OrgId orgId
 
                   let! blobUrl =
                      FileStorage.uploadInvoice containerClient orgId file
 
-                  let draftId = Guid.NewGuid() |> InvoiceDraftId
+                  let uploadId = Guid.NewGuid() |> InvoiceDraftId
 
                   InvoiceParserActor.get sys
                   <! InvoiceParserActor.Message.ParseInvoice {
-                     DraftId = draftId
+                     DraftId = uploadId
                      OrgId = orgId
                      BlobUrl = blobUrl
                   }
 
-                  return {| DraftId = draftId |}
+                  return {| UploadId = uploadId |}
                }
                |> TaskResult.mapError Err.UnexpectedError
                |> RouteUtil.unwrapTaskResult)

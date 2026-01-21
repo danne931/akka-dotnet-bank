@@ -35,13 +35,13 @@ type ParsedInvoice = {
       (props:
          {|
             Tax: decimal option
-            Total: decimal option
+            SubTotal: decimal option
          |})
       =
       Option.map2
          (fun tax total -> if total > 0m then tax / total * 100m else 0m)
          props.Tax
-         props.Total
+         props.SubTotal
 
 [<RequireQualifiedAccess>]
 type InvoiceDraftStatus =

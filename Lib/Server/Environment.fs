@@ -8,6 +8,7 @@ open System.IO
 open FsConfig
 
 open Lib.Types
+open Lib.SharedTypes
 
 // Serve static files out of the UI/dist directory during development.
 // This dist directory is copied over to the default Web/wwwroot
@@ -80,8 +81,8 @@ type AzureBlobStorage = {
 }
 
 type AzureDocumentIntelligence = {
-   Endpoint: string option
-   ApiKey: string option
+   Endpoint: NonEmptyString option
+   ApiKey: NonEmptyString option
 }
 
 type BackoffSupervisorInput = {
@@ -374,8 +375,12 @@ let config =
                |> Option.defaultValue "phoenix-blobs"
          }
          AzureDocumentIntelligence = {
-            Endpoint = input.AzureDocumentIntelligenceEndpoint
-            ApiKey = input.AzureDocumentIntelligenceApiKey
+            Endpoint =
+               input.AzureDocumentIntelligenceEndpoint
+               |> Option.bind (NonEmptyString.create >> Result.toOption)
+            ApiKey =
+               input.AzureDocumentIntelligenceApiKey
+               |> Option.bind (NonEmptyString.create >> Result.toOption)
          }
       }
    | Error err ->

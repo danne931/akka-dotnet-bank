@@ -118,6 +118,14 @@ module FileStorage =
    open Microsoft.AspNetCore.Http
    open System.Threading
 
+   let verifyParserConfigured () : Result<unit, string> =
+      if Env.config.AzureDocumentIntelligence.Endpoint.IsNone then
+         Error "AzureDocumentIntelligence.Endpoint not configured."
+      elif Env.config.AzureDocumentIntelligence.ApiKey.IsNone then
+         Error "AzureDocumentIntelligence.ApiKey not configured."
+      else
+         Ok()
+
    let validateFile (file: IFormFile) : TaskResult<IFormFile, string> = task {
       if file.Length = 0L then
          return Error "File is empty"
@@ -311,7 +319,7 @@ module Parser =
          let taxPercent =
             ParsedInvoice.computeTaxPercent {|
                Tax = parsedInvoice.Tax
-               Total = parsedInvoice.Total
+               SubTotal = parsedInvoice.SubTotal
             |}
 
          {
@@ -383,8 +391,8 @@ module Parser =
       | _, _, true -> Some InvoiceParsingClient.Mock
       | Some endpoint, Some apiKey, false ->
          DocumentIntelligenceClient(
-            Uri endpoint,
-            Azure.AzureKeyCredential apiKey
+            Uri endpoint.Value,
+            Azure.AzureKeyCredential apiKey.Value
          )
          |> InvoiceParsingClient.Azure
          |> Some

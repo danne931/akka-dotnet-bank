@@ -11,6 +11,9 @@
     <Compile Include="Lib/FelizExtensions.fs" />
     <Compile Include="Lib/Util.fs" />
     <Compile Include="Lib/Domain.fs" />
+    <Compile Include="Realtime/API.fs" />
+    <Compile Include="Realtime/ConnectionContext.fs" />
+    <Compile Include="Realtime/EventContext.fs" />
     <Compile Include="Diagnostic/Domain.fs" />
     <Compile Include="Employees/Domain.fs" />
     <Compile Include="Accounts/Domain.fs" />
@@ -25,9 +28,6 @@
     <Compile Include="Users/SessionContext.fs" />
     <Compile Include="Transactions/Service.fs" />
     <Compile Include="Routes.fs" />
-    <Compile Include="Realtime/API.fs" />
-    <Compile Include="Realtime/ConnectionContext.fs" />
-    <Compile Include="Realtime/EventContext.fs" />
     <Compile Include="ComponentLib/CustomDate/Interpreter.fs" />
     <Compile Include="ComponentLib/CustomDate/DateRangeInput.fs" />
     <Compile Include="ComponentLib/CustomDate/DateInput.fs" />

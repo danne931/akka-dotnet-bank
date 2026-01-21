@@ -227,6 +227,65 @@ module Form =
          ]
          |> withLabelAndError attributes.Label showError error
 
+      let fileField
+         (props:
+            {|
+               OnChange: Browser.Types.File[] -> unit
+               Disabled: bool
+               Value: Browser.Types.File[]
+               Error: Error.Error option
+               ShowError: bool
+               Attributes: Simple.Field.FileField.Attributes
+            |})
+         =
+         let files = Array.toList props.Value
+
+         Html.div [
+            fieldLabel props.Attributes.Label
+
+            Html.input [
+               attr.type' "file"
+               attr.disabled props.Disabled
+
+               if props.Attributes.Multiple then
+                  attr.custom ("multiple", true)
+
+               attr.custom (
+                  "onChange",
+                  fun (e: Browser.Types.Event) ->
+                     let target = e.target :?> Browser.Types.HTMLInputElement
+
+                     let files =
+                        if isNull target.files then
+                           [||]
+                        else
+                           Array.init target.files.length target.files.item
+
+                     props.OnChange files
+               )
+            ]
+
+            if not files.IsEmpty then
+               Html.div [
+                  for f in files do
+                     Html.div [ Html.span f.name ]
+
+                  Html.button [
+                     attr.text "Clear"
+                     attr.onClick (fun _ -> props.OnChange [||])
+                  ]
+               ]
+            else
+               Html.none
+
+            if props.ShowError && props.Error.IsSome then
+               props.Error
+               |> Option.map (errorToString >> errorMessage)
+               |> Option.defaultValue Html.none
+            else
+               Html.none
+         ]
+
       let formList
          ({
              Dispatch = dispatch
@@ -272,7 +331,9 @@ module Form =
             match disabled, delete with
             | (false, Some delete) ->
                Html.button [
-                  attr.onClick (fun _ -> delete.Action() |> dispatch)
+                  attr.onClick (fun e ->
+                     e.preventDefault ()
+                     delete.Action() |> dispatch)
 
                   attr.children [
                      Fa.i [ Fa.Solid.Trash ] []
@@ -381,7 +442,7 @@ module Form =
          Group = group
          PasswordField = fun _ -> Html.none
          TextAreaField = fun _ -> Html.none
-         ColorField = fun _ -> Html.none
+         ColorField = fun o -> Html.none
          DateField = DateFieldComponent
          DateTimeLocalField = fun _ -> Html.none
          SearchField = fun _ -> Html.none
@@ -391,7 +452,25 @@ module Form =
          Section = fun _ _ -> Html.none
          FormList = formList
          FormListItem = formListItem
-         FileField = fun _ -> Html.none
+         FileField =
+            fun
+               ({
+                   Dispatch = dispatch
+                   OnChange = onChange
+                   Disabled = disabled
+                   Value = value
+                   Error = error
+                   ShowError = showError
+                   Attributes = attributes
+                }: FileFieldConfig<'Msg>) ->
+               fileField {|
+                  OnChange = onChange >> dispatch
+                  Disabled = disabled
+                  Value = value
+                  Error = error
+                  ShowError = showError
+                  Attributes = attributes
+               |}
       }
 
       // Function which will be called by the consumer to render the form

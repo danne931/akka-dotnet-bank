@@ -126,3 +126,54 @@ let OrgSearchComponent
 
       makeChildren state.SearchInput state.Orgs
    ]
+
+[<ReactComponent>]
+let OrgSearchSelectComponent
+   (orgId: OrgId)
+   (label: string)
+   (makeChildren:
+      string option
+         -> Deferred<Result<SocialTransferDiscoveryCandidate option, Err>>
+         -> ReactElement)
+   =
+   let selectedOrg, setSelectedOrg =
+      React.useState<SocialTransferDiscoveryCandidate option> None
+
+   OrgSearchComponent orgId (fun searchInput orgsDeferred ->
+      match orgsDeferred with
+      | Deferred.Idle -> Html.none
+      | Deferred.Resolved(Ok(Some orgs)) ->
+         let selectedOrg = selectedOrg |> Option.orElse (List.tryHead orgs)
+
+         let selectedOrgId =
+            selectedOrg |> Option.map (fun o -> string o.OrgId)
+
+         React.fragment [
+            Html.label [ Html.text label ]
+
+            Html.select [
+               attr.onChange (fun (orgId: string) ->
+                  orgs
+                  |> List.tryFind (fun o -> string o.OrgId = orgId)
+                  |> setSelectedOrg)
+
+               attr.value (selectedOrgId |> Option.defaultValue "")
+
+               attr.children [
+                  for org in orgs do
+                     let orgId = string org.OrgId
+
+                     Html.option [
+                        attr.value orgId
+                        attr.text org.OrgName
+                        if Some orgId = selectedOrgId then
+                           attr.disabled true
+                     ]
+               ]
+            ]
+
+            makeChildren searchInput (Deferred.Resolved(Ok selectedOrg))
+         ]
+      | Deferred.InProgress -> Html.progress []
+      | Deferred.Resolved(Ok None) -> Html.p "No organizations found."
+      | Deferred.Resolved(Error err) -> Html.p $"Error searching organizations")
