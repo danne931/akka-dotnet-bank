@@ -50,6 +50,9 @@
 #### Approvals
 ![approvals](https://github.com/user-attachments/assets/e81135c5-bc2a-4e6c-9c8d-00a3f832f792)
 
+#### Invoice Parsing
+![invoice-parse](https://github.com/user-attachments/assets/da14fc78-495a-42e8-9cb1-a4ef408e1185)
+
 #### Transactions
 ![transactions](https://github.com/user-attachments/assets/70ac0809-03f5-4868-9e3f-7aca0748f222)
 
