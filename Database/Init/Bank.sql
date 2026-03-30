@@ -26,6 +26,7 @@ DROP TABLE IF EXISTS counterparty;
 DROP TABLE IF EXISTS recurring_payment_schedule;
 DROP TABLE IF EXISTS invoice_draft;
 DROP TABLE IF EXISTS invoice;
+DROP TABLE IF EXISTS invoice_upload;
 DROP TABLE IF EXISTS merchant;
 DROP TABLE IF EXISTS saga;
 DROP TABLE IF EXISTS ancillary_transaction_info;
@@ -80,6 +81,7 @@ DROP TYPE IF EXISTS saga_type;
 DROP TYPE IF EXISTS saga_status;
 DROP TYPE IF EXISTS counterparty_type;
 DROP TYPE IF EXISTS invoice_draft_status;
+DROP TYPE IF EXISTS invoice_upload_file_type;
 
 -- Drop Akka event sourcing tables.
 -- These tables are initiated in Infrastructure/Akka.fs.
@@ -342,14 +344,35 @@ SELECT prevent_update('billing_statement');
 CREATE INDEX billing_statement_org_id_idx ON billing_statement(org_id);
 CREATE INDEX billing_statement_account_id_idx ON billing_statement(account_id);
 
+--- Invoice Upload ---
+
+CREATE TYPE invoice_upload_file_type AS ENUM ('PDF','PNG','JPEG');
+
+CREATE TABLE invoice_upload (
+   id UUID PRIMARY KEY,
+   file_name TEXT NOT NULL,
+   file_type invoice_upload_file_type NOT NULL,
+   blob_url TEXT NOT NULL,
+   org_id UUID NOT NULL REFERENCES organization
+);
+
+SELECT add_created_at_column('invoice_upload');
+SELECT add_updated_at_column_and_trigger('invoice_upload');
+CREATE INDEX invoice_upload_org_id_idx ON invoice_upload(org_id);
+
+COMMENT ON TABLE invoice_upload IS
+'Refers to an invoice file attachment uploaded to Azure Blob Storage.';
+
+--- Invoice Draft ---
+
 CREATE TYPE invoice_draft_status AS ENUM ('Parsing', 'Parsed', 'ParseFailed');
 
 CREATE TABLE invoice_draft (
+   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+   invoice_upload_id UUID NOT NULL REFERENCES invoice_upload(id),
    parsed_data JSONB,
    status invoice_draft_status NOT NULL,
    status_detail JSONB NOT NULL,
-   blob_url TEXT NOT NULL,
-   invoice_draft_id UUID PRIMARY KEY,
    org_id UUID NOT NULL REFERENCES organization
 );
 
@@ -357,18 +380,45 @@ SELECT add_created_at_column('invoice_draft');
 SELECT add_updated_at_column_and_trigger('invoice_draft');
 CREATE INDEX invoice_draft_org_id_idx ON invoice_draft(org_id);
 
+COMMENT ON TABLE invoice_draft IS
+'Transient records created to track the async parsing of an invoice_upload by Azure Document Intelligence.';
+
+--- Invoice ---
+
 CREATE TABLE invoice (
    invoice_id UUID PRIMARY KEY,
    line_items JSONB NOT NULL,
    tax_percent NUMERIC(4,2) NOT NULL,
    subtotal MONEY NOT NULL,
    total MONEY NOT NULL,
-   org_id UUID NOT NULL REFERENCES organization
+   org_id UUID NOT NULL REFERENCES organization,
+   invoice_upload_id UUID REFERENCES invoice_upload(id)
 );
 
 SELECT add_created_at_column('invoice');
 SELECT add_updated_at_column_and_trigger('invoice');
 CREATE INDEX invoice_org_id_idx ON invoice(org_id);
+
+COMMENT ON TABLE invoice IS
+'Represents a finalized record of line items associated with a payment request.
+
+A payment request made without an invoice is a simple request for some amount
+while a payment request with an invoice is a more informative breakdown of amounts owed.
+As such, the invoice is a supporting record for a payment request where the amount associated
+with the payment_request record influences the ledger while the invoice does not.
+
+Scenarios in which an invoice can be created:
+1. User manually fills out a form of line items before submitting payment request.
+2. User uploads an invoice document before submitting payment request.
+   Azure Document Intelligence parses the file and generates values for line_items, subtotal, total, & tax_percent.
+3. User submits a simple amount-based payment request without uploading an associated invoice document.
+   A subsequent user later uploads an invoice document corresponding to the payment request and an invoice is created.
+   TODO: 
+   Decide whether this case should be supported.  Will need to consider expected behavior
+   if the parsed invoice amount differs from the requested payment amount.
+';
+
+--- Recurring Payment Schedule ---
 
 CREATE TYPE recurrence_termination_type AS ENUM ('EndDate', 'MaxPayments', 'Never');
 
@@ -922,6 +972,9 @@ COMMENT ON TABLE payment_request IS
 
 1. Platform payments (payments requested between orgs on the platform)
 2. Third party payments (payment requests across platform boundaries)';
+
+COMMENT ON COLUMN payment_request.invoice_id IS
+'The invoice is an optional supporting record including a line item breakdown of the payment owed.';
 
 
 --- PLATFORM PAYMENTS ---

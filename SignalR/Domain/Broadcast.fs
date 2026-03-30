@@ -79,7 +79,7 @@ type SagaUpdated = {
 
 type InvoiceParsed = {
    Date: DateTime
-   DraftId: InvoiceDraftId
+   UploadId: InvoiceUploadId
    ParsedData: ParsedInvoice
    OrgId: OrgId
 }
@@ -94,5 +94,5 @@ type SignalRBroadcast = {
    orgEventPersisted: OrgEvent -> Org -> unit
    orgEventError: OrgId -> CorrelationId -> Err -> unit
    sagaUpdated: OrgId -> SagaDTO.SagaDTO -> unit
-   invoiceParsed: OrgId -> InvoiceDraftId -> ParsedInvoice -> unit
+   invoiceParsed: OrgId -> InvoiceUploadId -> ParsedInvoice -> unit
 }

@@ -109,11 +109,11 @@ let init
             sendToSignalR msg
 
       invoiceParsed =
-         fun orgId draftId parsedData ->
+         fun orgId uploadId parsedData ->
             let msg =
                SignalRActor.Msg.InvoiceParsed {
                   Date = DateTime.UtcNow
-                  DraftId = draftId
+                  UploadId = uploadId
                   ParsedData = parsedData
                   OrgId = orgId
                }

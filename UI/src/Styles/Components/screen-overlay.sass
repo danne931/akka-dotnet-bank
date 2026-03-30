@@ -12,8 +12,10 @@
   >.grid
     height: 100%
     grid-template-columns: auto 40%
+    > :first-child
+      overflow-y: scroll
   >.overlay-wide
-    grid-template-columns: auto 70%
+    grid-template-columns: auto 65%
   aside
     background-color: rgba(var(--background-color-rgb), 0.8)
     border-left: solid 1px var(--primary)

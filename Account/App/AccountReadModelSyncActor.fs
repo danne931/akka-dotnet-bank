@@ -914,6 +914,8 @@ let sqlParamReducer
                InvoiceSqlMapper.Writer.taxPercent invoice.TaxPercent
                "subtotal", InvoiceSqlMapper.Writer.subtotal invoice.SubTotal
                "total", InvoiceSqlMapper.Writer.total invoice.Total
+               "invoiceUploadId",
+               InvoiceSqlMapper.Writer.invoiceUploadId invoice.InvoiceUploadId
             ]
 
             {
@@ -1251,6 +1253,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
       $"""
       INSERT into {InvoiceSqlMapper.table}
          ({InvoiceSqlMapper.Fields.invoiceId},
+          {InvoiceSqlMapper.Fields.invoiceUploadId},
           {InvoiceSqlMapper.Fields.orgId},
           {InvoiceSqlMapper.Fields.lineItems},
           {InvoiceSqlMapper.Fields.taxPercent},
@@ -1258,6 +1261,7 @@ let upsertReadModels (accountEvents: AccountEvent list) =
           {InvoiceSqlMapper.Fields.total})
       VALUES
          (@invoiceId,
+          @invoiceUploadId,
           @orgId,
           @lineItems,
           @taxPercent,

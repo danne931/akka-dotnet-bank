@@ -22,6 +22,11 @@ type InvoiceValues = {
    Total: string
 }
 
+[<RequireQualifiedAccess>]
+type InvoiceOrigin =
+   | ManualEntry
+   | UploadedDocument of InvoiceUploadId
+
 let private moneyParser fieldName =
    amountValidatorFromString fieldName >> validationErrorsHumanFriendly
 
@@ -132,7 +137,10 @@ let private lineItemsForm
       }
       lineItemForm
 
-let invoiceForm: Form.Form<InvoiceValues, Invoice, IReactProperty> =
+let invoiceForm
+   (origin: InvoiceOrigin)
+   : Form.Form<InvoiceValues, Invoice, IReactProperty>
+   =
    let taxField =
       Form.textField {
          Parser = taxParser
@@ -179,6 +187,10 @@ let invoiceForm: Form.Form<InvoiceValues, Invoice, IReactProperty> =
 
    Form.succeed (fun lineItems tax -> {
       Id = InvoiceId(Guid.NewGuid())
+      InvoiceUploadId =
+         match origin with
+         | InvoiceOrigin.ManualEntry -> None
+         | InvoiceOrigin.UploadedDocument id -> Some id
       LineItems = lineItems
       TaxPercent = tax
    })

@@ -5,12 +5,45 @@ open System.Threading.Tasks
 
 open Lib.SharedTypes
 
-type InvoiceDraftId =
-   | InvoiceDraftId of Guid
+type InvoiceUploadId =
+   | InvoiceUploadId of Guid
 
    override x.ToString() = string x.Value
 
-   member x.Value = let (InvoiceDraftId id) = x in id
+   member x.Value = let (InvoiceUploadId id) = x in id
+
+[<RequireQualifiedAccess>]
+type InvoiceFileType =
+   | PDF
+   | PNG
+   | JPEG
+
+   override x.ToString() =
+      match x with
+      | PDF -> "PDF"
+      | PNG -> "PNG"
+      | JPEG -> "JPEG"
+
+   static member ofString(value: string) =
+      match value.ToUpper() with
+      | "PDF" -> Some InvoiceFileType.PDF
+      | "PNG" -> Some InvoiceFileType.PNG
+      | "JPEG" -> Some InvoiceFileType.JPEG
+      | _ -> None
+
+   member x.AsContentType =
+      match x with
+      | InvoiceFileType.PDF -> "application/pdf"
+      | InvoiceFileType.PNG -> "image/png"
+      | InvoiceFileType.JPEG -> "image/jpeg"
+
+type InvoiceUpload = {
+   UploadId: InvoiceUploadId
+   OrgId: OrgId
+   FileName: string
+   FileType: InvoiceFileType
+   BlobUrl: Uri
+}
 
 type ParsedInvoiceLineItem = {
    Description: string
@@ -56,23 +89,21 @@ type InvoiceDraftStatus =
       | ParseFailed _ -> "ParseFailed"
 
 type InvoiceDraft = {
-   Id: InvoiceDraftId
+   InvoiceUploadId: InvoiceUploadId
    OrgId: OrgId
-   BlobUrl: Uri
    ParsedData: ParsedInvoice option
    Status: InvoiceDraftStatus
 } with
 
-   static member create id orgId blobUrl : InvoiceDraft = {
-      Id = id
+   static member create invoiceUploadId orgId : InvoiceDraft = {
+      InvoiceUploadId = invoiceUploadId
       OrgId = orgId
-      BlobUrl = blobUrl
       ParsedData = None
       Status = InvoiceDraftStatus.Parsing
    }
 
 type InvoiceDraftPersistence = {
    create: InvoiceDraft -> Task<Result<unit, Err>>
-   parseCompleted: InvoiceDraftId -> ParsedInvoice -> Task<Result<unit, Err>>
-   parseFailed: InvoiceDraftId -> string -> Task<Result<unit, Err>>
+   parseCompleted: InvoiceUploadId -> ParsedInvoice -> Task<Result<unit, Err>>
+   parseFailed: InvoiceUploadId -> string -> Task<Result<unit, Err>>
 }

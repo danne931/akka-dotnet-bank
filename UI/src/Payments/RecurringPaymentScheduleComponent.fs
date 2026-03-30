@@ -37,6 +37,7 @@ let render
       attr.name "payment due dates"
       attr.isOpen true
       attr.classes [ "payment-schedule" ]
+      attr.style [ style.borderStyle.none ]
       attr.children [
          Html.summary "Payment Due Date Schedule"
 
@@ -59,15 +60,19 @@ let render
 
          Html.br []
 
-         Html.small (
-            match props.Settings.Termination with
-            | RecurrenceTerminationCondition.Never -> "No end date"
-            | RecurrenceTerminationCondition.MaxPayments num ->
-               $"Ends after {num} payments"
-            | RecurrenceTerminationCondition.EndDate date ->
-               $"No payments due after {DateTime.format date}"
-         )
-
-         Html.br []
+         Html.div [
+            Html.small "Payments End:"
+            Html.p [
+               attr.style [ style.marginLeft 10; style.display.inlineElement ]
+               attr.text (
+                  match props.Settings.Termination with
+                  | RecurrenceTerminationCondition.Never -> "Never"
+                  | RecurrenceTerminationCondition.MaxPayments num ->
+                     $"After {num} payments"
+                  | RecurrenceTerminationCondition.EndDate date ->
+                     $"After {DateTime.format date}"
+               )
+            ]
+         ]
       ]
    ]

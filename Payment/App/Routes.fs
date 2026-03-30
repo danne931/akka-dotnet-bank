@@ -90,22 +90,46 @@ let start (app: WebApplication) processAccountCommand =
 
                   let orgId = OrgId orgId
 
-                  let! blobUrl =
+                  let! invoiceUpload =
                      FileStorage.uploadInvoice containerClient orgId file
 
-                  let uploadId = Guid.NewGuid() |> InvoiceDraftId
+                  // Save pointer to the uploaded invoice
+                  do!
+                     createAttachment invoiceUpload
+                     |> TaskResult.mapError string
 
                   InvoiceParserActor.get sys
-                  <! InvoiceParserActor.Message.ParseInvoice {
-                     DraftId = uploadId
-                     OrgId = orgId
-                     BlobUrl = blobUrl
-                  }
+                  <! InvoiceParserActor.Message.ParseInvoice invoiceUpload
 
-                  return {| UploadId = uploadId |}
+                  return invoiceUpload.UploadId
                }
                |> TaskResult.mapError Err.UnexpectedError
                |> RouteUtil.unwrapTaskResult)
       )
       .RBAC(Permissions.ManagePayment)
+   |> ignore
+
+   app
+      .MapGet(
+         PaymentPath.InvoiceAttachment,
+         Func<Azure.Storage.Blobs.BlobContainerClient, Guid, Task<IResult>>
+            (fun containerClient uploadId -> task {
+               let! res =
+                  FileStorage.getInvoiceAttachment
+                     containerClient
+                     (InvoiceUploadId uploadId)
+
+               return
+                  match res with
+                  | Ok(Some(attachment, stream)) ->
+                     Results.File(
+                        stream,
+                        contentType = attachment.FileType.AsContentType,
+                        fileDownloadName = attachment.FileName
+                     )
+                  | Ok None -> Results.NotFound()
+                  | Error err -> Results.BadRequest(err)
+            })
+      )
+      .RBAC(Permissions.ViewPayments)
    |> ignore

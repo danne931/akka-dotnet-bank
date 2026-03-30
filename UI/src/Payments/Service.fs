@@ -4,6 +4,7 @@ module PaymentService
 open Fable.SimpleHttp
 open FsToolkit.ErrorHandling
 open Fable.Core
+open Browser.Types
 
 open Lib.SharedTypes
 open Bank.Transfer.Domain
@@ -57,11 +58,11 @@ let getDomesticTransfersRetryableUponCounterpartyEdit
 [<Emit("new FormData()")>]
 let private createFormData () : Browser.Types.FormData = jsNative
 
-/// Upload invoice document for Azure Document Intelligence parsing
+/// Upload invoice document with optional Azure Document Intelligence parsing
 let uploadInvoice
    (orgId: OrgId)
-   (file: Browser.Types.File)
-   : Async<Result<InvoiceDraftId, Err>>
+   (file: File)
+   : Async<Result<InvoiceUploadId, Err>>
    =
    async {
       let path = PaymentPath.uploadInvoice orgId
@@ -78,11 +79,33 @@ let uploadInvoice
       if res.statusCode <> 200 then
          return Error(Err.InvalidStatusCodeError(serviceName, res.statusCode))
       else
-         let result =
-            Serialization.deserialize<{| UploadId: InvoiceDraftId |}>
-               res.responseText
+         return Serialization.deserialize<InvoiceUploadId> res.responseText
+   }
 
-         return result |> Result.map _.UploadId
+let getInvoiceAttachment
+   (uploadId: InvoiceUploadId)
+   : Async<Result<File option, Err>>
+   =
+   async {
+      let path =
+         PaymentPath.InvoiceAttachment.Replace("{uploadId}", string uploadId)
+
+      let! res =
+         Http.request path
+         |> Http.method HttpMethod.GET
+         |> Http.overrideResponseType ResponseTypes.Blob
+         |> Http.send
+
+      match res.content with
+      | ResponseContent.Blob blob ->
+         // TODO: File name is currently empty string.  Change it
+         let file = File.fromBlob blob ""
+         return Ok(Some file)
+      | _ ->
+         if res.statusCode = 404 then
+            return Ok None
+         else
+            return Error(Err.UnexpectedError res.responseText)
    }
 
 [<Literal>]

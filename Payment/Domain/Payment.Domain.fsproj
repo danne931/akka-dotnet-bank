@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="RecurringPaymentSchedule.fs" />
-    <Compile Include="Invoice.fs" />
     <Compile Include="InvoiceProcessor.fs" />
+    <Compile Include="Invoice.fs" />
     <Compile Include="PaymentRequest.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Commands.fs" />

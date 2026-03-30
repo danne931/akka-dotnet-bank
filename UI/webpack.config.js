@@ -1,8 +1,22 @@
 const HtmlWebpackPlugin = require('html-webpack-plugin')
+const CopyWebpackPlugin = require('copy-webpack-plugin')
+
 const Dotenv = require('dotenv-webpack')
 const path = require('path')
 
 const staticPath = path.resolve(__dirname, './dist')
+
+// PDFJS: Support non-Latin characters
+const cMapsDir = path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'cmaps')
+
+// PDFJS: Support standard fonts (deprecated in PDF 1.5, but still around)
+const standardFontsDir = path.join(
+  path.dirname(require.resolve('pdfjs-dist/package.json')),
+  'standard_fonts',
+)
+
+// PDFJS: Support JPEG 2000
+const wasmDir = path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'wasm')
 
 module.exports = (env, argv) => {
   const mode = argv.mode
@@ -33,12 +47,21 @@ module.exports = (env, argv) => {
 
     plugins: [
       new Dotenv(),
+
       new HtmlWebpackPlugin({
         title: 'Phoenix Banking',
         template: './src/index.html',
         meta: {
           viewport: 'width=device-width, initial-scale=1'
         }
+      }),
+
+      new CopyWebpackPlugin({
+        patterns: [
+          { from: cMapsDir, to: 'cmaps/' },
+          { from: standardFontsDir, to: 'standard_fonts/' },
+          { from: wasmDir, to: 'wasm/' },
+        ],
       })
     ],
 

@@ -3,7 +3,6 @@ module Bank.Account.Forms.PaymentRequest
 open Feliz
 open Fable.Form.Simple
 open Fable.Form.Simple.Pico
-open Fable.Form.Simple.Field.FileField
 open System
 
 open Bank.Org.Domain
@@ -111,30 +110,13 @@ let fieldPayeeAccountSelect
       }
    }
 
-let fieldFormUpload (onFileSelect: Browser.Types.File -> unit) =
-   Form.View.fileField {|
-      Value = [||]
-      Disabled = false
-      OnChange =
-         fun files ->
-            if files.Length > 0 then
-               onFileSelect files.[0]
-      Error = None
-      ShowError = false
-      Attributes = {
-         Label = "Upload Invoice (optional)"
-         InputLabel = "Choose file"
-         Accept =
-            FileType.Specific [ "image/jpeg"; "image/png"; "application/pdf" ]
-         FileIconClassName = FileIconClassName.Default
-         Multiple = false
-      }
-   |}
-
-let invoiceForm: Form.Form<Values, decimal * Invoice option, _> =
+let invoiceForm
+   (origin: InvoiceOrigin)
+   : Form.Form<Values, decimal * Invoice option, _>
+   =
    Form.succeed (fun (invoice: Invoice) -> invoice.Total, Some invoice)
    |> Form.append (
-      invoiceForm
+      invoiceForm origin
       |> Form.mapValues {
          Value = _.InvoiceValues
          Update =
@@ -151,7 +133,7 @@ let formPlatformPayment
    (payeeDestinationAccounts: Map<AccountId, Account>)
    (payerOrg: SocialTransferDiscoveryCandidate)
    (initiatedBy: Initiator)
-   (asInvoice: bool)
+   (invoiceOrigin: InvoiceOrigin option)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let onSubmit
@@ -205,9 +187,9 @@ let formPlatformPayment
 
    Form.succeed onSubmit
    |> Form.append (
-      if asInvoice then
-         invoiceForm
-      else
+      match invoiceOrigin with
+      | Some origin -> invoiceForm origin
+      | None ->
          Form.succeed (fun amount -> amount, None)
          |> Form.append paymentAmountField
    )
@@ -230,7 +212,7 @@ let formThirdPartyPayment
    (payeeOrg: Org)
    (payeeDestinationAccounts: Map<AccountId, Account>)
    (initiatedBy: Initiator)
-   (asInvoice: bool)
+   (invoiceOrigin: InvoiceOrigin option)
    : Form.Form<Values, Msg<Values>, IReactProperty>
    =
    let fieldPayerName =
@@ -309,9 +291,9 @@ let formThirdPartyPayment
 
    Form.succeed onSubmit
    |> Form.append (
-      if asInvoice then
-         invoiceForm
-      else
+      match invoiceOrigin with
+      | Some origin -> invoiceForm origin
+      | None ->
          Form.succeed (fun amount -> amount, None)
          |> Form.append paymentAmountField
    )
@@ -425,7 +407,7 @@ let private renderInvoiceSelectButtons
 let private renderPaymentRequestForm
    setInvoiceSelect
    invoiceSelect
-   onInvoiceFileSelect
+   uploadFile
    (form: ReactElement)
    (parsedInvoice: Deferred<Result<ParsedInvoice, Err>>)
    =
@@ -438,11 +420,19 @@ let private renderPaymentRequestForm
       | None -> form
       | Some InvoiceSelect.ManualEntry -> form
       | Some InvoiceSelect.Upload ->
+         PDFViewer.PDFUploadComponent {|
+            Label = Some "Upload Invoice (PDF):"
+            renderPDFInContainer = ScreenOverlay.PortalForSupplementaryContent
+            uploadFile = uploadFile
+         |}
+
+         Html.br []
+
          match parsedInvoice with
-         | Deferred.Idle -> fieldFormUpload onInvoiceFileSelect
+         | Deferred.Idle -> ()
          | Deferred.InProgress ->
             Html.progress []
-            Html.p "Uploading and parsing invoice..."
+            Html.p "Parsing invoice..."
          | Deferred.Resolved(Error _) -> Html.p "Error parsing invoice."
          | Deferred.Resolved(Ok parsedData) ->
             if parsedData.LineItems.Length = 0 then
@@ -495,6 +485,15 @@ let PaymentRequestFormComponent
    let invoiceSelect, setInvoiceSelect =
       React.useState<InvoiceSelect option> None
 
+   let invoiceUploadId, setInvoiceUploadId = React.useState None
+
+   let invoiceOrigin =
+      match invoiceSelect, invoiceUploadId with
+      | Some InvoiceSelect.ManualEntry, None -> Some InvoiceOrigin.ManualEntry
+      | Some InvoiceSelect.Upload, Some uploadId ->
+         Some(InvoiceOrigin.UploadedDocument uploadId)
+      | _ -> None
+
    let initiatedBy = session.AsInitiator
 
    let selectedPaymentType, setSelectedPaymentType =
@@ -520,8 +519,6 @@ let PaymentRequestFormComponent
    // uploaded and a SignalR realtime event arrives.
    let formValues, setFormValues = React.useState<Values> defaultFormValues
 
-   let invoiceUploadId, setInvoiceUploadId = React.useState None
-
    // SignalR listener for Azure Doc Intelligence invoice parsing
    React.useEffect (
       (fun () ->
@@ -531,7 +528,7 @@ let PaymentRequestFormComponent
                (fun evt ->
                   // Verify this event is for the current upload
                   match invoiceUploadId with
-                  | Some uploadId when uploadId = string evt.DraftId ->
+                  | Some uploadId when uploadId = evt.UploadId ->
                      let formValues =
                         parsedInvoiceDataToFormValues
                            evt.ParsedData
@@ -547,34 +544,32 @@ let PaymentRequestFormComponent
       [| box invoiceUploadId |]
    )
 
-   let onInvoiceFileSelect (file: Browser.Types.File) =
-      async {
-         let formValues = {
+   let uploadFile (file: Browser.Types.File) = async {
+      let formValues = {
+         formValues with
+            ParsedInvoice = Deferred.InProgress
+      }
+
+      setFormValues formValues
+
+      let! result = PaymentService.uploadInvoice session.OrgId file
+
+      match result with
+      | Ok id ->
+         setInvoiceUploadId (Some id)
+         return Ok()
+      | Error err ->
+         setFormValues {
             formValues with
-               ParsedInvoice = Deferred.InProgress
+               ParsedInvoice = Deferred.Resolved(Error err)
          }
 
-         setFormValues formValues
-
-         let! result = PaymentService.uploadInvoice session.OrgId file
-
-         match result with
-         | Ok id -> setInvoiceUploadId (Some(string id))
-         | Error err ->
-            setFormValues {
-               formValues with
-                  ParsedInvoice = Deferred.Resolved(Error err)
-            }
-
-            Log.error $"Failed to upload invoice: {err}"
-      }
-      |> Async.StartImmediate
+         Log.error $"Failed to upload invoice: {err}"
+         return Error err
+   }
 
    let renderPaymentRequestForm =
-      renderPaymentRequestForm
-         setInvoiceSelect
-         invoiceSelect
-         onInvoiceFileSelect
+      renderPaymentRequestForm setInvoiceSelect invoiceSelect uploadFile
 
    let onSubmit =
       function
@@ -631,7 +626,7 @@ let PaymentRequestFormComponent
                               payeeDestinationAccounts
                               org
                               initiatedBy
-                              invoiceSelect.IsSome
+                              invoiceOrigin
                         Action = Some customAction
                         OnSubmit = onSubmit
                         Session = session
@@ -652,7 +647,7 @@ let PaymentRequestFormComponent
                      payeeOrg
                      payeeDestinationAccounts
                      initiatedBy
-                     invoiceSelect.IsSome
+                     invoiceOrigin
                Action = Some customAction
                OnSubmit = onSubmit
                Session = session

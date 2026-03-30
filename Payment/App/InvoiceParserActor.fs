@@ -10,16 +10,10 @@ open Lib.SharedTypes
 open Bank.Payment.Domain
 open BankActorRegistry
 
-type ParseInvoiceMessage = {
-   DraftId: InvoiceDraftId
-   OrgId: OrgId
-   BlobUrl: Uri
-}
-
 [<RequireQualifiedAccess>]
 type Message =
-   | ParseInvoice of ParseInvoiceMessage
-   | InvoiceParsed of InvoiceDraftId * OrgId * Result<ParsedInvoice, string>
+   | ParseInvoice of InvoiceUpload
+   | InvoiceParsed of InvoiceUploadId * OrgId * Result<ParsedInvoice, string>
 
 let actorProps
    (broadcaster: SignalRBroadcast.SignalRBroadcast)
@@ -35,35 +29,35 @@ let actorProps
 
          match msg with
          | Message.ParseInvoice info ->
-            logDebug
-               $"Processing invoice draft {info.DraftId} for org {info.OrgId}"
+            logDebug $"Processing invoice {info.UploadId} for org {info.OrgId}"
 
-            let draft = InvoiceDraft.create info.DraftId info.OrgId info.BlobUrl
+            let draft = InvoiceDraft.create info.UploadId info.OrgId
             let! saveResult = persistence.create draft
 
             match saveResult with
-            | Error err -> logError $"Failed to create invoice draft: {err}"
+            | Error err -> logError $"Failed to create invoice: {err}"
             | Ok() ->
                let parseInBackground = async {
                   let! result = parse info.BlobUrl |> Async.AwaitTask
-                  return Message.InvoiceParsed(info.DraftId, info.OrgId, result)
+
+                  return
+                     Message.InvoiceParsed(info.UploadId, info.OrgId, result)
                }
 
                ctx.Self <!| parseInBackground
-         | Message.InvoiceParsed(draftId, orgId, parseResult) ->
+         | Message.InvoiceParsed(uploadId, orgId, parseResult) ->
             match parseResult with
             | Ok parsed ->
-               match! persistence.parseCompleted draftId parsed with
+               match! persistence.parseCompleted uploadId parsed with
                | Ok() ->
-                  logDebug $"Successfully parsed invoice draft {draftId}"
-                  broadcaster.invoiceParsed orgId draftId parsed
+                  logDebug $"Successfully parsed invoice {uploadId}"
+                  broadcaster.invoiceParsed orgId uploadId parsed
                | Error errMsg -> logError $"Failed to parse invoice: {errMsg}"
             | Error err ->
                logError $"Failed to parse invoice: {err}"
 
-               match! persistence.parseFailed draftId err with
-               | Error errMsg ->
-                  logError $"Failed to mark draft as failed: {errMsg}"
+               match! persistence.parseFailed uploadId err with
+               | Error errMsg -> logError $"Failed to mark as failed: {errMsg}"
                | Ok() -> ()
 
          return! loop ()

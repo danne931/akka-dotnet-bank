@@ -11,22 +11,57 @@ open Lib.Postgres
 open Bank.Payment.Domain
 open InvoiceDraftSqlMapper
 
+/// Save pointer to invoice uploaded to blob storage
+let createAttachment (upload: InvoiceUpload) : Task<Result<unit, Err>> = task {
+   let query =
+      $"""
+      INSERT INTO {InvoiceUploadSqlMapper.table}
+         ({InvoiceUploadSqlMapper.Fields.id},
+          {InvoiceUploadSqlMapper.Fields.orgId},
+          {InvoiceUploadSqlMapper.Fields.fileName},
+          {InvoiceUploadSqlMapper.Fields.fileType},
+          {InvoiceUploadSqlMapper.Fields.blobUrl})
+      VALUES (@id, @orgId, @fileName, @fileType::{InvoiceUploadSqlMapper.TypeCast.fileType}, @blobUrl)
+      """
+
+   let! result =
+      pgPersist query [
+         "id", InvoiceUploadSqlMapper.Writer.id upload.UploadId
+         "orgId", InvoiceUploadSqlMapper.Writer.orgId upload.OrgId
+         "fileName", InvoiceUploadSqlMapper.Writer.fileName upload.FileName
+         "fileType", InvoiceUploadSqlMapper.Writer.fileType upload.FileType
+         "blobUrl", InvoiceUploadSqlMapper.Writer.blobUrl upload.BlobUrl
+      ]
+
+   return result |> Result.map ignore
+}
+
+let getAttachment
+   (uploadId: InvoiceUploadId)
+   : Task<Result<InvoiceUpload option, Err>>
+   =
+   pgQuerySingle
+      $"""
+      SELECT * FROM {InvoiceUploadSqlMapper.table}
+      WHERE {InvoiceUploadSqlMapper.Fields.id} = @id
+      """
+      (Some [ "id", InvoiceUploadSqlMapper.Writer.id uploadId ])
+      InvoiceUploadSqlMapper.Reader.invoiceUpload
+
 /// Save an invoice draft corresponding to a document uploaded to
 /// Azure blob storage for interpretation by Azure Document Intelligence.
 let createDraft (draft: InvoiceDraft) : Task<Result<unit, Err>> = task {
    let query =
       $"""
-      INSERT INTO {table}
-         ({Fields.invoiceDraftId},
+      INSERT INTO {InvoiceDraftSqlMapper.table}
+         ({Fields.invoiceUploadId},
           {Fields.orgId},
-          {Fields.blobUrl},
           {Fields.status},
           {Fields.statusDetail},
           {Fields.parsedData})
       VALUES
-         (@invoiceDraftId,
+         (@invoiceUploadId,
           @orgId,
-          @blobUrl,
           @status::{TypeCast.status},
           @statusDetail,
           @parsedData)
@@ -34,9 +69,8 @@ let createDraft (draft: InvoiceDraft) : Task<Result<unit, Err>> = task {
 
    let! result =
       pgPersist query [
-         "invoiceDraftId", Writer.invoiceDraftId draft.Id
+         "invoiceUploadId", Writer.invoiceUploadId draft.InvoiceUploadId
          "orgId", Writer.orgId draft.OrgId
-         "blobUrl", Writer.blobUrl draft.BlobUrl
          "status", Writer.status draft.Status
          "statusDetail", Writer.statusDetail draft.Status
          "parsedData", Writer.parsedData draft.ParsedData
@@ -45,20 +79,8 @@ let createDraft (draft: InvoiceDraft) : Task<Result<unit, Err>> = task {
    return result |> Result.map ignore
 }
 
-let getDraft
-   (draftId: InvoiceDraftId)
-   : Task<Result<InvoiceDraft option, Err>>
-   =
-   pgQuerySingle
-      $"""
-      SELECT * FROM invoice_drafts
-      WHERE {Fields.invoiceDraftId} = @id
-      """
-      (Some [ "id", Writer.invoiceDraftId draftId ])
-      Reader.invoiceDraft
-
 let markDraftAsParsed
-   (draftId: InvoiceDraftId)
+   (uploadId: InvoiceUploadId)
    (parsedData: ParsedInvoice)
    : Task<Result<unit, Err>>
    =
@@ -70,14 +92,14 @@ let markDraftAsParsed
             {Fields.parsedData} = @parsedData,
             {Fields.status} = @status::{TypeCast.status},
             {Fields.statusDetail} = @statusDetail
-         WHERE {Fields.invoiceDraftId} = @invoiceDraftId
+         WHERE {Fields.invoiceUploadId} = @uploadId
          """
 
       let status = InvoiceDraftStatus.Parsed
 
       let! result =
          pgPersist query [
-            "invoiceDraftId", Writer.invoiceDraftId draftId
+            "uploadId", Writer.invoiceUploadId uploadId
             "parsedData", Writer.parsedData (Some parsedData)
             "status", Writer.status status
             "statusDetail", Writer.statusDetail status
@@ -87,7 +109,7 @@ let markDraftAsParsed
    }
 
 let markDraftAsFailed
-   (draftId: InvoiceDraftId)
+   (draftId: InvoiceUploadId)
    (errorMsg: string)
    : Task<Result<unit, Err>>
    =
@@ -98,14 +120,14 @@ let markDraftAsFailed
          SET
             {Fields.status} = @status::{TypeCast.status},
             {Fields.statusDetail} = @statusDetail
-         WHERE {Fields.invoiceDraftId} = @invoiceDraftId
+         WHERE {Fields.invoiceUploadId} = @uploadId
          """
 
       let status = InvoiceDraftStatus.ParseFailed errorMsg
 
       let! result =
          pgPersist query [
-            "invoiceDraftId", Writer.invoiceDraftId draftId
+            "uploadId", Writer.invoiceUploadId draftId
             "status", Writer.status status
             "statusDetail", Writer.statusDetail status
          ]
@@ -117,6 +139,7 @@ module FileStorage =
    open Azure.Storage.Blobs
    open Microsoft.AspNetCore.Http
    open System.Threading
+   open System.IO
 
    let verifyParserConfigured () : Result<unit, string> =
       if Env.config.AzureDocumentIntelligence.Endpoint.IsNone then
@@ -126,7 +149,7 @@ module FileStorage =
       else
          Ok()
 
-   let validateFile (file: IFormFile) : TaskResult<IFormFile, string> = task {
+   let validateFile (file: IFormFile) : TaskResult<InvoiceFileType, string> = task {
       if file.Length = 0L then
          return Error "File is empty"
       elif file.Length > 5L * 1024L * 1024L then
@@ -138,35 +161,72 @@ module FileStorage =
          let! fileType =
             validator.FindValidatedTypeAsync(file, null, CancellationToken.None)
 
-         let allowedMimeTypes = [ "image/jpeg"; "image/png"; "application/pdf" ]
          let mime = fileType.MimeTypes
 
-         if mime |> Seq.exists (fun m -> List.contains m allowedMimeTypes) then
-            return Ok file
+         if Seq.contains "application/pdf" mime then
+            return Ok InvoiceFileType.PDF
+         elif Seq.contains "image/png" mime then
+            return Ok InvoiceFileType.PNG
+         elif Seq.contains "image/jpeg" mime then
+            return Ok InvoiceFileType.JPEG
          else
             return
                Error
                   $"{mime} not allowed. Only JPEG, PNG, and PDF files are accepted"
    }
 
+   let getBlobName
+      (orgId: OrgId)
+      (uploadId: InvoiceUploadId)
+      (fileName: string)
+      =
+      $"invoices/{orgId}/{uploadId}/{fileName}"
+
    let uploadInvoice
       (containerClient: BlobContainerClient)
       (orgId: OrgId)
       (file: IFormFile)
-      : TaskResult<Uri, string>
+      : TaskResult<InvoiceUpload, string>
       =
       taskResult {
-         let! file = validateFile file
+         let! fileType = validateFile file
 
-         let blobName = $"invoices/{orgId}/{Guid.NewGuid()}/{file.FileName}"
+         let uploadId = InvoiceUploadId(Guid.NewGuid())
+
+         let blobName = getBlobName orgId uploadId file.FileName
          let blobClient = containerClient.GetBlobClient blobName
 
          use stream = file.OpenReadStream()
          let! _ = blobClient.UploadAsync(stream, overwrite = true)
 
-         return blobClient.Uri
+         return {
+            UploadId = uploadId
+            OrgId = orgId
+            FileName = file.FileName
+            FileType = fileType
+            BlobUrl = blobClient.Uri
+         }
       }
       |> TaskResult.catch _.Message
+
+   let getInvoiceAttachment
+      (containerClient: BlobContainerClient)
+      (uploadId: InvoiceUploadId)
+      : TaskResultOption<InvoiceUpload * Stream, Err>
+      =
+      taskResultOption {
+         let! attachment = getAttachment uploadId
+
+         let blobName =
+            getBlobName attachment.OrgId attachment.UploadId attachment.FileName
+
+         let blobClient = containerClient.GetBlobClient blobName
+
+         let! response =
+            blobClient.OpenReadAsync() |> Task.map (Some >> Result.Ok)
+
+         return attachment, response
+      }
 
 module Parser =
    let decipherAnalyzedDocuments (docs: IReadOnlyList<AnalyzedDocument>) =

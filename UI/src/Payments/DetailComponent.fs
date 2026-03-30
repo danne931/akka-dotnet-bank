@@ -6,6 +6,9 @@ open Feliz.UseElmish
 open Elmish
 open Elmish.SweetAlert
 open Feliz.Router
+open Browser.Types
+open Fable.FontAwesome
+open FsToolkit.ErrorHandling
 
 open Bank.Account.Domain
 open Bank.Employee.Domain
@@ -20,9 +23,13 @@ open Lib.SharedTypes
 
 type State = {
    IsFulfillingPayment: bool
+   InvoiceDocument: Deferred<Result<File option, Err>>
 } with
 
-   static member Init = { IsFulfillingPayment = false }
+   static member Init = {
+      IsFulfillingPayment = false
+      InvoiceDocument = Deferred.Idle
+   }
 
 [<RequireQualifiedAccess>]
 type Confirmation =
@@ -44,6 +51,9 @@ type Msg =
       PaymentRequest *
       AsyncOperationStatus<Result<AccountCommandReceipt, Err>>
    | SubmitPaymentForApproval
+   | LoadInvoiceDocument of
+      InvoiceUploadId *
+      AsyncOperationStatus<Result<File option, Err>>
 
 let init () = State.Init, Cmd.none
 
@@ -178,6 +188,23 @@ let update (notifyParentOnUpdate: AccountCommandReceipt -> unit) msg state =
          Alerts.toastSuccessCommand "Submitted payment for approval."
          Cmd.navigate Routes.PaymentUrl.BasePath
       ]
+   | LoadInvoiceDocument(uploadId, Started) ->
+      let load = async {
+         let! res = PaymentService.getInvoiceAttachment uploadId
+         return Msg.LoadInvoiceDocument(uploadId, Finished res)
+      }
+
+      {
+         state with
+            InvoiceDocument = Deferred.InProgress
+      },
+      Cmd.fromAsync load
+   | LoadInvoiceDocument(_, Finished res) ->
+      {
+         state with
+            InvoiceDocument = Deferred.Resolved res
+      },
+      Cmd.none
 
 let private renderInfoRow (label: string) (value: string) =
    Html.div [
@@ -220,6 +247,15 @@ let renderInvoice (invoice: Invoice) =
          ]
       ]
    ]
+
+let private renderPDFUpload orgId =
+   PDFViewer.PDFUploadComponent {|
+      Label = Some "Attach Invoice (PDF):"
+      renderPDFInContainer = ScreenOverlay.PortalForSupplementaryContent
+      uploadFile =
+         fun file ->
+            PaymentService.uploadInvoice orgId file |> AsyncResult.map ignore
+   |}
 
 [<ReactComponent>]
 let PaymentDetailComponent
@@ -301,16 +337,10 @@ let PaymentDetailComponent
          renderInfoRow "Request sent from:" payee.OrgName
          renderInfoRow "Memo:" sharedDetails.Memo
 
-      renderInfoRow "Requested on:" (DateTime.format sharedDetails.CreatedAt)
+      Html.br []
 
-      renderInfoRow
-         (if
-             sharedDetails.DueAt.ToUniversalTime().Date > DateTime.UtcNow.Date
-          then
-             "Due:"
-          else
-             "Expired on:")
-         (DateTime.format sharedDetails.DueAt)
+      renderInfoRow "Requested on:" (DateTime.format sharedDetails.CreatedAt)
+      renderInfoRow "Due:" (DateTime.format sharedDetails.DueAt)
 
       Html.br []
 
@@ -323,15 +353,68 @@ let PaymentDetailComponent
             MaxPaymentsToDisplay = 6
             MaxColumns = 3
          |}
-
-         Html.br []
       | None -> ()
 
+      (*
+         1. When invoice_upload exists
+            -> show PDF Viewer button
+            -> on click, request document from server by invoice_upload_id
+            -> retrieve document from Azure Blob Storage
+            -> stream File back to client and render in portal
+         2. When invoice_upload does not exist
+            -> Currently do not show option upload document
+            -> TODO:
+               Consider allowing the user to upload a supporting invoice
+               document if they already created a payment request without an
+               invoice or they create a payment request with a manually inputted
+               invoice
+      *)
       match sharedDetails.Invoice with
+      | None when isPaymentRequestOutgoing ->
+         //renderPDFUpload session.OrgId
+         //Html.br []
+         ()
+      | None -> ()
       | Some invoice ->
          renderInvoice invoice
+
+         match invoice.InvoiceUploadId with
+         | Some uploadId ->
+            Html.button [
+               attr.style [ style.maxWidth (length.percent 60) ]
+               attr.disabled (state.InvoiceDocument <> Deferred.Idle)
+
+               attr.onClick (fun e ->
+                  e.preventDefault ()
+                  dispatch (Msg.LoadInvoiceDocument(uploadId, Started)))
+
+               attr.children [
+                  Fa.i [ Fa.Solid.FileAlt ] []
+                  Html.span [
+                     attr.text "View Invoice Attachment"
+                     attr.style [ style.marginLeft (length.rem 0.5) ]
+                  ]
+               ]
+            ]
+
+            match state.InvoiceDocument with
+            | Deferred.Resolved(Ok(Some file)) ->
+               PDFViewer.PDFViewerComponent {|
+                  PDFFile = file
+                  onLoadSuccess = ignore
+                  renderPDFInContainer =
+                     ScreenOverlay.PortalForSupplementaryContent
+               |}
+            | Deferred.Resolved(Ok None) -> Html.p "No file found."
+            | Deferred.Resolved(Error _) -> Html.p "Could not retrieve file."
+            | Deferred.InProgress -> Html.progress []
+            | Deferred.Idle -> ()
+         | None when isPaymentRequestOutgoing ->
+            //renderPDFUpload session.OrgId
+            ()
+         | _ -> ()
+
          Html.br []
-      | None -> ()
 
       match payment.Status with
       | PaymentRequestStatus.Fulfilled f ->
@@ -364,6 +447,9 @@ let PaymentDetailComponent
 
                   dispatch Msg.SubmitPaymentForApproval)
          else
+            Html.hr []
+            Html.br []
+
             match canManagePayment, isPaymentRequestOutgoing with
             | true, true ->
                Html.button [

@@ -12,6 +12,7 @@ module Fields =
    let taxPercent = "tax_percent"
    let subtotal = "subtotal"
    let total = "total"
+   let invoiceUploadId = "invoice_upload_id"
 
 module Reader =
    let invoiceId (read: RowReader) =
@@ -26,10 +27,14 @@ module Reader =
 
    let taxPercent (read: RowReader) = Fields.taxPercent |> read.decimal
 
+   let invoiceUploadId (read: RowReader) =
+      Fields.invoiceUploadId |> read.uuidOrNone |> Option.map InvoiceUploadId
+
    let invoice (read: RowReader) : Invoice = {
       Id = invoiceId read
       LineItems = lineItems read
       TaxPercent = taxPercent read
+      InvoiceUploadId = invoiceUploadId read
    }
 
 module Writer =
@@ -42,3 +47,6 @@ module Writer =
    let taxPercent = Sql.decimal
    let subtotal = Sql.decimal
    let total = Sql.decimal
+
+   let invoiceUploadId (id: InvoiceUploadId option) =
+      id |> Option.map _.Value |> Sql.uuidOrNone

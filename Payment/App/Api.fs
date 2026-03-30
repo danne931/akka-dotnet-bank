@@ -30,7 +30,8 @@ let getPayments
             recurrence.{RecurringPaymentScheduleSqlMapper.Fields.terminationDetail},
             recurrence.{RecurringPaymentScheduleSqlMapper.Fields.paymentsRequestedCount},
             invoice.{InvoiceSqlMapper.Fields.lineItems},
-            invoice.{InvoiceSqlMapper.Fields.taxPercent}
+            invoice.{InvoiceSqlMapper.Fields.taxPercent},
+            invoice.{InvoiceSqlMapper.Fields.invoiceUploadId}
          FROM {Table.payment} pay
          LEFT JOIN {Table.platformPayment} platformPay using({PaymentFields.paymentId})
          LEFT JOIN {Table.thirdPartyPayment} thirdPartyPay using({PaymentFields.paymentId})

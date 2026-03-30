@@ -9,8 +9,16 @@ open UIDomain.Employee
 let getEl () =
    document.getElementById "screen-overlay-portal"
 
+/// Render content in portal
 let Portal (content: ReactElement) =
    ReactDOM.createPortal (content, getEl ())
+
+/// Render content beside the primary content (ex: PDF)
+let PortalForSupplementaryContent (content: ReactElement) =
+   ReactDOM.createPortal (
+      content,
+      document.getElementById "screen-overlay-portal-supplementary-content"
+   )
 
 type OverlaySize =
    | Standard
