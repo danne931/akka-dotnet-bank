@@ -117,7 +117,7 @@
     <PackageReference Include="Feliz.Router" />
     <PackageReference Include="Feliz.UseElmish" />
     <PackageReference Include="FSharp.Core" />
-    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="FsToolkit.ErrorHandling" />
     <PackageReference Include="Thoth.Json" />
     <PackageReference Include="Validus" />
   </ItemGroup>

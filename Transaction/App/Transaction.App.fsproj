@@ -1,8 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-  </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="HistoryApi.fs" />
     <Compile Include="TransactionApi.fs" />
@@ -18,7 +14,7 @@
     <PackageReference Include="Akkling.Cluster.Sharding" />
     <PackageReference Include="Akkling.Persistence" />
     <PackageReference Include="FSharp.Control.TaskSeq" />
-    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="FsToolkit.ErrorHandling" />
     <PackageReference Include="Validus" />
   </ItemGroup>
 

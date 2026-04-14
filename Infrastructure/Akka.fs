@@ -5,7 +5,6 @@ open Akka.Hosting
 open Akka.Remote.Hosting
 open Akka.Cluster.Hosting
 open Akka.Cluster.Hosting.SBR
-open Akka.HealthCheck.Hosting
 open Akka.Persistence.Sql.Hosting
 open Akka.Management
 open Akka.Management.Cluster.Bootstrap
@@ -146,24 +145,11 @@ module AkkaInfra =
             cmd.RegisterCommandPalette ClusterShardingCommands.Instance
             |> ignore)
 
-   let withHealthCheck (builder: AkkaConfigurationBuilder) =
-      builder.WithHealthCheck(fun opts ->
-         opts.AddProviders HealthCheckType.All |> ignore
-
-         opts.Liveness.Transport <- HealthCheckTransport.Tcp
-         opts.Liveness.TcpPort <- Env.config.AkkaHealthCheck.LivenessPort
-         opts.Readiness.Transport <- HealthCheckTransport.Tcp
-         opts.Readiness.TcpPort <- Env.config.AkkaHealthCheck.ReadinessPort)
-
    let withLogging (builder: AkkaConfigurationBuilder) =
       builder.ConfigureLoggers(fun builder ->
          builder.LogLevel <- LogLevel.InfoLevel
          builder.LogConfigOnStart <- true
-
-         builder.AddLogger<SerilogLogger>() |> ignore
-
-         builder.WithDefaultLogMessageFormatter<SerilogLogMessageFormatter>()
-         |> ignore)
+         builder.AddSerilogLogging() |> ignore)
 
    let withConflictFreeReplicatedDataTypes (builder: AkkaConfigurationBuilder) =
       builder.WithDistributedData(fun opts ->

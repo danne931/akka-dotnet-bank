@@ -31,6 +31,8 @@ open BankActorRegistry
 open Email
 open PartnerBank.Service.Domain
 
+#nowarn 25
+
 module aeFields = AccountEventSqlMapper.Fields
 
 let randomAmount min max =
@@ -367,6 +369,38 @@ let enableOrgSocialTransferDiscovery (registry: #IOrgActor) =
 
       registry.OrgActor org.OrgId <! msg
 
+// Poll the saga read model count.
+// Once the count stops increasing we consider seeding complete.
+let waitForSeedingToComplete (ctx: Actor<AccountSeederMessage>) = task {
+   let logInfo = logInfo ctx
+
+   let getSagaCount () =
+      pgQuerySingle
+         $"SELECT COUNT(*) as count FROM {AppSagaSqlMapper.table}"
+         None
+         (fun read -> read.int "count")
+
+   let mutable priorCount = -1
+   let mutable finished = false
+
+   while not finished do
+      do! Task.Delay(TimeSpan.FromSeconds 10.)
+
+      match! getSagaCount () with
+      | Ok countOpt ->
+         let count = countOpt |> Option.defaultValue 0
+
+         if count > 0 && count = priorCount then
+            logInfo $"Seeding complete. Counted {count} workflows"
+            finished <- true
+         else
+            logInfo $"Waiting for seeding to complete {priorCount} <> {count}"
+            priorCount <- count
+      | Error err -> logError ctx (string err)
+
+   return ()
+}
+
 // NOTE:
 // Initial employee purchase requests are configured with timestamps
 // in the past.  However, subsequent employee purchase approval/decline
@@ -379,6 +413,7 @@ let enableOrgSocialTransferDiscovery (registry: #IOrgActor) =
 // Modifying system-produced event timestamps via update statements on
 // the read models as demonstrated below should be a sufficient strategy
 // for observing time based analytics on seed data.
+
 let overwriteHistoricalAccountEventTimestamps () = taskResultOption {
    let query =
       $"""
@@ -483,6 +518,8 @@ let overwriteHistoricalAccountEventTimestamps () = taskResultOption {
 let private expectedDomesticTransfersCount = 10
 let private numberOfMonthsToGenerateDataFor = 12
 
+// Overwrite domestic transfer follow-up events (Settled, Failed, Progress) to
+// be a few minutes after the transfer intent.
 // It takes a few minutes of interaction with mock partner bank for domestic transfers to transition from pending to settled.
 // Return None and try again after a few seconds until the domestic transfers are settled.
 let overwriteHistoricalDomesticTransferAccountEventTimestamps () = taskResultOption {
@@ -2079,6 +2116,7 @@ let actorProps
    =
    let handler (ctx: Actor<AccountSeederMessage>) =
       let logInfo = logInfo ctx
+      let logError = logError ctx
 
       let rec loop (state: State) = actor {
          let! msg = ctx.Receive()
@@ -2167,24 +2205,11 @@ let actorProps
 
                logInfo "Enabled social transfer discovery"
 
-               // TODO:
-               // Call "overwriteHistoricalAccountEventTimestamps" once an
-               // expected number of transactions complete, based on
-               // "numberOfMonthsToGenerateDataFor" multiplied by an expected
-               // txns count per month, rather than creating this delay here.
-
-               // Reason: This delay is fine for 12 months worth of
-               // transaction data but if we seed 200 months worth
-               // of transaction data then it will take more than a minute
-               // to process. This results in analytics charts showing
-               // several million dollars worth of MoneyOut transaction occurring
-               // today rather than with their timestamps overwritten to past dates.
-
-               do! Task.Delay(TimeSpan.FromMinutes 1.)
+               do! waitForSeedingToComplete ctx
 
                do! overwriteHistoricalAccountEventTimestamps ()
 
-               scheduleOverwriteDomesticTransferTimestamps ctx 80.
+               scheduleOverwriteDomesticTransferTimestamps ctx 1.
 
                let! balanceHistoryRes = seedBalanceHistory ()
 
@@ -2199,10 +2224,10 @@ let actorProps
                         AccountsToSeedWithTransactions = txnsSeedMap
                      }
                | Ok None ->
-                  logError ctx "Error seeding balance history.  No purchases."
+                  logError "Error seeding balance history.  No purchases."
                   return unhandled ()
                | Error err ->
-                  logError ctx $"Error seeding balance history {err}"
+                  logError $"Error seeding balance history {err}"
                   return unhandled ()
             else
                let remaining =

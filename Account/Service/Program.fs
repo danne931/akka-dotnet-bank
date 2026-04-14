@@ -76,7 +76,7 @@ builder.Services.AddAkka(
             ClusterMetadata.roles.crdt
          |]
          << AkkaInfra.withPetabridgeCmd
-         << AkkaInfra.withHealthCheck
+         << HealthCheck.App.configureAkka
          << AkkaInfra.withLogging
          << AkkaInfra.withConflictFreeReplicatedDataTypes
 
@@ -362,10 +362,8 @@ builder.Services.AddAkka(
                let typedProps =
                   AppSagaReadModelSyncActor.initProps
                      (AppSaga.getEntityRef system)
-                     // TODO: Create saga-specific Environment file & replace
-                     //       account env var here.
-                     Env.config.AccountEventProjectionChunking
-                     Env.config.AccountEventReadModelPersistenceBackoffRestart
+                     Env.config.SagaEventProjectionChunking
+                     Env.config.SagaEventReadModelPersistenceBackoffRestart
 
                typedProps.ToProps()),
             ClusterSingletonOptions(Role = ClusterMetadata.roles.saga)

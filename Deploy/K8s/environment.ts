@@ -51,7 +51,8 @@ export const initContainers = {
     command: [
       'sh',
       '-c',
-      `until nc -zv account-service.${defaultNamespace}.svc.cluster.local ${ports.akkaHealthCheckReadiness};` +
+      // TODO: Probe healthcheck readiness
+      `until nc -zv account-service.${defaultNamespace}.svc.cluster.local ${ports.akkaRemoting};` +
       'do echo waiting for account cluster formation; sleep 3; done'
     ],
     image: 'busybox:1.28',

@@ -66,9 +66,10 @@ export const initWebCluster = (
                 image: isDev ? 'web:latest' : 'danne931/akka-dotnet-bank-web:latest',
                 imagePullPolicy: isDev ? 'Never' : 'Always',
                 livenessProbe: {
-                  initialDelaySeconds: 10,
-                  tcpSocket: {
-                    port: ports.akkaHealthCheckLiveness
+                  initialDelaySeconds: 15,
+                  httpGet: {
+                    path: '/healthz/live',
+                    port: 'http'
                   }
                 },
                 name: 'web-cluster',
@@ -90,7 +91,8 @@ export const initWebCluster = (
                   }
                 ],
                 readinessProbe: {
-                  tcpSocket: {
+                  httpGet: {
+                    path: '/healthz/ready',
                     port: 'http'
                   }
                 }

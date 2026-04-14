@@ -99,9 +99,10 @@ export const initSchedulerCluster = (
                 image: isDev ? 'scheduler:latest' : 'danne931/akka-dotnet-bank-scheduler:latest',
                 imagePullPolicy: isDev ? 'Never' : 'Always',
                 livenessProbe: {
-                  initialDelaySeconds: 10,
+                  initialDelaySeconds: 15,
+                  // TODO: Probe healthcheck liveness
                   tcpSocket: {
-                    port: ports.akkaHealthCheckLiveness
+                    port: ports.akkaRemoting
                   }
                 },
                 name: 'scheduler-cluster',

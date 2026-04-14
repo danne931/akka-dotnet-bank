@@ -126,12 +126,6 @@ let submitOnboardingApplication
       return ()
    }
 
-type private OrgDBResult =
-   | AccountProfilesWithOrg of (Org * AccountProfile) list option
-   | CommandApprovalRules of CommandApprovalRule list option
-   | CommandApprovalProgress of CommandApprovalProgress.T list option
-   | Counterparties of Counterparty list option
-
 let getOrgAndAccountProfiles
    (orgId: OrgId)
    (getCounterparties: OrgId -> Task<Result<Counterparty list option, Err>>)
@@ -176,7 +170,7 @@ let getOrgAndAccountProfiles
          WHERE {Fields.orgId} = @orgId
          """
 
-      let orgTask =
+      let! accountProfilesWithOrgOpt =
          pgQuery<Org * AccountProfile>
             query
             (Some [ "orgId", Writer.orgId orgId ])
@@ -211,48 +205,31 @@ let getOrgAndAccountProfiles
                         |> Option.defaultValue 0m
                   }
                })
-         |> TaskResult.map OrgDBResult.AccountProfilesWithOrg
 
-      let approvalRuleTask =
-         Bank.CommandApproval.Api.getApprovalRules orgId
-         |> TaskResult.map OrgDBResult.CommandApprovalRules
+      and! approvalRulesOpt = Bank.CommandApproval.Api.getApprovalRules orgId
 
-      let approvalProgressTask =
+      and! approvalProgressOpt =
          Bank.CommandApproval.Api.getCommandApprovals orgId
-         |> TaskResult.map OrgDBResult.CommandApprovalProgress
 
-      let counterpartiesTask =
-         getCounterparties orgId |> TaskResult.map OrgDBResult.Counterparties
-
-      let! res =
-         Task.WhenAll [|
-            orgTask
-            approvalRuleTask
-            approvalProgressTask
-            counterpartiesTask
-         |]
-
-      let! res = res |> List.ofArray |> List.traverseResultM id
+      and! counterpartiesOpt = getCounterparties orgId
 
       return
-         match res with
-         | [ OrgDBResult.AccountProfilesWithOrg(Some accountProfilesWithOrg)
-             OrgDBResult.CommandApprovalRules rulesOpt
-             OrgDBResult.CommandApprovalProgress progressOpt
-             OrgDBResult.Counterparties counterpartiesOpt ] ->
+         accountProfilesWithOrgOpt
+         |> Option.map (fun accountProfilesWithOrg ->
             let org = fst (List.head accountProfilesWithOrg)
 
             let org =
-               match rulesOpt with
+               match approvalRulesOpt with
                | None -> org
                | Some rules -> {
                   org with
                      CommandApprovalRules =
-                        [ for rule in rules -> rule.RuleId, rule ] |> Map.ofList
+                        [ for rule in rules -> rule.RuleId, rule ]
+                        |> Map.ofList
                  }
 
             let org =
-               match progressOpt with
+               match approvalProgressOpt with
                | None -> org
                | Some progress -> {
                   org with
@@ -260,7 +237,7 @@ let getOrgAndAccountProfiles
                         [ for p in progress -> p.ProgressId, p ] |> Map.ofList
                  }
 
-            Some {
+            {
                Org = org
                AccountProfiles =
                   [
@@ -277,8 +254,7 @@ let getOrgAndAccountProfiles
                      [ for c in counterparties -> c.CounterpartyId, c ]
                      |> Map.ofList
                   | None -> Map.empty
-            }
-         | _ -> None
+            })
    }
 
 let searchOrgTransferSocialDiscovery (fromOrgId: OrgId) (nameQuery: string) =

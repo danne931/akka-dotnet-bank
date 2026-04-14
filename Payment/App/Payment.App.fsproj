@@ -10,7 +10,7 @@
   <ItemGroup>
     <PackageReference Include="Azure.AI.DocumentIntelligence" />
     <PackageReference Include="Azure.Storage.Blobs" />
-    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="FsToolkit.ErrorHandling" />
     <PackageReference Include="MagicBytesValidator" />
   </ItemGroup>
 

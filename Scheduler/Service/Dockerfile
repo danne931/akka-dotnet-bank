@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
 
 RUN mkdir -p /home/app
 

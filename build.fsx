@@ -68,7 +68,7 @@ let imageBuilders = {|
 
 let publishProject project =
    Trace.trace $"Publishing project {project}..."
-   Shell.Exec("dotnet", $"publish {project}") |> ignore
+   Shell.Exec("dotnet", $"publish {project} -c Release") |> ignore
 
 let dockerImageNameFromProject (fsproj: string) =
    match IO.Path.GetFileNameWithoutExtension fsproj with

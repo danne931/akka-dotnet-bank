@@ -5,11 +5,10 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
   <PropertyGroup Label="SharedVersions">
-    <AkkaVersion>1.5.55</AkkaVersion>
-    <AkklingVersion>0.17.0</AkklingVersion>
-    <PbmVersion>1.4.6</PbmVersion>
+    <AkkaVersion>1.5.65</AkkaVersion>
+    <AkklingVersion>0.18.0</AkklingVersion>
+    <PbmVersion>1.5.0</PbmVersion>
     <QuartzVersion>3.8.1</QuartzVersion>
-    <FontAwesomeVersion>3.0.0</FontAwesomeVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Akka" Version="$(AkkaVersion)" />
@@ -17,38 +16,36 @@
     <PackageVersion Include="Akka.Cluster.Sharding" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Cluster.Hosting" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.DependencyInjection" Version="$(AkkaVersion)" />
-    <PackageVersion Include="Akka.Discovery.KubernetesApi" Version="1.5.55" />
-    <PackageVersion Include="Akka.HealthCheck.Hosting.Web" Version="1.5.37" />
+    <PackageVersion Include="Akka.Discovery.KubernetesApi" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Hosting" Version="$(AkkaVersion)" />
-    <PackageVersion Include="Akka.Logger.Serilog" Version="1.5.25" />
-    <PackageVersion Include="Akka.Management" Version="1.5.55" />
+    <PackageVersion Include="Akka.Logger.Serilog" Version="1.5.63" />
+    <PackageVersion Include="Akka.Management" Version="$(AkkaVersion)" />
     <PackageVersion Include="Akka.Persistence.Extras" Version="1.5.1" />
     <PackageVersion Include="Akka.Persistence.Hosting" Version="$(AkkaVersion)" />
-    <PackageVersion Include="Akka.Persistence.Sql.Hosting" Version="$(AkkaVersion)" />
-    <PackageVersion Include="Akka.Persistence.Sql" Version="$(AkkaVersion)" />
+    <PackageVersion Include="Akka.Persistence.Sql.Hosting" Version="1.5.62" />
+    <PackageVersion Include="Akka.Persistence.Sql" Version="1.5.62" />
     <PackageVersion Include="Akka.Quartz.Actor" Version="1.5.13" />
     <PackageVersion Include="Akka.Remote.Hosting" Version="$(AkkaVersion)" />
-    <PackageVersion Include="Akka.Streams.Amqp.RabbitMq" Version="1.5.40" />
+    <PackageVersion Include="Akka.Streams.Amqp.RabbitMq" Version="1.5.59" />
     <PackageVersion Include="Akkling" Version="$(AkklingVersion)" />
     <PackageVersion Include="Akkling.Cluster.Sharding" Version="$(AkklingVersion)" />
     <PackageVersion Include="Akkling.Persistence" Version="$(AkklingVersion)" />
-    <PackageVersion Include="Akkling.TestKit" Version="$(AkklingVersion)" />
+    <PackageVersion Include="Akkling.TestKit" Version="0.17.0" />
     <PackageVersion Include="Azure.AI.DocumentIntelligence" Version="1.0.0" />
-    <PackageVersion Include="Azure.Storage.Blobs" Version="12.26.0" />
+    <PackageVersion Include="Azure.Storage.Blobs" Version="12.27.0" />
     <PackageVersion Include="Elmish.SweetAlert" Version="3.4.0" />
-    <PackageVersion Include="Fable.FontAwesome" Version="$(FontAwesomeVersion)" />
-    <PackageVersion Include="Fable.FontAwesome.Free" Version="$(FontAwesomeVersion)" />
+    <PackageVersion Include="Fable.FontAwesome" Version="3.0.0" />
+    <PackageVersion Include="Fable.FontAwesome.Free" Version="3.0.0" />
     <PackageVersion Include="Fable.Form.Simple" Version="4.1.0" />
     <PackageVersion Include="Fable.Mocha" Version="2.17.0" />
     <PackageVersion Include="Fable.SimpleHttp" Version="3.6.0" />
-    <PackageVersion Include="Feliz.Recharts" Version="4.3.0" />
     <PackageVersion Include="Flurl.Http" Version="4.0.2" />
     <PackageVersion Include="FsConfig" Version="4.1.0" />
-    <PackageVersion Include="FSharp.Control.TaskSeq" Version="0.4.0" />
-    <PackageVersion Include="FSharp.SystemTextJson" Version="1.3.13" />
-    <PackageVersion Include="FsToolkit.ErrorHandling.TaskResult" Version="4.18.0" />
-    <PackageVersion Include="MagicBytesValidator" Version="2.1.6" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="9.0.1" />
+    <PackageVersion Include="FSharp.Control.TaskSeq" Version="1.0.0" />
+    <PackageVersion Include="FSharp.SystemTextJson" Version="1.4.36" />
+    <PackageVersion Include="FsToolkit.ErrorHandling" Version="5.2.0" />
+    <PackageVersion Include="MagicBytesValidator" Version="2.2.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
     <PackageVersion Include="Nanoid" Version="3.1.0" />
     <PackageVersion Include="Npgsql.FSharp" Version="8.0.0" />
     <PackageVersion Include="Petabridge.Cmd.Cluster" Version="$(PbmVersion)" />
@@ -58,17 +55,18 @@
     <PackageVersion Include="Quartz.Extensions.Hosting" Version="$(QuartzVersion)" />
     <PackageVersion Include="Quartz.Plugins" Version="$(QuartzVersion)" />
     <PackageVersion Include="Quartz.Serialization.Json" Version="$(QuartzVersion)" />
-    <PackageVersion Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.7" />
     <PackageVersion Include="Thoth.Json" Version="10.4.1" />
     <PackageVersion Include="Thoth.Json.Net" Version="12.0.0" />
     <PackageVersion Include="Validus" Version="4.1.4" />
-    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageVersion Include="Expecto" Version="10.2.1" />
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageVersion Include="Expecto" Version="10.2.3" />
     <PackageVersion Include="Feliz" Version="2.9.0" />
+    <PackageVersion Include="Feliz.Recharts" Version="4.3.0" />
     <PackageVersion Include="Feliz.Router" Version="4.0.0" />
     <PackageVersion Include="Feliz.UseElmish" Version="2.5.0" />
-    <PackageVersion Include="FSharp.Core" Version="9.0.101" />
+    <PackageVersion Include="FSharp.Core" Version="10.1.201" />
   </ItemGroup>
 </Project>

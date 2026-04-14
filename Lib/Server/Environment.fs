@@ -52,11 +52,6 @@ type ClusterDiscoveryKubernetesStartup = {
    RequiredContactPointsNr: int
 }
 
-type AkkaHealthCheck = {
-   ReadinessPort: int
-   LivenessPort: int
-}
-
 type ClusterSeedNodeStartup = { SeedNodes: string list }
 
 // Recommended to have ~10 shards per node. If 4 account nodes are deployed in
@@ -184,10 +179,6 @@ type private BankConfigInput = {
    ClusterDiscoveryStartup: ClusterDiscoveryStartup option
    ClusterDiscoveryKubernetesStartup: ClusterDiscoveryKubernetesStartup option
    ClusterSeedNodeStartup: ClusterSeedNodeStartup option
-   AkkaHealthCheck: {|
-      ReadinessPort: int option
-      LivenessPort: int option
-   |}
    BillingCycleFanoutThrottle: StreamThrottleInput
    AccountCluster: {| NumberOfShards: int option |}
    AccountActorSupervisor: PersistenceSupervisorInput
@@ -204,6 +195,9 @@ type private BankConfigInput = {
       Name: string option
       MaxParallelism: int option
    |}
+   SagaEventProjectionChunking: StreamChunkingInput
+   SagaEventReadModelPersistenceBackoffRestart:
+      StreamBackoffRestartSettingsInput
    AzureBlobStorageConnectionString: string option
    AzureBlobContainerName: string option
    AzureDocumentIntelligenceEndpoint: string option
@@ -219,7 +213,6 @@ type BankConfig = {
    PetabridgeCmdRemoting: PetabridgeCmdRemoting
    ClusterStartupMethod: ClusterStartupMethod
    SerilogOutputFile: string
-   AkkaHealthCheck: AkkaHealthCheck
    BillingCycleFanoutThrottle: StreamThrottleEnvConfig
    AccountCluster: AccountCluster
    AccountActorSupervisor: PersistenceSupervisorEnvConfig
@@ -232,6 +225,8 @@ type BankConfig = {
    SagaPassivateIdleEntityAfter: TimeSpan
    SagaWakeFromSleepBurstLimit: int
    SagaQueue: QueueEnvConfig
+   SagaEventProjectionChunking: StreamChunkingEnvConfig
+   SagaEventReadModelPersistenceBackoffRestart: Akka.Streams.RestartSettings
    AzureBlobStorage: AzureBlobStorage
    AzureDocumentIntelligence: AzureDocumentIntelligence
 }
@@ -296,12 +291,6 @@ let config =
          }
          PetabridgeCmdRemoting = input.PetabridgeCmdRemoting
          SerilogOutputFile = "logs.json"
-         AkkaHealthCheck = {
-            LivenessPort =
-               input.AkkaHealthCheck.LivenessPort |> Option.defaultValue 11000
-            ReadinessPort =
-               input.AkkaHealthCheck.ReadinessPort |> Option.defaultValue 11001
-         }
          BillingCycleFanoutThrottle = {
             Count =
                input.BillingCycleFanoutThrottle.Count
@@ -366,6 +355,17 @@ let config =
             MaxParallelism =
                input.SagaQueue.MaxParallelism |> Option.defaultValue 70
          }
+         SagaEventProjectionChunking = {
+            Size =
+               input.SagaEventProjectionChunking.Size |> Option.defaultValue 70
+            Duration =
+               input.SagaEventProjectionChunking.Seconds
+               |> Option.defaultValue 2.
+               |> TimeSpan.FromSeconds
+         }
+         SagaEventReadModelPersistenceBackoffRestart =
+            streamBackoffRestartSettingsFromInput
+               input.SagaEventReadModelPersistenceBackoffRestart
          AzureBlobStorage = {
             ConnectionString =
                input.AzureBlobStorageConnectionString

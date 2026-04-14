@@ -87,7 +87,7 @@ builder.Services.AddAkka(
       let initConfig =
          AkkaInfra.withClustering [| ClusterMetadata.roles.scheduling |]
          << AkkaInfra.withPetabridgeCmd
-         << AkkaInfra.withHealthCheck
+         << HealthCheck.App.configureAkka
          << AkkaInfra.withLogging
 
       (initConfig builder)

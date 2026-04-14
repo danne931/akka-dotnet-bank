@@ -33,15 +33,17 @@ module.exports = (env, argv) => {
     },
 
     devServer: {
-      proxy: {
-        '/api': proxyUrl,
-        '/login': proxyUrl,
-        '/session': proxyUrl,
-        '/bankHub': {
+      proxy: [
+        {
+          context: ['/api', '/login', '/session'],
+          target: proxyUrl
+        },
+        {
+          context: ['/bankHub'],
           target: 'ws://localhost:3000',
           ws: true
         }
-      },
+      ],
       static: staticPath
     },
 

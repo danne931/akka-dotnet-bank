@@ -18,7 +18,7 @@
     <PackageReference Include="Akka.Hosting" />
     <PackageReference Include="Akkling" />
     <PackageReference Include="FSharp.Control.TaskSeq" />
-    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="FsToolkit.ErrorHandling" />
   </ItemGroup>
 
   <ItemGroup>

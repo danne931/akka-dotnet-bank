@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="Validus" />
-    <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" />
+    <PackageReference Include="FsToolkit.ErrorHandling" />
   </ItemGroup>
 
   <ItemGroup>

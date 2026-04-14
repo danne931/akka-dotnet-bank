@@ -663,7 +663,6 @@ let actorProps
                   })
 
                return! loop stateOpt
-            | _ -> return unhandled ()
          // Event replay on actor start
          | :? AccountEvent as e when mailbox.IsRecovering() ->
             let state = ParentAccount.applyEvent state e

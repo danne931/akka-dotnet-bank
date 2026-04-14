@@ -55,6 +55,8 @@ let abortScheduledPaymentReminders
 // If multiple payment reminders scheduled then will mark
 // the most recent one as finished.
 // (Most recent = smallest InactivityTimeout TimeSpan)
+#nowarn 25
+
 let finishPaymentReminderActivity
    (timestamp: DateTime)
    (state: SagaLifeCycle<Activity>)
@@ -90,6 +92,8 @@ let finishPaymentReminderActivity
          InProgress = wip
          Completed = complete
    }
+
+#warnon 25
 
 let applyStartEvent (e: PaymentRequestSagaStartEvent) (timestamp: DateTime) =
    match e with

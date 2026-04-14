@@ -4,8 +4,6 @@ open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.DependencyInjection
 open Akka.Hosting
 open Akka.Cluster.Hosting
-open Akka.HealthCheck.Hosting
-open Akka.HealthCheck.Hosting.Web
 open Akka.Actor
 open Akkling
 open Serilog
@@ -73,7 +71,7 @@ builder.Services.AddAkka(
             ClusterMetadata.roles.signalR
          |]
          << AkkaInfra.withPetabridgeCmd
-         << AkkaInfra.withHealthCheck
+         << HealthCheck.App.configureAkka
          << AkkaInfra.withLogging
 
       (initConfig builder)
@@ -189,8 +187,8 @@ builder.Services.AddAkka(
 )
 |> ignore
 
+builder.Services.AddHealthChecks() |> ignore
 builder.Services.AddEndpointsApiExplorer().AddSwaggerGen() |> ignore
-builder.Services.WithAkkaHealthCheck HealthCheckType.All |> ignore
 
 builder.Services
    .AddDistributedMemoryCache()
@@ -216,18 +214,7 @@ if app.Environment.IsDevelopment() then
 
 app.MapHub<BankHub> Constants.SIGNAL_R_HUB |> ignore
 
-// Available at endpoint: /healthz/akka
-// Changing the default ResponseWriter to JsonResponseWriter
-// provides a more verbose response than the default string
-// response of "healthy"/"unhealthy".
-app.MapAkkaHealthCheckRoutes(
-   optionConfigure =
-      fun _ opt ->
-         opt.ResponseWriter <-
-            fun httpCtx healthReport ->
-               Helper.JsonResponseWriter(httpCtx, healthReport)
-)
-|> ignore
+HealthCheck.App.configureEndpoints app
 
 Bank.Routes.Org.start app Bank.Transfer.Api.getDomesticTransferRecipients
 Bank.Routes.UserSession.start app
