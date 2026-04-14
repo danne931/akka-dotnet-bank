@@ -8,8 +8,6 @@ open Fable.Mocha
 open Expecto
 #endif
 
-#nowarn 25
-
 open Bank.Account.Domain
 open Bank.Transfer.Domain
 open Lib.SharedTypes

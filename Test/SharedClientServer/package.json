@@ -5,10 +5,13 @@
     "//start": "echo 'Run tests in the browser.  Open localhost:8080 to view test results.'",
     "start": "dotnet fable tests -o dist --run npx webpack-dev-server"
   },
+  "dependencies": {
+    "nanoid": "^5.1.6"
+  },
   "devDependencies": {
     "html-webpack-plugin": "^5.6.5",
-    "mocha": "^11.7.5",
-    "webpack-cli": "^6.0.1",
-    "webpack-dev-server": "^4.15.2"
+    "mocha": "^12.0.0-beta-10",
+    "webpack-cli": "^7.0.2",
+    "webpack-dev-server": "^5.2.3"
   }
 }
